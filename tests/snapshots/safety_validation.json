@@ -1,0 +1,7 @@
+{
+  "approval_status": "pending_approval",
+  "is_safe": false,
+  "requires_human": true,
+  "risk_level": "MEDIUM",
+  "risk_score": 35.0
+}

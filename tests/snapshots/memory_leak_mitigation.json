@@ -1,0 +1,27 @@
+{
+  "action": {
+    "command": "kubectl rollout restart deployment/api-server",
+    "description": "Restart pods to clear memory leak, investigate root cause",
+    "risk_level": "MEDIUM",
+    "rollback_command": null
+  },
+  "diagnosis": {
+    "affected_services": [
+      "api-server",
+      "cache-svc",
+      "db-proxy",
+      "worker-svc"
+    ],
+    "confidence": "medium",
+    "evidence": [
+      "Memory issue: OutOfMemoryError: heap space exhausted, triggering emergency GC (x39)",
+      "Memory issue: Task dispatch failed: api-server unavailable (OOM restart in progress) (x13)",
+      "Memory issue: Memory allocation failed: cannot allocate <*> heap at <*> (x38)",
+      "Memory issue: OOM killer terminated process api-server <*> used <*> (x29)",
+      "Memory issue: Process restarted after OOM kill, uptime was <*> (x28)"
+    ],
+    "root_cause": "Memory leak detected in api-server",
+    "timeline": "Heuristic analysis - check logs for temporal correlation"
+  },
+  "pattern_matched": "memory"
+}

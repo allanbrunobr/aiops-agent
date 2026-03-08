@@ -1,0 +1,14 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "unit: Testes unitários (sem deps externas, sem ML, sem API)",
+    "integration: Testes de integração (pipeline completo, modo --no-llm)",
+    "snapshot: Testes de snapshot (validação de output determinístico)",
+    "slow: Testes lentos de performance (podem demorar >10s)",
+]
+addopts = "-v --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning:torch.*",
+    "ignore::DeprecationWarning:transformers.*",
+    "ignore::FutureWarning:torch.*",
+]

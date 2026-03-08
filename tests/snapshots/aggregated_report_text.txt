@@ -1,0 +1,42 @@
+# Observability Report
+- Severity: CRITICAL
+- Affected Services: auth-svc, gateway, order-svc, payment-svc
+- Data processed: 503 logs → 20 templates, 2160 metric points → 6 anomalies, 278 spans → 2 slow paths
+
+## Log Analysis
+
+- [ERROR][payment-svc] "Circuit breaker OPEN for database calls <*> failures in 60s)" | count=40 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=10.0
+- [ERROR][payment-svc] "Failed to acquire connection: pool full (50/50)" | count=51 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=9.5
+- [ERROR][payment-svc] "Connection pool exhausted, max=50, <*>" | count=50 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=9.5
+- [ERROR][payment-svc] "Transaction aborted: connection timeout after <*>" | count=28 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=8.8
+- [ERROR][payment-svc] "Connection to <*> timed out after 30s" | count=31 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=7.6
+- [ERROR][gateway] "Circuit breaker tripped for payment-svc, routing to fallback" | count=12 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=7.2
+- [ERROR][auth-svc] "Token validation failed for request from payment-svc: connection refused" | count=9 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=6.9
+- [ERROR][order-svc] "Payment confirmation timeout for order <*>" | count=10 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=5.5
+- [ERROR][gateway] "Upstream payment-svc returned 503 after <*>" | count=9 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=5.4
+- [INFO][payment-svc] "Configuration reloaded: max_connections=50, timeout=30s, pool_min_idle=5" | count=1 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=3.46
+- [WARN][payment-svc] "Connection pool resized from 200 to 50 active connections" | count=1 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=3.46
+- [WARN][payment-svc] "Connection wait time exceeded <*>" | count=15 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=2.9
+- [WARN][payment-svc] "Connection pool utilization high: <*> active" | count=16 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=2.86
+- [WARN][payment-svc] "Slow query detected: <*> on SELECT from payments" | count=19 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=2.74
+- [INFO][deployment-controller] "Deployment payment-svc updated: image=payment:v2.3.1, config=prod-NORMALIZED_TIMESTAMP" | count=1 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=1.96
+
+## Metric Anomalies
+
+- gateway/error_rate_percent: level_shift | 47.73 (baseline: 0.05) | 2139.1sigma | NORMALIZED_TIMESTAMP
+- payment-svc/error_rate_percent: spike | 55.01 (baseline: 0.1) | 1088.9sigma | NORMALIZED_TIMESTAMP
+- gateway/latency_p99_ms: spike | 5388.44 (baseline: 80.95) | 543.7sigma | NORMALIZED_TIMESTAMP
+- payment-svc/latency_p99_ms: spike | 5616.0 (baseline: 119.12) | 369.2sigma | NORMALIZED_TIMESTAMP
+- payment-svc/cpu_usage_percent: level_shift | 91.65 (baseline: 34.53) | 19.3sigma | NORMALIZED_TIMESTAMP
+- payment-svc/memory_usage_percent: level_shift | 82.26 (baseline: 54.93) | 13.2sigma | NORMALIZED_TIMESTAMP
+
+## Slow Traces
+
+- gateway → payment-svc → postgres: 6597ms (normal: 1520ms) | bottleneck: gateway
+- gateway → payment-svc: 6199ms (normal: 1520ms) | bottleneck: gateway
+
+## Summary
+- Total errors: 240 across 9 patterns
+- Metric anomalies: 6 detected
+- Slow traces: 2 unique paths
+- Primary suspect: gateway

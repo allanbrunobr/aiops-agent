@@ -1,0 +1,38 @@
+[
+  {
+    "attributes": {},
+    "bottleneck_duration_ms": 6597.056518,
+    "bottleneck_service": "gateway",
+    "normal_duration_ms": 1519.5,
+    "operations": [
+      "POST /api/payments",
+      "process_payment",
+      "SELECT payments WHERE id = ?"
+    ],
+    "path": [
+      "gateway",
+      "payment-svc",
+      "postgres"
+    ],
+    "timestamp": "NORMALIZED_TIMESTAMP",
+    "total_duration_ms": 6597.056518,
+    "trace_id": "trace-0093"
+  },
+  {
+    "attributes": {},
+    "bottleneck_duration_ms": 6198.807813,
+    "bottleneck_service": "gateway",
+    "normal_duration_ms": 1519.5,
+    "operations": [
+      "POST /api/payments",
+      "process_payment"
+    ],
+    "path": [
+      "gateway",
+      "payment-svc"
+    ],
+    "timestamp": "NORMALIZED_TIMESTAMP",
+    "total_duration_ms": 6198.807813,
+    "trace_id": "trace-0075"
+  }
+]

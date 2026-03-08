@@ -1,0 +1,18 @@
+{
+  "affected_services": [
+    "auth-svc",
+    "gateway",
+    "order-svc",
+    "payment-svc"
+  ],
+  "anomaly_count": 6,
+  "is_incident": true,
+  "severity": "CRITICAL",
+  "signals": [
+    "240 errors across 9 patterns",
+    "6 metric anomalies (>3.0sigma)",
+    "2 slow trace patterns"
+  ],
+  "slow_trace_count": 2,
+  "total_errors": 240
+}

@@ -1,0 +1,68 @@
+[
+  {
+    "anomaly_type": "level_shift",
+    "description": "<gateway, error_rate_percent, level_shift: 14:25:00, value=47.7, baseline_mean=0.0, deviation=2139.1sigma>",
+    "deviation_sigma": 2139.1,
+    "mean": 0.05,
+    "metric_name": "error_rate_percent",
+    "service": "gateway",
+    "std": 0.02,
+    "timestamp": "NORMALIZED_TIMESTAMP",
+    "value": 47.73
+  },
+  {
+    "anomaly_type": "spike",
+    "description": "<payment-svc, error_rate_percent, spike: 14:38:45, value=55.0, baseline_mean=0.1, deviation=1088.9sigma>",
+    "deviation_sigma": 1088.9,
+    "mean": 0.1,
+    "metric_name": "error_rate_percent",
+    "service": "payment-svc",
+    "std": 0.05,
+    "timestamp": "NORMALIZED_TIMESTAMP",
+    "value": 55.01
+  },
+  {
+    "anomaly_type": "spike",
+    "description": "<gateway, latency_p99_ms, spike: 14:27:00, value=5388.4, baseline_mean=80.9, deviation=543.7sigma>",
+    "deviation_sigma": 543.7,
+    "mean": 80.95,
+    "metric_name": "latency_p99_ms",
+    "service": "gateway",
+    "std": 9.76,
+    "timestamp": "NORMALIZED_TIMESTAMP",
+    "value": 5388.44
+  },
+  {
+    "anomaly_type": "spike",
+    "description": "<payment-svc, latency_p99_ms, spike: 14:24:30, value=5616.0, baseline_mean=119.1, deviation=369.2sigma>",
+    "deviation_sigma": 369.2,
+    "mean": 119.12,
+    "metric_name": "latency_p99_ms",
+    "service": "payment-svc",
+    "std": 14.89,
+    "timestamp": "NORMALIZED_TIMESTAMP",
+    "value": 5616.0
+  },
+  {
+    "anomaly_type": "level_shift",
+    "description": "<payment-svc, cpu_usage_percent, level_shift: 14:44:00, value=91.6, baseline_mean=34.5, deviation=19.3sigma>",
+    "deviation_sigma": 19.3,
+    "mean": 34.53,
+    "metric_name": "cpu_usage_percent",
+    "service": "payment-svc",
+    "std": 2.96,
+    "timestamp": "NORMALIZED_TIMESTAMP",
+    "value": 91.65
+  },
+  {
+    "anomaly_type": "level_shift",
+    "description": "<payment-svc, memory_usage_percent, level_shift: 14:24:00, value=82.3, baseline_mean=54.9, deviation=13.2sigma>",
+    "deviation_sigma": 13.2,
+    "mean": 54.93,
+    "metric_name": "memory_usage_percent",
+    "service": "payment-svc",
+    "std": 2.08,
+    "timestamp": "NORMALIZED_TIMESTAMP",
+    "value": 82.26
+  }
+]

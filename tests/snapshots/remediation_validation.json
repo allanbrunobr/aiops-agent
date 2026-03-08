@@ -1,0 +1,7 @@
+{
+  "blocked_patterns": [],
+  "is_safe": true,
+  "recommendation": "🟢 SAFE — No dangerous patterns detected in the proposed remediation.",
+  "risk": "SAFE",
+  "warnings": []
+}

@@ -1,0 +1,102 @@
+{
+  "workflow_version": "1.2.0",
+  "timestamps": {
+    "started": "2026-03-05T14:30:00Z",
+    "last_updated": "2026-03-05T15:10:00Z"
+  },
+  "mode": "initial_scan",
+  "scan_level": "deep",
+  "project_root": "/Users/bruno/0 - AI projects/aiops-agent",
+  "project_knowledge": "/Users/bruno/0 - AI projects/aiops-agent/docs",
+  "completed_steps": [
+    {
+      "step": "step_1",
+      "status": "completed",
+      "timestamp": "2026-03-05T14:32:00Z",
+      "summary": "Classified as monolith with 1 part, backend type, Python 3.12"
+    },
+    {
+      "step": "step_2",
+      "status": "completed",
+      "timestamp": "2026-03-05T14:34:00Z",
+      "summary": "Found 10 existing doc files across docs/, root, output/, _bmad-output/, .hive/"
+    },
+    {
+      "step": "step_3",
+      "status": "completed",
+      "timestamp": "2026-03-05T14:36:00Z",
+      "summary": "Tech stack: Python 3.12, 10 deps, sequential pipeline + multi-agent state machine architecture"
+    },
+    {
+      "step": "step_4",
+      "status": "completed",
+      "timestamp": "2026-03-05T14:50:00Z",
+      "summary": "Conditional analysis complete, 2 files written (data-models.md, api-contracts-internal.md)"
+    },
+    {
+      "step": "step_5",
+      "status": "completed",
+      "timestamp": "2026-03-05T14:55:00Z",
+      "summary": "Source tree documented with 6 critical directories, 5 entry points"
+    },
+    {
+      "step": "step_6",
+      "status": "completed",
+      "timestamp": "2026-03-05T15:00:00Z",
+      "summary": "Dev setup and deployment documented"
+    },
+    {
+      "step": "step_7",
+      "status": "skipped",
+      "timestamp": "2026-03-05T15:00:00Z",
+      "summary": "Single-part project — no multi-part integration needed"
+    },
+    {
+      "step": "step_8",
+      "status": "completed",
+      "timestamp": "2026-03-05T15:03:00Z",
+      "summary": "Architecture summary written (links to full 78KB document)"
+    },
+    {
+      "step": "step_9",
+      "status": "completed",
+      "timestamp": "2026-03-05T15:05:00Z",
+      "summary": "Project overview written"
+    },
+    {
+      "step": "step_10",
+      "status": "completed",
+      "timestamp": "2026-03-05T15:08:00Z",
+      "summary": "Master index generated with 7 generated docs + 7 existing docs + 7 papers"
+    },
+    {
+      "step": "step_11",
+      "status": "completed",
+      "timestamp": "2026-03-05T15:10:00Z",
+      "summary": "Validation complete, all documents verified"
+    }
+  ],
+  "current_step": "complete",
+  "project_types": [
+    {
+      "part_id": "main",
+      "project_type_id": "backend",
+      "display_name": "Python Backend (Standalone CLI)"
+    }
+  ],
+  "findings": {
+    "project_classification": "Monolith, 1 part, Python 3.12 backend with multi-agent pipeline architecture",
+    "existing_docs": "10 docs found: 1 architecture (78KB), 4 specialized guides in docs/, 9 postmortems, 1 project-context",
+    "technology_stack": "Python 3.12 with anthropic, drain3, sentence-transformers, faiss-cpu, torch, numpy, rich, python-dotenv, transformers"
+  },
+  "outputs_generated": [
+    "docs/data-models.md",
+    "docs/api-contracts-internal.md",
+    "docs/source-tree-analysis.md",
+    "docs/development-guide.md",
+    "docs/architecture.md",
+    "docs/project-overview.md",
+    "docs/index.md",
+    "docs/project-scan-report.json"
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "affected_services": [
+    "auth-svc",
+    "gateway",
+    "order-svc",
+    "payment-svc"
+  ],
+  "confidence": "medium",
+  "evidence": [
+    "Pool exhaustion: Connection pool exhausted, max=50, <*> (x50)",
+    "Timeouts: Transaction aborted: connection timeout after <*> (x28)",
+    "Timeouts: Connection to <*> timed out after 30s (x31)",
+    "Timeouts: Payment confirmation timeout for order <*> (x10)",
+    "Timeouts: Configuration reloaded: max_connections=50, timeout=30s, pool_min_idle=5 (x1)"
+  ],
+  "root_cause": "Connection pool exhaustion in payment-svc",
+  "timeline": "Heuristic analysis - check logs for temporal correlation"
+}
