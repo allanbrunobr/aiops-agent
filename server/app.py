@@ -1,41 +1,88 @@
+"""
+Raiz de composição do AIOps Agent — FastAPI app com MCP SSE opcional.
+
+Responsável por instanciar e conectar todas as dependências.
+MCP SSE montado condicionalmente com base em config.mcp.enabled.
+
+História 5.1: Wire MCP SSE no app FastAPI.
+História 5.6: Montagem condicional com base em config.mcp.enabled.
+"""
+
 from __future__ import annotations
 
 from fastapi import FastAPI
 
-from core.store import InMemoryStore
-from rag.knowledge_store import KnowledgeStore
-from server.api.accuracy import router as accuracy_router, get_store
-from server.api.metrics import router as metrics_router, get_metrics_collector
-from server.health import router as health_router, set_metrics_collector
-from server.metrics.pipeline import PipelineMetricsCollector
-from server.routes.admin import router as admin_router
-from server.routes.knowledge import router as knowledge_router, get_knowledge_store
+from config.loader import AppConfig
 
-# Composition root — instâncias únicas compartilhadas
-incident_store = InMemoryStore()
-knowledge_store = KnowledgeStore(storage_path="data/knowledge/patterns.json")
-pipeline_metrics = PipelineMetricsCollector(retention_hours=24)
 
-# Carrega padrões existentes do disco
-knowledge_store.load_from_disk()
+def create_app(config: AppConfig | None = None) -> FastAPI:
+    """Cria aplicação FastAPI com montagem condicional do MCP.
 
-app = FastAPI(
-    title="AIOps Agent API",
-    description="API para monitoramento e feedback do agente AIOps",
-    version="1.0.0",
-)
+    Composição de dependências:
+      1. Carrega config (padrão ou fornecida)
+      2. Inicializa safety layers
+      3. Inicializa rate limiter
+      4. Monta MCP SSE se config.mcp.enabled e transport == "sse"
 
-# Routers
-app.include_router(health_router)
-app.include_router(accuracy_router)
-app.include_router(metrics_router)
-app.include_router(knowledge_router)
-app.include_router(admin_router)
+    Args:
+        config: AppConfig pré-carregado (None = carrega defaults).
 
-# Injeta dependências via dependency_overrides
-app.dependency_overrides[get_store] = lambda: incident_store
-app.dependency_overrides[get_metrics_collector] = lambda: pipeline_metrics
-app.dependency_overrides[get_knowledge_store] = lambda: knowledge_store
+    Returns:
+        FastAPI app configurado e pronto para inicialização.
+    """
+    if config is None:
+        config = AppConfig()
 
-# Configura health endpoint com métricas
-set_metrics_collector(pipeline_metrics)
+    app = FastAPI(
+        title="AIOps Agent",
+        description="Agentic incident response platform with MCP Toolshed",
+        version="1.0.0",
+    )
+
+    # --------------------------------------------------------
+    # Rotas de infraestrutura
+    # --------------------------------------------------------
+
+    @app.get("/health")
+    async def health() -> dict:
+        """Health check endpoint."""
+        return {
+            "status": "ok",
+            "mcp_enabled": config.mcp.enabled,
+            "mcp_transport": config.mcp.transport,
+        }
+
+    # --------------------------------------------------------
+    # MCP SSE — montado somente se habilitado e transporte = sse
+    # --------------------------------------------------------
+
+    if config.mcp.enabled and config.mcp.transport == "sse":
+        from mcp_server.sse import mount_sse
+        from mcp_server.rate_limiter import InMemoryRateLimiter
+        from safety.pre_validator import PreExecutionValidator
+        from safety.tnr import TNRSafetyGuard
+        from safety.version_validator import VersionValidator
+        from pipeline.telemetry_sanitizer import TelemetrySanitizer
+
+        # Instancia safety layers
+        sanitizer = TelemetrySanitizer()
+        pre_validator = PreExecutionValidator()
+        tnr = TNRSafetyGuard(
+            regression_threshold=config.thresholds.regression_threshold
+        )
+        version_validator = VersionValidator()
+
+        # Instancia rate limiter com config
+        rate_limiter = InMemoryRateLimiter.from_config(config.mcp.rate_limits)
+
+        mount_sse(
+            app,
+            config=config.mcp,
+            rate_limiter=rate_limiter,
+            sanitizer=sanitizer,
+            pre_validator=pre_validator,
+            tnr=tnr,
+            version_validator=version_validator,
+        )
+
+    return app

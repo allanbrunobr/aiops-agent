@@ -1,18 +1,48 @@
-# AIOps Agent — Default Configuration
-# Override with environment variables: AIOPS__<SECTION>__<KEY>=value
+# AIOps Agent — Configuração padrão
+# Overrides via variáveis de ambiente: AIOPS__SECAO__CAMPO=valor
+# Ex: AIOPS__THRESHOLDS__SIGMA_THRESHOLD=4.0
 
-# Notification channels configuration
-notifications:
-  slack:
-    enabled: false
-    channel: ""                   # Slack channel ID (e.g., "C1234567890")
-    max_retries: 3                # Retry attempts before local fallback
-    initial_backoff_s: 1.0        # Initial backoff in seconds
-    backoff_multiplier: 2.0       # Exponential backoff multiplier (1s, 2s, 4s)
-    fallback_dir: "output"        # Directory for local fallback JSON files
-    dry_run: false                # Log messages without sending to Slack
+# Thresholds de análise de anomalias
+thresholds:
+  sigma_threshold: 3.0           # Desvios padrão acima da baseline para anomalia
+  baseline_ratio: 0.5            # Fração da série temporal usada como baseline
+  percentile_threshold: 95.0     # Percentil acima do qual traces são "lentos"
+  max_hops: 3                    # Profundidade máxima do call path
+  regression_threshold: -5.0     # Delta mínimo de health aceitável (STRATUS paper)
+  error_threshold: 50            # Número mínimo de erros para acionar incidente
+  detection_sigma_threshold: 3.0 # Sigma threshold para classificação de severidade
 
-# Observability and monitoring settings
-observability:
-  metric_retention_hours: 24      # How long to keep pipeline metrics (hours)
-  accuracy_tracking_enabled: true # Enable diagnostic accuracy tracking
+# Configuração de segurança
+safety:
+  blast_radius_limit: 5          # Máximo de serviços afetados sem aprovação humana
+  require_human_approval: true   # Sempre requer aprovação humana para ações
+
+# Blueprint Engine (stub — habilitado em épicos futuros)
+blueprint:
+  enabled: false
+
+# Servidor webhook (stub — habilitado no épico 2)
+webhook:
+  host: "0.0.0.0"
+  port: 8000
+  secret: ""
+
+# Notificações Slack (stub — habilitado no épico 3)
+slack:
+  enabled: false
+  webhook_url: ""
+
+# MCP Toolshed — servidor de ferramentas para agentes externos
+mcp:
+  enabled: false                    # Desabilitado por padrão — opt-in explícito
+  transport: sse                    # "stdio" (dev local) ou "sse" (produção/remoto)
+  sse_port: 3001                    # Porta SSE (ignorada no modo stdio)
+  enabled_tools:                    # Ferramentas habilitadas (subconjunto de 3 disponíveis)
+    - diagnose_incident
+    - validate_action
+    - search_incidents
+  auth_method: header               # "header" (X-Client-Id) ou "none" (confiança implícita)
+  rate_limits:
+    diagnose: 10                    # diagnose_incident: 10 chamadas/min (caro: LLM + FAISS + safety)
+    search: 60                      # search_incidents: 60 chamadas/min (barato: RAG read-only)
+    validate: 30                    # validate_action: 30 chamadas/min (moderado: safety layers)
