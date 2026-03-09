@@ -1,0 +1,18 @@
+# AIOps Agent — Default Configuration
+# Override with environment variables: AIOPS__<SECTION>__<KEY>=value
+
+# Notification channels configuration
+notifications:
+  slack:
+    enabled: false
+    channel: ""                   # Slack channel ID (e.g., "C1234567890")
+    max_retries: 3                # Retry attempts before local fallback
+    initial_backoff_s: 1.0        # Initial backoff in seconds
+    backoff_multiplier: 2.0       # Exponential backoff multiplier (1s, 2s, 4s)
+    fallback_dir: "output"        # Directory for local fallback JSON files
+    dry_run: false                # Log messages without sending to Slack
+
+# Observability and monitoring settings
+observability:
+  metric_retention_hours: 24      # How long to keep pipeline metrics (hours)
+  accuracy_tracking_enabled: true # Enable diagnostic accuracy tracking
