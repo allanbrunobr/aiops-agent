@@ -1,44 +1,41 @@
 from __future__ import annotations
 
-import structlog
+from fastapi import FastAPI
 
-from blueprint.engine import BlueprintEngine
-from config.loader import AppConfig, load_config
-from core.credentials import EnvCredentialProvider
+from core.store import InMemoryStore
+from rag.knowledge_store import KnowledgeStore
+from server.api.accuracy import router as accuracy_router, get_store
+from server.api.metrics import router as metrics_router, get_metrics_collector
+from server.health import router as health_router, set_metrics_collector
+from server.metrics.pipeline import PipelineMetricsCollector
+from server.routes.admin import router as admin_router
+from server.routes.knowledge import router as knowledge_router, get_knowledge_store
 
-log = structlog.get_logger()
+# Composition root — instâncias únicas compartilhadas
+incident_store = InMemoryStore()
+knowledge_store = KnowledgeStore(storage_path="data/knowledge/patterns.json")
+pipeline_metrics = PipelineMetricsCollector(retention_hours=24)
 
+# Carrega padrões existentes do disco
+knowledge_store.load_from_disk()
 
-def create_engine(config: AppConfig | None = None) -> BlueprintEngine:
-    """Cria e configura o BlueprintEngine com observers registrados.
+app = FastAPI(
+    title="AIOps Agent API",
+    description="API para monitoramento e feedback do agente AIOps",
+    version="1.0.0",
+)
 
-    Composicao root: conecta config, credenciais e notificacoes.
-    """
-    if config is None:
-        config = load_config()
+# Routers
+app.include_router(health_router)
+app.include_router(accuracy_router)
+app.include_router(metrics_router)
+app.include_router(knowledge_router)
+app.include_router(admin_router)
 
-    creds = EnvCredentialProvider()
-    engine = BlueprintEngine()
+# Injeta dependências via dependency_overrides
+app.dependency_overrides[get_store] = lambda: incident_store
+app.dependency_overrides[get_metrics_collector] = lambda: pipeline_metrics
+app.dependency_overrides[get_knowledge_store] = lambda: knowledge_store
 
-    slack_config = config.notifications.slack
-
-    if slack_config.enabled:
-        from server.notifications.slack import SlackNotifier
-
-        notifier = SlackNotifier(
-            channel=slack_config.channel,
-            creds=creds,
-            max_retries=slack_config.max_retries,
-            initial_backoff_s=slack_config.initial_backoff_s,
-            backoff_multiplier=slack_config.backoff_multiplier,
-            fallback_dir=slack_config.fallback_dir,
-            dry_run=slack_config.dry_run,
-        )
-        engine.add_observer(notifier)
-        log.info(
-            "slack.observer_registered",
-            channel=slack_config.channel,
-            dry_run=slack_config.dry_run,
-        )
-
-    return engine
+# Configura health endpoint com métricas
+set_metrics_collector(pipeline_metrics)

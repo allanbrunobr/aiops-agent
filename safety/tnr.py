@@ -13,6 +13,7 @@ Garante que o agente NUNCA piore o sistema.
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -178,6 +179,8 @@ class TNRSafetyGuard:
         action: MitigationAction,
         pre_health: HealthSnapshot,
         post_health: HealthSnapshot,
+        *,
+        correlation_id: str = "",
     ) -> TNRReport:
         """Simula TNR check sem executar (para demo/testes)."""
         health_delta = post_health.health_score - pre_health.health_score
@@ -204,4 +207,46 @@ class TNRSafetyGuard:
             message=message,
         )
         self.history.append(report)
+
+        # Emite evento de auditoria (Story 3.4)
+        try:
+            from safety.audit import SafetyAuditEvent, SafetyAuditor
+
+            is_rollback = result == TNRResult.REGRESSION
+            SafetyAuditor.log_decision(SafetyAuditEvent(
+                layer_name="tnr",
+                correlation_id=correlation_id,
+                verdict="rollback" if is_rollback else "pass",
+                rationale=(
+                    f"Health regression detected: delta={health_delta:.1f} < "
+                    f"threshold={self.regression_threshold}"
+                    if is_rollback
+                    else f"Health stable: delta={health_delta:.1f} >= "
+                         f"threshold={self.regression_threshold}"
+                ),
+                input_summary=(
+                    f"Pre: {pre_health.health_score:.1f}, "
+                    f"Post: {post_health.health_score:.1f}"
+                ),
+                output_summary=(
+                    "Rollback triggered" if is_rollback else "No regression detected"
+                ),
+                triggered_rule=(
+                    f"regression_threshold={self.regression_threshold}"
+                    if is_rollback
+                    else None
+                ),
+                metadata={
+                    "pre_score": pre_health.health_score,
+                    "post_score": post_health.health_score,
+                    "delta": health_delta,
+                },
+            ))
+        except Exception as exc:
+            try:
+                from safety.audit import SafetyAuditor
+                SafetyAuditor.log_error("tnr", correlation_id, exc)
+            except Exception:
+                pass
+
         return report

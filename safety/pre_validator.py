@@ -19,6 +19,7 @@ Regra principal: NUNCA executar ações destrutivas sem aprovação humana.
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime
@@ -150,6 +151,8 @@ class PreExecutionValidator:
         action,  # MitigationAction
         diagnosis: dict,
         system_state: dict | None = None,
+        *,
+        correlation_id: str = "",
     ) -> SafetyCheckResult:
         """
         Valida uma ação de mitigação antes da execução.
@@ -162,6 +165,7 @@ class PreExecutionValidator:
         Returns:
             SafetyCheckResult com decisão e detalhes
         """
+        start = time.monotonic()
         checks_passed = []
         checks_failed = []
         warnings = []
@@ -261,6 +265,47 @@ class PreExecutionValidator:
         )
 
         self.history.append(result)
+
+        # Emite evento de auditoria (Story 3.4)
+        try:
+            from safety.audit import SafetyAuditEvent, SafetyAuditor
+
+            duration_ms = int((time.monotonic() - start) * 1000)
+            command_preview = action.command[:100] if hasattr(action, "command") else str(action)[:100]
+            blocked = result.approval_status == ApprovalStatus.BLOCKED
+
+            SafetyAuditor.log_decision(SafetyAuditEvent(
+                layer_name="pre_validator",
+                correlation_id=correlation_id,
+                verdict="block" if blocked else "pass",
+                rationale=(
+                    f"Action blocked: {'; '.join(result.checks_failed)}"
+                    if blocked
+                    else f"Action approved. Risk score: {result.risk_score:.1f}, "
+                         f"Blast radius: {result.blast_radius.affected_services} services"
+                ),
+                input_summary=f"Command: {command_preview}",
+                output_summary=(
+                    "Action rejected — not forwarded to execution"
+                    if blocked
+                    else "Action forwarded to TNR check"
+                ),
+                triggered_rule=(
+                    "; ".join(result.checks_failed[:2]) if blocked else None
+                ),
+                duration_ms=duration_ms,
+                metadata={
+                    "blast_radius": result.blast_radius.affected_services,
+                    "risk_score": result.risk_score,
+                },
+            ))
+        except Exception as exc:
+            try:
+                from safety.audit import SafetyAuditor
+                SafetyAuditor.log_error("pre_validator", correlation_id, exc)
+            except Exception:
+                pass
+
         return result
 
     def _check_command_safety(self, command: str) -> tuple[bool, str]:

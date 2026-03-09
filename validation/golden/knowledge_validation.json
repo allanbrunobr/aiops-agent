@@ -1,0 +1,20 @@
+{
+  "subsystem": "knowledge",
+  "expected_scenarios": [
+    {
+      "name": "rag_retrieval_accuracy",
+      "expected_passed": true,
+      "description": "Known payment-svc pattern must appear in top-K results"
+    },
+    {
+      "name": "rag_graceful_degradation",
+      "expected_passed": true,
+      "description": "Pipeline must complete without exception when FAISS unavailable"
+    },
+    {
+      "name": "knowledge_write_read_cycle",
+      "expected_passed": true,
+      "description": "Pattern inserted must be retrievable after index rebuild"
+    }
+  ]
+}

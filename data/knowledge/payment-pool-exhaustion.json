@@ -1,0 +1,19 @@
+[
+  {
+    "pattern_id": "pat-payment-pool-001",
+    "service": "payment-svc",
+    "symptoms": [
+      "Connection pool exhausted",
+      "Database connection timeout",
+      "Circuit breaker open",
+      "High error rate on payment endpoints",
+      "Requests queuing beyond pool capacity"
+    ],
+    "root_cause": "Connection pool exhaustion after config deploy reduced max_connections from 200 to 50",
+    "resolution": "Revert config to restore max_connections=200, then investigate config change process and add config validation",
+    "tags": ["connection-pool", "config-change", "database", "payment-svc"],
+    "confidence": 0.95,
+    "is_negative_example": false,
+    "created_at": "2026-03-08T00:00:00+00:00"
+  }
+]

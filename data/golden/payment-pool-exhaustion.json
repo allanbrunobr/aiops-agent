@@ -1,0 +1,20 @@
+{
+  "scenario_name": "payment-pool-exhaustion",
+  "scenario_seed": 42,
+  "expected_detection": {
+    "incident_declared": true,
+    "correlated_signals": {
+      "error_logs": true,
+      "metric_anomalies": true,
+      "slow_traces": true
+    },
+    "min_signals_required": 2
+  },
+  "expected_diagnosis": {
+    "affected_services": ["payment-svc"],
+    "root_cause_contains": "connection pool",
+    "severity": "high"
+  },
+  "expected_affected_services": ["payment-svc"],
+  "validation_mode": "no-llm"
+}
