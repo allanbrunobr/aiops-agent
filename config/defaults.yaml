@@ -1,0 +1,28 @@
+# AIOps Agent — Configuracao padrao
+# Sobrescreva com variaveis de ambiente usando delimitador __ (double underscore)
+# Exemplo: AIOPS__WEBHOOK__PORT=9000
+
+webhook:
+  enabled: false
+  port: 8000
+  max_payload_bytes: 1048576   # 1MB
+  dedup_window_seconds: 300    # 5 minutos
+  max_concurrent_pipelines: 3
+  max_queued_alerts: 10
+
+thresholds:
+  sigma_threshold: 3.0
+  p95_threshold_ms: 500.0
+  min_error_rate: 0.05
+  min_anomaly_score: 0.6
+  correlation_window_seconds: 300
+  min_correlated_signals: 2
+  regression_threshold: -0.1
+
+safety:
+  blast_radius_limit: 5
+  enable_command_blocklist: true
+
+slack:
+  enabled: false
+  channel: ""
