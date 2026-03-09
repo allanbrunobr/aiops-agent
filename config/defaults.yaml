@@ -1,0 +1,42 @@
+# AIOps Agent — Default Configuration
+# Override with environment variables: AIOPS_<SECTION>__<KEY>=value
+
+thresholds:
+  # Standard deviations above baseline mean to flag as anomaly
+  # Higher = fewer anomalies detected (less sensitive)
+  sigma_threshold: 3.0
+
+  # Fraction of time series used as pre-incident baseline (0.0-1.0)
+  baseline_ratio: 0.5
+
+  # Percentile threshold for "slow" traces (0-100)
+  percentile_threshold: 95.0
+
+  # Maximum hop depth for slow trace call path extraction
+  max_hops: 3
+
+  # Maximum health score drop before triggering rollback (must be <= 0)
+  # -5.0 per STRATUS paper (NeurIPS 2025) — do NOT change without justification
+  regression_threshold: -5.0
+
+  # Minimum error count to trigger incident detection
+  error_threshold: 50
+
+  # Sigma threshold for high-severity anomaly classification in detection
+  detection_sigma_threshold: 3.0
+
+safety:
+  blast_radius_limit: 5
+  require_human_approval: true
+
+blueprint:
+  enabled: true
+  pipeline_timeout_seconds: 90  # NFR1 — global pipeline timeout
+  max_llm_calls: 15             # NFR6 — max LLM API calls per pipeline run
+
+webhook:
+  enabled: false
+  port: 8000
+
+slack:
+  enabled: false

@@ -47,7 +47,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 
-from config import ThresholdConfig, load_config
+from config.loader import AppConfig, load_config
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
@@ -216,20 +216,20 @@ def step_sanitize(incident):
     return san_report
 
 
-def step_pipeline(incident, config: ThresholdConfig | None = None) -> AggregatedReport:
+def step_pipeline(incident, config: AppConfig | None = None) -> AggregatedReport:
     """Etapa 2: Pre-processamento (Drain3 + 3-sigma + p95)."""
     console.print(Rule("[bold]Stage 2: Pre-Processing Pipeline[/bold]", style="cyan"))
     console.print()
 
     if config is None:
-        config = ThresholdConfig()
+        config = AppConfig()
 
     t0 = time.time()
     aggregator = Aggregator(
-        sigma_threshold=config.sigma_threshold,
-        baseline_ratio=config.baseline_ratio,
-        percentile_threshold=config.percentile_threshold,
-        max_hops=config.max_hops,
+        sigma_threshold=config.thresholds.sigma_threshold,
+        baseline_ratio=config.thresholds.baseline_ratio,
+        percentile_threshold=config.thresholds.percentile_threshold,
+        max_hops=config.thresholds.max_hops,
     )
     report = aggregator.process(incident.logs, incident.metrics, incident.traces)
     elapsed = time.time() - t0
@@ -379,7 +379,7 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
 
 def step_agents(report, retriever, use_llm: bool = True,
                 llm_model: str = "claude-sonnet-4-20250514",
-                config: ThresholdConfig | None = None) -> tuple[dict, Orchestrator]:
+                config: AppConfig | None = None) -> tuple[dict, Orchestrator]:
     """Etapa 4: Pipeline de agentes (Detect -> Diagnose -> Mitigate -> Verify).
 
     Args:
@@ -387,22 +387,22 @@ def step_agents(report, retriever, use_llm: bool = True,
         retriever: ObservabilityRetriever para RAG (ou None).
         use_llm: Se True, usa LLM para diagnostico. Se False, heuristica apenas.
         llm_model: Nome do modelo LLM a usar (ignorado se use_llm=False).
-        config: ThresholdConfig com valores de thresholds para agentes.
+        config: AppConfig com valores de thresholds para agentes.
     """
     console.print(Rule("[bold]Stage 4: Agent Pipeline[/bold]", style="cyan"))
     console.print()
 
     if config is None:
-        config = ThresholdConfig()
+        config = AppConfig()
 
     # Inicializa agentes
     detector = DetectionAgent(
-        error_threshold=config.error_threshold,
-        sigma_threshold=config.detection_sigma_threshold,
+        error_threshold=config.thresholds.error_threshold,
+        sigma_threshold=config.thresholds.detection_sigma_threshold,
     )
     diagnoser = DiagnosisAgent(max_iterations=5 if use_llm else 1, model=llm_model)
     mitigator = MitigationAgent()
-    tnr_guard = TNRSafetyGuard(regression_threshold=config.regression_threshold)
+    tnr_guard = TNRSafetyGuard(regression_threshold=config.thresholds.regression_threshold)
 
     # Inicializa orchestrator
     orchestrator = Orchestrator()
@@ -706,7 +706,7 @@ def _serialize_result(result: dict, incident) -> dict:
     config = {}
     tc = result.get("threshold_config")
     if tc is not None:
-        config["thresholds"] = dataclasses.asdict(tc)
+        config["thresholds"] = tc.thresholds.model_dump() if hasattr(tc, 'thresholds') else dataclasses.asdict(tc)
     config["source"] = result.get("config_source", "defaults")
 
     # Tracking (Story 6.3)
@@ -924,7 +924,7 @@ def print_summary(result, orchestrator, compression_stats=None, safety_result=No
     if tc:
         table.add_row(
             "Thresholds",
-            f"[dim]σ={tc.sigma_threshold:.1f}, p{tc.percentile_threshold:.0f}, TNR={tc.regression_threshold:.1f}[/dim]",
+            f"[dim]σ={tc.thresholds.sigma_threshold:.1f}, p{tc.thresholds.percentile_threshold:.0f}, TNR={tc.thresholds.regression_threshold:.1f}[/dim]",
             f"[dim]source: {config_source}[/dim]",
         )
 
@@ -1078,7 +1078,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         default=None,
         metavar="FILE",
-        help="Path to TOML config file for analysis thresholds (default: auto-discover aiops.toml)",
+        help="Path to YAML config file for analysis thresholds (default: config/defaults.yaml)",
     )
     parser.add_argument(
         "--output-format",
@@ -1375,14 +1375,9 @@ def main() -> int:
     # Leitura do modelo LLM configuravel via env var (Story 5.1)
     llm_model = os.environ.get("AIOPS_LLM_MODEL", "claude-sonnet-4-20250514")
 
-    # Carrega configuração de thresholds via TOML (Story 5.2)
+    # Carrega configuracao via YAML (Pydantic Settings)
     threshold_config = load_config(config_path=args.config)
-    config_source = args.config or "defaults"
-    if args.config is None:
-        # Verifica se auto-discovery encontrou arquivo
-        project_root = Path(__file__).parent
-        if (project_root / "aiops.toml").exists():
-            config_source = str(project_root / "aiops.toml")
+    config_source = args.config or "config/defaults.yaml"
 
     # Resolve tracker (Story 6.3) — antes do pipeline para falhar rapido em config invalida
     tracker = _resolve_tracker(args.tracker)

@@ -255,9 +255,9 @@ class TestSerializeResult:
 
     def test_threshold_config_serialized(self):
         from main import _serialize_result
-        from config import ThresholdConfig
+        from config.loader import AppConfig
         result = self._make_minimal_result()
-        result["threshold_config"] = ThresholdConfig()
+        result["threshold_config"] = AppConfig()
         incident = self._make_minimal_incident()
         serialized = _serialize_result(result, incident)
         assert "config" in serialized
@@ -328,7 +328,7 @@ class TestSerializeResult:
         """Testa que o resultado completo sobrevive serialize -> dump -> load."""
         from main import _serialize_result, _json_default
         from safety.tnr import MitigationAction, HealthSnapshot
-        from config import ThresholdConfig
+        from config.loader import AppConfig
 
         now = datetime(2026, 3, 7, 14, 0, 0)
         result = self._make_minimal_result()
@@ -361,7 +361,7 @@ class TestSerializeResult:
                 connection_pool_max=200,
             ),
         }
-        result["threshold_config"] = ThresholdConfig()
+        result["threshold_config"] = AppConfig()
         incident = self._make_minimal_incident()
         serialized = _serialize_result(result, incident)
         json_str = json.dumps(serialized, default=_json_default, indent=2)
