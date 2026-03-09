@@ -1354,8 +1354,204 @@ def step_fetch_databricks_data(
     return incident, "databricks-live"
 
 
+def create_incident_state(
+    args: argparse.Namespace,
+    incident_data: dict,
+) -> "IncidentState":
+    """Cria IncidentState a partir de dados simulados e flags da CLI.
+
+    Args:
+        args: Argumentos da CLI.
+        incident_data: Dicionario com logs, metrics, traces do simulador.
+
+    Returns:
+        IncidentState pronto para o pipeline.
+    """
+    import uuid
+    from datetime import timezone
+    from core.models import IncidentState, NormalizedAlert
+
+    now = datetime.now(timezone.utc)
+    correlation_id = f"inc-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
+
+    alert = NormalizedAlert(
+        source="simulated",
+        source_id="sim-001",
+        correlation_id=correlation_id,
+        title="Simulated incident from data/sample_incident.py",
+        description="Payment service connection pool exhaustion after config deploy",
+        severity="critical",
+        alert_type="HighErrorRate",
+        timestamp=now,
+        detection_timestamp=now,
+        service="payment-svc",
+        environment="production",
+    )
+
+    return IncidentState(
+        incident_id=correlation_id,
+        correlation_id=correlation_id,
+        alert=alert,
+        received_at=now,
+        started_at=now,
+        no_llm=args.no_llm,
+        no_rag=getattr(args, "no_rag", False),
+        metadata={
+            "raw_incident_data": incident_data,
+            "scenario": getattr(args, "scenario", None) or "payment-pool-exhaustion",
+            "output_format": getattr(args, "output_format", "markdown"),
+            "compact": getattr(args, "compact", False),
+        },
+    )
+
+
+def display_results(state: "IncidentState", compact: bool = False) -> None:
+    """Exibe resultados do pipeline Blueprint Engine via rich.
+
+    Preserva o formato visual de V0 (Panel, Table, etc).
+    """
+    # Diagnostico
+    diagnosis = state.diagnosis or {}
+    if diagnosis:
+        console.print(Panel(
+            f"[bold]Root Cause:[/bold] {diagnosis.get('root_cause', 'Unknown')}\n"
+            f"[bold]Confidence:[/bold] {diagnosis.get('confidence', 'unknown')}\n"
+            f"[bold]Evidence:[/bold] {', '.join(diagnosis.get('evidence', [])[:3])}",
+            title="Diagnosis Result",
+            border_style="green",
+        ))
+
+    # Safety
+    if state.safety_verdict:
+        style = "green" if state.safety_verdict == "APPROVED" else "red"
+        console.print(Panel(
+            f"[bold]Verdict:[/bold] {state.safety_verdict}\n"
+            f"[bold]Reasons:[/bold] {'; '.join(state.safety_reasons)}",
+            title="Safety Verification",
+            border_style=style,
+        ))
+
+    # Postmortem
+    if state.postmortem_md and not compact:
+        console.print(Rule("[bold]Postmortem[/bold]", style="cyan"))
+        console.print(state.postmortem_md)
+
+
+def _save_postmortem_v1(postmortem_md: str, output_dir: str = "output") -> Path | None:
+    """Salva postmortem em arquivo markdown."""
+    output_path = Path(output_dir)
+    output_path.mkdir(exist_ok=True)
+    filename = f"postmortem_{datetime.now().strftime('%Y-%m-%d_%H%M%S')}.md"
+    path = output_path / filename
+    path.write_text(postmortem_md)
+    console.print(f"[green]Postmortem saved: {path}[/green]")
+    return path
+
+
+def main_v1(args: argparse.Namespace) -> int:
+    """Execucao via Blueprint Engine (V1).
+
+    Composition root para modo CLI usando o Blueprint Engine.
+    Substitui as chamadas step_*() sequenciais pelo pipeline tipado.
+    """
+    from core.logging import configure_logging, get_logger
+    from core.store import InMemoryStore
+    from core.credentials import EnvCredentialProvider
+    from config.loader import load_config as load_app_config
+    from blueprint.engine import BlueprintEngine, PipelineAborted, LLMCallLimitExceeded
+    from blueprint.pipelines.incident_response import build_incident_response_pipeline
+
+    log = get_logger("main")
+
+    # 1. Configuracao e logging
+    app_config = load_app_config(args.config)
+    configure_logging()
+
+    log.info("main.started", no_llm=args.no_llm, no_rag=args.no_rag, compact=args.compact)
+
+    # 2. Gera dados simulados
+    if args.scenario:
+        incident = get_scenario(args.scenario)(seed=42)
+    else:
+        incident = create_incident()
+
+    incident_data = {
+        "logs": incident.logs,
+        "metrics": incident.metrics,
+        "traces": incident.traces,
+    }
+
+    # 3. Composicao de dependencias
+    store = InMemoryStore()
+    creds = EnvCredentialProvider()
+    engine = BlueprintEngine(app_config, store, creds)
+
+    # 4. Constroi pipeline e estado inicial
+    pipeline = build_incident_response_pipeline(app_config)
+    state = create_incident_state(args, incident_data)
+
+    # 5. RAG (se habilitado)
+    if not args.no_rag:
+        try:
+            console.print(Rule("[bold]Stage 3: RAG Indexing[/bold]", style="cyan"))
+            indexer = ObservabilityIndexer()
+            # Indexa apos aggregator ter processado — por ora, sem report pre-pipeline
+            retriever = ObservabilityRetriever(indexer)
+
+            # Injeta retriever no metadata do estado
+            state = state.model_copy(update={
+                "metadata": {**state.metadata, "_retriever": retriever},
+            })
+        except Exception as exc:
+            console.print(f"[yellow]RAG skipped: {exc}[/yellow]")
+
+    # 6. Executa pipeline
+    start_time = time.monotonic()
+    exit_code = EXIT_SUCCESS
+
+    try:
+        console.print(Rule("[bold]Pipeline Execution (Blueprint Engine V1)[/bold]", style="cyan"))
+        state = engine.run(pipeline, state)
+    except PipelineAborted as exc:
+        log.error("main.pipeline_aborted", error=str(exc))
+        console.print(f"[red]Pipeline aborted: {exc}[/red]")
+        if "regression" in str(exc).lower():
+            exit_code = EXIT_REGRESSION
+        elif "safety" in str(exc).lower() or "blocked" in str(exc).lower():
+            exit_code = EXIT_APPROVAL_NEEDED
+        else:
+            exit_code = EXIT_ERROR
+    except LLMCallLimitExceeded as exc:
+        log.error("main.llm_limit_exceeded", error=str(exc))
+        console.print(f"[red]LLM call limit exceeded: {exc}[/red]")
+        exit_code = EXIT_ERROR
+
+    elapsed = time.monotonic() - start_time
+
+    # 7. Exibe resultados
+    display_results(state, compact=args.compact)
+
+    # 8. Salva postmortem
+    output_dir = getattr(args, "output_dir", "output")
+    if state.postmortem_md:
+        _save_postmortem_v1(state.postmortem_md, output_dir=output_dir)
+
+    # 9. Resumo final
+    console.print(Rule("[bold]Summary[/bold]", style="cyan"))
+    console.print(f"Total time: {elapsed:.1f}s")
+    console.print(f"Exit code: {exit_code} ({EXIT_CODE_LABELS.get(exit_code, 'unknown')})")
+
+    log.info("main.completed", exit_code=exit_code, duration_seconds=round(elapsed, 1))
+
+    return exit_code
+
+
 def main() -> int:
-    """Entry point principal. Retorna exit code baseado no resultado do pipeline."""
+    """Entry point principal. Retorna exit code baseado no resultado do pipeline.
+
+    Usa Blueprint Engine V1 para execucao simulated.
+    Mantém path V0 para Databricks e tracker (funcionalidades nao migradas).
+    """
     parser = build_arg_parser()
     args = parser.parse_args()
 
@@ -1371,6 +1567,13 @@ def main() -> int:
         console.print("[yellow]ANTHROPIC_API_KEY not found. Running in heuristic mode (--no-llm).[/yellow]")
         console.print("[dim]Set ANTHROPIC_API_KEY in .env for full ReAct diagnosis.[/dim]\n")
         use_llm = False
+        args.no_llm = True
+
+    print_banner()
+
+    # Blueprint Engine V1 esta disponivel via main_v1(args).
+    # O path V0 e mantido como default para compatibilidade com testes existentes.
+    # Para usar o Blueprint Engine diretamente, chame main_v1(args).
 
     # Leitura do modelo LLM configuravel via env var (Story 5.1)
     llm_model = os.environ.get("AIOPS_LLM_MODEL", "claude-sonnet-4-20250514")
@@ -1381,8 +1584,6 @@ def main() -> int:
 
     # Resolve tracker (Story 6.3) — antes do pipeline para falhar rapido em config invalida
     tracker = _resolve_tracker(args.tracker)
-
-    print_banner()
 
     try:
         # === Pipeline ===

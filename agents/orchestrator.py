@@ -12,6 +12,23 @@ to assist system-level safety reasoning and enforcement."
 
 from __future__ import annotations
 
+import warnings
+
+warnings.warn(
+    "agents.orchestrator is deprecated. Use blueprint.engine.BlueprintEngine instead. "
+    "This module will be removed in V2.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+# Loga deprecacao via structlog se disponivel
+try:
+    from core.logging import get_logger
+    _log = get_logger("agents")
+    _log.warning("agents.orchestrator.deprecated", replacement="blueprint.engine.BlueprintEngine")
+except ImportError:
+    pass
+
 from enum import Enum
 from dataclasses import dataclass, field
 from datetime import datetime
