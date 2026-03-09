@@ -8,9 +8,18 @@ __pycache__/
 # Environment
 .env
 
-# IDE
+# IDE and Tools
 .idea/
 .vscode/
+.claude/
+.cursor/
+.factory/
+.gemini/
+.hive/
+.serena/
+.taskmaster/
+_bmad/
+_bmad-output/
 *.swp
 *.swo
 
@@ -24,6 +33,10 @@ data/index.faiss
 # Test artifacts
 .pytest_cache/
 tests/__snapshots__/
+
+# Root .md files (except README.md)
+*.md
+!README.md
 
 # OS
 .DS_Store
