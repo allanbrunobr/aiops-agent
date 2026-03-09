@@ -61,11 +61,13 @@ class SafetyConfig(BaseModel):
 
 
 class BlueprintConfig(BaseModel):
-    """Stub — preenchido em Story 1.4 (Blueprint Engine)."""
+    """Configuracao do Blueprint Engine — motor de orquestracao do pipeline."""
 
     model_config = ConfigDict(frozen=True)
 
-    enabled: bool = False
+    enabled: bool = True
+    pipeline_timeout_seconds: int = 90   # NFR1 — timeout global do pipeline
+    max_llm_calls: int = 15             # NFR6 — limite de chamadas LLM por run
 
 
 class WebhookConfig(BaseModel):

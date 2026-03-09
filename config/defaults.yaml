@@ -30,7 +30,9 @@ safety:
   require_human_approval: true
 
 blueprint:
-  enabled: false
+  enabled: true
+  pipeline_timeout_seconds: 90  # NFR1 — global pipeline timeout
+  max_llm_calls: 15             # NFR6 — max LLM API calls per pipeline run
 
 webhook:
   enabled: false
