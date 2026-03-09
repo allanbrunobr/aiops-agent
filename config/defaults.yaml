@@ -1,28 +1,18 @@
-# AIOps Agent — Configuracao padrao
-# Sobrescreva com variaveis de ambiente usando delimitador __ (double underscore)
-# Exemplo: AIOPS__WEBHOOK__PORT=9000
+# AIOps Agent — Default Configuration
+# Override with environment variables: AIOPS__<SECTION>__<KEY>=value
 
-webhook:
-  enabled: false
-  port: 8000
-  max_payload_bytes: 1048576   # 1MB
-  dedup_window_seconds: 300    # 5 minutos
-  max_concurrent_pipelines: 3
-  max_queued_alerts: 10
+# Notification channels configuration
+notifications:
+  slack:
+    enabled: false
+    channel: ""                   # Slack channel ID (e.g., "C1234567890")
+    max_retries: 3                # Retry attempts before local fallback
+    initial_backoff_s: 1.0        # Initial backoff in seconds
+    backoff_multiplier: 2.0       # Exponential backoff multiplier (1s, 2s, 4s)
+    fallback_dir: "output"        # Directory for local fallback JSON files
+    dry_run: false                # Log messages without sending to Slack
 
-thresholds:
-  sigma_threshold: 3.0
-  p95_threshold_ms: 500.0
-  min_error_rate: 0.05
-  min_anomaly_score: 0.6
-  correlation_window_seconds: 300
-  min_correlated_signals: 2
-  regression_threshold: -0.1
-
-safety:
-  blast_radius_limit: 5
-  enable_command_blocklist: true
-
-slack:
-  enabled: false
-  channel: ""
+# Observability and monitoring settings
+observability:
+  metric_retention_hours: 24      # How long to keep pipeline metrics (hours)
+  accuracy_tracking_enabled: true # Enable diagnostic accuracy tracking

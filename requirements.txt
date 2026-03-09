@@ -26,6 +26,10 @@ structlog>=24.1.0
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 
+# Notifications
+slack-sdk>=3.27.0
+aiohttp>=3.9.0
+
 # Testing
 pytest>=9.0.0
 pytest-mock>=3.14.0

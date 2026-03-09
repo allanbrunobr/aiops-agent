@@ -1,5 +1,6 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 markers = [
     "unit: Testes unitários (sem deps externas, sem ML, sem API)",
     "integration: Testes de integração (pipeline completo, modo --no-llm)",
