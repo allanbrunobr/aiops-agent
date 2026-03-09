@@ -24,6 +24,7 @@ Ref: "When AIOps Become AI Oops: Subverting LLM-driven IT Operations
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -225,6 +226,8 @@ class VersionValidator:
         command: str,
         description: str = "",
         context: dict | None = None,
+        *,
+        correlation_id: str = "",
     ) -> RemediationValidation:
         """
         Valida uma proposta de remediação completa.
@@ -237,6 +240,7 @@ class VersionValidator:
         Returns:
             RemediationValidation com resultado e detalhes
         """
+        start = time.monotonic()
         checks = []
         blocked = []
         warnings = []
@@ -291,6 +295,43 @@ class VersionValidator:
         )
 
         self.history.append(result)
+
+        # Emite evento de auditoria (Story 3.4)
+        try:
+            from safety.audit import SafetyAuditEvent, SafetyAuditor
+
+            duration_ms = int((time.monotonic() - start) * 1000)
+            is_blocked = not result.is_safe
+
+            SafetyAuditor.log_decision(SafetyAuditEvent(
+                layer_name="version_validator",
+                correlation_id=correlation_id,
+                verdict="block" if is_blocked else "pass",
+                rationale=(
+                    f"Remediation blocked: {result.risk.name} — "
+                    + "; ".join(result.blocked_patterns[:2])
+                    if is_blocked
+                    else f"Remediation approved: {result.risk.name}"
+                ),
+                input_summary=f"Command: {command[:100]}",
+                output_summary=(
+                    f"Blocked {len(result.blocked_patterns)} patterns"
+                    if is_blocked
+                    else "Remediation approved"
+                ),
+                triggered_rule=(
+                    result.blocked_patterns[0] if result.blocked_patterns else None
+                ),
+                duration_ms=duration_ms,
+                metadata={"risk": result.risk.name},
+            ))
+        except Exception as exc:
+            try:
+                from safety.audit import SafetyAuditor
+                SafetyAuditor.log_error("version_validator", correlation_id, exc)
+            except Exception:
+                pass
+
         return result
 
     # ========================================================================

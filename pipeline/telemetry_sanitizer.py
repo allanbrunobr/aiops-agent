@@ -28,6 +28,7 @@ Ref: "When AIOps Become AI Oops: Subverting LLM-driven IT Operations
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -307,7 +308,7 @@ class TelemetrySanitizer:
         return sanitized_traces, trace_report
 
     def sanitize_all(
-        self, logs: list, metrics: list, traces: list
+        self, logs: list, metrics: list, traces: list, *, correlation_id: str = ""
     ) -> tuple[list, list, list, SanitizationReport]:
         """
         Sanitiza todos os dados de telemetria de uma vez.
@@ -320,9 +321,65 @@ class TelemetrySanitizer:
         Returns:
             Tuple de (logs, métricas, traces, relatório combinado)
         """
+        start = time.monotonic()
         s_logs, log_report = self.sanitize_logs(logs)
         s_metrics, metric_report = self.sanitize_metrics(metrics)
         s_traces, trace_report = self.sanitize_traces(traces)
+
+        # Emite evento de auditoria (Story 3.4)
+        try:
+            from safety.audit import SafetyAuditEvent, SafetyAuditor
+
+            total_entries = (
+                log_report.total_entries
+                + metric_report.total_entries
+                + trace_report.total_entries
+            )
+            adversarial_blocked = (
+                log_report.adversarial_entries
+                + metric_report.adversarial_entries
+                + trace_report.adversarial_entries
+            )
+            pii_count = (
+                log_report.tainted_entries
+                + metric_report.tainted_entries
+                + trace_report.tainted_entries
+            )
+            duration_ms = int((time.monotonic() - start) * 1000)
+
+            if adversarial_blocked > 0:
+                triggered_patterns = log_report.adversarial_payloads_blocked
+                SafetyAuditor.log_decision(SafetyAuditEvent(
+                    layer_name="sanitizer",
+                    correlation_id=correlation_id,
+                    verdict="block",
+                    rationale=(
+                        f"Adversarial payload detected: {adversarial_blocked} patterns matched"
+                    ),
+                    input_summary=f"Telemetry data with {total_entries} entries",
+                    output_summary=(
+                        f"Blocked {adversarial_blocked} adversarial payloads, "
+                        f"redacted {pii_count} PII fields"
+                    ),
+                    triggered_rule=", ".join(triggered_patterns[:3]) if triggered_patterns else None,
+                    duration_ms=duration_ms,
+                ))
+            else:
+                SafetyAuditor.log_decision(SafetyAuditEvent(
+                    layer_name="sanitizer",
+                    correlation_id=correlation_id,
+                    verdict="pass",
+                    rationale=f"No adversarial payloads. {pii_count} PII fields redacted.",
+                    input_summary=f"Telemetry data with {total_entries} entries",
+                    output_summary=f"Clean output with {pii_count} PII redactions",
+                    duration_ms=duration_ms,
+                ))
+        except Exception as exc:
+            try:
+                from safety.audit import SafetyAuditor
+                SafetyAuditor.log_error("sanitizer", correlation_id, exc)
+            except Exception:
+                pass
 
         # Combina relatórios
         combined = SanitizationReport(
