@@ -19,6 +19,7 @@ output/
 
 # RAG index cache
 .aiops-cache/
+data/index.faiss
 
 # Test artifacts
 .pytest_cache/

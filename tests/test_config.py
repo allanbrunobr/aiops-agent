@@ -29,9 +29,11 @@ class TestAppConfigDefaults:
         assert config.safety.require_human_approval is True
 
     def test_blueprint_defaults(self):
-        """BlueprintConfig carrega como stub desabilitado."""
+        """BlueprintConfig carrega com valores padrao."""
         config = AppConfig()
-        assert config.blueprint.enabled is False
+        assert config.blueprint.enabled is True
+        assert config.blueprint.pipeline_timeout_seconds == 90
+        assert config.blueprint.max_llm_calls == 15
 
     def test_webhook_defaults(self):
         """WebhookConfig carrega com valores padrao."""
