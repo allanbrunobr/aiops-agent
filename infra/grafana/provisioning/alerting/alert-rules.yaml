@@ -1,0 +1,119 @@
+# Alert Rules — detecta anomalias no payment-svc
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: payment-svc-alerts
+    folder: AIOps
+    interval: 10s
+    rules:
+      # Alerta 1: Error rate acima de 10%
+      - uid: payment-svc-high-error-rate
+        title: "High Error Rate - payment-svc"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: payment_svc_error_rate_percent{service="payment-svc"}
+              intervalMs: 15000
+              maxDataPoints: 20
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 10
+        for: 30s
+        labels:
+          severity: critical
+          service: payment-svc
+          component: connection-pool
+          environment: production
+        annotations:
+          summary: "Error rate at {{ $values.A }}% (threshold: 10%)"
+          description: "payment-svc error rate exceeded 10% for 30s. Current: {{ $values.A }}%. Possible connection pool exhaustion."
+
+      # Alerta 2: Connection pool saturado (> 80% usado)
+      - uid: payment-svc-pool-exhaustion
+        title: "Connection Pool Exhaustion - payment-svc"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: (payment_svc_connection_pool_active / payment_svc_connection_pool_max) * 100
+              intervalMs: 15000
+              maxDataPoints: 20
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 80
+        for: 15s
+        labels:
+          severity: critical
+          service: payment-svc
+          component: connection-pool
+          environment: production
+        annotations:
+          summary: "Connection pool at {{ $values.A }}% capacity"
+          description: "payment-svc connection pool usage exceeds 80%. Active connections near max. Possible pool exhaustion after config change."
+
+      # Alerta 3: Latencia p95 acima de 500ms
+      - uid: payment-svc-high-latency
+        title: "High Latency P95 - payment-svc"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: payment_svc_latency_ms{service="payment-svc",quantile="0.95"}
+              intervalMs: 15000
+              maxDataPoints: 20
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 500
+        for: 30s
+        labels:
+          severity: warning
+          service: payment-svc
+          component: api
+          environment: production
+        annotations:
+          summary: "P95 latency at {{ $values.A }}ms (threshold: 500ms)"
+          description: "payment-svc P95 latency exceeded 500ms. Possible downstream dependency issue or resource contention."

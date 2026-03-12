@@ -60,6 +60,7 @@ class SlackNotifier:
         self._fallback_dir = Path(fallback_dir)
         self._dry_run = dry_run
         self._message_ts: dict[str, str] = {}          # correlation_id -> message timestamp
+        self._channel_ids: dict[str, str] = {}           # correlation_id -> resolved channel ID
         self._completed_nodes: dict[str, list[str]] = {}  # correlation_id -> lista de nos concluidos
 
         if dry_run:
@@ -200,7 +201,8 @@ class SlackNotifier:
 
         response = await self._send_with_retry(_send, context="initial_message", correlation_id=cid)
         self._message_ts[cid] = response["ts"]
-        log.info("slack.message_posted", correlation_id=cid, ts=response["ts"])
+        self._channel_ids[cid] = response["channel"]
+        log.info("slack.message_posted", correlation_id=cid, ts=response["ts"], channel_id=response["channel"])
 
     async def _update_progress(self, event: LifecycleEvent) -> None:
         """Atualiza mensagem com progresso do pipeline via chat.update()."""
@@ -222,9 +224,12 @@ class SlackNotifier:
             )
             return
 
+        # chat.update requer channel ID (nao nome) — usa o ID resolvido no postMessage
+        channel_id = self._channel_ids.get(cid, self._channel)
+
         async def _send() -> Any:
             return await self._client.chat_update(  # type: ignore[union-attr]
-                channel=self._channel,
+                channel=channel_id,
                 ts=ts,
                 blocks=blocks,
                 text=f"Incident {cid}: Processing stage {event.node_name}...",
@@ -251,10 +256,13 @@ class SlackNotifier:
             self._completed_nodes.pop(cid, None)
             return
 
+        # chat.update requer channel ID (nao nome)
+        channel_id = self._channel_ids.get(cid, self._channel)
+
         async def _send() -> None:
             if ts:
                 await self._client.chat_update(  # type: ignore[union-attr]
-                    channel=self._channel,
+                    channel=channel_id,
                     ts=ts,
                     blocks=blocks,
                     text=fallback_text,
@@ -282,6 +290,7 @@ class SlackNotifier:
 
         # Limpa estado independente de sucesso/falha
         self._message_ts.pop(cid, None)
+        self._channel_ids.pop(cid, None)
         self._completed_nodes.pop(cid, None)
 
     async def _post_failure_message(self, event: LifecycleEvent) -> None:
@@ -301,10 +310,13 @@ class SlackNotifier:
             self._completed_nodes.pop(cid, None)
             return
 
+        # chat.update requer channel ID (nao nome)
+        channel_id = self._channel_ids.get(cid, self._channel)
+
         async def _send() -> None:
             if ts:
                 await self._client.chat_update(  # type: ignore[union-attr]
-                    channel=self._channel,
+                    channel=channel_id,
                     ts=ts,
                     blocks=blocks,
                     text=f"Incident {cid}: Pipeline failed",
@@ -318,6 +330,7 @@ class SlackNotifier:
 
         await self._send_with_retry(_send, context="failure_message", correlation_id=cid)
         self._message_ts.pop(cid, None)
+        self._channel_ids.pop(cid, None)
         self._completed_nodes.pop(cid, None)
 
     # --- Block Kit builders ---

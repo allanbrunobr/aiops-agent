@@ -1,0 +1,13 @@
+# Prometheus config — scrape do metrics-exporter simulado
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "payment-svc"
+    static_configs:
+      - targets: ["metrics-exporter:9101"]
+        labels:
+          service: "payment-svc"
+          environment: "production"
+          component: "connection-pool"

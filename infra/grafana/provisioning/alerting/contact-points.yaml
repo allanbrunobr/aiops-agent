@@ -1,0 +1,15 @@
+# Grafana Contact Points — envia webhooks para o aiops-agent local
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: aiops-webhook
+    receivers:
+      - uid: aiops-webhook-receiver
+        type: webhook
+        settings:
+          url: "http://host.docker.internal:8000/webhook"
+          httpMethod: POST
+          authorization_scheme: Bearer
+          authorization_credentials: "test-grafana-token-local"
+        disableResolveMessage: false

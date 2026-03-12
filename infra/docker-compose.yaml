@@ -1,0 +1,55 @@
+# AIOps Agent — Infraestrutura Local de Teste
+# Sobe Grafana + Prometheus + Metrics Exporter + Slack Mock
+# Usage: docker compose -f infra/docker-compose.yaml up -d
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: aiops-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: aiops-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: aiops123
+      GF_UNIFIED_ALERTING_ENABLED: "true"
+      GF_ALERTING_ENABLED: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  metrics-exporter:
+    build:
+      context: ./metrics-exporter
+      dockerfile: Dockerfile
+    container_name: aiops-metrics-exporter
+    ports:
+      - "9101:9101"
+    restart: unless-stopped
+
+  slack-mock:
+    build:
+      context: ./slack-mock
+      dockerfile: Dockerfile
+    container_name: aiops-slack-mock
+    ports:
+      - "8003:8001"
+    restart: unless-stopped
+
+volumes:
+  grafana-data:

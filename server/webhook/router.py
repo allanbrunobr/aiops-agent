@@ -42,6 +42,14 @@ def identify_source(headers: dict[str, str], payload: dict[str, Any] | None = No
     if "x-pagerduty-signature" in headers:
         return "pagerduty"
 
+    # Deteccao Grafana pelo formato do payload (Unified Alerting)
+    if payload and isinstance(payload.get("alerts"), list):
+        return "grafana"
+
+    # Deteccao Databricks pelo formato do payload
+    if payload and ("job_id" in payload or "alert_id" in payload):
+        return "databricks"
+
     # Fallback: campo source no payload (se disponivel)
     if payload and isinstance(payload.get("source"), str):
         return payload["source"].lower()

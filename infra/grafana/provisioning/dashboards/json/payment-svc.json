@@ -1,0 +1,139 @@
+{
+  "uid": "aiops-payment-svc",
+  "title": "AIOps - Payment Service Monitor",
+  "tags": ["aiops", "payment-svc"],
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Error Rate %",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "payment_svc_error_rate_percent{service=\"payment-svc\"}",
+          "legendFormat": "Error Rate %",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 10 }
+            ]
+          },
+          "unit": "percent"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Connection Pool",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "payment_svc_connection_pool_active{service=\"payment-svc\"}",
+          "legendFormat": "Active",
+          "refId": "A"
+        },
+        {
+          "expr": "payment_svc_connection_pool_max{service=\"payment-svc\"}",
+          "legendFormat": "Max",
+          "refId": "B"
+        },
+        {
+          "expr": "payment_svc_connection_pool_waiting{service=\"payment-svc\"}",
+          "legendFormat": "Waiting",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Latency (ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "payment_svc_latency_ms{service=\"payment-svc\",quantile=\"0.5\"}",
+          "legendFormat": "p50",
+          "refId": "A"
+        },
+        {
+          "expr": "payment_svc_latency_ms{service=\"payment-svc\",quantile=\"0.95\"}",
+          "legendFormat": "p95",
+          "refId": "B"
+        },
+        {
+          "expr": "payment_svc_latency_ms{service=\"payment-svc\",quantile=\"0.99\"}",
+          "legendFormat": "p99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 200 },
+              { "color": "red", "value": 500 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "CPU & Memory %",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "payment_svc_cpu_percent{service=\"payment-svc\"}",
+          "legendFormat": "CPU %",
+          "refId": "A"
+        },
+        {
+          "expr": "payment_svc_memory_percent{service=\"payment-svc\"}",
+          "legendFormat": "Memory %",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percent" }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Incident Phase",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "payment_svc_phase{service=\"payment-svc\"}",
+          "legendFormat": "Phase",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "NORMAL", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "DEGRADING", "color": "yellow" } } },
+            { "type": "value", "options": { "2": { "text": "INCIDENT", "color": "red" } } },
+            { "type": "value", "options": { "3": { "text": "RECOVERING", "color": "blue" } } }
+          ]
+        }
+      }
+    }
+  ],
+  "schemaVersion": 39
+}
