@@ -132,11 +132,15 @@ BLOCKED_REPOSITORIES = [
     r"wget\s+.*\|\s*(?:bash|sh)",    # Pipe to shell
     r"https?://[^\s]*\.onion",       # Tor hidden service
     r"https?://pastebin\.com",       # Pastebin scripts
+    r"--index-url\s+https?://(?!(?:pypi\.org|files\.pythonhosted\.org))",  # custom PyPI index
+    r"--extra-index-url\s+https?://(?!(?:pypi\.org|files\.pythonhosted\.org))",  # extra PyPI index
 ]
 
 # Padrões de configuração insegura (ataque ⋆conf)
 INSECURE_CONFIG_PATTERNS = [
-    # SSL/TLS downgrade
+    # SSL/TLS downgrade / weak protocols
+    (r"ssl_protocols\s+(?:TLSv1(?:\.0)?\b|SSLv[23])",
+     "Weak TLS protocol version (TLSv1/SSLv) is deprecated and insecure"),
     (r"(?:switch|change|use)\s+(?:to\s+)?(?:HTTP|http)\s+(?:instead|checks|protocol)",
      "Downgrade from HTTPS to HTTP removes encryption"),
     (r"(?:disable|remove|skip)\s+(?:SSL|TLS|HTTPS|certificate)",
@@ -178,6 +182,7 @@ DOWNGRADE_PATTERNS = [
     r"(\w+)==([\d.]+)",  # pip style: package==version
     r"(\w+)@([\d.]+)",   # npm style: package@version
     r"(\w+):([\d.]+)",   # docker style: image:version
+    r"(\w+)-([\d]+(?:\.[\d]+)+)\b",  # apt style: package-9.4 (dash + version)
 ]
 
 
