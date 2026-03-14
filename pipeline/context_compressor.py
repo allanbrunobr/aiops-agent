@@ -408,14 +408,11 @@ class ContextCompressor:
         return tpl.template
 
     def _format_metric_chunk(self, anomaly) -> str:
-        return (
-            f"{anomaly.service}/{anomaly.metric_name} {anomaly.deviation_sigma}σ "
-            f"({anomaly.anomaly_type})"
-        )
+        return f"{anomaly.service}/{anomaly.metric_name}"
 
     def _format_trace_chunk(self, trace) -> str:
         ratio = int(trace.total_duration_ms / max(trace.normal_duration_ms, 1))
-        return f"{trace.bottleneck_service}: {trace.total_duration_ms:.0f}ms ({ratio}x slow)"
+        return f"{trace.bottleneck_service}: {ratio}x slow"
 
     # --- Utils ---
 
