@@ -18,6 +18,12 @@ from safety.tnr import (
 
 console = Console()
 
+# Mapeamento de versões implantadas → versão estável anterior para rollback
+ROLLBACK_VERSIONS = {
+    "v3.1.0": "v3.0.2",   # api-server memory-leak
+    "v4.0.0": "v3.9.2",   # data-processor unknown-fault
+}
+
 # Padrões de remediação conhecidos
 REMEDIATION_PATTERNS = {
     "connection pool": {
@@ -83,8 +89,23 @@ class MitigationAgent:
             pattern = REMEDIATION_PATTERNS["unknown"]
             matched_pattern = "unknown"
 
+        # Enriquece descrição com versão de rollback se disponível
+        deployed_version = diagnosis.get("deployed_version", "")
+        rollback_version = ROLLBACK_VERSIONS.get(deployed_version, "")
+        description = pattern["action"].format(service=primary_service)
+        if rollback_version:
+            description = description.replace(
+                "Rollback deployment",
+                f"Rollback deployment to {rollback_version}",
+            ).replace(
+                "Rollback deployment",  # fallback if pattern didn't match
+                f"Rollback to {rollback_version}",
+            )
+            if rollback_version not in description:
+                description += f" (rollback to {rollback_version})"
+
         action = MitigationAction(
-            description=pattern["action"].format(service=primary_service),
+            description=description,
             command=pattern["command"].format(service=primary_service, current=3, prev=1),
             risk_level=pattern["risk"],
             rollback_command=pattern["rollback"].format(

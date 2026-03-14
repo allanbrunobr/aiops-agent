@@ -647,6 +647,15 @@ class DiagnosisAgent:
 
         primary_service = max(service_errors, key=service_errors.get) if service_errors else "unknown"
 
+        # Extrai versão do deploy dos templates de log
+        import re as _re
+        deployed_version = None
+        for tpl in report.log_templates:
+            m = _re.search(r'image=\S+:(v[\d.]+)', tpl.template)
+            if m:
+                deployed_version = m.group(1)
+                break
+
         # Busca padrões conhecidos nos templates
         evidence = []
         root_cause = f"Multiple errors detected in {primary_service}"
@@ -690,10 +699,13 @@ class DiagnosisAgent:
             else:
                 root_cause = f"Unknown fault type detected in {primary_service}"
 
-        return {
+        result = {
             "root_cause": root_cause,
             "evidence": evidence[:5],
             "affected_services": affected,
             "confidence": confidence,
             "timeline": "Heuristic analysis - check logs for temporal correlation",
         }
+        if deployed_version:
+            result["deployed_version"] = deployed_version
+        return result
