@@ -75,7 +75,6 @@ def _run_pipeline(incident, scenario_name: str | None = None):
     from agents.detector import DetectionAgent
     from agents.diagnoser import DiagnosisAgent
     from agents.mitigator import MitigationAgent
-    from agents.orchestrator import Orchestrator
     from safety.tnr import TNRSafetyGuard
     from safety.pre_validator import PreExecutionValidator
     from safety.version_validator import VersionValidator
@@ -104,16 +103,44 @@ def _run_pipeline(incident, scenario_name: str | None = None):
         diagnoser = DiagnosisAgent(max_iterations=1)
         mitigator = MitigationAgent()
         tnr_guard = TNRSafetyGuard()
-        orchestrator = Orchestrator()
 
-        result = orchestrator.run_incident_response(
-            detector=detector,
-            diagnoser=diagnoser,
-            mitigator=mitigator,
-            tnr_guard=tnr_guard,
-            report=report,
-            retriever=None,
-        )
+        from datetime import datetime as _dt
+        timeline: list[dict] = []
+
+        def _rec(frm: str, to: str, reason: str) -> None:
+            timeline.append({"time": _dt.now().strftime("%H:%M:%S"),
+                             "from": frm, "to": to, "reason": reason})
+
+        result: dict = {"success": False, "stages": {}}
+        _rec("IDLE", "DETECTING", "Analisando dados de observabilidade...")
+        detection = detector.detect(report)
+        result["stages"]["detection"] = detection
+        if detection.get("is_incident"):
+            affected = ", ".join(detection.get("affected_services", []))
+            _rec("DETECTING", "DIAGNOSING", f"Investigando incidente em {affected}")
+            diagnosis = diagnoser.diagnose(report, None)
+            result["stages"]["diagnosis"] = diagnosis
+            if diagnosis.get("root_cause"):
+                _rec("DIAGNOSING", "MITIGATING", "Propondo remediação...")
+                mitigation = mitigator.propose(diagnosis)
+                result["stages"]["mitigation"] = mitigation
+                _rec("MITIGATING", "VERIFYING", "Verificando impacto (TNR)...")
+                tnr_check = mitigator.verify_with_tnr(mitigation, tnr_guard)
+                result["stages"]["verification"] = {
+                    "result": tnr_check.result.value,
+                    "health_delta": tnr_check.health_delta,
+                    "message": tnr_check.message,
+                }
+                if tnr_check.result.value != "regression":
+                    _rec("VERIFYING", "RESOLVED", f"Incidente resolvido: {tnr_check.message}")
+                    result["success"] = True
+                else:
+                    _rec("VERIFYING", "ROLLBACK", f"Regressão detectada: {tnr_check.message}")
+            else:
+                _rec("DIAGNOSING", "FAILED", "Não foi possível identificar root cause")
+        else:
+            _rec("DETECTING", "IDLE", "Nenhum incidente detectado")
+        result["timeline"] = timeline
 
         # 4b. Validação de segurança pré-execução
         mitigation = result.get("stages", {}).get("mitigation", {})

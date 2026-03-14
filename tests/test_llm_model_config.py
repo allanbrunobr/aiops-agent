@@ -99,20 +99,12 @@ class TestAiopsLlmModelEnvVar:
         with patch("main.DiagnosisAgent") as MockDiagnoser, \
              patch("main.DetectionAgent") as MockDetector, \
              patch("main.MitigationAgent"), \
-             patch("main.TNRSafetyGuard"), \
-             patch("main.Orchestrator") as MockOrch:
+             patch("main.TNRSafetyGuard"):
 
             # Setup mocks
             MockDetector.return_value = MagicMock()
             mock_diagnoser_instance = MagicMock()
             MockDiagnoser.return_value = mock_diagnoser_instance
-            mock_orch = MagicMock()
-            mock_orch.run_incident_response.return_value = {
-                "success": True,
-                "stages": {},
-                "timeline": [],
-            }
-            MockOrch.return_value = mock_orch
 
             from main import step_agents
             step_agents(mock_report, retriever=None, use_llm=True, llm_model="test-model-99")
@@ -142,16 +134,7 @@ class TestAiopsLlmModelEnvVar:
         with patch("main.DiagnosisAgent") as MockDiagnoser, \
              patch("main.DetectionAgent"), \
              patch("main.MitigationAgent"), \
-             patch("main.TNRSafetyGuard"), \
-             patch("main.Orchestrator") as MockOrch:
-
-            mock_orch = MagicMock()
-            mock_orch.run_incident_response.return_value = {
-                "success": True,
-                "stages": {},
-                "timeline": [],
-            }
-            MockOrch.return_value = mock_orch
+             patch("main.TNRSafetyGuard"):
 
             from main import step_agents
             # Em no-llm mode, llm_model nao importa
@@ -179,19 +162,10 @@ class TestAiopsLlmModelEnvVar:
         with patch("main.DiagnosisAgent"), \
              patch("main.DetectionAgent"), \
              patch("main.MitigationAgent"), \
-             patch("main.TNRSafetyGuard"), \
-             patch("main.Orchestrator") as MockOrch:
-
-            mock_orch = MagicMock()
-            mock_orch.run_incident_response.return_value = {
-                "success": True,
-                "stages": {},
-                "timeline": [],
-            }
-            MockOrch.return_value = mock_orch
+             patch("main.TNRSafetyGuard"):
 
             from main import step_agents
-            result, _ = step_agents(mock_report, retriever=None, use_llm=True, llm_model="my-model")
+            result = step_agents(mock_report, retriever=None, use_llm=True, llm_model="my-model")
 
             assert result["llm_model"] == "my-model"
 
@@ -214,19 +188,10 @@ class TestAiopsLlmModelEnvVar:
         with patch("main.DiagnosisAgent"), \
              patch("main.DetectionAgent"), \
              patch("main.MitigationAgent"), \
-             patch("main.TNRSafetyGuard"), \
-             patch("main.Orchestrator") as MockOrch:
-
-            mock_orch = MagicMock()
-            mock_orch.run_incident_response.return_value = {
-                "success": True,
-                "stages": {},
-                "timeline": [],
-            }
-            MockOrch.return_value = mock_orch
+             patch("main.TNRSafetyGuard"):
 
             from main import step_agents
-            result, _ = step_agents(mock_report, retriever=None, use_llm=False, llm_model="ignored")
+            result = step_agents(mock_report, retriever=None, use_llm=False, llm_model="ignored")
 
             assert result["llm_model"] == "heuristic"
 
@@ -265,11 +230,8 @@ class TestPostmortemModelMetadata:
             "llm_model": "claude-haiku-4-20250514",
         }
 
-        from agents.orchestrator import Orchestrator
-        orch = Orchestrator()
-
         from main import step_postmortem
-        path, _ = step_postmortem(result, orch, incident, output_dir=str(tmp_path))
+        path, _ = step_postmortem(result, incident, output_dir=str(tmp_path))
 
         content = path.read_text()
         assert "claude-haiku-4-20250514" in content
@@ -302,11 +264,8 @@ class TestPostmortemModelMetadata:
             "llm_model": "heuristic",
         }
 
-        from agents.orchestrator import Orchestrator
-        orch = Orchestrator()
-
         from main import step_postmortem
-        path, _ = step_postmortem(result, orch, incident, output_dir=str(tmp_path))
+        path, _ = step_postmortem(result, incident, output_dir=str(tmp_path))
 
         content = path.read_text()
         assert "heuristic" in content

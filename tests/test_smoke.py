@@ -110,7 +110,6 @@ class TestPipelineDeterminism:
             from agents.detector import DetectionAgent
             from agents.diagnoser import DiagnosisAgent
             from agents.mitigator import MitigationAgent
-            from agents.orchestrator import Orchestrator
             from safety.tnr import TNRSafetyGuard
             from safety.pre_validator import PreExecutionValidator
             from safety.version_validator import VersionValidator
@@ -131,16 +130,44 @@ class TestPipelineDeterminism:
                 diagnoser = DiagnosisAgent(max_iterations=1)
                 mitigator = MitigationAgent()
                 tnr_guard = TNRSafetyGuard()
-                orchestrator = Orchestrator()
 
-                result = orchestrator.run_incident_response(
-                    detector=detector,
-                    diagnoser=diagnoser,
-                    mitigator=mitigator,
-                    tnr_guard=tnr_guard,
-                    report=report,
-                    retriever=None,
-                )
+                from datetime import datetime as _dt2
+                _tl: list[dict] = []
+
+                def _r(frm: str, to: str, reason: str) -> None:
+                    _tl.append({"time": _dt2.now().strftime("%H:%M:%S"),
+                                "from": frm, "to": to, "reason": reason})
+
+                result: dict = {"success": False, "stages": {}}
+                _r("IDLE", "DETECTING", "Analisando dados de observabilidade...")
+                detection = detector.detect(report)
+                result["stages"]["detection"] = detection
+                if detection.get("is_incident"):
+                    affected = ", ".join(detection.get("affected_services", []))
+                    _r("DETECTING", "DIAGNOSING", f"Investigando incidente em {affected}")
+                    diagnosis = diagnoser.diagnose(report, None)
+                    result["stages"]["diagnosis"] = diagnosis
+                    if diagnosis.get("root_cause"):
+                        _r("DIAGNOSING", "MITIGATING", "Propondo remediação...")
+                        mitigation_r = mitigator.propose(diagnosis)
+                        result["stages"]["mitigation"] = mitigation_r
+                        _r("MITIGATING", "VERIFYING", "Verificando impacto (TNR)...")
+                        tnr_check = mitigator.verify_with_tnr(mitigation_r, tnr_guard)
+                        result["stages"]["verification"] = {
+                            "result": tnr_check.result.value,
+                            "health_delta": tnr_check.health_delta,
+                            "message": tnr_check.message,
+                        }
+                        if tnr_check.result.value != "regression":
+                            _r("VERIFYING", "RESOLVED", f"Incidente resolvido: {tnr_check.message}")
+                            result["success"] = True
+                        else:
+                            _r("VERIFYING", "ROLLBACK", f"Regressão detectada: {tnr_check.message}")
+                    else:
+                        _r("DIAGNOSING", "FAILED", "Não foi possível identificar root cause")
+                else:
+                    _r("DETECTING", "IDLE", "Nenhum incidente detectado")
+                result["timeline"] = _tl
 
                 # Validação de segurança pré-execução
                 mitigation = result.get("stages", {}).get("mitigation", {})

@@ -306,7 +306,7 @@ class TestPostmortemTrackingSection:
     ):
         """Postmortem markdown inclui ## Incident Tracking quando tracker_issue_key presente."""
         md_path, _ = step_postmortem(
-            sample_result, mock_orchestrator, sample_incident,
+            sample_result, sample_incident,
             output_dir=str(tmp_path),
             output_format="markdown",
             tracker_url="https://test.atlassian.net",
@@ -323,7 +323,7 @@ class TestPostmortemTrackingSection:
     ):
         """Postmortem markdown NAO inclui ## Incident Tracking sem tracker."""
         md_path, _ = step_postmortem(
-            sample_result, mock_orchestrator, sample_incident,
+            sample_result, sample_incident,
             output_dir=str(tmp_path),
             output_format="markdown",
         )
@@ -341,7 +341,7 @@ class TestPostmortemTrackingSection:
         }
 
         _, json_path = step_postmortem(
-            sample_result, mock_orchestrator, sample_incident,
+            sample_result, sample_incident,
             output_dir=str(tmp_path),
             output_format="json",
             tracker_url="https://test.atlassian.net",
@@ -358,7 +358,7 @@ class TestPostmortemTrackingSection:
     ):
         """JSON output NAO inclui 'tracking' quando nao ha tracker."""
         _, json_path = step_postmortem(
-            sample_result, mock_orchestrator, sample_incident,
+            sample_result, sample_incident,
             output_dir=str(tmp_path),
             output_format="json",
         )
@@ -377,7 +377,7 @@ class TestPrintSummaryTracker:
         """print_summary inclui linha de Tracking quando tracker_info presente."""
         tracker_info = {"issue_key": "OPS-123", "url": "https://test.atlassian.net"}
 
-        print_summary(sample_result, mock_orchestrator, tracker_info=tracker_info)
+        print_summary(sample_result, tracker_info=tracker_info)
 
         output = capsys.readouterr().out
         assert "OPS-123" in output
@@ -386,14 +386,14 @@ class TestPrintSummaryTracker:
         """print_summary mostra 'skipped' quando tracker falhou."""
         tracker_info = {"issue_key": None, "url": None}
 
-        print_summary(sample_result, mock_orchestrator, tracker_info=tracker_info)
+        print_summary(sample_result, tracker_info=tracker_info)
 
         output = capsys.readouterr().out
         assert "skipped" in output
 
     def test_summary_no_tracker_row_when_none(self, sample_result, mock_orchestrator, capsys):
         """print_summary nao inclui linha de Tracking quando tracker_info e None."""
-        print_summary(sample_result, mock_orchestrator, tracker_info=None)
+        print_summary(sample_result, tracker_info=None)
 
         output = capsys.readouterr().out
         assert "Tracking" not in output

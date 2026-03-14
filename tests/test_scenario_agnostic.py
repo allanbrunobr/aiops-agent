@@ -135,7 +135,7 @@ class TestPostmortemAcrossScenarios:
 
         bundle = scenario_pipeline_bundle
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            path, _ = step_postmortem(bundle["result"], None, bundle["incident"])
+            path, _ = step_postmortem(bundle["result"], bundle["incident"])
 
         assert path.exists(), f"Postmortem não gerado para '{bundle['scenario_name']}'"
         assert path.stat().st_size > 0, f"Postmortem vazio para '{bundle['scenario_name']}'"
@@ -151,7 +151,7 @@ class TestPostmortemAcrossScenarios:
 
         bundle = scenario_pipeline_bundle
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            path, _ = step_postmortem(bundle["result"], None, bundle["incident"])
+            path, _ = step_postmortem(bundle["result"], bundle["incident"])
 
         text = path.read_text(encoding="utf-8")
         path.unlink(missing_ok=True)
@@ -167,7 +167,7 @@ class TestPostmortemAcrossScenarios:
 
         bundle = scenario_pipeline_bundle
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            path, _ = step_postmortem(bundle["result"], None, bundle["incident"])
+            path, _ = step_postmortem(bundle["result"], bundle["incident"])
 
         text = path.read_text(encoding="utf-8")
         path.unlink(missing_ok=True)
@@ -183,7 +183,7 @@ class TestPostmortemAcrossScenarios:
         bundle = scenario_pipeline_bundle
         diagnosis = bundle["result"]["stages"]["diagnosis"]
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            path, _ = step_postmortem(bundle["result"], None, bundle["incident"])
+            path, _ = step_postmortem(bundle["result"], bundle["incident"])
 
         text = path.read_text(encoding="utf-8")
         path.unlink(missing_ok=True)
@@ -203,7 +203,7 @@ class TestPostmortemAcrossScenarios:
         pattern = mitigation.get("pattern_matched", "default")
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            path, _ = step_postmortem(bundle["result"], None, bundle["incident"])
+            path, _ = step_postmortem(bundle["result"], bundle["incident"])
 
         text = path.read_text(encoding="utf-8")
         path.unlink(missing_ok=True)
@@ -274,7 +274,7 @@ class TestNoPipelineHardcodedServiceNames:
         "pipeline/trace_filter.py",
         "pipeline/aggregator.py",
         "agents/detector.py",
-        "agents/orchestrator.py",
+        
     ]
 
     # Nomes de serviço que NÃO devem aparecer nesses módulos.

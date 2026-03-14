@@ -368,7 +368,7 @@ class TestUnknownFaultPipelineSnapshots:
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             postmortem_path, _ = step_postmortem(
-                unknown_fault_pipeline_result, None, unknown_fault_incident,
+                unknown_fault_pipeline_result, unknown_fault_incident,
             )
 
         postmortem_text = postmortem_path.read_text(encoding="utf-8")

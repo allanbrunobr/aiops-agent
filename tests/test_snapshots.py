@@ -118,7 +118,7 @@ class TestPipelineResultSnapshots:
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             postmortem_path, _ = step_postmortem(
-                pipeline_result, None, simulated_incident,
+                pipeline_result, simulated_incident,
             )
 
         # Lê o postmortem gerado e limpa o arquivo temporário

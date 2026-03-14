@@ -66,7 +66,6 @@ from rag.retriever import ObservabilityRetriever
 from agents.detector import DetectionAgent
 from agents.diagnoser import DiagnosisAgent
 from agents.mitigator import MitigationAgent
-from agents.orchestrator import Orchestrator, State
 from safety.tnr import TNRSafetyGuard
 from pipeline.context_compressor import ContextCompressor
 from safety.pre_validator import PreExecutionValidator
@@ -379,7 +378,7 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
 
 def step_agents(report, retriever, use_llm: bool = True,
                 llm_model: str = "claude-sonnet-4-20250514",
-                config: AppConfig | None = None) -> tuple[dict, Orchestrator]:
+                config: AppConfig | None = None) -> dict:
     """Etapa 4: Pipeline de agentes (Detect -> Diagnose -> Mitigate -> Verify).
 
     Args:
@@ -404,32 +403,75 @@ def step_agents(report, retriever, use_llm: bool = True,
     mitigator = MitigationAgent()
     tnr_guard = TNRSafetyGuard(regression_threshold=config.thresholds.regression_threshold)
 
-    # Inicializa orchestrator
-    orchestrator = Orchestrator()
-
     if not use_llm:
         console.print("  [yellow]Running in no-LLM mode (heuristic diagnosis only)[/yellow]\n")
     else:
         console.print(f"  [dim]Model: {llm_model}[/dim]\n")
 
-    # Roda o ciclo completo
+    # Executa pipeline de agentes (logica migrada de agents.orchestrator)
     t0 = time.time()
-    result = orchestrator.run_incident_response(
-        detector=detector,
-        diagnoser=diagnoser,
-        mitigator=mitigator,
-        tnr_guard=tnr_guard,
-        report=report,
-        retriever=retriever,
-    )
-    elapsed = time.time() - t0
+    result: dict = {"success": False, "stages": {}}
+    timeline: list[dict] = []
 
-    console.print(f"\n  [dim]Agent pipeline completed in {elapsed:.1f}s[/dim]")
+    def _transition(from_state: str, to_state: str, reason: str) -> None:
+        timeline.append({
+            "time": datetime.now().strftime("%H:%M:%S"),
+            "from": from_state,
+            "to": to_state,
+            "reason": reason,
+        })
+        console.print(f"\n  [{to_state}] {reason}", style="bold")
 
-    # Armazena modelo no resultado para postmortem e summary
+    # 1. DETECTING
+    _transition("IDLE", "DETECTING", "Analisando dados de observabilidade...")
+    detection = detector.detect(report)
+    result["stages"]["detection"] = detection
+
+    if not detection.get("is_incident"):
+        _transition("DETECTING", "IDLE", "Nenhum incidente detectado")
+        result["timeline"] = timeline
+        result["llm_model"] = llm_model if use_llm else "heuristic"
+        console.print(f"\n  [dim]Agent pipeline completed in {time.time() - t0:.1f}s[/dim]")
+        return result
+
+    # 2. DIAGNOSING
+    affected = ", ".join(detection.get("affected_services", []))
+    _transition("DETECTING", "DIAGNOSING", f"Investigando incidente em {affected}")
+    diagnosis = diagnoser.diagnose(report, retriever)
+    result["stages"]["diagnosis"] = diagnosis
+
+    if not diagnosis.get("root_cause"):
+        _transition("DIAGNOSING", "FAILED", "Não foi possível identificar root cause")
+        result["timeline"] = timeline
+        result["llm_model"] = llm_model if use_llm else "heuristic"
+        console.print(f"\n  [dim]Agent pipeline completed in {time.time() - t0:.1f}s[/dim]")
+        return result
+
+    # 3. MITIGATING
+    _transition("DIAGNOSING", "MITIGATING", "Propondo remediação...")
+    mitigation = mitigator.propose(diagnosis)
+    result["stages"]["mitigation"] = mitigation
+
+    # 4. VERIFYING (TNR)
+    _transition("MITIGATING", "VERIFYING", "Verificando impacto (TNR)...")
+    tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
+    result["stages"]["verification"] = {
+        "result": tnr_result.result.value,
+        "health_delta": tnr_result.health_delta,
+        "message": tnr_result.message,
+    }
+
+    if tnr_result.result.value == "regression":
+        _transition("VERIFYING", "ROLLBACK", f"Regressão detectada: {tnr_result.message}")
+        result["stages"]["rollback"] = {"message": "Rollback executado, retornando ao diagnostico"}
+    else:
+        _transition("VERIFYING", "RESOLVED", f"Incidente resolvido: {tnr_result.message}")
+        result["success"] = True
+
+    result["timeline"] = timeline
     result["llm_model"] = llm_model if use_llm else "heuristic"
-
-    return result, orchestrator
+    console.print(f"\n  [dim]Agent pipeline completed in {time.time() - t0:.1f}s[/dim]")
+    return result
 
 
 def step_safety_validation(result):
@@ -730,7 +772,7 @@ def _serialize_result(result: dict, incident) -> dict:
     return serialized
 
 
-def step_postmortem(result, orchestrator, incident, output_dir: str = "output",
+def step_postmortem(result, incident, output_dir: str = "output",
                     output_format: str = "markdown",
                     tracker_url: str | None = None,
                     tracker_issue_key: str | None = None):
@@ -899,7 +941,7 @@ def step_postmortem(result, orchestrator, incident, output_dir: str = "output",
     return markdown_path, json_path
 
 
-def print_summary(result, orchestrator, compression_stats=None, safety_result=None,
+def print_summary(result, compression_stats=None, safety_result=None,
                    san_report=None, remediation_result=None, tracker_info=None):
     """Exibe resumo final."""
     console.print()
@@ -1024,7 +1066,7 @@ def print_summary(result, orchestrator, compression_stats=None, safety_result=No
                 "tracker error — postmortem still generated",
             )
 
-    table.add_row("Status", status_icon, f"{len(orchestrator.history)} state transitions")
+    table.add_row("Status", status_icon, f"{len(result.get('timeline', []))} state transitions")
     console.print(table)
 
     # Timeline visual
@@ -1622,8 +1664,8 @@ def main() -> int:
             retriever = None
 
         # 4. Agent Pipeline
-        result, orchestrator = step_agents(report, retriever, use_llm=use_llm, llm_model=llm_model,
-                                           config=threshold_config)
+        result = step_agents(report, retriever, use_llm=use_llm, llm_model=llm_model,
+                             config=threshold_config)
 
         # 4b. Pre-Execution Safety Validation
         safety_result = step_safety_validation(result)
@@ -1666,7 +1708,7 @@ def main() -> int:
 
         # 5. Postmortem (still runs regardless of exit code)
         markdown_path, json_path = step_postmortem(
-            result, orchestrator, incident,
+            result, incident,
             output_dir=args.output_dir,
             output_format=args.output_format,
             tracker_url=tracker_url,
@@ -1678,7 +1720,7 @@ def main() -> int:
             _attach_postmortem_to_tracker(tracker, tracker_issue_key, result)
 
         # Summary
-        print_summary(result, orchestrator, compression_stats, safety_result,
+        print_summary(result, compression_stats, safety_result,
                       san_report=san_report, remediation_result=remediation_result,
                       tracker_info=tracker_info)
 

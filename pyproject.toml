@@ -1,6 +1,6 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"
+asyncio_mode = "strict"
 markers = [
     "unit: Testes unitários (sem deps externas, sem ML, sem API)",
     "integration: Testes de integração (pipeline completo, modo --no-llm)",
@@ -8,7 +8,6 @@ markers = [
     "slow: Testes lentos de performance (podem demorar >10s)",
 ]
 addopts = "-v --tb=short"
-asyncio_mode = "strict"
 filterwarnings = [
     "ignore::DeprecationWarning:torch.*",
     "ignore::DeprecationWarning:transformers.*",

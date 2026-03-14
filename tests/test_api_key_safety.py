@@ -148,7 +148,7 @@ class TestPostmortemNoApiKeys:
         from main import step_postmortem, _contains_api_key_pattern
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            path, _ = step_postmortem(pipeline_result, None, simulated_incident)
+            path, _ = step_postmortem(pipeline_result, simulated_incident)
 
         text = path.read_text(encoding="utf-8")
         path.unlink(missing_ok=True)

@@ -1,26 +1,10 @@
 """Testes para Story 1.8 — Wire main.py to Blueprint Engine.
 
-Valida que main.py usa o Blueprint Engine, preserva CLI flags,
-exit codes, e que orchestrator.py emite deprecation warning.
+Valida que main.py usa o Blueprint Engine, preserva CLI flags e exit codes.
 """
 from __future__ import annotations
 
-import warnings
-
 import pytest
-
-
-def test_orchestrator_deprecation_warning():
-    """Importar agents.orchestrator deve emitir DeprecationWarning."""
-    with warnings.catch_warnings(record=True) as w:
-        warnings.simplefilter("always")
-        import importlib
-        import agents.orchestrator
-        importlib.reload(agents.orchestrator)
-
-        deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
-        assert len(deprecation_warnings) >= 1
-        assert "deprecated" in str(deprecation_warnings[0].message).lower()
 
 
 def test_create_incident_state_has_required_fields():

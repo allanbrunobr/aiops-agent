@@ -122,7 +122,7 @@ class TestMainExitCodes:
             patch("main.step_pipeline", return_value=MagicMock()),
             patch("main.step_compression", return_value=(MagicMock(), "text", MagicMock(
                 compression_ratio=0.5, critical_preserved=100, chunks_kept=5, chunks_removed=3))),
-            patch("main.step_agents", return_value=(mock_result, mock_orchestrator)),
+            patch("main.step_agents", return_value=mock_result),
             patch("main.step_safety_validation", return_value=mock_safety),
             patch("main.step_remediation_validation", return_value=mock_remediation),
             patch("main.step_postmortem", return_value=(MagicMock(), None)),
@@ -212,7 +212,7 @@ class TestMainExitCodes:
             patch("main.step_pipeline", return_value=MagicMock()),
             patch("main.step_compression", return_value=(MagicMock(), "text", MagicMock(
                 compression_ratio=0.5, critical_preserved=100, chunks_kept=5, chunks_removed=3))),
-            patch("main.step_agents", return_value=(mock_result, mock_orchestrator)),
+            patch("main.step_agents", return_value=mock_result),
             patch("main.step_safety_validation", return_value=mock_safety),
             patch("main.step_remediation_validation", return_value=mock_remediation),
             patch("main.step_postmortem", return_value=(MagicMock(), None)),
@@ -282,7 +282,7 @@ class TestMainExitCodes:
             patch("main.step_pipeline", return_value=MagicMock()),
             patch("main.step_compression", return_value=(MagicMock(), "text", MagicMock(
                 compression_ratio=0.5, critical_preserved=100, chunks_kept=5, chunks_removed=3))),
-            patch("main.step_agents", return_value=(mock_result, mock_orchestrator)),
+            patch("main.step_agents", return_value=mock_result),
             patch("main.step_safety_validation", return_value=mock_safety),
             patch("main.step_remediation_validation", return_value=mock_remediation),
             patch("main.step_postmortem", return_value=(MagicMock(), None)),
@@ -354,7 +354,7 @@ class TestMainExitCodes:
             patch("main.step_pipeline", return_value=MagicMock()),
             patch("main.step_compression", return_value=(MagicMock(), "text", MagicMock(
                 compression_ratio=0.5, critical_preserved=100, chunks_kept=5, chunks_removed=3))),
-            patch("main.step_agents", return_value=(mock_result, mock_orchestrator)),
+            patch("main.step_agents", return_value=mock_result),
             patch("main.step_safety_validation", return_value=mock_safety),
             patch("main.step_remediation_validation", return_value=mock_remediation),
             patch("main.step_postmortem", return_value=(MagicMock(), None)),

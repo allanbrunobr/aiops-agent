@@ -80,7 +80,7 @@ class TestPostmortemOutputDir:
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             path, _ = step_postmortem(
-                pipeline_result, None, simulated_incident,
+                pipeline_result, simulated_incident,
                 output_dir=str(tmp_path),
             )
 
@@ -100,7 +100,7 @@ class TestPostmortemOutputDir:
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             path, _ = step_postmortem(
-                pipeline_result, None, simulated_incident,
+                pipeline_result, simulated_incident,
                 output_dir=str(nested),
             )
 
@@ -116,7 +116,7 @@ class TestPostmortemOutputDir:
         from pathlib import Path
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            path, _ = step_postmortem(pipeline_result, None, simulated_incident)
+            path, _ = step_postmortem(pipeline_result, simulated_incident)
 
         assert path.exists(), f"Postmortem não encontrado em {path}"
         assert path.parent == Path("output"), f"Postmortem não em output/: {path}"
