@@ -53,6 +53,12 @@ class LogParser:
 
     def parse(self, logs: list) -> list[LogTemplate]:
         """Processa lista de LogEntry e retorna templates agregados."""
+        # Amostragem sistemática para limitar custo O(N) do Drain3 em volumes grandes.
+        # Templates convergem com ~10K amostras; além disso é redundante.
+        _MAX = 10_000
+        if len(logs) > _MAX:
+            step = len(logs) // _MAX
+            logs = logs[::step]
         for log in logs:
             msg = log.message
             result = self.miner.add_log_message(msg)
