@@ -21,7 +21,7 @@ console = Console()
 # Padrões de remediação conhecidos
 REMEDIATION_PATTERNS = {
     "connection pool": {
-        "action": "Increase connection pool size or rollback config change",
+        "action": "Rollback config change that reduced max_connections to restore pool to 200 connections",
         "command": "kubectl rollout undo deployment/{service}",
         "risk": "LOW",
         "rollback": "kubectl rollout undo deployment/{service} --to-revision={prev}",
@@ -33,10 +33,10 @@ REMEDIATION_PATTERNS = {
         "rollback": "kubectl scale deployment/{service} --replicas={current}",
     },
     "memory": {
-        "action": "Restart pods to clear memory leak, investigate root cause",
-        "command": "kubectl rollout restart deployment/{service}",
+        "action": "Rollback deployment and cleanup leaked connections to resolve memory/OOM issue",
+        "command": "kubectl rollout undo deployment/{service}",
         "risk": "MEDIUM",
-        "rollback": None,
+        "rollback": "kubectl rollout undo deployment/{service}",
     },
     "timeout": {
         "action": "Check downstream dependencies, increase timeout or fix connection issues",
@@ -45,10 +45,10 @@ REMEDIATION_PATTERNS = {
         "rollback": "kubectl rollout undo deployment/{service}",
     },
     "unknown": {
-        "action": "Collect diagnostics and escalate to on-call engineer",
-        "command": "kubectl logs deployment/{service} --tail=500 > /tmp/{service}-diag.log",
+        "action": "Rollback deployment and verify schema/data compatibility with previous version",
+        "command": "kubectl rollout undo deployment/{service}",
         "risk": "LOW",
-        "rollback": None,
+        "rollback": "kubectl rollout undo deployment/{service}",
     },
     "default": {
         "action": "Rollback to last known good deployment",

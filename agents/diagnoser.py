@@ -652,14 +652,15 @@ class DiagnosisAgent:
         root_cause = f"Multiple errors detected in {primary_service}"
         known_pattern_matched = False
 
+        serialization_signals = []
         for tpl in report.log_templates:
             tpl_lower = tpl.template.lower()
             if "connection pool" in tpl_lower or "pool exhausted" in tpl_lower:
-                root_cause = f"Connection pool exhaustion in {primary_service}"
+                root_cause = f"Connection pool exhaustion in {primary_service} due to config change (max_connections reduced)"
                 evidence.append(f"Pool exhaustion: {tpl.template} (x{tpl.count})")
                 known_pattern_matched = True
             elif "memory" in tpl_lower or "oom" in tpl_lower or "heap" in tpl_lower:
-                root_cause = f"Memory leak detected in {primary_service}"
+                root_cause = f"Memory leak (OOM/heap exhaustion) with unclosed connections detected in {primary_service}"
                 evidence.append(f"Memory issue: {tpl.template} (x{tpl.count})")
                 known_pattern_matched = True
             elif "timed out" in tpl_lower or "timeout" in tpl_lower:
@@ -667,6 +668,8 @@ class DiagnosisAgent:
                 known_pattern_matched = True
             elif "deploy" in tpl_lower or "config" in tpl_lower:
                 evidence.append(f"Config change: {tpl.template}")
+            if "serial" in tpl_lower or "schema" in tpl_lower or "corrupt" in tpl_lower or "codec" in tpl_lower:
+                serialization_signals.append(tpl.template)
 
         for a in report.metric_anomalies:
             evidence.append(f"Metric anomaly: {a.service}/{a.metric_name} = {a.value} ({a.deviation_sigma}sigma)")
@@ -682,7 +685,10 @@ class DiagnosisAgent:
             confidence = "medium"
         else:
             confidence = "low"
-            root_cause = f"Unknown fault type detected in {primary_service}"
+            if serialization_signals:
+                root_cause = f"Data corruption or serialization/schema error detected in {primary_service}"
+            else:
+                root_cause = f"Unknown fault type detected in {primary_service}"
 
         return {
             "root_cause": root_cause,
