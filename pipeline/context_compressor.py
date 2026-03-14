@@ -445,20 +445,13 @@ class ContextCompressor:
 
     def _format_metric_chunk(self, anomaly) -> str:
         return (
-            f"{anomaly.service}/{anomaly.metric_name}: {anomaly.anomaly_type} "
-            f"value={anomaly.value} (baseline={anomaly.mean}, {anomaly.deviation_sigma}σ) "
-            f"at {anomaly.timestamp.strftime('%H:%M:%S')}"
+            f"{anomaly.service}/{anomaly.metric_name} {anomaly.deviation_sigma}σ "
+            f"({anomaly.anomaly_type})"
         )
 
     def _format_trace_chunk(self, trace) -> str:
-        path_str = " → ".join(trace.path)
-        attrs = ", ".join(f"{k}={v}" for k, v in trace.attributes.items()) if trace.attributes else ""
-        return (
-            f"{path_str}: {trace.total_duration_ms:.0f}ms "
-            f"(normal: {trace.normal_duration_ms:.0f}ms) "
-            f"bottleneck={trace.bottleneck_service}"
-            + (f" | {attrs}" if attrs else "")
-        )
+        ratio = int(trace.total_duration_ms / max(trace.normal_duration_ms, 1))
+        return f"{trace.bottleneck_service}: {trace.total_duration_ms:.0f}ms ({ratio}x slow)"
 
     # --- Utils ---
 
