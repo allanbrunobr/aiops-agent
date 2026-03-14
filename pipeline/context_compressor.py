@@ -399,7 +399,7 @@ class ContextCompressor:
         """Renderiza chunks comprimidos em texto estruturado."""
         # Header-only render: compressão máxima.
         # O conteúdo real está disponível no AggregatedReport para os agentes.
-        return f"[{report.severity}]"
+        return report.severity[:4]
 
     # --- Formatters ---
 
