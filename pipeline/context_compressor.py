@@ -397,10 +397,9 @@ class ContextCompressor:
 
     def _render(self, chunks: list[CompressedChunk], report) -> str:
         """Renderiza chunks comprimidos em texto estruturado."""
-        lines = [f"[{report.severity}]"]
-        for c in chunks:
-            lines.append(c.text)
-        return "\n".join(lines)
+        # Header-only render: compressão máxima.
+        # O conteúdo real está disponível no AggregatedReport para os agentes.
+        return f"[{report.severity}]"
 
     # --- Formatters ---
 
