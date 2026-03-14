@@ -405,7 +405,7 @@ class ContextCompressor:
     # --- Formatters ---
 
     def _format_log_chunk(self, tpl) -> str:
-        return f"[{tpl.level}] \"{tpl.template}\""
+        return tpl.template
 
     def _format_metric_chunk(self, anomaly) -> str:
         return (
