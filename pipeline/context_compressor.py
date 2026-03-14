@@ -88,9 +88,9 @@ class ContextCompressor:
 
         # Thresholds por nível de compressão
         self._thresholds = {
-            "minimal": {"min_priority": Priority.NOISE, "max_similar": 5, "summary_ratio": 0.8},
-            "balanced": {"min_priority": Priority.CONTEXT, "max_similar": 3, "summary_ratio": 0.5},
-            "aggressive": {"min_priority": Priority.IMPORTANT, "max_similar": 2, "summary_ratio": 0.3},
+            "minimal": {"min_priority": Priority.NOISE, "max_similar": 10, "summary_ratio": 0.8},
+            "balanced": {"min_priority": Priority.CONTEXT, "max_similar": 10, "summary_ratio": 0.5},
+            "aggressive": {"min_priority": Priority.IMPORTANT, "max_similar": 4, "summary_ratio": 0.3},
         }
 
     def compress(self, report) -> tuple[str, CompressionStats]:
