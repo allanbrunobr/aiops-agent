@@ -397,7 +397,7 @@ class ContextCompressor:
 
     def _render(self, chunks: list[CompressedChunk], report) -> str:
         """Renderiza chunks comprimidos em texto estruturado."""
-        lines = [f"[{report.severity}] {', '.join(sorted(report.affected_services))}"]
+        lines = [f"[{report.severity}]"]
         for c in chunks:
             lines.append(c.text)
         return "\n".join(lines)
