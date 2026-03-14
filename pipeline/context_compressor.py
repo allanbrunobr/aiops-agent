@@ -397,45 +397,9 @@ class ContextCompressor:
 
     def _render(self, chunks: list[CompressedChunk], report) -> str:
         """Renderiza chunks comprimidos em texto estruturado."""
-        lines = [
-            f"# Compressed Incident Report | Severity: {report.severity}",
-            f"Affected: {', '.join(sorted(report.affected_services))}",
-            f"Data: {report.total_logs} logs, {report.total_metrics} metrics, {report.total_traces} traces",
-            "",
-        ]
-
-        # Agrupa por source
-        by_source = {"log": [], "metric": [], "trace": []}
+        lines = [f"[{report.severity}] {', '.join(sorted(report.affected_services))}"]
         for c in chunks:
-            if c.source in by_source:
-                by_source[c.source].append(c)
-
-        # Logs
-        if by_source["log"]:
-            lines.append("## Log Analysis (compressed)")
-            for c in by_source["log"]:
-                priority_marker = "🔴" if c.priority == Priority.CRITICAL else "🟡" if c.priority == Priority.IMPORTANT else "⚪"
-                lines.append(f"{priority_marker} {c.text}")
-
-        # Metrics
-        if by_source["metric"]:
-            lines.append("\n## Metric Anomalies (compressed)")
-            for c in by_source["metric"]:
-                lines.append(f"- {c.text}")
-
-        # Traces
-        if by_source["trace"]:
-            lines.append("\n## Slow Traces (compressed)")
-            for c in by_source["trace"]:
-                lines.append(f"- {c.text}")
-
-        # Summary
-        lines.append(f"\n## Summary")
-        lines.append(f"- Primary suspect: {report._primary_suspect()}")
-        error_templates = [t for t in report.log_templates if t.level in ("ERROR", "FATAL")]
-        lines.append(f"- Total error patterns: {len(error_templates)}")
-        lines.append(f"- Total anomalies: {len(report.metric_anomalies)}")
-
+            lines.append(c.text)
         return "\n".join(lines)
 
     # --- Formatters ---
