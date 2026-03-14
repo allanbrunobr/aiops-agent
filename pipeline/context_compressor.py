@@ -445,10 +445,17 @@ class ContextCompressor:
         first = tpl.first_seen.strftime("%H:%M:%S") if tpl.first_seen else "?"
         last = tpl.last_seen.strftime("%H:%M:%S") if tpl.last_seen else "?"
         score = round(tpl.relevance_score, 1)
-        count = tpl.count if tpl.count < 10000 else f"{tpl.count // 1000}K"
+        if tpl.count < 10:
+            count_tier = "rare"
+        elif tpl.count < 100:
+            count_tier = "few"
+        elif tpl.count < 1000:
+            count_tier = "many"
+        else:
+            count_tier = "flood"
         return (
             f"[{tpl.level}][{svcs}] \"{tpl.template}\" "
-            f"x{count} | {first}→{last} | score={score}"
+            f"({count_tier}) | {first}→{last} | score={score}"
         )
 
     def _format_metric_chunk(self, anomaly) -> str:
