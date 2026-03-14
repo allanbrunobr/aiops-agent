@@ -441,10 +441,7 @@ class ContextCompressor:
     # --- Formatters ---
 
     def _format_log_chunk(self, tpl) -> str:
-        svcs = ", ".join(sorted(tpl.services))
-        first = tpl.first_seen.strftime("%H:%M:%S") if tpl.first_seen else "?"
-        last = tpl.last_seen.strftime("%H:%M:%S") if tpl.last_seen else "?"
-        return f"[{tpl.level}] \"{tpl.template}\" {first}→{last}"
+        return f"[{tpl.level}] \"{tpl.template}\""
 
     def _format_metric_chunk(self, anomaly) -> str:
         return (
