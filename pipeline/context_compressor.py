@@ -444,10 +444,9 @@ class ContextCompressor:
         svcs = ", ".join(sorted(tpl.services))
         first = tpl.first_seen.strftime("%H:%M:%S") if tpl.first_seen else "?"
         last = tpl.last_seen.strftime("%H:%M:%S") if tpl.last_seen else "?"
-        score = round(tpl.relevance_score, 1)
         return (
             f"[{tpl.level}][{svcs}] \"{tpl.template}\" "
-            f"{first}→{last} | score={score}"
+            f"{first}→{last}"
         )
 
     def _format_metric_chunk(self, anomaly) -> str:
