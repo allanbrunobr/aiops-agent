@@ -102,7 +102,8 @@ class LogParser:
             # mas errors frequentes SÃO relevantes)
             frequency_ratio = tpl.count / total_logs
             if tpl.level in ("ERROR", "FATAL"):
-                score += min(tpl.count / 10, 5.0)  # Mais errors = mais relevante
+                # Cap at 2.0 to keep score stable across log volumes
+                score += min(tpl.count / 10, 2.0)
             else:
                 score += max(0, 2.0 - frequency_ratio * 20)  # Info raros = mais relevantes
 
