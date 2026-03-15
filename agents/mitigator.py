@@ -94,14 +94,13 @@ class MitigationAgent:
         rollback_version = ROLLBACK_VERSIONS.get(deployed_version, "")
         description = pattern["action"].format(service=primary_service)
         if rollback_version:
-            description = description.replace(
-                "Rollback deployment",
-                f"Rollback deployment to {rollback_version}",
-            ).replace(
-                "Rollback deployment",  # fallback if pattern didn't match
-                f"Rollback to {rollback_version}",
-            )
-            if rollback_version not in description:
+            if "Rollback deployment" in description:
+                description = description.replace(
+                    "Rollback deployment",
+                    f"Rollback deployment to {rollback_version}",
+                    1,
+                )
+            elif rollback_version not in description:
                 description += f" (rollback to {rollback_version})"
 
         action = MitigationAction(
