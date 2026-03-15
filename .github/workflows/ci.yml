@@ -59,7 +59,7 @@ jobs:
   rust-build:
     name: Rust Build & PyO3 Extension
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
@@ -76,14 +76,24 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: cargo-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: cargo-
+
       - name: Run Rust unit tests
         run: cargo test --manifest-path rust/Cargo.toml
 
-      - name: Build PyO3 extension
-        run: maturin develop --manifest-path rust/Cargo.toml
+      - name: Build PyO3 extension (release — performance benchmarks require optimized build)
+        run: maturin develop --manifest-path rust/Cargo.toml --release
 
       - name: Verify import
-        run: python -c "import _aiops_rust; print('ok')"
+        run: python -c "import _aiops_rust; print(dir(_aiops_rust))"
 
       - name: Run pytest
         run: python -m pytest tests/ -v
