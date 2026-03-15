@@ -4,7 +4,7 @@
     "first_seen": "NORMALIZED_TIMESTAMP",
     "last_seen": "NORMALIZED_TIMESTAMP",
     "level": "ERROR",
-    "relevance_score": 10.0,
+    "relevance_score": 8.0,
     "sample_messages": [
       "2026-03-04 14:23:08.000 ERROR [payment-svc] Circuit breaker OPEN for database calls (75 failures in 60s)",
       "2026-03-04 14:23:20.000 ERROR [payment-svc] Circuit breaker OPEN for database calls (162 failures in 60s)",
@@ -16,11 +16,75 @@
     "template": "Circuit breaker OPEN for database calls <*> failures in 60s)"
   },
   {
+    "count": 28,
+    "first_seen": "NORMALIZED_TIMESTAMP",
+    "last_seen": "NORMALIZED_TIMESTAMP",
+    "level": "ERROR",
+    "relevance_score": 8.0,
+    "sample_messages": [
+      "2026-03-04 14:23:28.000 ERROR [payment-svc] Transaction aborted: connection timeout after 26s",
+      "2026-03-04 14:23:46.000 ERROR [payment-svc] Transaction aborted: connection timeout after 33s",
+      "2026-03-04 14:23:56.000 ERROR [payment-svc] Transaction aborted: connection timeout after 32s"
+    ],
+    "services": [
+      "payment-svc"
+    ],
+    "template": "Transaction aborted: connection timeout after <*>"
+  },
+  {
+    "count": 9,
+    "first_seen": "NORMALIZED_TIMESTAMP",
+    "last_seen": "NORMALIZED_TIMESTAMP",
+    "level": "ERROR",
+    "relevance_score": 8.0,
+    "sample_messages": [
+      "2026-03-04 14:23:34.000 ERROR [auth-svc] Token validation failed for request from payment-svc: connection refused",
+      "2026-03-04 14:23:38.000 ERROR [auth-svc] Token validation failed for request from payment-svc: connection refused",
+      "2026-03-04 14:23:38.000 ERROR [auth-svc] Token validation failed for request from payment-svc: connection refused"
+    ],
+    "services": [
+      "auth-svc"
+    ],
+    "template": "Token validation failed for request from payment-svc: connection refused"
+  },
+  {
+    "count": 12,
+    "first_seen": "NORMALIZED_TIMESTAMP",
+    "last_seen": "NORMALIZED_TIMESTAMP",
+    "level": "ERROR",
+    "relevance_score": 8.0,
+    "sample_messages": [
+      "2026-03-04 14:23:53.000 ERROR [gateway] Circuit breaker tripped for payment-svc, routing to fallback",
+      "2026-03-04 14:23:54.000 ERROR [gateway] Circuit breaker tripped for payment-svc, routing to fallback",
+      "2026-03-04 14:24:07.000 ERROR [gateway] Circuit breaker tripped for payment-svc, routing to fallback"
+    ],
+    "services": [
+      "gateway"
+    ],
+    "template": "Circuit breaker tripped for payment-svc, routing to fallback"
+  },
+  {
+    "count": 31,
+    "first_seen": "NORMALIZED_TIMESTAMP",
+    "last_seen": "NORMALIZED_TIMESTAMP",
+    "level": "ERROR",
+    "relevance_score": 6.5,
+    "sample_messages": [
+      "2026-03-04 14:23:01.000 ERROR [payment-svc] Connection to 10.0.1.47:5432 timed out after 30s",
+      "2026-03-04 14:23:18.000 ERROR [payment-svc] Connection to 10.0.1.46:5432 timed out after 30s",
+      "2026-03-04 14:23:26.000 ERROR [payment-svc] Connection to 10.0.1.47:5432 timed out after 30s"
+    ],
+    "services": [
+      "payment-svc"
+    ],
+    "template": "Connection to <*> timed out after 30s"
+  },
+  {
     "count": 51,
     "first_seen": "NORMALIZED_TIMESTAMP",
     "last_seen": "NORMALIZED_TIMESTAMP",
     "level": "ERROR",
-    "relevance_score": 9.5,
+    "relevance_score": 6.5,
     "sample_messages": [
       "2026-03-04 14:23:04.000 ERROR [payment-svc] Failed to acquire connection: pool full (50/50)",
       "2026-03-04 14:23:21.000 ERROR [payment-svc] Failed to acquire connection: pool full (50/50)",
@@ -36,7 +100,7 @@
     "first_seen": "NORMALIZED_TIMESTAMP",
     "last_seen": "NORMALIZED_TIMESTAMP",
     "level": "ERROR",
-    "relevance_score": 9.5,
+    "relevance_score": 6.5,
     "sample_messages": [
       "2026-03-04 14:23:07.000 ERROR [payment-svc] Connection pool exhausted, max=50, waiting=53",
       "2026-03-04 14:23:11.000 ERROR [payment-svc] Connection pool exhausted, max=50, waiting=60",
@@ -48,75 +112,11 @@
     "template": "Connection pool exhausted, max=50, <*>"
   },
   {
-    "count": 28,
-    "first_seen": "NORMALIZED_TIMESTAMP",
-    "last_seen": "NORMALIZED_TIMESTAMP",
-    "level": "ERROR",
-    "relevance_score": 8.8,
-    "sample_messages": [
-      "2026-03-04 14:23:28.000 ERROR [payment-svc] Transaction aborted: connection timeout after 26s",
-      "2026-03-04 14:23:46.000 ERROR [payment-svc] Transaction aborted: connection timeout after 33s",
-      "2026-03-04 14:23:56.000 ERROR [payment-svc] Transaction aborted: connection timeout after 32s"
-    ],
-    "services": [
-      "payment-svc"
-    ],
-    "template": "Transaction aborted: connection timeout after <*>"
-  },
-  {
-    "count": 31,
-    "first_seen": "NORMALIZED_TIMESTAMP",
-    "last_seen": "NORMALIZED_TIMESTAMP",
-    "level": "ERROR",
-    "relevance_score": 7.6,
-    "sample_messages": [
-      "2026-03-04 14:23:01.000 ERROR [payment-svc] Connection to 10.0.1.47:5432 timed out after 30s",
-      "2026-03-04 14:23:18.000 ERROR [payment-svc] Connection to 10.0.1.46:5432 timed out after 30s",
-      "2026-03-04 14:23:26.000 ERROR [payment-svc] Connection to 10.0.1.47:5432 timed out after 30s"
-    ],
-    "services": [
-      "payment-svc"
-    ],
-    "template": "Connection to <*> timed out after 30s"
-  },
-  {
-    "count": 12,
-    "first_seen": "NORMALIZED_TIMESTAMP",
-    "last_seen": "NORMALIZED_TIMESTAMP",
-    "level": "ERROR",
-    "relevance_score": 7.2,
-    "sample_messages": [
-      "2026-03-04 14:23:53.000 ERROR [gateway] Circuit breaker tripped for payment-svc, routing to fallback",
-      "2026-03-04 14:23:54.000 ERROR [gateway] Circuit breaker tripped for payment-svc, routing to fallback",
-      "2026-03-04 14:24:07.000 ERROR [gateway] Circuit breaker tripped for payment-svc, routing to fallback"
-    ],
-    "services": [
-      "gateway"
-    ],
-    "template": "Circuit breaker tripped for payment-svc, routing to fallback"
-  },
-  {
-    "count": 9,
-    "first_seen": "NORMALIZED_TIMESTAMP",
-    "last_seen": "NORMALIZED_TIMESTAMP",
-    "level": "ERROR",
-    "relevance_score": 6.9,
-    "sample_messages": [
-      "2026-03-04 14:23:34.000 ERROR [auth-svc] Token validation failed for request from payment-svc: connection refused",
-      "2026-03-04 14:23:38.000 ERROR [auth-svc] Token validation failed for request from payment-svc: connection refused",
-      "2026-03-04 14:23:38.000 ERROR [auth-svc] Token validation failed for request from payment-svc: connection refused"
-    ],
-    "services": [
-      "auth-svc"
-    ],
-    "template": "Token validation failed for request from payment-svc: connection refused"
-  },
-  {
     "count": 10,
     "first_seen": "NORMALIZED_TIMESTAMP",
     "last_seen": "NORMALIZED_TIMESTAMP",
     "level": "ERROR",
-    "relevance_score": 5.5,
+    "relevance_score": 6.5,
     "sample_messages": [
       "2026-03-04 14:23:36.000 ERROR [order-svc] Payment confirmation timeout for order 79391",
       "2026-03-04 14:25:21.000 ERROR [order-svc] Payment confirmation timeout for order 69770",
@@ -132,7 +132,7 @@
     "first_seen": "NORMALIZED_TIMESTAMP",
     "last_seen": "NORMALIZED_TIMESTAMP",
     "level": "ERROR",
-    "relevance_score": 5.4,
+    "relevance_score": 6.5,
     "sample_messages": [
       "2026-03-04 14:23:37.000 ERROR [gateway] Upstream payment-svc returned 503 after 31735ms",
       "2026-03-04 14:24:00.000 ERROR [gateway] Upstream payment-svc returned 503 after 34292ms",

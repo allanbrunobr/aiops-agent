@@ -5,15 +5,15 @@
 
 ## Log Analysis
 
-- [ERROR][payment-svc] "Circuit breaker OPEN for database calls <*> failures in 60s)" | count=40 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=10.0
-- [ERROR][payment-svc] "Failed to acquire connection: pool full (50/50)" | count=51 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=9.5
-- [ERROR][payment-svc] "Connection pool exhausted, max=50, <*>" | count=50 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=9.5
-- [ERROR][payment-svc] "Transaction aborted: connection timeout after <*>" | count=28 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=8.8
-- [ERROR][payment-svc] "Connection to <*> timed out after 30s" | count=31 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=7.6
-- [ERROR][gateway] "Circuit breaker tripped for payment-svc, routing to fallback" | count=12 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=7.2
-- [ERROR][auth-svc] "Token validation failed for request from payment-svc: connection refused" | count=9 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=6.9
-- [ERROR][order-svc] "Payment confirmation timeout for order <*>" | count=10 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=5.5
-- [ERROR][gateway] "Upstream payment-svc returned 503 after <*>" | count=9 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=5.4
+- [ERROR][payment-svc] "Circuit breaker OPEN for database calls <*> failures in 60s)" | count=40 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=8.0
+- [ERROR][payment-svc] "Transaction aborted: connection timeout after <*>" | count=28 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=8.0
+- [ERROR][auth-svc] "Token validation failed for request from payment-svc: connection refused" | count=9 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=8.0
+- [ERROR][gateway] "Circuit breaker tripped for payment-svc, routing to fallback" | count=12 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=8.0
+- [ERROR][payment-svc] "Connection to <*> timed out after 30s" | count=31 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=6.5
+- [ERROR][payment-svc] "Failed to acquire connection: pool full (50/50)" | count=51 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=6.5
+- [ERROR][payment-svc] "Connection pool exhausted, max=50, <*>" | count=50 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=6.5
+- [ERROR][order-svc] "Payment confirmation timeout for order <*>" | count=10 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=6.5
+- [ERROR][gateway] "Upstream payment-svc returned 503 after <*>" | count=9 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=6.5
 - [INFO][payment-svc] "Configuration reloaded: max_connections=50, timeout=30s, pool_min_idle=5" | count=1 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=3.46
 - [WARN][payment-svc] "Connection pool resized from 200 to 50 active connections" | count=1 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=3.46
 - [WARN][payment-svc] "Connection wait time exceeded <*>" | count=15 | NORMALIZED_TIMESTAMP→NORMALIZED_TIMESTAMP | score=2.9
