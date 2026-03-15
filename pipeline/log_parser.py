@@ -17,6 +17,13 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 
+try:
+    import _aiops_rust as _rust
+    _RUST_AVAILABLE = True
+except ImportError:
+    _rust = None
+    _RUST_AVAILABLE = False
+
 from drain3 import TemplateMiner
 from drain3.template_miner_config import TemplateMinerConfig
 

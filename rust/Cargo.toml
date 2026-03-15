@@ -1,0 +1,15 @@
+[workspace]
+members = ["."]
+
+[package]
+name = "aiops-rust"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "_aiops_rust"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+rayon = "1"

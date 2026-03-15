@@ -22,6 +22,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
+try:
+    import _aiops_rust as _rust
+    _RUST_AVAILABLE = True
+except ImportError:
+    _rust = None
+    _RUST_AVAILABLE = False
+
 
 class Priority(Enum):
     """Prioridade de informação para compressão."""

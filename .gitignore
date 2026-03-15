@@ -43,6 +43,9 @@ tests/__snapshots__/
 !infra/**/*.md
 !infra/*.md
 
+# Rust build artifacts
+rust/target/
+
 # OS
 .DS_Store
 Thumbs.db
