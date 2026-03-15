@@ -107,6 +107,18 @@ class ContextCompressor:
         Returns:
             (compressed_text, stats)
         """
+        if _RUST_AVAILABLE:
+            text, stats_dict = _rust.compress_context(report)
+            stats = CompressionStats(
+                original_tokens=stats_dict["original_tokens"],
+                compressed_tokens=stats_dict["compressed_tokens"],
+                chunks_kept=stats_dict["chunks_kept"],
+                chunks_removed=stats_dict["chunks_removed"],
+                critical_preserved=stats_dict["critical_preserved"],
+                compression_ratio=stats_dict["compression_ratio"],
+            )
+            return text, stats
+
         # Fase 1: Classificar chunks com prioridades
         chunks = self._classify_chunks(report)
 
@@ -473,3 +485,21 @@ class ContextCompressor:
     def _estimate_tokens(text: str) -> int:
         """Estimativa rápida de tokens (Claude usa ~4 chars/token)."""
         return len(text) // 4
+
+    def _validate_rust_output(self, report) -> bool:
+        """Helper de validação A/B: compara output Rust vs Python (para testes de desenvolvimento)."""
+        if not _RUST_AVAILABLE:
+            return True
+        rust_text, _ = _rust.compress_context(report)
+        py_text, _ = self._compress_python(report)
+        return rust_text == py_text
+
+    def _compress_python(self, report) -> tuple[str, CompressionStats]:
+        """Caminho Python puro (fallback e validação)."""
+        chunks = self._classify_chunks(report)
+        compressed = self._apply_compression(chunks)
+        final_chunks, stats = self._enforce_budget(compressed)
+        compressed_text = self._render(final_chunks, report)
+        stats.compressed_tokens = self._estimate_tokens(compressed_text)
+        stats.compression_ratio = 1 - (stats.compressed_tokens / max(stats.original_tokens, 1))
+        return compressed_text, stats
