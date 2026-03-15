@@ -1,7 +1,7 @@
 {
   "action": {
     "command": "kubectl rollout undo deployment/payment-svc",
-    "description": "Increase connection pool size or rollback config change",
+    "description": "Rollback config change that reduced max_connections to restore pool to 200 connections",
     "risk_level": "LOW",
     "rollback_command": "kubectl rollout undo deployment/payment-svc --to-revision=1"
   },
@@ -13,14 +13,15 @@
       "payment-svc"
     ],
     "confidence": "medium",
+    "deployed_version": "v2.3.1",
     "evidence": [
-      "Pool exhaustion: Connection pool exhausted, max=50, <*> (x50)",
       "Timeouts: Transaction aborted: connection timeout after <*> (x28)",
       "Timeouts: Connection to <*> timed out after 30s (x31)",
+      "Pool exhaustion: Connection pool exhausted, max=50, <*> (x50)",
       "Timeouts: Payment confirmation timeout for order <*> (x10)",
       "Timeouts: Configuration reloaded: max_connections=50, timeout=30s, pool_min_idle=5 (x1)"
     ],
-    "root_cause": "Connection pool exhaustion in payment-svc",
+    "root_cause": "Connection pool exhaustion in payment-svc due to config change (max_connections reduced)",
     "timeline": "Heuristic analysis - check logs for temporal correlation"
   },
   "pattern_matched": "connection pool"

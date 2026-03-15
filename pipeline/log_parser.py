@@ -59,7 +59,51 @@ class LogParser:
         self.templates: dict[int, LogTemplate] = {}
 
     def parse(self, logs: list) -> list[LogTemplate]:
-        """Processa lista de LogEntry e retorna templates agregados."""
+        """Processa lista de LogEntry e retorna templates agregados.
+
+        Delega para implementação Rust quando disponível (sem cap de amostragem).
+        Fallback para Python com cap de 500 amostras quando Rust não disponível.
+        """
+        if _RUST_AVAILABLE:
+            return self._rust_parse(logs)
+        return self._python_drain3_parse(logs)
+
+    def _rust_parse(self, logs: list) -> list[LogTemplate]:
+        """Delega processamento para implementação Rust via PyO3.
+
+        Rust processa todos os logs sem cap de amostragem usando Drain3
+        reimplementado e paralelismo Rayon.
+        """
+        import datetime as _dt
+
+        raw = _rust.parse_logs(logs)
+        result = []
+        for d in raw:
+            tpl = LogTemplate(
+                template=d["template"],
+                count=d["count"],
+                level=d["level"],
+                relevance_score=d["relevance_score"],
+            )
+            tpl.services = set(d["services"])
+            fs = d.get("first_seen")
+            ls = d.get("last_seen")
+            tpl.first_seen = fs if isinstance(fs, _dt.datetime) else (
+                _dt.datetime.fromtimestamp(fs) if fs is not None else None
+            )
+            tpl.last_seen = ls if isinstance(ls, _dt.datetime) else (
+                _dt.datetime.fromtimestamp(ls) if ls is not None else None
+            )
+            tpl.sample_messages = list(d.get("sample_messages", []))
+            result.append(tpl)
+        return result
+
+    def _python_drain3_parse(self, logs: list) -> list[LogTemplate]:
+        """Implementação Python com amostragem sistemática (fallback).
+
+        Cap de 500 amostras mantido intencionalmente para controlar custo O(N).
+        Usado apenas quando _aiops_rust não está disponível.
+        """
         # Amostragem sistemática para limitar custo O(N) do Drain3 em volumes grandes.
         # Templates convergem com ~10K amostras; além disso é redundante.
         _MAX = 500
@@ -94,6 +138,32 @@ class LogParser:
 
         self._compute_relevance()
         return sorted(self.templates.values(), key=lambda t: t.relevance_score, reverse=True)
+
+    def _validate_rust_output(self, logs: list) -> dict:
+        """Helper de validação para desenvolvimento: compara saídas Rust vs Python.
+
+        Retorna dict com métricas de concordância entre os dois paths.
+        """
+        if not _RUST_AVAILABLE:
+            return {"error": "_aiops_rust não disponível"}
+
+        # Executar ambos com estado limpo
+        rust_templates = self._rust_parse(logs)
+
+        py_parser = LogParser.__new__(LogParser)
+        py_parser.__init__()
+        py_templates = py_parser._python_drain3_parse(logs)
+
+        rust_set = {t.template for t in rust_templates}
+        py_set = {t.template for t in py_templates}
+
+        return {
+            "rust_count": len(rust_templates),
+            "python_count": len(py_templates),
+            "templates_in_rust_only": sorted(rust_set - py_set),
+            "templates_in_python_only": sorted(py_set - rust_set),
+            "common_templates": len(rust_set & py_set),
+        }
 
     def _compute_relevance(self):
         """Calcula score de relevância combinando keywords + raridade (TF-IDF simples)."""
