@@ -3,6 +3,7 @@ use pyo3::prelude::*;
 mod context_compressor;
 mod log_parser;
 mod metric_filter;
+mod telemetry_sanitizer;
 mod trace_filter;
 
 /// Módulo nativo _aiops_rust — extensão PyO3 para aceleração do pipeline AIOps.
@@ -16,5 +17,8 @@ fn _aiops_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(metric_filter::filter_metrics, m)?)?;
     // TraceFilter / p95 latency filtering
     m.add_function(wrap_pyfunction!(trace_filter::filter_traces, m)?)?;
+    // TelemetrySanitizer / AIOpsShield (batch regex via Rayon)
+    m.add_function(wrap_pyfunction!(telemetry_sanitizer::detect_taint_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(telemetry_sanitizer::detect_taint_single, m)?)?;
     Ok(())
 }

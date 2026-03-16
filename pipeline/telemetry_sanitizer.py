@@ -33,6 +33,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
+try:
+    import _aiops_rust as _rust
+    _RUST_AVAILABLE = True
+except ImportError:
+    _rust = None
+    _RUST_AVAILABLE = False
+
 
 # ============================================================================
 # Taint detection patterns — campos que tipicamente contêm input externo
@@ -194,8 +201,16 @@ class TelemetrySanitizer:
         self.report = SanitizationReport()
         sanitized_logs = []
 
-        for log in logs:
-            result = self._sanitize_log_entry(log)
+        # Pré-computa taint levels em batch usando Rust+Rayon (paralelo)
+        if _RUST_AVAILABLE and logs:
+            messages = [log.message for log in logs]
+            taint_strs = _rust.detect_taint_batch(messages)
+            taint_cache = {i: TaintLevel(t) for i, t in enumerate(taint_strs)}
+        else:
+            taint_cache = {}
+
+        for idx, log in enumerate(logs):
+            result = self._sanitize_log_entry(log, precomputed_taint=taint_cache.get(idx))
             self.report.total_entries += 1
             self.report.fields_sanitized += result.fields_sanitized
 
@@ -426,14 +441,14 @@ class TelemetrySanitizer:
     # Internal methods
     # ========================================================================
 
-    def _sanitize_log_entry(self, log) -> SanitizationResult:
+    def _sanitize_log_entry(self, log, precomputed_taint=None) -> SanitizationResult:
         """Sanitiza uma única entrada de log."""
         message = log.message
         detections = []
         fields_sanitized = 0
 
         # Phase 1: Detecta adversarial reward-hacking patterns
-        taint = self._detect_taint(message)
+        taint = precomputed_taint if precomputed_taint is not None else self._detect_taint(message)
 
         if taint == TaintLevel.ADVERSARIAL:
             # Bloqueia completamente — substitui por mensagem segura
@@ -475,29 +490,26 @@ class TelemetrySanitizer:
         """
         Detecta o nível de contaminação de um texto.
 
-        Hierarquia de detecção:
-          1. Adversarial reward-hacking patterns → ADVERSARIAL
-          2. Suspicious embedded content → SUSPICIOUS
-          3. Clean → CLEAN
+        Usa implementação Rust se disponível (regex crate, muito mais rápido).
         """
         if not text:
             return TaintLevel.CLEAN
 
-        # Check adversarial reward-hacking patterns
+        if _RUST_AVAILABLE:
+            return TaintLevel(_rust.detect_taint_single(text))
+
+        # Fallback Python
         for pattern in self._adversarial_patterns:
             if pattern.search(text):
                 return TaintLevel.ADVERSARIAL
 
-        # Check suspicious embedded content
         for pattern in self._suspicious_patterns:
             if pattern.search(text):
                 return TaintLevel.SUSPICIOUS
 
-        # Check for tainted field indicators in the text
         text_lower = text.lower()
         for field_name in TAINTED_LOG_FIELDS:
             if field_name in text_lower:
-                # Apenas marca como tainted se contém valor após o campo
                 field_pattern = rf"{re.escape(field_name)}\s*[=:]\s*\S+"
                 if re.search(field_pattern, text_lower):
                     return TaintLevel.TAINTED
