@@ -264,3 +264,149 @@ class ObservabilityIndexer:
     def get_all_chunks(self) -> list[IndexedChunk]:
         """Retorna todos os chunks indexados."""
         return self.chunks
+
+
+class ObservabilityIndexerWithHistory(ObservabilityIndexer):
+    """Indexador FAISS com suporte a chunks históricos de incidentes anteriores.
+
+    Extende ObservabilityIndexer adicionando chunks do banco de memória
+    com peso reduzido para enriquecer o índice sem dominar os resultados.
+    """
+
+    def __init__(
+        self,
+        model_name: str = "all-MiniLM-L6-v2",
+        db_path: str = "data/incident_memory.db",
+    ) -> None:
+        super().__init__(model_name=model_name)
+        self.db_path = db_path
+
+    def build_index_with_history(
+        self,
+        log_templates: list,
+        metric_anomalies: list,
+        slow_traces: list,
+        include_history: bool = True,
+        max_historical_chunks: int = 3,
+    ) -> int:
+        """Constrói índice FAISS com chunks atuais e opcionalmente históricos.
+
+        Chunks atuais recebem chunk_weight=1.0 nos metadados.
+        Chunks históricos recebem chunk_weight=0.5 e is_historical=True.
+
+        Args:
+            log_templates: Templates de log do aggregator.
+            metric_anomalies: Anomalias de métricas.
+            slow_traces: Traces lentos.
+            include_history: Se True, adiciona chunks históricos ao índice.
+            max_historical_chunks: Máximo de chunks históricos a incluir.
+
+        Returns:
+            Número total de chunks indexados.
+        """
+        import faiss
+
+        self._load_model()
+        self.chunks = []
+
+        # Indexa chunks atuais (lógica idêntica ao build_index base)
+        for tpl in log_templates:
+            svcs = ", ".join(sorted(tpl.services))
+            text = (
+                f"[{tpl.level}] Service: {svcs}. "
+                f"Log pattern: {tpl.template}. "
+                f"Occurrences: {tpl.count}. "
+                f"Time range: {tpl.first_seen} to {tpl.last_seen}."
+            )
+            self.chunks.append(IndexedChunk(
+                text=text,
+                source="log",
+                metadata={"level": tpl.level, "count": tpl.count, "services": list(tpl.services), "chunk_weight": 1.0},
+            ))
+
+        for anomaly in metric_anomalies:
+            text = (
+                f"Metric anomaly in {anomaly.service}/{anomaly.metric_name}. "
+                f"Type: {anomaly.anomaly_type}. "
+                f"Value: {anomaly.value} (baseline: {anomaly.mean}, deviation: {anomaly.deviation_sigma} sigma). "
+                f"Detected at: {anomaly.timestamp}."
+            )
+            self.chunks.append(IndexedChunk(
+                text=text,
+                source="metric",
+                metadata={
+                    "service": anomaly.service,
+                    "metric": anomaly.metric_name,
+                    "deviation": anomaly.deviation_sigma,
+                    "chunk_weight": 1.0,
+                },
+            ))
+
+        for trace in slow_traces:
+            path_str = " -> ".join(trace.path)
+            attrs = ", ".join(f"{k}={v}" for k, v in trace.attributes.items()) if trace.attributes else "none"
+            text = (
+                f"Slow trace: {path_str}. "
+                f"Duration: {trace.total_duration_ms:.0f}ms (normal: {trace.normal_duration_ms:.0f}ms). "
+                f"Bottleneck: {trace.bottleneck_service} ({trace.bottleneck_duration_ms:.0f}ms). "
+                f"Attributes: {attrs}."
+            )
+            self.chunks.append(IndexedChunk(
+                text=text,
+                source="trace",
+                metadata={
+                    "path": trace.path,
+                    "duration_ms": trace.total_duration_ms,
+                    "bottleneck": trace.bottleneck_service,
+                    "chunk_weight": 1.0,
+                },
+            ))
+
+        # Adiciona chunks históricos (degradação graciosa em caso de erro)
+        if include_history:
+            try:
+                from rag.memory import IncidentMemoryDB
+
+                db = IncidentMemoryDB(db_path=self.db_path)
+                with db._connect() as conn:
+                    rows = conn.execute(
+                        "SELECT * FROM incidents ORDER BY timestamp DESC LIMIT ?",
+                        (max_historical_chunks,),
+                    ).fetchall()
+
+                import json as _json
+
+                for row in rows:
+                    services = _json.loads(row["affected_services"])
+                    tags = _json.loads(row["tags"])
+                    text = (
+                        f"[HISTORICAL] Past incident: {row['scenario']}. "
+                        f"Root cause: {row['root_cause']}. "
+                        f"Affected services: {', '.join(services)}. "
+                        f"Tags: {', '.join(tags)}. "
+                        f"Confidence: {row['diagnosis_confidence']:.2f}. "
+                        f"Resolution time: {row['resolution_time_sec']:.0f}s."
+                    )
+                    self.chunks.append(IndexedChunk(
+                        text=text,
+                        source="historical",
+                        metadata={
+                            "incident_id": row["incident_id"],
+                            "scenario": row["scenario"],
+                            "is_historical": True,
+                            "chunk_weight": 0.5,
+                        },
+                    ))
+            except Exception:
+                # Degradação graciosa — continua sem histórico
+                pass
+
+        # Gera embeddings e constrói índice
+        texts = [chunk.text for chunk in self.chunks]
+        embeddings = self.model.encode(texts, normalize_embeddings=True)
+        embeddings = np.array(embeddings, dtype=np.float32)
+
+        self.index = faiss.IndexFlatIP(embeddings.shape[1])
+        self.index.add(embeddings)
+
+        return len(self.chunks)

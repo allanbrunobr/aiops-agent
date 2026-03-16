@@ -63,6 +63,8 @@ from data.registry import get_scenario, list_scenarios
 from pipeline.aggregator import Aggregator, AggregatedReport
 from rag.indexer import ObservabilityIndexer
 from rag.retriever import ObservabilityRetriever
+from rag.retriever_history import ObservabilityRetrieverWithHistory
+from rag.memory import IncidentMemoryDB, IncidentRecord
 from agents.detector import DetectionAgent
 from agents.diagnoser import DiagnosisAgent
 from agents.mitigator import MitigationAgent
@@ -310,6 +312,49 @@ def step_compression(report):
     return compressor, compressed_text, stats
 
 
+def _extract_fault_tags(report) -> list[str]:
+    """Extrai tags de falha heurísticas a partir do report agregado.
+
+    Analisa templates de log e anomalias de métricas para inferir tags
+    como 'connection-pool', 'config-change', 'error-spike', etc.
+
+    Args:
+        report: AggregatedReport com dados pré-processados.
+
+    Returns:
+        Lista de tags de falha únicas (strings kebab-case).
+    """
+    tags: set[str] = set()
+
+    for tpl in report.log_templates:
+        template_lower = str(tpl.template).lower()
+        if "connection" in template_lower and ("pool" in template_lower or "timeout" in template_lower):
+            tags.add("connection-pool")
+        if "config" in template_lower or "configuration" in template_lower:
+            tags.add("config-change")
+        if tpl.level in ("ERROR", "FATAL") and tpl.count > 100:
+            tags.add("error-spike")
+        if "memory" in template_lower or "oom" in template_lower or "heap" in template_lower:
+            tags.add("memory-leak")
+        if "timeout" in template_lower:
+            tags.add("timeout")
+        if "deploy" in template_lower or "rollout" in template_lower:
+            tags.add("deployment")
+
+    for anomaly in report.metric_anomalies:
+        metric_lower = str(anomaly.metric_name).lower()
+        if "connection" in metric_lower or "pool" in metric_lower:
+            tags.add("connection-pool")
+        if "memory" in metric_lower or "heap" in metric_lower:
+            tags.add("memory-leak")
+        if "error" in metric_lower or "failure" in metric_lower:
+            tags.add("error-spike")
+        if anomaly.deviation_sigma > 10:
+            tags.add("high-sigma-anomaly")
+
+    return sorted(tags)
+
+
 def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False):
     """Etapa 3: Indexacao RAG com FAISS.
 
@@ -364,13 +409,25 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
 
     console.print(f"  Model: [dim]all-MiniLM-L6-v2 (384 dimensions)[/dim]")
 
-    retriever = ObservabilityRetriever(indexer)
+    retriever = ObservabilityRetrieverWithHistory(indexer)
 
     # Demo query
     console.print(f"\n  [dim]Sample query: 'connection pool timeout'[/dim]")
     results = retriever.search("connection pool timeout", top_k=3)
     for i, r in enumerate(results, 1):
         console.print(f"    {i}. [{r.chunk.source.upper()}] (score={r.score:.3f}) {r.chunk.text[:100]}...")
+
+    # Exibe precedentes históricos antes do diagnóstico
+    try:
+        services = list(report.affected_services)
+        tags = _extract_fault_tags(report)
+        precedents = retriever.get_similar_past_incidents(services, tags, limit=3)
+        if precedents:
+            console.print(f"\n  [bold cyan]Similar past incidents found:[/bold cyan]")
+            for p in precedents:
+                console.print(f"    • {p['scenario']}: {p['root_cause']}")
+    except Exception:
+        pass
 
     console.print()
     return retriever
@@ -1718,6 +1775,31 @@ def main() -> int:
         # 5c. Attach postmortem to tracker (Story 6.3)
         if tracker is not None and tracker_issue_key:
             _attach_postmortem_to_tracker(tracker, tracker_issue_key, result)
+
+        # 5d. Persiste incidente na memória institucional (Story 7.3)
+        try:
+            diagnosis = result.get("stages", {}).get("diagnosis", {})
+            root_cause = diagnosis.get("root_cause") or ""
+            if root_cause:
+                detection = result.get("stages", {}).get("detection", {})
+                affected_services = list(detection.get("affected_services", []))
+                confidence = float(diagnosis.get("confidence") or 0.0)
+                elapsed_total_local = time.time() - t_total
+                tags = _extract_fault_tags(report)
+                evidence = "; ".join(str(e) for e in diagnosis.get("evidence", [])[:5])
+                record = IncidentRecord.new(
+                    scenario=scenario_name,
+                    root_cause=root_cause,
+                    affected_services=affected_services,
+                    diagnosis_confidence=confidence,
+                    resolution_time_sec=elapsed_total_local,
+                    tags=tags,
+                    evidence_summary=evidence,
+                )
+                db = IncidentMemoryDB()
+                db.save_incident(record)
+        except Exception:
+            pass
 
         # Summary
         print_summary(result, compression_stats, safety_result,
