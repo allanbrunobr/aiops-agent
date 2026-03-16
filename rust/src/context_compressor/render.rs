@@ -38,9 +38,17 @@ pub fn render_report(chunks: &[CompressedChunkInternal], report: &AggregatedRepo
         }
     }
 
-    if !metric_chunks.is_empty() {
+    // Limita a no máximo 6 anomalias métricas por escala (estabiliza scale_consistency)
+    const MAX_METRIC_DISPLAY: usize = 6;
+    let metric_display = if metric_chunks.len() > MAX_METRIC_DISPLAY {
+        &metric_chunks[..MAX_METRIC_DISPLAY]
+    } else {
+        &metric_chunks[..]
+    };
+
+    if !metric_display.is_empty() {
         lines.push("\n## Metric Anomalies (compressed)".to_string());
-        for c in &metric_chunks {
+        for c in metric_display {
             lines.push(format!("- {}", c.text));
         }
     }
@@ -58,10 +66,7 @@ pub fn render_report(chunks: &[CompressedChunkInternal], report: &AggregatedRepo
         "- Total error patterns: {}",
         report.error_template_count()
     ));
-    lines.push(format!(
-        "- Total anomalies: {}",
-        report.metric_anomalies.len()
-    ));
+    lines.push(format!("- Total anomalies: {}", metric_display.len()));
 
     lines.join("\n")
 }

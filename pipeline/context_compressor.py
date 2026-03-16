@@ -473,7 +473,7 @@ class ContextCompressor:
     # --- Formatters ---
 
     def _format_log_chunk(self, tpl) -> str:
-        svcs = ", ".join(sorted(tpl.services))
+        svcs = ", ".join(sorted(tpl.services)[:2])
         return f"[{tpl.level}][{svcs}] \"{tpl.template}\" x{tpl.count} | score={tpl.relevance_score}"
 
     def _format_metric_chunk(self, anomaly) -> str:
