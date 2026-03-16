@@ -4,29 +4,89 @@ Retriever semântico para busca em dados de observabilidade indexados.
 
 from __future__ import annotations
 
+import logging
+import warnings
+
 import numpy as np
 from rag.indexer import ObservabilityIndexer, IndexedChunk
 
+logger = logging.getLogger(__name__)
+
 
 class ObservabilityRetriever:
-    """Busca semântica em dados de observabilidade."""
+    """Busca semântica em dados de observabilidade.
 
-    def __init__(self, indexer: ObservabilityIndexer):
+    Suporta reranking opcional via DomainReranker para refinar os candidatos
+    retornados pelo FAISS usando sinais de domínio. A interface sem reranker
+    mantém comportamento idêntico à versão V1 (backward compatible).
+    """
+
+    def __init__(
+        self,
+        indexer: ObservabilityIndexer,
+        reranker: object | None = None,
+    ) -> None:
+        """Inicializa o retriever com indexer obrigatório e reranker opcional.
+
+        Args:
+            indexer: Instância de ObservabilityIndexer com índice FAISS construído.
+            reranker: Instância de DomainReranker opcional. Se None, comportamento
+                V1 (ordenação por score FAISS direto) é preservado.
+        """
         self.indexer = indexer
+        self.reranker = reranker
 
-    def search(self, query: str, top_k: int = 10, source_filter: str | None = None) -> list[SearchResult]:
-        """Busca os chunks mais relevantes para a query."""
+    def search(
+        self,
+        query: str,
+        top_k: int = 10,
+        source_filter: str | None = None,
+        use_reranking: bool = True,
+    ) -> list[SearchResult]:
+        """Busca os chunks mais relevantes para a query.
+
+        Se reranker estiver configurado e use_reranking=True, recupera top_k*2
+        candidatos do FAISS e aplica reranking para refinar os resultados.
+        Em caso de falha no reranking, retorna os resultados FAISS originais.
+
+        Se reranker for None ou use_reranking=False, comportamento V1 é preservado.
+
+        Args:
+            query: Texto de consulta para busca semântica.
+            top_k: Número máximo de resultados a retornar.
+            source_filter: Filtro opcional por tipo de fonte ("log", "metric", "trace").
+            use_reranking: Se False, ignora o reranker mesmo que esteja configurado.
+
+        Returns:
+            Lista de até top_k SearchResult ordenados por relevância decrescente.
+        """
         if self.indexer.index is None or self.indexer.model is None:
             return []
+
+        # Determina se reranking está ativo nesta chamada
+        reranking_active = (
+            self.reranker is not None
+            and use_reranking
+            and source_filter is None  # reranking não combinado com source_filter
+        )
 
         query_embedding = self.indexer.model.encode([query], normalize_embeddings=True)
         query_embedding = np.array(query_embedding, dtype=np.float32)
 
-        # Busca mais do que top_k para compensar filtragem
-        search_k = top_k * 3 if source_filter else top_k
-        distances, indices = self.indexer.index.search(query_embedding, min(search_k, len(self.indexer.chunks)))
+        if reranking_active:
+            # Recupera top_k*2 candidatos para o reranker refinar
+            faiss_k = top_k * 2
+        else:
+            # Busca mais do que top_k para compensar filtragem
+            faiss_k = top_k * 3 if source_filter else top_k
+
+        distances, indices = self.indexer.index.search(
+            query_embedding,
+            min(faiss_k, len(self.indexer.chunks)),
+        )
 
         results = []
+        limit = faiss_k if reranking_active else top_k
         for dist, idx in zip(distances[0], indices[0]):
             if idx < 0:
                 continue
@@ -37,8 +97,21 @@ class ObservabilityRetriever:
                 chunk=chunk,
                 score=float(dist),
             ))
-            if len(results) >= top_k:
+            if len(results) >= limit:
                 break
+
+        # Aplica reranking se ativo
+        if reranking_active and results:
+            try:
+                results = self.reranker.rerank(results, query, top_k=top_k)  # type: ignore[attr-defined]
+            except Exception as exc:
+                warnings.warn(
+                    f"Reranker falhou — retornando resultados FAISS brutos: {exc}",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
+                logger.warning("Reranker exception: %s", exc)
+                results = results[:top_k]
 
         return results
 
