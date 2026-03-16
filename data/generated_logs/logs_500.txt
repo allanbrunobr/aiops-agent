@@ -1,0 +1,500 @@
+2026-03-04 13:53:00.000 INFO [auth-svc] Outbound request to inventory-svc completed in 92ms
+2026-03-04 13:53:07.000 INFO [auth-svc] Metrics exported: 45 series, 219 samples
+2026-03-04 13:53:11.000 INFO [payment-svc] Metrics exported: 52 series, 329 samples
+2026-03-04 13:53:25.000 INFO [inventory-svc] Outbound request to inventory-svc completed in 24ms
+2026-03-04 13:53:35.000 INFO [payment-svc] Outbound request to payment-svc completed in 103ms
+2026-03-04 13:53:40.000 INFO [inventory-svc] Database query executed in 43ms rows_returned=388
+2026-03-04 13:53:48.000 INFO [gateway] Database query executed in 38ms rows_returned=29
+2026-03-04 13:53:55.000 INFO [payment-svc] HTTP GET /api/v1/orders 200 124ms
+2026-03-04 13:53:59.000 INFO [order-svc] JWT token validated for user_id=92793
+2026-03-04 13:54:04.000 INFO [auth-svc] Health check passed for order-svc
+2026-03-04 13:54:05.000 INFO [auth-svc] Database query executed in 32ms rows_returned=144
+2026-03-04 13:54:19.000 INFO [order-svc] Cache hit for user session 37852
+2026-03-04 13:54:21.000 INFO [inventory-svc] Health check passed for inventory-svc
+2026-03-04 13:54:21.000 INFO [auth-svc] Cache hit for user session 64484
+2026-03-04 13:54:22.000 INFO [payment-svc] Cache hit for user session 23547
+2026-03-04 13:54:24.000 INFO [auth-svc] Kafka message produced to topic=orders partition=10 offset=54126
+2026-03-04 13:54:25.000 INFO [auth-svc] JWT token validated for user_id=44918
+2026-03-04 13:54:28.000 INFO [order-svc] Kafka message produced to topic=orders partition=1 offset=69123
+2026-03-04 13:54:33.000 INFO [payment-svc] Kafka message produced to topic=orders partition=0 offset=79529
+2026-03-04 13:54:34.000 INFO [gateway] gRPC call to gateway completed status=OK latency=69ms
+2026-03-04 13:54:36.000 INFO [payment-svc] Connection acquired from pool (14/200 active)
+2026-03-04 13:54:49.000 INFO [gateway] Connection acquired from pool (22/200 active)
+2026-03-04 13:54:50.000 INFO [payment-svc] Request processed successfully in 165ms
+2026-03-04 13:55:00.000 INFO [gateway] Health check passed for gateway
+2026-03-04 13:55:07.000 INFO [gateway] Config reload completed: 27 keys loaded from ConfigMap
+2026-03-04 13:55:10.000 INFO [order-svc] Database query executed in 21ms rows_returned=126
+2026-03-04 13:55:13.000 INFO [order-svc] gRPC call to order-svc completed status=OK latency=10ms
+2026-03-04 13:55:19.000 INFO [gateway] Database query executed in 44ms rows_returned=406
+2026-03-04 13:55:20.000 INFO [gateway] JWT token validated for user_id=15509
+2026-03-04 13:55:21.000 INFO [inventory-svc] Metrics exported: 59 series, 254 samples
+2026-03-04 13:55:22.000 INFO [payment-svc] HTTP GET /api/v1/payments 200 116ms
+2026-03-04 13:55:22.000 INFO [auth-svc] JWT token validated for user_id=54842
+2026-03-04 13:55:28.000 INFO [payment-svc] gRPC call to payment-svc completed status=OK latency=36ms
+2026-03-04 13:55:29.000 INFO [order-svc] Database query executed in 4ms rows_returned=219
+2026-03-04 13:55:31.000 INFO [inventory-svc] HTTP GET /api/v1/orders 200 23ms
+2026-03-04 13:55:34.000 INFO [order-svc] Metrics exported: 65 series, 222 samples
+2026-03-04 13:55:38.000 INFO [auth-svc] Cache hit for user session 94971
+2026-03-04 13:55:47.000 INFO [order-svc] Request processed successfully in 88ms
+2026-03-04 13:55:53.000 INFO [auth-svc] Kafka message produced to topic=orders partition=3 offset=64255
+2026-03-04 13:55:55.000 INFO [order-svc] Config reload completed: 27 keys loaded from ConfigMap
+2026-03-04 13:55:57.000 INFO [auth-svc] Readiness probe: all 6 dependencies healthy
+2026-03-04 13:56:11.000 INFO [gateway] Cache hit for user session 48687
+2026-03-04 13:56:13.000 INFO [payment-svc] HTTP GET /api/v1/users 200 67ms
+2026-03-04 13:56:24.000 INFO [payment-svc] Kafka message produced to topic=orders partition=11 offset=19547
+2026-03-04 13:56:25.000 INFO [gateway] Outbound request to payment-svc completed in 109ms
+2026-03-04 13:56:32.000 INFO [gateway] Outbound request to gateway completed in 80ms
+2026-03-04 13:56:37.000 INFO [auth-svc] Config reload completed: 14 keys loaded from ConfigMap
+2026-03-04 13:56:41.000 INFO [order-svc] Config reload completed: 24 keys loaded from ConfigMap
+2026-03-04 13:56:41.000 INFO [inventory-svc] Request processed successfully in 106ms
+2026-03-04 13:56:43.000 INFO [gateway] Cache hit for user session 27110
+2026-03-04 13:56:48.000 INFO [payment-svc] TLS handshake completed peer=auth-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 13:56:49.000 INFO [auth-svc] Readiness probe: all 8 dependencies healthy
+2026-03-04 13:56:49.000 INFO [payment-svc] Readiness probe: all 8 dependencies healthy
+2026-03-04 13:56:54.000 INFO [inventory-svc] Metrics exported: 77 series, 373 samples
+2026-03-04 13:56:54.000 INFO [gateway] Outbound request to gateway completed in 56ms
+2026-03-04 13:56:56.000 INFO [payment-svc] TLS handshake completed peer=gateway protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 13:56:56.000 INFO [auth-svc] Connection acquired from pool (27/200 active)
+2026-03-04 13:57:02.000 INFO [inventory-svc] Metrics exported: 59 series, 222 samples
+2026-03-04 13:57:05.000 INFO [inventory-svc] Cache hit for user session 5501
+2026-03-04 13:57:07.000 INFO [inventory-svc] Metrics exported: 70 series, 345 samples
+2026-03-04 13:57:15.000 INFO [order-svc] Health check passed for gateway
+2026-03-04 13:57:15.000 INFO [auth-svc] Kafka message produced to topic=orders partition=5 offset=25347
+2026-03-04 13:57:17.000 INFO [gateway] HTTP GET /api/v1/users 200 70ms
+2026-03-04 13:57:20.000 INFO [gateway] Database query executed in 14ms rows_returned=478
+2026-03-04 13:57:27.000 INFO [auth-svc] Connection acquired from pool (27/200 active)
+2026-03-04 13:57:30.000 INFO [inventory-svc] Redis GET cache_key=session:35314 hit=true latency=3ms
+2026-03-04 13:57:31.000 INFO [auth-svc] Readiness probe: all 6 dependencies healthy
+2026-03-04 13:57:33.000 INFO [order-svc] HTTP GET /api/v1/users 200 122ms
+2026-03-04 13:57:45.000 INFO [payment-svc] HTTP GET /api/v1/products 200 11ms
+2026-03-04 13:57:45.000 INFO [gateway] TLS handshake completed peer=order-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 13:57:47.000 INFO [order-svc] Connection acquired from pool (36/200 active)
+2026-03-04 13:58:03.000 INFO [order-svc] Connection acquired from pool (39/200 active)
+2026-03-04 13:58:05.000 INFO [inventory-svc] Request processed successfully in 105ms
+2026-03-04 13:58:08.000 INFO [gateway] Database query executed in 4ms rows_returned=8
+2026-03-04 13:58:12.000 INFO [gateway] Health check passed for auth-svc
+2026-03-04 13:58:12.000 INFO [gateway] Connection acquired from pool (10/200 active)
+2026-03-04 13:58:13.000 INFO [auth-svc] Metrics exported: 49 series, 482 samples
+2026-03-04 13:58:16.000 INFO [gateway] Config reload completed: 25 keys loaded from ConfigMap
+2026-03-04 13:58:25.000 INFO [order-svc] gRPC call to inventory-svc completed status=OK latency=38ms
+2026-03-04 13:58:26.000 INFO [order-svc] JWT token validated for user_id=68198
+2026-03-04 13:58:27.000 INFO [order-svc] Redis GET cache_key=session:84939 hit=true latency=4ms
+2026-03-04 13:58:30.000 INFO [inventory-svc] Metrics exported: 76 series, 294 samples
+2026-03-04 13:58:32.000 INFO [gateway] Readiness probe: all 8 dependencies healthy
+2026-03-04 13:58:50.000 INFO [inventory-svc] TLS handshake completed peer=auth-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 13:59:00.000 INFO [inventory-svc] HTTP GET /api/v1/products 200 42ms
+2026-03-04 13:59:05.000 INFO [inventory-svc] Readiness probe: all 3 dependencies healthy
+2026-03-04 13:59:20.000 INFO [payment-svc] Redis GET cache_key=session:75782 hit=true latency=5ms
+2026-03-04 13:59:29.000 INFO [inventory-svc] gRPC call to order-svc completed status=OK latency=49ms
+2026-03-04 13:59:29.000 INFO [auth-svc] Request processed successfully in 84ms
+2026-03-04 13:59:34.000 INFO [auth-svc] Health check passed for inventory-svc
+2026-03-04 13:59:38.000 INFO [order-svc] gRPC call to inventory-svc completed status=OK latency=54ms
+2026-03-04 13:59:46.000 INFO [payment-svc] Redis GET cache_key=session:14187 hit=true latency=5ms
+2026-03-04 13:59:47.000 INFO [inventory-svc] Database query executed in 7ms rows_returned=224
+2026-03-04 13:59:47.000 INFO [gateway] Request processed successfully in 138ms
+2026-03-04 13:59:48.000 INFO [order-svc] JWT token validated for user_id=76803
+2026-03-04 13:59:48.000 INFO [payment-svc] Redis GET cache_key=session:98354 hit=true latency=4ms
+2026-03-04 14:00:10.000 INFO [order-svc] Metrics exported: 71 series, 283 samples
+2026-03-04 14:00:13.000 INFO [order-svc] JWT token validated for user_id=65390
+2026-03-04 14:00:16.000 INFO [inventory-svc] Outbound request to order-svc completed in 112ms
+2026-03-04 14:00:23.000 INFO [order-svc] Outbound request to gateway completed in 88ms
+2026-03-04 14:00:26.000 INFO [order-svc] TLS handshake completed peer=inventory-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:00:31.000 INFO [order-svc] Redis GET cache_key=session:50231 hit=true latency=1ms
+2026-03-04 14:00:31.000 INFO [payment-svc] Health check passed for gateway
+2026-03-04 14:00:31.000 INFO [order-svc] Cache hit for user session 51693
+2026-03-04 14:00:33.000 INFO [order-svc] TLS handshake completed peer=payment-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:00:39.000 INFO [payment-svc] Metrics exported: 74 series, 444 samples
+2026-03-04 14:00:42.000 INFO [inventory-svc] Database query executed in 8ms rows_returned=242
+2026-03-04 14:00:45.000 INFO [auth-svc] Connection acquired from pool (21/200 active)
+2026-03-04 14:00:46.000 INFO [auth-svc] Health check passed for inventory-svc
+2026-03-04 14:00:56.000 INFO [payment-svc] Database query executed in 20ms rows_returned=421
+2026-03-04 14:01:01.000 INFO [auth-svc] Cache hit for user session 73126
+2026-03-04 14:01:04.000 INFO [gateway] Database query executed in 4ms rows_returned=110
+2026-03-04 14:01:09.000 INFO [auth-svc] gRPC call to gateway completed status=OK latency=36ms
+2026-03-04 14:01:13.000 INFO [inventory-svc] Health check passed for gateway
+2026-03-04 14:01:14.000 INFO [order-svc] gRPC call to gateway completed status=OK latency=19ms
+2026-03-04 14:01:17.000 INFO [payment-svc] TLS handshake completed peer=gateway protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:01:18.000 INFO [auth-svc] HTTP GET /api/v1/users 200 43ms
+2026-03-04 14:01:21.000 INFO [gateway] gRPC call to inventory-svc completed status=OK latency=39ms
+2026-03-04 14:01:27.000 INFO [gateway] Health check passed for auth-svc
+2026-03-04 14:01:28.000 INFO [auth-svc] Connection acquired from pool (24/200 active)
+2026-03-04 14:01:30.000 INFO [payment-svc] gRPC call to gateway completed status=OK latency=36ms
+2026-03-04 14:01:31.000 INFO [payment-svc] JWT token validated for user_id=32781
+2026-03-04 14:01:34.000 INFO [payment-svc] Health check passed for inventory-svc
+2026-03-04 14:01:34.000 INFO [gateway] Health check passed for payment-svc
+2026-03-04 14:01:37.000 INFO [order-svc] Health check passed for order-svc
+2026-03-04 14:01:44.000 INFO [auth-svc] Connection acquired from pool (35/200 active)
+2026-03-04 14:01:49.000 INFO [auth-svc] Outbound request to gateway completed in 60ms
+2026-03-04 14:01:50.000 INFO [gateway] Config reload completed: 25 keys loaded from ConfigMap
+2026-03-04 14:01:52.000 INFO [order-svc] JWT token validated for user_id=83362
+2026-03-04 14:01:54.000 INFO [gateway] HTTP GET /api/v1/payments 200 73ms
+2026-03-04 14:01:59.000 INFO [inventory-svc] Metrics exported: 65 series, 298 samples
+2026-03-04 14:02:00.000 INFO [inventory-svc] gRPC call to gateway completed status=OK latency=19ms
+2026-03-04 14:02:02.000 INFO [inventory-svc] Config reload completed: 18 keys loaded from ConfigMap
+2026-03-04 14:02:03.000 INFO [order-svc] Outbound request to auth-svc completed in 90ms
+2026-03-04 14:02:03.000 INFO [payment-svc] Health check passed for gateway
+2026-03-04 14:02:06.000 INFO [payment-svc] Redis GET cache_key=session:38309 hit=true latency=5ms
+2026-03-04 14:02:06.000 INFO [auth-svc] Health check passed for gateway
+2026-03-04 14:02:08.000 INFO [payment-svc] Cache hit for user session 80732
+2026-03-04 14:02:13.000 INFO [inventory-svc] Metrics exported: 58 series, 377 samples
+2026-03-04 14:02:16.000 INFO [auth-svc] JWT token validated for user_id=48894
+2026-03-04 14:02:18.000 INFO [order-svc] gRPC call to inventory-svc completed status=OK latency=35ms
+2026-03-04 14:02:23.000 INFO [gateway] Cache hit for user session 6370
+2026-03-04 14:02:25.000 INFO [inventory-svc] Request processed successfully in 49ms
+2026-03-04 14:02:27.000 INFO [inventory-svc] gRPC call to auth-svc completed status=OK latency=21ms
+2026-03-04 14:02:29.000 INFO [payment-svc] Metrics exported: 61 series, 495 samples
+2026-03-04 14:02:29.000 INFO [gateway] Cache hit for user session 59833
+2026-03-04 14:02:29.000 INFO [order-svc] HTTP GET /api/v1/payments 200 66ms
+2026-03-04 14:02:30.000 INFO [order-svc] Cache hit for user session 46006
+2026-03-04 14:02:37.000 INFO [inventory-svc] Cache hit for user session 52206
+2026-03-04 14:02:43.000 INFO [gateway] gRPC call to order-svc completed status=OK latency=13ms
+2026-03-04 14:02:58.000 INFO [gateway] HTTP GET /api/v1/payments 200 142ms
+2026-03-04 14:03:01.000 INFO [order-svc] Connection acquired from pool (14/200 active)
+2026-03-04 14:03:07.000 INFO [gateway] Request processed successfully in 67ms
+2026-03-04 14:03:11.000 INFO [order-svc] Config reload completed: 29 keys loaded from ConfigMap
+2026-03-04 14:03:14.000 INFO [order-svc] JWT token validated for user_id=27759
+2026-03-04 14:03:16.000 INFO [order-svc] Kafka message produced to topic=orders partition=6 offset=97659
+2026-03-04 14:03:17.000 INFO [inventory-svc] Metrics exported: 74 series, 251 samples
+2026-03-04 14:03:19.000 INFO [payment-svc] TLS handshake completed peer=order-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:03:22.000 INFO [payment-svc] Cache hit for user session 49508
+2026-03-04 14:03:25.000 INFO [gateway] Cache hit for user session 89345
+2026-03-04 14:03:29.000 INFO [gateway] Request processed successfully in 137ms
+2026-03-04 14:03:33.000 INFO [order-svc] JWT token validated for user_id=26166
+2026-03-04 14:03:38.000 INFO [order-svc] HTTP GET /api/v1/products 200 28ms
+2026-03-04 14:03:38.000 INFO [inventory-svc] HTTP GET /api/v1/products 200 128ms
+2026-03-04 14:03:42.000 INFO [payment-svc] Request processed successfully in 24ms
+2026-03-04 14:03:42.000 INFO [order-svc] Redis GET cache_key=session:83246 hit=true latency=2ms
+2026-03-04 14:03:43.000 INFO [gateway] Outbound request to order-svc completed in 40ms
+2026-03-04 14:03:44.000 INFO [gateway] HTTP GET /api/v1/payments 200 132ms
+2026-03-04 14:03:49.000 INFO [order-svc] Redis GET cache_key=session:81780 hit=true latency=5ms
+2026-03-04 14:03:59.000 INFO [order-svc] gRPC call to order-svc completed status=OK latency=41ms
+2026-03-04 14:04:00.000 INFO [gateway] Config reload completed: 24 keys loaded from ConfigMap
+2026-03-04 14:04:03.000 INFO [order-svc] Request processed successfully in 31ms
+2026-03-04 14:04:04.000 INFO [payment-svc] Cache hit for user session 61078
+2026-03-04 14:04:12.000 INFO [auth-svc] Config reload completed: 29 keys loaded from ConfigMap
+2026-03-04 14:04:16.000 INFO [inventory-svc] JWT token validated for user_id=31401
+2026-03-04 14:04:20.000 INFO [order-svc] Metrics exported: 48 series, 255 samples
+2026-03-04 14:04:26.000 INFO [payment-svc] Config reload completed: 16 keys loaded from ConfigMap
+2026-03-04 14:04:29.000 INFO [payment-svc] Health check passed for inventory-svc
+2026-03-04 14:04:31.000 INFO [order-svc] Outbound request to inventory-svc completed in 27ms
+2026-03-04 14:04:32.000 INFO [payment-svc] Redis GET cache_key=session:58798 hit=true latency=3ms
+2026-03-04 14:04:37.000 INFO [gateway] Request processed successfully in 97ms
+2026-03-04 14:04:42.000 INFO [gateway] HTTP GET /api/v1/users 200 89ms
+2026-03-04 14:04:44.000 INFO [inventory-svc] Outbound request to payment-svc completed in 72ms
+2026-03-04 14:05:07.000 INFO [gateway] HTTP GET /api/v1/orders 200 88ms
+2026-03-04 14:05:20.000 INFO [inventory-svc] Cache hit for user session 2345
+2026-03-04 14:05:21.000 INFO [gateway] Connection acquired from pool (14/200 active)
+2026-03-04 14:05:27.000 INFO [gateway] JWT token validated for user_id=21200
+2026-03-04 14:05:35.000 INFO [order-svc] Kafka message produced to topic=orders partition=10 offset=69401
+2026-03-04 14:05:36.000 INFO [inventory-svc] Kafka message produced to topic=orders partition=0 offset=51499
+2026-03-04 14:05:44.000 INFO [order-svc] Readiness probe: all 5 dependencies healthy
+2026-03-04 14:05:48.000 INFO [order-svc] TLS handshake completed peer=auth-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:05:56.000 INFO [payment-svc] Database query executed in 8ms rows_returned=341
+2026-03-04 14:05:56.000 INFO [gateway] Redis GET cache_key=session:84434 hit=true latency=1ms
+2026-03-04 14:05:56.000 INFO [auth-svc] Request processed successfully in 164ms
+2026-03-04 14:05:57.000 INFO [auth-svc] Readiness probe: all 5 dependencies healthy
+2026-03-04 14:05:58.000 INFO [payment-svc] JWT token validated for user_id=33416
+2026-03-04 14:06:26.000 INFO [inventory-svc] Redis GET cache_key=session:15230 hit=true latency=2ms
+2026-03-04 14:06:30.000 INFO [gateway] HTTP GET /api/v1/payments 200 49ms
+2026-03-04 14:06:38.000 INFO [gateway] Connection acquired from pool (10/200 active)
+2026-03-04 14:06:41.000 INFO [payment-svc] Connection acquired from pool (31/200 active)
+2026-03-04 14:06:44.000 INFO [auth-svc] Metrics exported: 77 series, 499 samples
+2026-03-04 14:06:44.000 INFO [auth-svc] Kafka message produced to topic=orders partition=4 offset=65945
+2026-03-04 14:06:48.000 INFO [gateway] Config reload completed: 14 keys loaded from ConfigMap
+2026-03-04 14:06:52.000 INFO [inventory-svc] TLS handshake completed peer=payment-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:07:01.000 INFO [order-svc] Config reload completed: 17 keys loaded from ConfigMap
+2026-03-04 14:07:04.000 INFO [payment-svc] Connection acquired from pool (14/200 active)
+2026-03-04 14:07:09.000 INFO [order-svc] JWT token validated for user_id=32991
+2026-03-04 14:07:12.000 INFO [inventory-svc] Redis GET cache_key=session:47316 hit=true latency=5ms
+2026-03-04 14:07:18.000 INFO [inventory-svc] Redis GET cache_key=session:39130 hit=true latency=1ms
+2026-03-04 14:07:18.000 INFO [inventory-svc] TLS handshake completed peer=order-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:07:20.000 INFO [order-svc] Readiness probe: all 5 dependencies healthy
+2026-03-04 14:07:20.000 INFO [order-svc] Health check passed for order-svc
+2026-03-04 14:07:23.000 INFO [auth-svc] Config reload completed: 27 keys loaded from ConfigMap
+2026-03-04 14:07:24.000 INFO [payment-svc] Request processed successfully in 96ms
+2026-03-04 14:07:26.000 INFO [gateway] Readiness probe: all 5 dependencies healthy
+2026-03-04 14:07:26.000 INFO [inventory-svc] HTTP GET /api/v1/payments 200 84ms
+2026-03-04 14:07:27.000 INFO [auth-svc] Request processed successfully in 123ms
+2026-03-04 14:07:30.000 INFO [gateway] Connection acquired from pool (32/200 active)
+2026-03-04 14:07:35.000 INFO [inventory-svc] Request processed successfully in 128ms
+2026-03-04 14:07:37.000 INFO [inventory-svc] Database query executed in 26ms rows_returned=278
+2026-03-04 14:07:37.000 INFO [gateway] Config reload completed: 30 keys loaded from ConfigMap
+2026-03-04 14:07:37.000 INFO [auth-svc] Health check passed for inventory-svc
+2026-03-04 14:07:42.000 INFO [auth-svc] Database query executed in 26ms rows_returned=290
+2026-03-04 14:07:43.000 INFO [payment-svc] HTTP GET /api/v1/products 200 109ms
+2026-03-04 14:07:47.000 INFO [auth-svc] HTTP GET /api/v1/products 200 86ms
+2026-03-04 14:07:49.000 INFO [auth-svc] TLS handshake completed peer=payment-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:07:52.000 INFO [inventory-svc] Outbound request to order-svc completed in 115ms
+2026-03-04 14:07:53.000 INFO [payment-svc] Kafka message produced to topic=orders partition=1 offset=10111
+2026-03-04 14:08:04.000 INFO [inventory-svc] TLS handshake completed peer=auth-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:08:05.000 INFO [gateway] Kafka message produced to topic=orders partition=5 offset=47139
+2026-03-04 14:08:23.000 INFO [gateway] Metrics exported: 48 series, 235 samples
+2026-03-04 14:08:29.000 INFO [payment-svc] TLS handshake completed peer=gateway protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:08:29.000 INFO [auth-svc] Outbound request to auth-svc completed in 29ms
+2026-03-04 14:08:39.000 INFO [gateway] Outbound request to auth-svc completed in 19ms
+2026-03-04 14:08:41.000 INFO [gateway] Database query executed in 40ms rows_returned=360
+2026-03-04 14:08:45.000 INFO [gateway] Request processed successfully in 142ms
+2026-03-04 14:08:51.000 INFO [inventory-svc] Redis GET cache_key=session:8404 hit=true latency=2ms
+2026-03-04 14:08:57.000 INFO [gateway] Redis GET cache_key=session:60287 hit=true latency=3ms
+2026-03-04 14:08:58.000 INFO [inventory-svc] Outbound request to inventory-svc completed in 55ms
+2026-03-04 14:09:01.000 INFO [order-svc] gRPC call to inventory-svc completed status=OK latency=35ms
+2026-03-04 14:09:08.000 INFO [gateway] Metrics exported: 79 series, 378 samples
+2026-03-04 14:09:08.000 INFO [order-svc] Cache hit for user session 91022
+2026-03-04 14:09:09.000 INFO [gateway] HTTP GET /api/v1/products 200 65ms
+2026-03-04 14:09:09.000 INFO [payment-svc] Redis GET cache_key=session:76330 hit=true latency=3ms
+2026-03-04 14:09:13.000 INFO [inventory-svc] Connection acquired from pool (24/200 active)
+2026-03-04 14:09:15.000 INFO [order-svc] gRPC call to payment-svc completed status=OK latency=75ms
+2026-03-04 14:09:16.000 INFO [inventory-svc] Readiness probe: all 6 dependencies healthy
+2026-03-04 14:09:16.000 INFO [payment-svc] JWT token validated for user_id=52663
+2026-03-04 14:09:34.000 INFO [gateway] Kafka message produced to topic=orders partition=1 offset=54745
+2026-03-04 14:09:34.000 INFO [order-svc] Cache hit for user session 35206
+2026-03-04 14:09:36.000 INFO [gateway] Cache hit for user session 55068
+2026-03-04 14:09:38.000 INFO [gateway] JWT token validated for user_id=35036
+2026-03-04 14:09:45.000 INFO [payment-svc] Config reload completed: 28 keys loaded from ConfigMap
+2026-03-04 14:09:52.000 INFO [auth-svc] Connection acquired from pool (40/200 active)
+2026-03-04 14:10:02.000 INFO [order-svc] Readiness probe: all 8 dependencies healthy
+2026-03-04 14:10:13.000 INFO [order-svc] Config reload completed: 17 keys loaded from ConfigMap
+2026-03-04 14:10:14.000 INFO [inventory-svc] Request processed successfully in 160ms
+2026-03-04 14:10:16.000 INFO [auth-svc] Request processed successfully in 101ms
+2026-03-04 14:10:19.000 INFO [inventory-svc] Cache hit for user session 15476
+2026-03-04 14:10:20.000 INFO [payment-svc] Config reload completed: 18 keys loaded from ConfigMap
+2026-03-04 14:10:23.000 INFO [order-svc] Health check passed for inventory-svc
+2026-03-04 14:10:23.000 INFO [order-svc] HTTP GET /api/v1/payments 200 15ms
+2026-03-04 14:10:27.000 INFO [payment-svc] Database query executed in 30ms rows_returned=53
+2026-03-04 14:10:32.000 INFO [gateway] Outbound request to auth-svc completed in 65ms
+2026-03-04 14:10:38.000 INFO [gateway] Health check passed for auth-svc
+2026-03-04 14:10:39.000 INFO [order-svc] Health check passed for gateway
+2026-03-04 14:10:40.000 INFO [order-svc] Request processed successfully in 53ms
+2026-03-04 14:10:50.000 INFO [auth-svc] Readiness probe: all 8 dependencies healthy
+2026-03-04 14:10:54.000 INFO [inventory-svc] Outbound request to auth-svc completed in 26ms
+2026-03-04 14:11:03.000 INFO [payment-svc] HTTP GET /api/v1/orders 200 84ms
+2026-03-04 14:11:06.000 INFO [payment-svc] Redis GET cache_key=session:86014 hit=true latency=2ms
+2026-03-04 14:11:07.000 INFO [gateway] Request processed successfully in 157ms
+2026-03-04 14:11:07.000 INFO [inventory-svc] Redis GET cache_key=session:86397 hit=true latency=5ms
+2026-03-04 14:11:07.000 INFO [auth-svc] Database query executed in 20ms rows_returned=442
+2026-03-04 14:11:13.000 INFO [payment-svc] Readiness probe: all 7 dependencies healthy
+2026-03-04 14:11:13.000 INFO [gateway] Outbound request to gateway completed in 34ms
+2026-03-04 14:11:17.000 INFO [gateway] Cache hit for user session 86798
+2026-03-04 14:11:18.000 INFO [auth-svc] Request processed successfully in 49ms
+2026-03-04 14:11:22.000 INFO [gateway] JWT token validated for user_id=2380
+2026-03-04 14:11:22.000 INFO [order-svc] gRPC call to gateway completed status=OK latency=52ms
+2026-03-04 14:11:23.000 INFO [auth-svc] TLS handshake completed peer=payment-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:11:24.000 INFO [gateway] TLS handshake completed peer=gateway protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:11:24.000 INFO [payment-svc] JWT token validated for user_id=23493
+2026-03-04 14:11:26.000 INFO [payment-svc] Connection acquired from pool (40/200 active)
+2026-03-04 14:11:27.000 INFO [payment-svc] Health check passed for inventory-svc
+2026-03-04 14:11:30.000 INFO [payment-svc] TLS handshake completed peer=inventory-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:11:31.000 INFO [order-svc] Database query executed in 43ms rows_returned=165
+2026-03-04 14:11:32.000 INFO [auth-svc] Redis GET cache_key=session:98481 hit=true latency=5ms
+2026-03-04 14:11:36.000 INFO [payment-svc] Redis GET cache_key=session:60683 hit=true latency=5ms
+2026-03-04 14:11:38.000 INFO [inventory-svc] Readiness probe: all 4 dependencies healthy
+2026-03-04 14:11:42.000 INFO [order-svc] Readiness probe: all 7 dependencies healthy
+2026-03-04 14:11:47.000 INFO [payment-svc] Request processed successfully in 42ms
+2026-03-04 14:11:47.000 INFO [auth-svc] JWT token validated for user_id=21031
+2026-03-04 14:11:50.000 INFO [auth-svc] Config reload completed: 28 keys loaded from ConfigMap
+2026-03-04 14:11:53.000 INFO [payment-svc] HTTP GET /api/v1/orders 200 44ms
+2026-03-04 14:11:53.000 INFO [gateway] Outbound request to order-svc completed in 119ms
+2026-03-04 14:11:54.000 INFO [gateway] Redis GET cache_key=session:82470 hit=true latency=4ms
+2026-03-04 14:11:55.000 INFO [auth-svc] Readiness probe: all 6 dependencies healthy
+2026-03-04 14:11:57.000 INFO [gateway] TLS handshake completed peer=gateway protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:12:00.000 INFO [gateway] HTTP GET /api/v1/orders 200 127ms
+2026-03-04 14:19:18.000 WARN [auth-svc] Retry attempt 3/3 for outbound call to gateway
+2026-03-04 14:19:34.000 WARN [payment-svc] Memory usage at 83% — threshold 90%
+2026-03-04 14:19:40.000 WARN [payment-svc] Connection pool usage high: 157/200 active
+2026-03-04 14:19:40.000 INFO [payment-svc] TLS handshake completed peer=inventory-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:19:40.000 INFO [gateway] Kafka message produced to topic=orders partition=11 offset=60058
+2026-03-04 14:19:48.000 WARN [auth-svc] Memory usage at 76% — threshold 90%
+2026-03-04 14:19:57.000 WARN [auth-svc] Retry attempt 3/3 for outbound call to auth-svc
+2026-03-04 14:19:58.000 INFO [auth-svc] Redis GET cache_key=session:39420 hit=true latency=4ms
+2026-03-04 14:20:08.000 WARN [auth-svc] Retry attempt 2/3 for outbound call to gateway
+2026-03-04 14:20:12.000 WARN [auth-svc] Request queue depth: 97 (threshold: 200)
+2026-03-04 14:20:13.000 WARN [auth-svc] Memory usage at 80% — threshold 90%
+2026-03-04 14:20:20.000 WARN [gateway] Memory usage at 82% — threshold 90%
+2026-03-04 14:20:22.000 WARN [auth-svc] Connection pool usage high: 165/200 active
+2026-03-04 14:20:27.000 WARN [auth-svc] Connection pool usage high: 159/200 active
+2026-03-04 14:20:42.000 WARN [auth-svc] Connection pool usage high: 172/200 active
+2026-03-04 14:20:44.000 WARN [payment-svc] Connection pool usage high: 150/200 active
+2026-03-04 14:20:45.000 INFO [auth-svc] HTTP GET /api/v1/users 200 80ms
+2026-03-04 14:20:46.000 INFO [gateway] Cache hit for user session 81484
+2026-03-04 14:20:49.000 INFO [gateway] Request processed successfully in 25ms
+2026-03-04 14:20:51.000 INFO [auth-svc] Health check passed for gateway
+2026-03-04 14:20:52.000 INFO [auth-svc] Request processed successfully in 144ms
+2026-03-04 14:20:53.000 WARN [gateway] Request queue depth: 113 (threshold: 200)
+2026-03-04 14:20:54.000 INFO [auth-svc] JWT token validated for user_id=57730
+2026-03-04 14:20:55.000 WARN [gateway] Request queue depth: 136 (threshold: 200)
+2026-03-04 14:20:56.000 WARN [auth-svc] Slow query detected: SELECT * FROM orders WHERE user_id=9857 took 603ms
+2026-03-04 14:20:58.000 INFO [payment-svc] Connection acquired from pool (25/200 active)
+2026-03-04 14:21:00.000 INFO [gateway] JWT token validated for user_id=7282
+2026-03-04 14:21:07.000 WARN [auth-svc] Retry attempt 3/3 for outbound call to inventory-svc
+2026-03-04 14:21:08.000 INFO [auth-svc] Health check passed for payment-svc
+2026-03-04 14:21:21.000 WARN [auth-svc] Retry attempt 3/3 for outbound call to payment-svc
+2026-03-04 14:21:25.000 INFO [gateway] gRPC call to inventory-svc completed status=OK latency=41ms
+2026-03-04 14:21:28.000 INFO [auth-svc] Connection acquired from pool (27/200 active)
+2026-03-04 14:21:30.000 INFO [payment-svc] HTTP GET /api/v1/payments 200 85ms
+2026-03-04 14:21:32.000 WARN [gateway] Slow query detected: SELECT * FROM orders WHERE user_id=928 took 272ms
+2026-03-04 14:21:33.000 INFO [payment-svc] TLS handshake completed peer=order-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:21:36.000 WARN [auth-svc] Slow query detected: SELECT * FROM orders WHERE user_id=1123 took 306ms
+2026-03-04 14:21:40.000 WARN [payment-svc] Connection pool usage high: 163/200 active
+2026-03-04 14:21:40.000 INFO [gateway] Cache hit for user session 24021
+2026-03-04 14:21:41.000 INFO [auth-svc] TLS handshake completed peer=gateway protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:21:48.000 INFO [auth-svc] Request processed successfully in 98ms
+2026-03-04 14:21:51.000 INFO [payment-svc] JWT token validated for user_id=11182
+2026-03-04 14:21:56.000 INFO [gateway] Outbound request to payment-svc completed in 45ms
+2026-03-04 14:22:13.000 INFO [payment-svc] HTTP GET /api/v1/products 200 40ms
+2026-03-04 14:22:21.000 INFO [auth-svc] Metrics exported: 54 series, 460 samples
+2026-03-04 14:22:22.000 INFO [gateway] Config reload completed: 20 keys loaded from ConfigMap
+2026-03-04 14:22:30.000 INFO [gateway] Metrics exported: 67 series, 402 samples
+2026-03-04 14:22:31.000 WARN [payment-svc] Slow query detected: SELECT * FROM orders WHERE user_id=133 took 794ms
+2026-03-04 14:22:41.000 INFO [auth-svc] Request processed successfully in 30ms
+2026-03-04 14:22:55.000 INFO [auth-svc] Readiness probe: all 8 dependencies healthy
+2026-03-04 14:22:59.000 INFO [payment-svc] Kafka message produced to topic=orders partition=6 offset=67608
+2026-03-04 14:23:07.000 ERROR [payment-svc] Transaction failed: could not serialize access due to concurrent update on orders.id=43153
+2026-03-04 14:23:08.000 WARN [auth-svc] Connection pool usage high: 171/200 active
+2026-03-04 14:23:09.000 INFO [order-svc] Readiness probe: all 6 dependencies healthy
+2026-03-04 14:23:14.000 ERROR [payment-svc] Kafka consumer lag critical: topic=payments partition=5 lag=36108
+2026-03-04 14:23:19.000 WARN [payment-svc] Retry attempt 1/3 for outbound call to auth-svc
+2026-03-04 14:23:26.000 ERROR [gateway] HTTP 503 from payment-svc: upstream connection pool exhausted
+2026-03-04 14:23:44.000 INFO [inventory-svc] Outbound request to payment-svc completed in 70ms
+2026-03-04 14:23:46.000 INFO [auth-svc] gRPC call to gateway completed status=OK latency=35ms
+2026-03-04 14:23:47.000 ERROR [payment-svc] Circuit breaker OPEN for order-svc after 9 consecutive failures
+2026-03-04 14:23:51.000 INFO [gateway] Connection acquired from pool (33/200 active)
+2026-03-04 14:23:52.000 INFO [inventory-svc] Outbound request to gateway completed in 26ms
+2026-03-04 14:24:02.000 FATAL [payment-svc] FATAL: connection pool completely drained — service entering degraded mode
+2026-03-04 14:24:04.000 INFO [order-svc] Readiness probe: all 5 dependencies healthy
+2026-03-04 14:24:05.000 WARN [gateway] Request queue depth: 127 (threshold: 200)
+2026-03-04 14:24:10.000 ERROR [gateway] HTTP 503 from order-svc: upstream connection pool exhausted
+2026-03-04 14:24:16.000 WARN [gateway] Retry attempt 2/3 for outbound call to gateway
+2026-03-04 14:24:22.000 ERROR [payment-svc] Database connection timeout after 17471ms to 10.0.1.47:5432
+2026-03-04 14:24:23.000 ERROR [gateway] Kafka consumer lag critical: topic=payments partition=7 lag=23111
+2026-03-04 14:24:32.000 WARN [payment-svc] Connection pool usage high: 180/200 active
+2026-03-04 14:24:32.000 INFO [auth-svc] TLS handshake completed peer=inventory-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:24:33.000 INFO [payment-svc] Database query executed in 39ms rows_returned=247
+2026-03-04 14:24:37.000 ERROR [gateway] Circuit breaker OPEN for gateway after 11 consecutive failures
+2026-03-04 14:24:38.000 INFO [auth-svc] Metrics exported: 74 series, 482 samples
+2026-03-04 14:24:39.000 INFO [payment-svc] Outbound request to inventory-svc completed in 78ms
+2026-03-04 14:24:42.000 INFO [order-svc] Health check passed for payment-svc
+2026-03-04 14:24:45.000 ERROR [payment-svc] Transaction failed: could not serialize access due to concurrent update on orders.id=98623
+2026-03-04 14:24:49.000 ERROR [gateway] Circuit breaker OPEN for inventory-svc after 8 consecutive failures
+2026-03-04 14:24:50.000 WARN [gateway] Connection pool usage high: 163/200 active
+2026-03-04 14:24:51.000 WARN [payment-svc] Request queue depth: 81 (threshold: 200)
+2026-03-04 14:24:56.000 ERROR [payment-svc] Circuit breaker OPEN for order-svc after 5 consecutive failures
+2026-03-04 14:24:56.000 WARN [payment-svc] Retry attempt 2/3 for outbound call to gateway
+2026-03-04 14:24:57.000 WARN [payment-svc] Slow query detected: SELECT * FROM orders WHERE user_id=8812 took 513ms
+2026-03-04 14:24:57.000 INFO [inventory-svc] TLS handshake completed peer=payment-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:24:58.000 ERROR [payment-svc] OOM warning: container memory at 96% of 2Gi limit
+2026-03-04 14:25:05.000 INFO [order-svc] Health check passed for payment-svc
+2026-03-04 14:25:09.000 INFO [inventory-svc] Health check passed for order-svc
+2026-03-04 14:25:09.000 ERROR [gateway] OOM warning: container memory at 95% of 2Gi limit
+2026-03-04 14:25:13.000 WARN [auth-svc] Request queue depth: 137 (threshold: 200)
+2026-03-04 14:25:25.000 INFO [payment-svc] Health check passed for order-svc
+2026-03-04 14:25:26.000 WARN [gateway] Connection pool usage high: 186/200 active
+2026-03-04 14:25:27.000 WARN [auth-svc] Slow query detected: SELECT * FROM orders WHERE user_id=6113 took 242ms
+2026-03-04 14:25:35.000 WARN [payment-svc] Slow query detected: SELECT * FROM orders WHERE user_id=141 took 870ms
+2026-03-04 14:25:36.000 INFO [payment-svc] Connection acquired from pool (18/200 active)
+2026-03-04 14:25:38.000 INFO [payment-svc] Config reload completed: 25 keys loaded from ConfigMap
+2026-03-04 14:25:41.000 INFO [payment-svc] HTTP GET /api/v1/users 200 93ms
+2026-03-04 14:25:54.000 ERROR [gateway] HTTP 503 from payment-svc: upstream connection pool exhausted
+2026-03-04 14:25:55.000 INFO [inventory-svc] gRPC call to inventory-svc completed status=OK latency=13ms
+2026-03-04 14:26:13.000 INFO [gateway] Redis GET cache_key=session:96747 hit=true latency=4ms
+2026-03-04 14:26:14.000 INFO [gateway] HTTP GET /api/v1/orders 200 77ms
+2026-03-04 14:26:37.000 INFO [inventory-svc] Request processed successfully in 135ms
+2026-03-04 14:26:40.000 WARN [payment-svc] Memory usage at 71% — threshold 90%
+2026-03-04 14:26:45.000 FATAL [payment-svc] FATAL: connection pool completely drained — service entering degraded mode
+2026-03-04 14:26:51.000 INFO [order-svc] Config reload completed: 16 keys loaded from ConfigMap
+2026-03-04 14:26:55.000 INFO [auth-svc] Cache hit for user session 98710
+2026-03-04 14:26:58.000 ERROR [payment-svc] Connection pool exhausted: 200/200 active, 34 waiting — cannot acquire connection after 28076ms
+2026-03-04 14:26:59.000 WARN [auth-svc] Request queue depth: 98 (threshold: 200)
+2026-03-04 14:27:10.000 WARN [auth-svc] Slow query detected: SELECT * FROM orders WHERE user_id=6946 took 270ms
+2026-03-04 14:27:21.000 ERROR [payment-svc] Connection pool exhausted: 200/200 active, 10 waiting — cannot acquire connection after 6605ms
+2026-03-04 14:27:23.000 INFO [order-svc] Metrics exported: 69 series, 254 samples
+2026-03-04 14:27:33.000 ERROR [gateway] Circuit breaker OPEN for auth-svc after 7 consecutive failures
+2026-03-04 14:27:43.000 INFO [gateway] Connection acquired from pool (32/200 active)
+2026-03-04 14:27:54.000 INFO [gateway] Health check passed for order-svc
+2026-03-04 14:27:56.000 ERROR [payment-svc] Request timeout: POST /api/v1/payments/91473 exceeded 11s deadline
+2026-03-04 14:28:02.000 ERROR [gateway] Circuit breaker OPEN for payment-svc after 7 consecutive failures
+2026-03-04 14:28:02.000 INFO [auth-svc] Metrics exported: 47 series, 431 samples
+2026-03-04 14:28:09.000 ERROR [gateway] Kafka consumer lag critical: topic=payments partition=4 lag=17530
+2026-03-04 14:28:09.000 INFO [payment-svc] Connection acquired from pool (27/200 active)
+2026-03-04 14:28:25.000 INFO [order-svc] Database query executed in 32ms rows_returned=7
+2026-03-04 14:28:30.000 INFO [auth-svc] Connection acquired from pool (25/200 active)
+2026-03-04 14:28:31.000 ERROR [gateway] Connection pool exhausted: 200/200 active, 20 waiting — cannot acquire connection after 27409ms
+2026-03-04 14:28:35.000 INFO [gateway] HTTP GET /api/v1/products 200 81ms
+2026-03-04 14:28:41.000 INFO [payment-svc] Kafka message produced to topic=orders partition=7 offset=62378
+2026-03-04 14:28:47.000 INFO [order-svc] Database query executed in 45ms rows_returned=472
+2026-03-04 14:28:47.000 FATAL [payment-svc] FATAL: connection pool completely drained — service entering degraded mode
+2026-03-04 14:28:49.000 ERROR [gateway] Request timeout: POST /api/v1/payments/99276 exceeded 24s deadline
+2026-03-04 14:28:59.000 INFO [gateway] Cache hit for user session 41543
+2026-03-04 14:29:00.000 ERROR [payment-svc] Transaction failed: could not serialize access due to concurrent update on orders.id=35345
+2026-03-04 14:29:02.000 INFO [order-svc] Config reload completed: 28 keys loaded from ConfigMap
+2026-03-04 14:29:07.000 FATAL [payment-svc] FATAL: connection pool completely drained — service entering degraded mode
+2026-03-04 14:29:10.000 ERROR [payment-svc] HTTP 503 from payment-svc: upstream connection pool exhausted
+2026-03-04 14:29:11.000 ERROR [gateway] Request timeout: POST /api/v1/payments/52083 exceeded 15s deadline
+2026-03-04 14:29:17.000 INFO [auth-svc] Redis GET cache_key=session:47260 hit=true latency=2ms
+2026-03-04 14:29:19.000 ERROR [gateway] HTTP 503 from inventory-svc: upstream connection pool exhausted
+2026-03-04 14:29:23.000 INFO [order-svc] Health check passed for order-svc
+2026-03-04 14:29:29.000 WARN [payment-svc] Request queue depth: 114 (threshold: 200)
+2026-03-04 14:29:30.000 INFO [auth-svc] Health check passed for inventory-svc
+2026-03-04 14:29:32.000 ERROR [gateway] Connection pool exhausted: 200/200 active, 10 waiting — cannot acquire connection after 11445ms
+2026-03-04 14:29:45.000 INFO [auth-svc] Cache hit for user session 45641
+2026-03-04 14:29:46.000 INFO [payment-svc] Database query executed in 34ms rows_returned=221
+2026-03-04 14:29:47.000 INFO [auth-svc] Config reload completed: 18 keys loaded from ConfigMap
+2026-03-04 14:30:05.000 ERROR [payment-svc] Request timeout: POST /api/v1/payments/49813 exceeded 26s deadline
+2026-03-04 14:30:14.000 INFO [order-svc] Config reload completed: 18 keys loaded from ConfigMap
+2026-03-04 14:30:26.000 WARN [auth-svc] Connection pool usage high: 151/200 active
+2026-03-04 14:30:31.000 ERROR [gateway] Transaction failed: could not serialize access due to concurrent update on orders.id=11309
+2026-03-04 14:30:32.000 INFO [inventory-svc] Outbound request to auth-svc completed in 22ms
+2026-03-04 14:30:32.000 WARN [payment-svc] Request queue depth: 72 (threshold: 200)
+2026-03-04 14:30:34.000 ERROR [gateway] Connection pool exhausted: 200/200 active, 18 waiting — cannot acquire connection after 13012ms
+2026-03-04 14:30:39.000 INFO [inventory-svc] HTTP GET /api/v1/orders 200 127ms
+2026-03-04 14:30:44.000 FATAL [payment-svc] FATAL: unrecoverable database error — all 3 replicas unreachable
+2026-03-04 14:30:49.000 INFO [payment-svc] Request processed successfully in 200ms
+2026-03-04 14:30:52.000 INFO [order-svc] Outbound request to auth-svc completed in 83ms
+2026-03-04 14:31:10.000 INFO [order-svc] HTTP GET /api/v1/products 200 78ms
+2026-03-04 14:31:13.000 ERROR [payment-svc] Request timeout: POST /api/v1/payments/15228 exceeded 28s deadline
+2026-03-04 14:31:18.000 WARN [gateway] Connection pool usage high: 163/200 active
+2026-03-04 14:31:19.000 INFO [payment-svc] Redis GET cache_key=session:98905 hit=true latency=2ms
+2026-03-04 14:31:21.000 INFO [auth-svc] Request processed successfully in 186ms
+2026-03-04 14:31:25.000 WARN [auth-svc] Request queue depth: 101 (threshold: 200)
+2026-03-04 14:31:28.000 INFO [auth-svc] Metrics exported: 75 series, 440 samples
+2026-03-04 14:31:29.000 INFO [gateway] Cache hit for user session 73533
+2026-03-04 14:31:29.000 INFO [gateway] Connection acquired from pool (28/200 active)
+2026-03-04 14:31:34.000 INFO [auth-svc] Config reload completed: 13 keys loaded from ConfigMap
+2026-03-04 14:31:58.000 INFO [payment-svc] TLS handshake completed peer=order-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:32:03.000 WARN [gateway] Slow query detected: SELECT * FROM orders WHERE user_id=3455 took 845ms
+2026-03-04 14:32:03.000 ERROR [gateway] Database connection timeout after 26424ms to 10.0.1.46:5432
+2026-03-04 14:32:03.000 ERROR [gateway] Kafka consumer lag critical: topic=payments partition=2 lag=15672
+2026-03-04 14:32:06.000 FATAL [payment-svc] FATAL: unrecoverable database error — all 3 replicas unreachable
+2026-03-04 14:32:13.000 ERROR [payment-svc] Database connection timeout after 23528ms to 10.0.1.46:5432
+2026-03-04 14:32:29.000 FATAL [payment-svc] FATAL: unrecoverable database error — all 3 replicas unreachable
+2026-03-04 14:32:30.000 FATAL [payment-svc] FATAL: unrecoverable database error — all 3 replicas unreachable
+2026-03-04 14:32:32.000 INFO [auth-svc] Health check passed for gateway
+2026-03-04 14:32:35.000 ERROR [payment-svc] OOM warning: container memory at 94% of 2Gi limit
+2026-03-04 14:32:38.000 ERROR [payment-svc] HTTP 503 from inventory-svc: upstream connection pool exhausted
+2026-03-04 14:32:41.000 WARN [payment-svc] Slow query detected: SELECT * FROM orders WHERE user_id=8810 took 779ms
+2026-03-04 14:32:47.000 ERROR [gateway] Connection pool exhausted: 200/200 active, 28 waiting — cannot acquire connection after 25938ms
+2026-03-04 14:32:49.000 WARN [gateway] Memory usage at 79% — threshold 90%
+2026-03-04 14:33:19.000 INFO [payment-svc] Outbound request to auth-svc completed in 47ms
+2026-03-04 14:33:20.000 INFO [gateway] gRPC call to auth-svc completed status=OK latency=15ms
+2026-03-04 14:33:21.000 INFO [order-svc] Redis GET cache_key=session:34623 hit=true latency=2ms
+2026-03-04 14:33:33.000 WARN [auth-svc] Memory usage at 79% — threshold 90%
+2026-03-04 14:33:39.000 INFO [payment-svc] Kafka message produced to topic=orders partition=0 offset=39127
+2026-03-04 14:34:16.000 WARN [auth-svc] Slow query detected: SELECT * FROM orders WHERE user_id=7463 took 886ms
+2026-03-04 14:34:17.000 INFO [payment-svc] Metrics exported: 74 series, 398 samples
+2026-03-04 14:34:32.000 INFO [gateway] Metrics exported: 72 series, 438 samples
+2026-03-04 14:34:36.000 INFO [auth-svc] Kafka message produced to topic=orders partition=6 offset=95678
+2026-03-04 14:35:25.000 INFO [auth-svc] HTTP GET /api/v1/orders 200 15ms
+2026-03-04 14:35:35.000 INFO [auth-svc] JWT token validated for user_id=95679
+2026-03-04 14:35:38.000 INFO [inventory-svc] Metrics exported: 51 series, 478 samples
+2026-03-04 14:35:48.000 INFO [gateway] Config reload completed: 30 keys loaded from ConfigMap
+2026-03-04 14:35:53.000 WARN [inventory-svc] Retry attempt 3/3 for outbound call to gateway
+2026-03-04 14:35:55.000 INFO [payment-svc] Connection acquired from pool (40/200 active)
+2026-03-04 14:35:59.000 INFO [auth-svc] TLS handshake completed peer=inventory-svc protocol=TLSv1.3 cipher=AES_256_GCM
+2026-03-04 14:36:10.000 INFO [auth-svc] Metrics exported: 65 series, 267 samples
+2026-03-04 14:36:16.000 INFO [order-svc] Metrics exported: 41 series, 483 samples
+2026-03-04 14:36:20.000 INFO [gateway] Health check passed for gateway
+2026-03-04 14:36:45.000 INFO [payment-svc] HTTP GET /api/v1/payments 200 25ms
+2026-03-04 14:37:08.000 INFO [gateway] Connection acquired from pool (27/200 active)
+2026-03-04 14:37:19.000 INFO [payment-svc] gRPC call to gateway completed status=OK latency=42ms
+2026-03-04 14:37:20.000 WARN [auth-svc] Retry attempt 2/3 for outbound call to gateway
+2026-03-04 14:37:28.000 INFO [inventory-svc] JWT token validated for user_id=5786
+2026-03-04 14:37:29.000 INFO [payment-svc] Database query executed in 16ms rows_returned=217
