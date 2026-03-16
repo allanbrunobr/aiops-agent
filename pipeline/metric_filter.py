@@ -14,6 +14,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from collections import defaultdict
 
+try:
+    import _aiops_rust as _rust
+    _RUST_AVAILABLE = True
+except ImportError:
+    _rust = None
+    _RUST_AVAILABLE = False
+
 
 @dataclass
 class MetricAnomaly:
@@ -38,6 +45,34 @@ class MetricFilter:
 
     def detect_anomalies(self, metrics: list) -> list[MetricAnomaly]:
         """Detecta anomalias em todas as métricas."""
+        if _RUST_AVAILABLE and self.sigma_threshold == 3.0 and self.baseline_ratio == 0.5:
+            return self._detect_rust(metrics)
+        return self._detect_python(metrics)
+
+    def _detect_rust(self, metrics: list) -> list[MetricAnomaly]:
+        """Delegação para implementação Rust (3-sigma com defaults)."""
+        raw = _rust.filter_metrics(metrics)
+        result = []
+        for r in raw:
+            ts = datetime.fromtimestamp(r["timestamp"])
+            result.append(MetricAnomaly(
+                service=r["service"],
+                metric_name=r["metric_name"],
+                anomaly_type=r["anomaly_type"],
+                timestamp=ts,
+                value=r["value"],
+                mean=r["mean"],
+                std=r["std"],
+                deviation_sigma=r["deviation_sigma"],
+                description=self._describe(
+                    r["service"], r["metric_name"], r["anomaly_type"],
+                    ts, r["value"], r["mean"], r["deviation_sigma"],
+                ),
+            ))
+        return result
+
+    def _detect_python(self, metrics: list) -> list[MetricAnomaly]:
+        """Implementação Python pura (fallback)."""
         # Agrupa por (service, metric_name)
         grouped: dict[tuple[str, str], list] = defaultdict(list)
         for m in metrics:
