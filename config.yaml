@@ -1,0 +1,7 @@
+service_criticality_map:
+  payment-svc: 1.0
+  auth-svc: 0.9
+  api-gateway: 0.8
+  database: 0.95
+  cache: 0.7
+  debug-svc: 0.1
