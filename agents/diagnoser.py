@@ -72,6 +72,14 @@ class DiagnosisAgent:
 
     def diagnose(self, report, retriever) -> dict:
         """Executa ReAct loop para diagnosticar o incidente."""
+        # Reinicia contexto CoT no início de cada diagnóstico
+        try:
+            from rag.cot_retriever import CoTObservabilityRetriever
+            if isinstance(retriever, CoTObservabilityRetriever):
+                retriever.reset_context()
+        except ImportError:
+            pass
+
         # Prepara contexto inicial com dados pré-processados
         initial_context = report.to_text()
 
@@ -334,6 +342,21 @@ class DiagnosisAgent:
             elif tool_name == "search_similar":
                 query = tool_input.get("query", "")
                 if retriever:
+                    try:
+                        from rag.cot_retriever import CoTObservabilityRetriever
+                        if isinstance(retriever, CoTObservabilityRetriever):
+                            results = retriever.search_with_cot(query, top_k=5)
+                            formatted = retriever.format_results(results)
+                            if retriever.search_history:
+                                ctx = retriever.search_history[-1]
+                                if ctx.query_expansion:
+                                    formatted = f"[Query expanded to: {ctx.query_expansion}]\n{formatted}"
+                            console.print(retriever.get_search_summary())
+                            return formatted
+                    except ImportError:
+                        pass
+                    except Exception:
+                        return "RAG search error — using baseline"
                     results = retriever.search(query, top_k=5)
                     return retriever.format_results(results)
                 return "RAG not available"
