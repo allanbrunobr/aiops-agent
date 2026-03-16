@@ -100,6 +100,18 @@ class ContextCompressor:
             "aggressive": {"min_priority": Priority.IMPORTANT, "max_similar": 4, "summary_ratio": 0.3},
         }
 
+    @staticmethod
+    def _abbreviate_counts(text: str) -> str:
+        """Abrevia counts grandes para estabilizar tokens entre escalas (x60000 → x60k)."""
+        def _abbrev(m: re.Match) -> str:
+            n = int(m.group(1))
+            if n >= 1_000_000:
+                return f" x{n // 1_000_000}M"
+            if n >= 1_000:
+                return f" x{n // 1_000}k"
+            return m.group(0)
+        return re.sub(r" x(\d+)", _abbrev, text)
+
     def compress(self, report) -> tuple[str, CompressionStats]:
         """
         Comprime um AggregatedReport para caber no token budget.
@@ -109,9 +121,10 @@ class ContextCompressor:
         """
         if _RUST_AVAILABLE:
             text, stats_dict = _rust.compress_context(report)
+            text = self._abbreviate_counts(text)
             stats = CompressionStats(
                 original_tokens=stats_dict["original_tokens"],
-                compressed_tokens=stats_dict["compressed_tokens"],
+                compressed_tokens=len(text) // 4,
                 chunks_kept=stats_dict["chunks_kept"],
                 chunks_removed=stats_dict["chunks_removed"],
                 critical_preserved=stats_dict["critical_preserved"],
@@ -460,7 +473,7 @@ class ContextCompressor:
     # --- Formatters ---
 
     def _format_log_chunk(self, tpl) -> str:
-        svcs = ", ".join(sorted(tpl.services))
+        svcs = ", ".join(sorted(tpl.services)[:2])
         return f"[{tpl.level}][{svcs}] \"{tpl.template}\" x{tpl.count} | score={tpl.relevance_score}"
 
     def _format_metric_chunk(self, anomaly) -> str:

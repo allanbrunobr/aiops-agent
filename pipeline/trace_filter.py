@@ -14,6 +14,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from collections import defaultdict
 
+try:
+    import _aiops_rust as _rust
+    _RUST_AVAILABLE = True
+except ImportError:
+    _rust = None
+    _RUST_AVAILABLE = False
+
 
 @dataclass
 class SlowCallPath:
@@ -38,6 +45,30 @@ class TraceFilter:
 
     def filter_slow_traces(self, spans: list) -> list[SlowCallPath]:
         """Identifica traces lentos e extrai call paths."""
+        if _RUST_AVAILABLE and self.percentile_threshold == 95.0 and self.max_hops == 3:
+            return self._filter_rust(spans)
+        return self._filter_python(spans)
+
+    def _filter_rust(self, spans: list) -> list[SlowCallPath]:
+        """Delegação para implementação Rust (p95 + max_hops=3)."""
+        raw = _rust.filter_traces(spans)
+        return [
+            SlowCallPath(
+                trace_id=r["trace_id"],
+                path=r["path"],
+                operations=r["operations"],
+                total_duration_ms=r["total_duration_ms"],
+                bottleneck_service=r["bottleneck_service"],
+                bottleneck_duration_ms=r["bottleneck_duration_ms"],
+                normal_duration_ms=r["normal_duration_ms"],
+                timestamp=r["timestamp"],
+                attributes=dict(r["attributes"]),
+            )
+            for r in raw
+        ]
+
+    def _filter_python(self, spans: list) -> list[SlowCallPath]:
+        """Implementação Python pura (fallback)."""
         # Agrupa spans por trace_id
         traces: dict[str, list] = defaultdict(list)
         for span in spans:

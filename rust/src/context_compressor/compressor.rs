@@ -36,7 +36,8 @@ fn py_float_str(v: f64) -> String {
 fn format_log_chunk(tpl: &LogTemplateProxy) -> String {
     let mut svcs: Vec<&str> = tpl.services.iter().map(|s| s.as_str()).collect();
     svcs.sort();
-    let svcs_str = svcs.join(", ");
+    const MAX_SERVICES: usize = 2;
+    let svcs_str = svcs[..svcs.len().min(MAX_SERVICES)].join(", ");
     format!(
         "[{}][{}] \"{}\" x{} | score={}",
         tpl.level,
