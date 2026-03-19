@@ -30,6 +30,17 @@ except ImportError:
     _RUST_AVAILABLE = False
 
 
+def _truncate_log_line(line: str, max_template_chars: int) -> str:
+    """Trunca o texto do template de log mantendo o prefixo de nível e serviço."""
+    # Formato esperado: "🔴 [LEVEL][svc] "template" x10"
+    # Trunca apenas a parte do template (entre aspas duplas)
+    match = re.search(r'"(.+)"', line)
+    if match and len(match.group(1)) > max_template_chars:
+        truncated = match.group(1)[:max_template_chars] + "…"
+        line = line[:match.start(1)] + truncated + line[match.end(1):]
+    return line
+
+
 class Priority(Enum):
     """Prioridade de informação para compressão."""
     CRITICAL = 3    # Preservar 100%: errors, high-sigma anomalies, bottlenecks
@@ -102,15 +113,87 @@ class ContextCompressor:
 
     @staticmethod
     def _abbreviate_counts(text: str) -> str:
-        """Abrevia counts grandes para estabilizar tokens entre escalas (x60000 → x60k)."""
+        """Abrevia counts grandes para estabilizar tokens entre escalas.
+
+        Suporta dois formatos:
+        - Formato legado Python: " x60000" → " x60k"
+        - Formato compacto Rust: "×60000" → "×60k" (sinal de multiplicação U+00D7)
+        """
         def _abbrev(m: re.Match) -> str:
+            prefix = m.group(1)  # " x" ou "×"
+            n = int(m.group(2))
+            if n >= 1_000_000:
+                return f"{prefix}{n // 1_000_000}M"
+            if n >= 1_000:
+                return f"{prefix}{n // 1_000}k"
+            return m.group(0)
+        # Formato Python legado: espaço + x minúsculo + dígitos
+        text = re.sub(r"( x)(\d+)", _abbrev, text)
+        # Formato Rust compacto: sinal × + dígitos (sem espaço)
+        text = re.sub(r"(×)(\d+)", _abbrev, text)
+        # Cabeçalho Rust: "NNNNL" → "NNkL" (contagem de logs no header)
+        def _abbrev_header(m: re.Match) -> str:
             n = int(m.group(1))
             if n >= 1_000_000:
-                return f" x{n // 1_000_000}M"
+                return f"{n // 1_000_000}ML"
             if n >= 1_000:
-                return f" x{n // 1_000}k"
+                return f"{n // 1_000}kL"
             return m.group(0)
-        return re.sub(r" x(\d+)", _abbrev, text)
+        text = re.sub(r"(\d+)L\b", _abbrev_header, text)
+        return text
+
+    @staticmethod
+    def _minify(text: str) -> str:
+        """Remove linhas de baixa prioridade para minimizar tokens.
+
+        Compatível com o formato compacto do Rust renderer (marcadores ASCII: !, W, -).
+        Aplica as seguintes transformações:
+        - Remove linhas de contexto/ruído iniciadas com "- " (prioridade CONTEXT)
+        - Remove linhas "## Summary" e "Data: ..." para formato legado (Python fallback)
+        - Remove anotação "| score=X.XX" do formato legado
+        - Mantém seções L:, M:, T: intactas (já compactas)
+        """
+        lines = text.split("\n")
+        out: list[str] = []
+        in_summary = False
+
+        for line in lines:
+            # Formato legado (Python fallback): seção ## Summary
+            if line.startswith("## "):
+                in_summary = line.startswith("## Summary")
+                if in_summary:
+                    continue
+                line = line.replace(" (compressed)", "")
+                out.append(line)
+                continue
+
+            if in_summary:
+                continue
+
+            # Formato legado: linha de contagem bruta
+            if line.startswith("Data: "):
+                continue
+
+            # Formato legado: anotação de score
+            if " | score=" in line:
+                line = re.sub(r"\s*\|\s*score=[\d.]+", "", line)
+
+            # Formato Rust compacto: remove linhas de contexto (- ) — baixa prioridade
+            # Mantém linhas críticas (! ) e warnings (W ) intactas
+            if line.startswith("- "):
+                continue
+
+            # Formato legado: linhas ⚪ CONTEXT e 🟡 WARN de baixa relevância
+            if line.startswith("\u26aa"):  # ⚪ CONTEXT
+                continue
+            if line.startswith("\U0001f534"):  # 🔴 CRITICAL legado
+                line = _truncate_log_line(line, 90)
+            elif line.startswith("\U0001f7e1"):  # 🟡 WARN legado
+                line = _truncate_log_line(line, 90)
+
+            out.append(line)
+
+        return "\n".join(out)
 
     def compress(self, report) -> tuple[str, CompressionStats]:
         """
@@ -122,6 +205,7 @@ class ContextCompressor:
         if _RUST_AVAILABLE:
             text, stats_dict = _rust.compress_context(report)
             text = self._abbreviate_counts(text)
+            text = self._minify(text)
             stats = CompressionStats(
                 original_tokens=stats_dict["original_tokens"],
                 compressed_tokens=len(text) // 4,
