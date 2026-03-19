@@ -5,7 +5,7 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyString};
 
-use super::detector::{detect_taint, detect_taint_batch_parallel, TaintLevel};
+use super::detector::{detect_taint, detect_taint_batch_parallel};
 
 /// Detecta taint em batch para uma lista de strings.
 ///

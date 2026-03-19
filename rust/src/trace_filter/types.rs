@@ -8,6 +8,7 @@ pub struct SpanData {
     pub operation: String,
     pub start_time: f64,      // epoch seconds
     pub duration_ms: f64,
+    #[allow(dead_code)]
     pub status: String,
     pub attributes: Vec<(String, String)>,
 }
