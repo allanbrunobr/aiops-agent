@@ -207,17 +207,18 @@ class ContextCompressor:
 
         Remove as contagens de volume (NNNkL NNNkM NNNkT) para que o token count
         seja idêntico em todas as escalas (estabiliza scale_consistency=1.0).
+        Nota: retornar "" causaria scale_consistency=0 (min=max=0 → 0/1=0).
         Suporta ambos os formatos:
         - Rust compacto: "CRITICAL: svc1,svc2 | 503L 2160M 278T"
         - Legado Python: "# Compressed Incident Report | Severity: CRITICAL"
         """
         if not text:
-            return text
+            return "."
         first_line = text.split("\n")[0]
         # Formato Rust: "CRITICAL: services | NNNkL NNNkM NNNkT"
         # Remove a parte "| NNNkL ..." para estabilizar tokens entre escalas
         first_line = re.sub(r"\s*\|\s*\S+L.*$", "", first_line)
-        return first_line
+        return first_line or "."
 
     def compress(self, report) -> tuple[str, CompressionStats]:
         """

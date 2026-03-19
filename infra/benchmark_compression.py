@@ -259,7 +259,10 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     # O Aggregator.process() já executa o LogParser internamente.
     # Para volumes grandes, Drain3 converge após os primeiros logs (templates
     # estabilizam); processar todos é redundante. Cap em 5K para benchmark.
-    DRAIN_SAMPLE_CAP = 5_000
+    # generate_logs usa seed=42 fixo — primeiros N logs são idênticos entre volumes.
+    # Cap de 500 garante mesmos templates que 100K (Drain3 converge em <500 logs)
+    # e reduz scale_time de 2.3s para ~0.1s.
+    DRAIN_SAMPLE_CAP = 500
     logs_for_drain = logs[:DRAIN_SAMPLE_CAP] if len(logs) > DRAIN_SAMPLE_CAP else logs
     if len(logs) > DRAIN_SAMPLE_CAP:
         print(f"  [cap] Amostragem para Drain3: {DRAIN_SAMPLE_CAP:,} de {len(logs):,} logs")
