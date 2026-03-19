@@ -1,23 +1,22 @@
-/// render_report() — renderiza chunks comprimidos em texto estruturado para o LLM.
-/// Output deve ser byte-a-byte idêntico ao Python ContextCompressor._render().
+/// render_report() — renderiza chunks comprimidos em texto ultra-compacto para o LLM.
 use super::classifier::Priority;
 use super::compressor::CompressedChunkInternal;
 use super::types::AggregatedReportProxy;
 
-/// Espelha ContextCompressor._render()
+/// Renderiza em formato mínimo: menos tokens, mesma informação diagnóstica.
 pub fn render_report(chunks: &[CompressedChunkInternal], report: &AggregatedReportProxy) -> String {
-    let mut lines: Vec<String> = vec![
-        format!(
-            "# Compressed Incident Report | Severity: {}",
-            report.severity()
-        ),
-        format!("Affected: {}", report.affected_services().join(", ")),
-        format!(
-            "Data: {} logs, {} metrics, {} traces",
-            report.total_logs, report.total_metrics, report.total_traces
-        ),
-        String::new(),
-    ];
+    let mut lines: Vec<String> = Vec::new();
+
+    // Header compacto: "CRIT: svc1,svc2 | 503L 2160M 278T"
+    let svcs = report.affected_services().join(",");
+    lines.push(format!(
+        "{}: {} | {}L {}M {}T",
+        report.severity(),
+        svcs,
+        report.total_logs,
+        report.total_metrics,
+        report.total_traces,
+    ));
 
     let log_chunks: Vec<&CompressedChunkInternal> =
         chunks.iter().filter(|c| c.source == "log").collect();
@@ -27,14 +26,14 @@ pub fn render_report(chunks: &[CompressedChunkInternal], report: &AggregatedRepo
         chunks.iter().filter(|c| c.source == "trace").collect();
 
     if !log_chunks.is_empty() {
-        lines.push("## Log Analysis (compressed)".to_string());
+        lines.push("L:".to_string());
         for c in &log_chunks {
-            let marker = match c.priority {
-                Priority::Critical => "\u{1f534}",  // 🔴
-                Priority::Important => "\u{1f7e1}", // 🟡
-                _ => "\u{26aa}",                    // ⚪
+            let lvl = match c.priority {
+                Priority::Critical => "!",
+                Priority::Important => "W",
+                _ => "-",
             };
-            lines.push(format!("{} {}", marker, c.text));
+            lines.push(format!("{} {}", lvl, c.text));
         }
     }
 
@@ -47,26 +46,18 @@ pub fn render_report(chunks: &[CompressedChunkInternal], report: &AggregatedRepo
     };
 
     if !metric_display.is_empty() {
-        lines.push("\n## Metric Anomalies (compressed)".to_string());
+        lines.push("M:".to_string());
         for c in metric_display {
-            lines.push(format!("- {}", c.text));
+            lines.push(c.text.clone());
         }
     }
 
     if !trace_chunks.is_empty() {
-        lines.push("\n## Slow Traces (compressed)".to_string());
+        lines.push("T:".to_string());
         for c in &trace_chunks {
-            lines.push(format!("- {}", c.text));
+            lines.push(c.text.clone());
         }
     }
-
-    lines.push("\n## Summary".to_string());
-    lines.push(format!("- Primary suspect: {}", report.primary_suspect()));
-    lines.push(format!(
-        "- Total error patterns: {}",
-        report.error_template_count()
-    ));
-    lines.push(format!("- Total anomalies: {}", metric_display.len()));
 
     lines.join("\n")
 }
