@@ -370,6 +370,62 @@ class SlackNotifier:
             {"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)}},
         ]
 
+    def _build_prediction_blocks(self, data: dict) -> list[dict]:
+        """Monta blocos Block Kit para notificações de predição pré-incidente.
+
+        Aplica cor vermelha para 'prediction.alert' (risk >= 60) e amarela
+        para 'prediction.warning' (30 <= risk < 60).
+
+        Args:
+            data: Dicionário com campos do PredictionReport:
+                  event_level, risk_score, eta_minutes, signals, matched_history.
+
+        Returns:
+            Lista de blocos Block Kit prontos para envio via Slack attachments.
+        """
+        event_level = data.get("event_level", "prediction.warning")
+        risk_score = data.get("risk_score", 0.0)
+        eta = data.get("eta_minutes")
+        signals = data.get("signals", [])
+        matched_history = data.get("matched_history", [])
+
+        # Header diferenciado por nível
+        if event_level == "prediction.alert":
+            header_text = f"⚠️ Degradation Alert — Incident likely in ~{eta:.1f} min" if eta is not None else "⚠️ Degradation Alert"
+        else:
+            header_text = f"📈 Degradation Warning — Risk {risk_score:.0f}%"
+
+        # ETA formatado
+        eta_text = f"{eta:.1f} min" if eta is not None else "Unknown"
+
+        # Nomes dos sinais (primeiros 5)
+        if signals:
+            signal_names = [
+                s.__class__.__name__ if not isinstance(s, str) else s
+                for s in signals[:5]
+            ]
+            signals_text = ", ".join(signal_names)
+        else:
+            signals_text = "No signals"
+
+        # Histórico — apenas primeira correspondência
+        if matched_history:
+            first = matched_history[0]
+            history_text = (
+                f"incident_id={first.get('incident_id', '?')} "
+                f"(similarity={first.get('similarity_score', 0):.2f})"
+            )
+        else:
+            history_text = "No historical match"
+
+        return [
+            {"type": "header", "text": {"type": "plain_text", "text": header_text}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": f"*Risk:* {risk_score:.0f}%"}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": f"*ETA:* {eta_text}"}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": f"*Signals:* {signals_text}"}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": f"*Historical Match:* {history_text}"}},
+        ]
+
     def _build_final_blocks(self, event: LifecycleEvent) -> list[dict]:
         """Monta blocos finais com diagnostico completo para leitura mobile."""
         cid = event.correlation_id
