@@ -79,6 +79,20 @@ CREATE INDEX IF NOT EXISTS idx_incidents_services
 """
 
 
+_DDL_SIGNATURES = """
+CREATE TABLE IF NOT EXISTS degradation_signatures (
+    incident_id   TEXT PRIMARY KEY,
+    risk_score    REAL NOT NULL,
+    signal_names  TEXT NOT NULL,
+    text_repr     TEXT NOT NULL,
+    timestamp     TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_signatures_timestamp
+    ON degradation_signatures (timestamp DESC);
+"""
+
+
 class IncidentMemoryDB:
     """Banco de dados SQLite para memória de incidentes."""
 
@@ -184,3 +198,96 @@ class IncidentMemoryDB:
 
         scored.sort(key=lambda x: x[0], reverse=True)
         return [r for _, r in scored[:limit]]
+
+    # --- Métodos de assinatura pré-incidente (Story 2.1 / Story 2.2) ---
+
+    def _ensure_signatures_table(self) -> None:
+        """Garante que a tabela degradation_signatures existe no banco."""
+        with self._connect() as conn:
+            conn.executescript(_DDL_SIGNATURES)
+
+    def store_degradation_signature(
+        self,
+        signals: list,
+        risk_score: float,
+        incident_id: str,
+    ) -> None:
+        """Persiste assinatura de degradação pré-incidente no banco de dados.
+
+        Armazena somente se risk_score >= 30 (limiar de relevância preditiva).
+        Usa INSERT OR REPLACE para garantir idempotência por incident_id.
+
+        Args:
+            signals: Lista de sinais de degradação detectados.
+            risk_score: Score de risco calculado pelo predictive stage (0–100).
+            incident_id: Identificador único do incidente relacionado.
+        """
+        if risk_score < 30:
+            return
+
+        import datetime
+
+        self._ensure_signatures_table()
+        signal_names = [s.__class__.__name__ for s in signals]
+        text_repr = (
+            f"pre_incident:{incident_id} risk:{risk_score:.1f} signals:{signal_names}"
+        )
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO degradation_signatures
+                    (incident_id, risk_score, signal_names, text_repr, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (incident_id, risk_score, json.dumps(signal_names), text_repr, now),
+            )
+
+    def query_similar_signatures(
+        self,
+        signals: list,
+        top_k: int = 3,
+    ) -> list[dict]:
+        """Busca assinaturas de degradação históricas similares aos sinais atuais.
+
+        Calcula similaridade de Jaccard entre os nomes de classe dos sinais
+        atuais e os armazenados. Retorna os top_k registros mais similares.
+
+        Args:
+            signals: Lista de sinais de degradação atuais.
+            top_k: Número máximo de resultados a retornar.
+
+        Returns:
+            Lista de dicts com 'incident_id', 'similarity_score' e 'outcome'.
+            Retorna [] em caso de exceção ou base de assinaturas vazia.
+        """
+        try:
+            self._ensure_signatures_table()
+            query_names = set(s.__class__.__name__ for s in signals)
+
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT * FROM degradation_signatures ORDER BY timestamp DESC"
+                ).fetchall()
+
+            if not rows:
+                return []
+
+            scored: list[tuple[float, dict]] = []
+            for row in rows:
+                stored_names = set(json.loads(row["signal_names"]))
+                union = query_names | stored_names
+                intersection = query_names & stored_names
+                similarity = len(intersection) / len(union) if union else 0.0
+
+                scored.append((similarity, {
+                    "incident_id": row["incident_id"],
+                    "similarity_score": round(similarity, 3),
+                    "outcome": f"pre_incident risk={row['risk_score']:.1f}",
+                }))
+
+            scored.sort(key=lambda x: x[0], reverse=True)
+            return [d for _, d in scored[:top_k]]
+        except Exception:
+            return []

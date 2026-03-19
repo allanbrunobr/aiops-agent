@@ -10,9 +10,12 @@ História 5.6: Montagem condicional com base em config.mcp.enabled.
 
 from __future__ import annotations
 
+import structlog
 from fastapi import FastAPI
 
 from config.loader import AppConfig
+
+log = structlog.get_logger()
 
 
 class NotificationEngine:
@@ -128,3 +131,58 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         )
 
     return app
+
+
+async def handle_prediction_event(
+    event_type: str,
+    data: dict,
+    slack_notifier: object,
+) -> None:
+    """Handler de evento de predição — envia notificação Slack proativa.
+
+    Registra handlers para 'prediction.warning' e 'prediction.alert'.
+    Erros de Slack são logados e nunca propagados ao pipeline.
+
+    Args:
+        event_type: "prediction.warning" ou "prediction.alert".
+        data: Dados do PredictionReport serializado como dict.
+        slack_notifier: Instância de SlackNotifier configurada.
+    """
+    try:
+        blocks = slack_notifier._build_prediction_blocks(data)  # type: ignore[union-attr]
+
+        client = getattr(slack_notifier, "_client", None)
+        dry_run = getattr(slack_notifier, "_dry_run", False)
+        channel = getattr(slack_notifier, "_channel", "#alerts")
+        incident_id = data.get("incident_id", "unknown")
+
+        if dry_run:
+            log.info(
+                "slack.dry_run",
+                action="prediction_event",
+                event_type=event_type,
+                correlation_id=incident_id,
+                blocks=blocks,
+            )
+            return
+
+        if client is None:
+            return
+
+        color = "#ff0000" if event_type == "prediction.alert" else "#ffcc00"
+        await client.chat_postMessage(
+            channel=channel,
+            attachments=[{"color": color, "blocks": blocks}],
+            text=f"Prediction event: {event_type}",
+        )
+        log.info(
+            "slack.prediction_sent",
+            event_type=event_type,
+            correlation_id=incident_id,
+        )
+    except Exception:
+        log.warning(
+            "slack.prediction_event_error",
+            event_type=event_type,
+            exc_info=True,
+        )

@@ -18,6 +18,7 @@ pub struct MetricAnomalyProxy {
     pub metric_name: String,
     pub anomaly_type: String,
     pub value: f64,
+    #[allow(dead_code)]
     pub mean: f64,
     pub deviation_sigma: f64,
 }
@@ -26,10 +27,12 @@ pub struct MetricAnomalyProxy {
 /// attributes usa Vec para preservar ordem de inserção do dict Python
 #[derive(Debug, Clone)]
 pub struct SlowTraceProxy {
+    #[allow(dead_code)]
     pub path: Vec<String>,
     pub total_duration_ms: f64,
     pub normal_duration_ms: f64,
     pub bottleneck_service: String,
+    #[allow(dead_code)]
     pub attributes: Vec<(String, String)>,
 }
 
@@ -44,6 +47,7 @@ pub struct AggregatedReportProxy {
     pub total_traces: u64,
 }
 
+#[allow(dead_code)]
 impl AggregatedReportProxy {
     /// Espelha AggregatedReport.severity (property Python)
     pub fn severity(&self) -> String {

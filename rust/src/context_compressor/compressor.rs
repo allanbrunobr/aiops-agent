@@ -22,14 +22,18 @@ fn estimate_tokens(text: &str) -> usize {
     text.chars().count() / 4
 }
 
-/// Formata float como Python faz: inteiros mostram ".0", fracionários usam representação mínima.
-/// Necessário para output byte-a-byte idêntico ao Python.
-fn py_float_str(v: f64) -> String {
-    if v.fract() == 0.0 && v.is_finite() {
-        format!("{:.1}", v)
-    } else {
-        format!("{}", v)
+/// Trunca string a N codepoints Unicode para limitar tokens.
+fn truncate_str(s: &str, max_chars: usize) -> &str {
+    let mut end = s.len();
+    let mut count = 0;
+    for (i, _) in s.char_indices() {
+        if count >= max_chars {
+            end = i;
+            break;
+        }
+        count += 1;
     }
+    &s[..end]
 }
 
 /// Trunca string a N codepoints Unicode para limitar tokens.
