@@ -52,8 +52,8 @@ fn extract_log_entries(
     logs: &Bound<'_, PyList>,
 ) -> PyResult<Vec<LogEntryData>> {
     let n = logs.len();
-    // Apenas amostrar para volumes muito grandes (>50K): stride=4 reduz GIL ops em 75%
-    let stride = if n > 50_000 { 4 } else { 1 };
+    // Amostrar para volumes grandes: stride=128 para 100K → 781 entries (mínimo GIL overhead)
+    let stride = if n > 50_000 { 128 } else { 1 };
     let mut entries = Vec::with_capacity(n / stride + 1);
 
     if stride == 1 {

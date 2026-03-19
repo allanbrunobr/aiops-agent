@@ -46,21 +46,11 @@ fn truncate_str(s: &str, max_chars: usize) -> &str {
     &s[..end]
 }
 
-/// Formato compacto de log: [LEVEL][svc] "template_35chars" — conta omitida para estabilidade de escala
+/// Formato ultra-compacto de log: apenas template (level/svc omitidos — redundantes com header/marker)
 fn format_log_chunk(tpl: &LogTemplateProxy) -> String {
-    let mut svcs: Vec<&str> = tpl.services.iter().map(|s| s.as_str()).collect();
-    svcs.sort();
-    const MAX_SERVICES: usize = 1;
-    let svcs_str = svcs[..svcs.len().min(MAX_SERVICES)].join(",");
     let tmpl = truncate_str(&tpl.template, 35);
     let ellipsis = if tpl.template.chars().count() > 35 { "…" } else { "" };
-    format!(
-        "[{}][{}] \"{}{}\"",
-        tpl.level,
-        svcs_str,
-        tmpl,
-        ellipsis,
-    )
+    format!("\"{}{}\"", tmpl, ellipsis)
 }
 
 /// Formato mínimo de métrica: svc/metric type σ (val omitido para reduzir tokens)
