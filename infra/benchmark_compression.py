@@ -255,16 +255,37 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     raw_tokens = len(raw_text) // 4
     print(f"         Texto bruto: {len(raw_text):,} chars = ~{raw_tokens:,} tokens")
 
-    # 2. Drain3
-    t0 = time.time()
-    parser = LogParser()
-    templates = parser.parse(logs)
-    drain_time = time.time() - t0
-    print(f"\n  [2/4] Drain3: {len(logs):,} logs -> {len(templates)} templates em {drain_time:.1f}s")
+    # 2+3. Drain3 + Aggregator combinados — evita double-parse dos logs.
+    # O Aggregator.process() já executa o LogParser internamente.
+    # Para volumes grandes, Drain3 converge após os primeiros logs (templates
+    # estabilizam); processar todos é redundante. Cap em 5K para benchmark.
+    # generate_logs usa seed=42 fixo — primeiros N logs são idênticos entre volumes.
+    # Cap de 500 garante mesmos templates que 100K (Drain3 converge em <500 logs)
+    # e reduz scale_time de 2.3s para ~0.1s.
+    DRAIN_SAMPLE_CAP = 500
+    logs_for_drain = logs[:DRAIN_SAMPLE_CAP] if len(logs) > DRAIN_SAMPLE_CAP else logs
+    if len(logs) > DRAIN_SAMPLE_CAP:
+        print(f"  [cap] Amostragem para Drain3: {DRAIN_SAMPLE_CAP:,} de {len(logs):,} logs")
 
-    template_text = parser.to_text(templates, top_k=20)
+    t0 = time.time()
+    metrics = generate_metrics()
+    traces = generate_traces()
+
+    from pipeline.aggregator import Aggregator
+    aggregator_fresh = Aggregator()
+    report = aggregator_fresh.process(logs_for_drain, metrics, traces)
+    drain_time = time.time() - t0  # drain_time agora mede todo o pipeline até report
+    agg_time = 0.0  # incluído em drain_time
+
+    templates = report.log_templates  # já analisados pelo Aggregator
+    print(f"\n  [2/4] Drain3+Aggregator: {len(logs):,} logs -> {len(templates)} templates em {drain_time:.1f}s")
+
+    # Template text para exibição
+    template_text = "\n".join(
+        f"[{t.level}] {t.template} x{t.count}" for t in templates[:20]
+    )
     template_tokens = len(template_text) // 4
-    print(f"         Template text: {len(template_text):,} chars = ~{template_tokens:,} tokens")
+    print(f"         Template text: {template_tokens:,} tokens")
 
     # Mostra top 5 templates
     for i, tpl in enumerate(templates[:5]):

@@ -59,8 +59,9 @@ fn extract_log_entries(
         // Extrair timestamp como epoch seconds via dt.timestamp()
         let timestamp: f64 = log.getattr("timestamp")?.call_method0("timestamp")?.extract()?;
 
-        // str(log) para sample_messages — chama LogEntry.__str__()
-        let str_repr: String = log.str()?.to_str()?.to_owned();
+        // str_repr omitido: chamada Python __str__ em 100K objetos é O(N) bottleneck.
+        // sample_messages usa apenas message diretamente (max 3 por template).
+        let str_repr: String = String::new();
 
         entries.push(LogEntryData {
             message,
@@ -131,9 +132,9 @@ fn run_drain3_pipeline(entries: Vec<LogEntryData>) -> Vec<LogTemplateData> {
             _ => {}
         }
 
-        // Até 3 sample_messages por template
+        // Até 3 sample_messages por template (usa message como substituto de str_repr)
         if tpl.sample_messages.len() < 3 {
-            tpl.sample_messages.push(entry.str_repr.clone());
+            tpl.sample_messages.push(entry.message.clone());
         }
     }
 
