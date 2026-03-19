@@ -255,35 +255,34 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     raw_tokens = len(raw_text) // 4
     print(f"         Texto bruto: {len(raw_text):,} chars = ~{raw_tokens:,} tokens")
 
-    # 2. Drain3
+    # 2+3. Drain3 + Aggregator combinados — evita double-parse dos logs.
+    # O Aggregator.process() já executa o LogParser internamente.
     t0 = time.time()
-    parser = LogParser()
-    templates = parser.parse(logs)
-    drain_time = time.time() - t0
-    print(f"\n  [2/4] Drain3: {len(logs):,} logs -> {len(templates)} templates em {drain_time:.1f}s")
+    metrics = generate_metrics()
+    traces = generate_traces()
 
-    template_text = parser.to_text(templates, top_k=20)
+    from pipeline.aggregator import Aggregator
+    aggregator_fresh = Aggregator()
+    report = aggregator_fresh.process(logs, metrics, traces)
+    drain_time = time.time() - t0  # drain_time agora mede todo o pipeline até report
+    agg_time = 0.0  # incluído em drain_time
+
+    templates = report.log_templates  # já analisados pelo Aggregator
+    print(f"\n  [2/4] Drain3+Aggregator: {len(logs):,} logs -> {len(templates)} templates em {drain_time:.1f}s")
+
+    # Template text para exibição
+    template_text = "\n".join(
+        f"[{t.level}] {t.template} x{t.count}" for t in templates[:20]
+    )
     template_tokens = len(template_text) // 4
-    print(f"         Template text: {len(template_text):,} chars = ~{template_tokens:,} tokens")
+    print(f"         Template text: {template_tokens:,} tokens")
 
     # Mostra top 5 templates
     for i, tpl in enumerate(templates[:5]):
         svcs = ", ".join(sorted(tpl.services))
         print(f"         #{i+1} [{tpl.level}][{svcs}] \"{tpl.template[:80]}\" x{tpl.count}")
 
-    # 3. Aggregator (precisa de metricas e traces tambem)
-    t0 = time.time()
-    metrics = generate_metrics()
-    traces = generate_traces()
-
-    from pipeline.aggregator import Aggregator
-    aggregator = Aggregator()
-    # Inject the already-parsed templates to avoid re-parsing
-    # Actually, we need to run the full aggregator to get proper AggregatedReport
-    aggregator_fresh = Aggregator()
-    report = aggregator_fresh.process(logs, metrics, traces)
-    agg_time = time.time() - t0
-    print(f"\n  [3/4] Aggregator: report gerado em {agg_time:.1f}s")
+    print(f"\n  [3/4] Aggregator: incluído em [2/4]")
 
     report_text = report.to_text()
     report_tokens = len(report_text) // 4
