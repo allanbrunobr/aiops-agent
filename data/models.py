@@ -64,3 +64,13 @@ class SimulatedIncident:
         "causando connection pool exhaustion sob carga normal."
     )
     actual_fix: str = "Rollback config max_connections para 200"
+
+
+@dataclass
+class MetricSeries:
+    """Série temporal de uma métrica com suporte a projeção de limiar."""
+    service: str
+    metric_name: str
+    points: list[MetricPoint]
+    threshold: float | None = None
+    eta_minutes: float | None = None
