@@ -46,14 +46,14 @@ fn truncate_str(s: &str, max_chars: usize) -> &str {
     &s[..end]
 }
 
-/// Formato compacto de log: [LEVEL][svc] "template_50chars" — conta omitida para estabilidade de escala
+/// Formato compacto de log: [LEVEL][svc] "template_35chars" — conta omitida para estabilidade de escala
 fn format_log_chunk(tpl: &LogTemplateProxy) -> String {
     let mut svcs: Vec<&str> = tpl.services.iter().map(|s| s.as_str()).collect();
     svcs.sort();
-    const MAX_SERVICES: usize = 2;
+    const MAX_SERVICES: usize = 1;
     let svcs_str = svcs[..svcs.len().min(MAX_SERVICES)].join(",");
-    let tmpl = truncate_str(&tpl.template, 50);
-    let ellipsis = if tpl.template.chars().count() > 50 { "…" } else { "" };
+    let tmpl = truncate_str(&tpl.template, 35);
+    let ellipsis = if tpl.template.chars().count() > 35 { "…" } else { "" };
     format!(
         "[{}][{}] \"{}{}\"",
         tpl.level,
@@ -63,14 +63,19 @@ fn format_log_chunk(tpl: &LogTemplateProxy) -> String {
     )
 }
 
-/// Formato mínimo de métrica: svc/metric type val σ
+/// Formato mínimo de métrica: svc/metric type σ (val omitido para reduzir tokens)
 fn format_metric_chunk(anomaly: &MetricAnomalyProxy) -> String {
+    // Abrevia anomaly_type para reduzir tokens: level_shift→ls, spike→sp
+    let atype = match anomaly.anomaly_type.as_str() {
+        "level_shift" => "ls",
+        "spike" => "sp",
+        other => other,
+    };
     format!(
-        "{}/{} {} {:.0} {:.0}\u{03c3}",
+        "{}/{} {} {:.0}\u{03c3}",
         anomaly.service,
         anomaly.metric_name,
-        anomaly.anomaly_type,
-        anomaly.value,
+        atype,
         anomaly.deviation_sigma
     )
 }

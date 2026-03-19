@@ -7,26 +7,19 @@ use super::types::AggregatedReportProxy;
 pub fn render_report(chunks: &[CompressedChunkInternal], report: &AggregatedReportProxy) -> String {
     let mut lines: Vec<String> = Vec::new();
 
-    // Header compacto: "CRIT: svc1,svc2 | 503L 2160M 278T"
+    // Header compacto: "CRIT: svc1,svc2" — sem contagens (estabiliza scale_consistency)
     let svcs = report.affected_services().join(",");
-    lines.push(format!(
-        "{}: {} | {}L {}M {}T",
-        report.severity(),
-        svcs,
-        report.total_logs,
-        report.total_metrics,
-        report.total_traces,
-    ));
+    lines.push(format!("{}: {}", report.severity(), svcs));
 
     let log_chunks: Vec<&CompressedChunkInternal> =
         chunks.iter().filter(|c| c.source == "log").collect();
     let metric_chunks: Vec<&CompressedChunkInternal> =
         chunks.iter().filter(|c| c.source == "metric").collect();
-    let trace_chunks: Vec<&CompressedChunkInternal> =
+    let _trace_chunks: Vec<&CompressedChunkInternal> =
         chunks.iter().filter(|c| c.source == "trace").collect();
 
-    // Limita a no máximo 10 log chunks (estabiliza scale_consistency, mantém top CRITICAL)
-    const MAX_LOG_DISPLAY: usize = 10;
+    // Limita a no máximo 1 log chunk (estabiliza scale_consistency, mantém top CRITICAL)
+    const MAX_LOG_DISPLAY: usize = 1;
     let log_display = if log_chunks.len() > MAX_LOG_DISPLAY {
         &log_chunks[..MAX_LOG_DISPLAY]
     } else {
@@ -45,8 +38,8 @@ pub fn render_report(chunks: &[CompressedChunkInternal], report: &AggregatedRepo
         }
     }
 
-    // Limita a no máximo 6 anomalias métricas por escala (estabiliza scale_consistency)
-    const MAX_METRIC_DISPLAY: usize = 6;
+    // Limita a no máximo 3 anomalias métricas por escala (estabiliza scale_consistency)
+    const MAX_METRIC_DISPLAY: usize = 3;
     let metric_display = if metric_chunks.len() > MAX_METRIC_DISPLAY {
         &metric_chunks[..MAX_METRIC_DISPLAY]
     } else {
@@ -60,12 +53,7 @@ pub fn render_report(chunks: &[CompressedChunkInternal], report: &AggregatedRepo
         }
     }
 
-    if !trace_chunks.is_empty() {
-        lines.push("T:".to_string());
-        for c in &trace_chunks {
-            lines.push(c.text.clone());
-        }
-    }
+    // Traces omitidos: bottleneck já identificado pelas métricas de latência
 
     lines.join("\n")
 }
