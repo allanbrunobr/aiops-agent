@@ -201,7 +201,7 @@ class SlackNotifier:
 
         response = await self._send_with_retry(_send, context="initial_message", correlation_id=cid)
         self._message_ts[cid] = response["ts"]
-        self._channel_ids[cid] = response["channel"]
+        self._channel_ids[cid] = response.get("channel", self._channel)
         log.info("slack.message_posted", correlation_id=cid, ts=response["ts"], channel_id=response["channel"])
 
     async def _update_progress(self, event: LifecycleEvent) -> None:
@@ -378,7 +378,7 @@ class SlackNotifier:
         root_cause = data.get("root_cause", "N/A")
         confidence = data.get("confidence", 0.0)
         evidence = data.get("evidence", [])
-        proposed_fix = data.get("proposed_fix", "N/A")
+        proposed_fix = data.get("proposed_fix") or "N/A"
         risk_level = data.get("risk_level", "unknown")
         blast_radius = data.get("blast_radius", "unknown")
         duration_ms = data.get("total_duration_ms", "?")

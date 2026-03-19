@@ -1553,12 +1553,24 @@ def main_v1(args: argparse.Namespace) -> int:
     Composition root para modo CLI usando o Blueprint Engine.
     Substitui as chamadas step_*() sequenciais pelo pipeline tipado.
     """
+    import asyncio
+    import os
+    from pathlib import Path as _Path
     from core.logging import configure_logging, get_logger
     from core.store import InMemoryStore
     from core.credentials import EnvCredentialProvider
     from config.loader import load_config as load_app_config
     from blueprint.engine import BlueprintEngine, PipelineAborted, LLMCallLimitExceeded
     from blueprint.pipelines.incident_response import build_incident_response_pipeline
+
+    # Carrega .env.local se existir (sem dependencia de python-dotenv)
+    _env_file = _Path(".env.local")
+    if _env_file.exists():
+        for _line in _env_file.read_text().splitlines():
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _, _v = _line.partition("=")
+                os.environ.setdefault(_k.strip(), _v.strip())
 
     log = get_logger("main")
 
@@ -1567,6 +1579,42 @@ def main_v1(args: argparse.Namespace) -> int:
     configure_logging()
 
     log.info("main.started", no_llm=args.no_llm, no_rag=args.no_rag, compact=args.compact)
+
+    # Slack notifier — opcional, wired se SLACK_BOT_TOKEN estiver no ambiente
+    from core.lifecycle import LifecycleEvent
+    from datetime import timezone as _tz
+    _slack_notifier = None
+    _slack_token = os.environ.get("SLACK_BOT_TOKEN")
+    _slack_channel = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
+    if _slack_token and _slack_channel:
+        try:
+            from server.notifications.slack import SlackNotifier
+            _slack_notifier = SlackNotifier(
+                channel=_slack_channel,
+                creds=EnvCredentialProvider(),
+            )
+            log.info("slack.notifier_created", channel=_slack_channel)
+            console.print(f"[cyan]Slack: notifier created for #{_slack_channel}[/cyan]")
+        except Exception as _exc:
+            log.warning("slack.notifier_failed", error=str(_exc))
+
+    def _fire(event_type: str, node_name: str | None = None, data: dict | None = None, cid: str = "") -> None:
+        """Dispara evento de ciclo de vida para o SlackNotifier (sync wrapper)."""
+        if _slack_notifier is None:
+            return
+        evt = LifecycleEvent(
+            event_type=event_type,
+            node_name=node_name,
+            correlation_id=cid,
+            timestamp=datetime.now(_tz.utc),
+            data=data or {},
+        )
+        try:
+            asyncio.run(_slack_notifier.on_event(evt))
+            console.print(f"[cyan]Slack: {event_type} fired[/cyan]")
+        except Exception as _exc:
+            console.print(f"[yellow]Slack: {event_type} failed: {_exc}[/yellow]")
+            log.warning("slack.fire_failed", event_type=event_type, error=str(_exc))
 
     # 2. Gera dados simulados
     if args.scenario:
@@ -1608,12 +1656,20 @@ def main_v1(args: argparse.Namespace) -> int:
     start_time = time.monotonic()
     exit_code = EXIT_SUCCESS
 
+    _cid = state.correlation_id
+    _fire("pipeline.started", cid=_cid, data={
+        "title": state.alert.title if state.alert else "AIOps Incident",
+        "severity": state.alert.severity if state.alert else "unknown",
+        "service": state.alert.service if state.alert else "unknown",
+    })
+
     try:
         console.print(Rule("[bold]Pipeline Execution (Blueprint Engine V1)[/bold]", style="cyan"))
         state = engine.run(pipeline, state)
     except PipelineAborted as exc:
         log.error("main.pipeline_aborted", error=str(exc))
         console.print(f"[red]Pipeline aborted: {exc}[/red]")
+        _fire("pipeline.failed", cid=_cid, data={"error": str(exc)})
         if "regression" in str(exc).lower():
             exit_code = EXIT_REGRESSION
         elif "safety" in str(exc).lower() or "blocked" in str(exc).lower():
@@ -1623,7 +1679,20 @@ def main_v1(args: argparse.Namespace) -> int:
     except LLMCallLimitExceeded as exc:
         log.error("main.llm_limit_exceeded", error=str(exc))
         console.print(f"[red]LLM call limit exceeded: {exc}[/red]")
+        _fire("pipeline.failed", cid=_cid, data={"error": str(exc)})
         exit_code = EXIT_ERROR
+    else:
+        # Pipeline completou com sucesso
+        diagnosis = state.diagnosis or {}
+        _conf_v1 = diagnosis.get("confidence", 0.0)
+        _fire("pipeline.completed", cid=_cid, data={
+            "root_cause": diagnosis.get("root_cause", ""),
+            "confidence": float(_conf_v1) if isinstance(_conf_v1, (int, float)) else 0.0,
+            "proposed_fix": diagnosis.get("proposed_fix") or diagnosis.get("fix_command", ""),
+            "risk_level": state.safety_verdict or "unknown",
+            "evidence": diagnosis.get("evidence", []),
+            "total_duration_ms": 0,  # preenchido abaixo
+        })
 
     elapsed = time.monotonic() - start_time
 
@@ -1657,8 +1726,15 @@ def main() -> int:
     # Validate mutual exclusion rules
     _validate_args(parser, args)
 
-    # Load .env
+    # Load .env e .env.local
     load_dotenv()
+    _env_local = Path(".env.local")
+    if _env_local.exists():
+        for _ln in _env_local.read_text().splitlines():
+            _ln = _ln.strip()
+            if _ln and not _ln.startswith("#") and "=" in _ln:
+                _ek, _, _ev = _ln.partition("=")
+                os.environ.setdefault(_ek.strip(), _ev.strip())
 
     # Verifica API key se vai usar LLM
     use_llm = not args.no_llm
@@ -1669,6 +1745,37 @@ def main() -> int:
         args.no_llm = True
 
     print_banner()
+
+    # Slack notifier — opcional, sem impacto no pipeline se falhar
+    import asyncio as _asyncio
+    from core.lifecycle import LifecycleEvent as _LifecycleEvent
+    from datetime import timezone as _tz2
+    _notifier = None
+    _slack_tok = os.environ.get("SLACK_BOT_TOKEN")
+    _slack_ch = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
+    if _slack_tok and _slack_ch:
+        try:
+            from server.notifications.slack import SlackNotifier as _SlackNotifier
+            from core.credentials import EnvCredentialProvider as _ECP
+            _notifier = _SlackNotifier(channel=_slack_ch, creds=_ECP())
+            console.print(f"[cyan]Slack: notificacoes ativas em #{_slack_ch}[/cyan]")
+        except Exception as _se:
+            console.print(f"[yellow]Slack: nao disponivel ({_se})[/yellow]")
+
+    def _slack_fire(event_type: str, data: dict | None = None, cid: str = "unknown") -> None:
+        if _notifier is None:
+            return
+        evt = _LifecycleEvent(
+            event_type=event_type,
+            node_name=None,
+            correlation_id=cid,
+            timestamp=datetime.now(_tz2.utc),
+            data=data or {},
+        )
+        try:
+            _asyncio.run(_notifier.on_event(evt))
+        except Exception as _fe:
+            console.print(f"[yellow]Slack: falha ao enviar {event_type}: {_fe}[/yellow]")
 
     # Blueprint Engine V1 esta disponivel via main_v1(args).
     # O path V0 e mantido como default para compatibilidade com testes existentes.
@@ -1684,9 +1791,18 @@ def main() -> int:
     # Resolve tracker (Story 6.3) — antes do pipeline para falhar rapido em config invalida
     tracker = _resolve_tracker(args.tracker)
 
+    import uuid as _uuid
+    _pipeline_cid = f"inc-{datetime.now().strftime('%Y%m%d')}-{_uuid.uuid4().hex[:8]}"
+
     try:
         # === Pipeline ===
         t_total = time.time()
+
+        _slack_fire("pipeline.started", cid=_pipeline_cid, data={
+            "title": f"AIOps: {args.scenario or 'payment-pool-exhaustion'}",
+            "severity": "critical",
+            "service": "payment-svc",
+        })
 
         # 1. Data Generation / Fetch
         if args.data_source == "databricks":
@@ -1807,6 +1923,37 @@ def main() -> int:
                       tracker_info=tracker_info)
 
         elapsed_total = time.time() - t_total
+
+        # Envia mensagem final ao Slack
+        _diag = result.get("stages", {}).get("diagnosis", {})
+        _conf_raw = _diag.get("confidence") or 0.0
+        _CONF_MAP = {"high": 0.85, "medium": 0.5, "low": 0.25}
+        if isinstance(_conf_raw, (int, float)):
+            _conf = float(_conf_raw)
+        else:
+            _conf = _CONF_MAP.get(str(_conf_raw).lower(), 0.0)
+        _mitigation_action = result.get("stages", {}).get("mitigation", {}).get("action")
+        _fix = (
+            _diag.get("proposed_fix")
+            or _diag.get("fix_command")
+            or (getattr(_mitigation_action, "command", None) if _mitigation_action else None)
+            or ""
+        )
+        _br = (
+            safety_result.blast_radius.scope
+            if safety_result and safety_result.blast_radius
+            else "unknown"
+        )
+        _slack_fire("pipeline.completed", cid=_pipeline_cid, data={
+            "root_cause": _diag.get("root_cause", ""),
+            "confidence": _conf,
+            "proposed_fix": _fix,
+            "risk_level": safety_result.risk_level.value if safety_result else "unknown",
+            "blast_radius": _br,
+            "evidence": list(_diag.get("evidence", []))[:5],
+            "total_duration_ms": int(elapsed_total * 1000),
+        })
+
         console.print(f"\n  [dim]Total execution time: {elapsed_total:.1f}s[/dim]")
         if markdown_path:
             console.print(f"  [dim]Postmortem (md): {markdown_path}[/dim]")
@@ -1817,9 +1964,10 @@ def main() -> int:
 
         return exit_code
 
-    except Exception:
+    except Exception as _exc:
         tb_text = traceback.format_exc()
         console.print(Text(_sanitize_secrets(tb_text), style="red"))
+        _slack_fire("pipeline.failed", cid=_pipeline_cid, data={"error": _sanitize_secrets(str(_exc))})
         return EXIT_ERROR
 
 

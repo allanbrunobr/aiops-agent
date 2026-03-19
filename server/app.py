@@ -15,6 +15,48 @@ from fastapi import FastAPI
 from config.loader import AppConfig
 
 
+class NotificationEngine:
+    """Container leve de observers de notificacao — Story 3.6."""
+
+    def __init__(self) -> None:
+        self._observers: list = []
+
+    def add_observer(self, observer: object) -> None:
+        self._observers.append(observer)
+
+
+def create_engine(config: AppConfig) -> NotificationEngine:
+    """Cria NotificationEngine com observers configurados.
+
+    Adiciona SlackNotifier como observer se notifications.slack.enabled=True
+    e token disponivel via EnvCredentialProvider.
+
+    Args:
+        config: Configuracao do sistema.
+
+    Returns:
+        NotificationEngine com observers registrados.
+    """
+    engine = NotificationEngine()
+    slack_cfg = config.notifications.slack
+    if slack_cfg.enabled:
+        from core.credentials import EnvCredentialProvider
+        from server.notifications.slack import SlackNotifier
+
+        creds = EnvCredentialProvider()
+        if creds.get("SLACK_BOT_TOKEN") is not None:
+            notifier = SlackNotifier(
+                channel=slack_cfg.channel,
+                creds=creds,
+                max_retries=slack_cfg.max_retries,
+                initial_backoff_s=slack_cfg.initial_backoff_s,
+                fallback_dir=slack_cfg.fallback_dir,
+                dry_run=slack_cfg.dry_run,
+            )
+            engine.add_observer(notifier)
+    return engine
+
+
 def create_app(config: AppConfig | None = None) -> FastAPI:
     """Cria aplicação FastAPI com montagem condicional do MCP.
 

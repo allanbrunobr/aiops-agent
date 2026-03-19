@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from pydantic_settings import (
@@ -80,11 +81,67 @@ class WebhookConfig(BaseModel):
 
 
 class SlackConfig(BaseModel):
-    """Stub — preenchido em Story 3.1 (Notifications)."""
+    """Configuracao do notificador Slack — Story 3.1 + 3.6."""
 
     model_config = ConfigDict(frozen=True)
 
     enabled: bool = False
+    channel: str = ""
+    max_retries: int = 3
+    initial_backoff_s: float = 1.0
+    backoff_multiplier: float = 2.0
+    fallback_dir: str = "output"
+    dry_run: bool = False
+
+    @field_validator("channel")
+    @classmethod
+    def channel_required_when_enabled(cls, v: str, info: Any) -> str:
+        """channel is required when enabled=True."""
+        if info.data.get("enabled") and not v:
+            raise ValueError("channel is required when Slack is enabled")
+        return v
+
+    @field_validator("max_retries")
+    @classmethod
+    def retries_non_negative(cls, v: int) -> int:
+        """max_retries must be >= 0."""
+        if v < 0:
+            raise ValueError("must be >= 0")
+        return v
+
+    @field_validator("initial_backoff_s")
+    @classmethod
+    def backoff_positive(cls, v: float) -> float:
+        """initial_backoff_s must be > 0."""
+        if v <= 0:
+            raise ValueError("must be > 0")
+        return v
+
+
+class ObservabilityConfig(BaseModel):
+    """Configuracao de observabilidade — Story 3.6."""
+
+    model_config = ConfigDict(frozen=True)
+
+    metric_retention_hours: int = 24
+    accuracy_tracking_enabled: bool = True
+
+    @field_validator("metric_retention_hours")
+    @classmethod
+    def retention_positive(cls, v: int) -> int:
+        """metric_retention_hours must be >= 1."""
+        if v < 1:
+            raise ValueError("must be >= 1")
+        return v
+
+
+class NotificationsConfig(BaseModel):
+    """Configuracao de notificacoes — Story 3.6."""
+
+    model_config = ConfigDict(frozen=True)
+
+    slack: SlackConfig = SlackConfig()
+    observability: ObservabilityConfig = ObservabilityConfig()
 
 
 class AppConfig(BaseSettings):
@@ -104,6 +161,7 @@ class AppConfig(BaseSettings):
     blueprint: BlueprintConfig = BlueprintConfig()
     webhook: WebhookConfig = WebhookConfig()
     slack: SlackConfig = SlackConfig()
+    notifications: NotificationsConfig = NotificationsConfig()
 
     @classmethod
     def settings_customise_sources(
@@ -124,17 +182,21 @@ class AppConfig(BaseSettings):
         )
 
 
-def load_config(config_path: str | None = None) -> AppConfig:
+def load_config(
+    config_path: str | None = None,
+    yaml_file: str | Path | None = None,
+) -> AppConfig:
     """Carrega configuracao do sistema.
 
     Prioridade: init params > env vars > .env > YAML file > defaults.
-    Se config_path fornecido, usa aquele YAML em vez do defaults.yaml.
+    Se config_path ou yaml_file fornecido, usa aquele YAML em vez do defaults.yaml.
     """
     try:
-        if config_path is not None:
-            path = Path(config_path)
+        effective_path = yaml_file if yaml_file is not None else config_path
+        if effective_path is not None:
+            path = Path(effective_path)
             if not path.exists():
-                print(f"Error: Config file not found: {config_path}", file=sys.stderr)
+                print(f"Error: Config file not found: {effective_path}", file=sys.stderr)
                 raise SystemExit(1)
             # Cria subclasse com yaml_file apontando para o arquivo customizado
             CustomConfig = type(
