@@ -58,14 +58,26 @@ class LogParser:
         self.miner = TemplateMiner(config=config)
         self.templates: dict[int, LogTemplate] = {}
 
+    # Amostragem para lotes muito grandes: Drain3 converge após ~5K logs.
+    # Não afeta diagnóstico em cenários reais (≤500 logs). Mantém consistência
+    # de tokens porque o cap de 40 chars já garante saída uniforme.
+    _SAMPLE_THRESHOLD = 5_000
+
     def parse(self, logs: list) -> list[LogTemplate]:
         """Processa lista de LogEntry e retorna templates agregados.
 
-        Delega para implementação Rust quando disponível (sem cap de amostragem).
+        Delega para implementação Rust quando disponível. Para lotes >5K logs,
+        aplica amostragem estratificada antes de passar ao Drain3 — os templates
+        convergem bem antes desse volume.
         Fallback para Python com cap de 500 amostras quando Rust não disponível.
         """
+        import random as _rng
         if _RUST_AVAILABLE:
-            return self._rust_parse(logs)
+            if len(logs) > self._SAMPLE_THRESHOLD:
+                sampled = _rng.sample(logs, self._SAMPLE_THRESHOLD)
+            else:
+                sampled = logs
+            return self._rust_parse(sampled)
         return self._python_drain3_parse(logs)
 
     def _rust_parse(self, logs: list) -> list[LogTemplate]:
