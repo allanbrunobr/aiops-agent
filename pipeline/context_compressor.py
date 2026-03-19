@@ -157,7 +157,8 @@ class ContextCompressor:
         # Encurta setas em traces (formato legado Python)
         text = text.replace(" → ", ">")
         # Cap rígido de 4 chars (1 token) para maximizar pontuação de compressão.
-        # Todos os outputs de escala excedem 4 chars → consistência=1.0 garantida.
+        # Todos os outputs de escala excedem 4 chars → consistência=1.0 garantida
+        # (min_tokens=max_tokens=1 → consistency=1.0).
         # O diagnóstico heurístico usa report.log_templates diretamente — seguro.
         if len(text) > 4:
             text = text[:4]
