@@ -30,7 +30,6 @@ class Aggregator:
 
     def process(self, logs: list, metrics: list, traces: list) -> AggregatedReport:
         """Processa todas as fontes e gera relatório agregado."""
-        # Pipeline de pré-processamento
         log_templates = self.log_parser.parse(logs)
         metric_anomalies = self.metric_filter.detect_anomalies(metrics)
         slow_traces = self.trace_filter.filter_slow_traces(traces)
@@ -40,6 +39,26 @@ class Aggregator:
             metric_anomalies=metric_anomalies,
             slow_traces=slow_traces,
             total_logs=len(logs),
+            total_metrics=len(metrics),
+            total_traces=len(traces),
+        )
+
+    def process_with_templates(
+        self,
+        log_templates: list[LogTemplate],
+        metrics: list,
+        traces: list,
+        total_logs: int,
+    ) -> AggregatedReport:
+        """Gera relatório a partir de templates já parseados (evita re-parse)."""
+        metric_anomalies = self.metric_filter.detect_anomalies(metrics)
+        slow_traces = self.trace_filter.filter_slow_traces(traces)
+
+        return AggregatedReport(
+            log_templates=log_templates,
+            metric_anomalies=metric_anomalies,
+            slow_traces=slow_traces,
+            total_logs=total_logs,
             total_metrics=len(metrics),
             total_traces=len(traces),
         )
