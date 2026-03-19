@@ -1,6 +1,7 @@
 use pyo3::prelude::*;
 
 mod context_compressor;
+mod cusum_ewma;
 mod log_parser;
 mod metric_filter;
 mod telemetry_sanitizer;
@@ -20,5 +21,8 @@ fn _aiops_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // TelemetrySanitizer / AIOpsShield (batch regex via Rayon)
     m.add_function(wrap_pyfunction!(telemetry_sanitizer::detect_taint_batch, m)?)?;
     m.add_function(wrap_pyfunction!(telemetry_sanitizer::detect_taint_single, m)?)?;
+    // CUSUM change-point detection e EWMA slope (Story 1.2)
+    m.add_function(wrap_pyfunction!(cusum_ewma::bridge::detect_cusum, m)?)?;
+    m.add_function(wrap_pyfunction!(cusum_ewma::bridge::compute_ewma_slope, m)?)?;
     Ok(())
 }
