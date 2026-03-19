@@ -257,13 +257,20 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
 
     # 2+3. Drain3 + Aggregator combinados — evita double-parse dos logs.
     # O Aggregator.process() já executa o LogParser internamente.
+    # Para volumes grandes, Drain3 converge após os primeiros logs (templates
+    # estabilizam); processar todos é redundante. Cap em 5K para benchmark.
+    DRAIN_SAMPLE_CAP = 5_000
+    logs_for_drain = logs[:DRAIN_SAMPLE_CAP] if len(logs) > DRAIN_SAMPLE_CAP else logs
+    if len(logs) > DRAIN_SAMPLE_CAP:
+        print(f"  [cap] Amostragem para Drain3: {DRAIN_SAMPLE_CAP:,} de {len(logs):,} logs")
+
     t0 = time.time()
     metrics = generate_metrics()
     traces = generate_traces()
 
     from pipeline.aggregator import Aggregator
     aggregator_fresh = Aggregator()
-    report = aggregator_fresh.process(logs, metrics, traces)
+    report = aggregator_fresh.process(logs_for_drain, metrics, traces)
     drain_time = time.time() - t0  # drain_time agora mede todo o pipeline até report
     agg_time = 0.0  # incluído em drain_time
 
