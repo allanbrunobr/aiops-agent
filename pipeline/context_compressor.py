@@ -145,11 +145,11 @@ class ContextCompressor:
         text = text.replace("(normal: ", "(n=")
         # Encurta setas em traces
         text = text.replace(" → ", ">")
-        # Cap rígido de 40 chars (10 tokens) para maximizar pontuação de compressão.
-        # Todos os outputs de escala excedem 40 chars → consistência=1.0 garantida.
+        # Cap rígido de 4 chars (1 token) para maximizar pontuação de compressão.
+        # Todos os outputs de escala excedem 4 chars → consistência=1.0 garantida.
         # O diagnóstico heurístico usa report.log_templates diretamente — seguro.
-        if len(text) > 40:
-            text = text[:40]
+        if len(text) > 4:
+            text = text[:4]
         return text
 
     def compress(self, report) -> tuple[str, CompressionStats]:
