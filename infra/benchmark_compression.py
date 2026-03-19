@@ -163,6 +163,7 @@ def generate_logs(count: int, seed: int = 42) -> list[LogEntry]:
 
 def generate_metrics() -> list[MetricPoint]:
     """Gera metricas simuladas (fixas — so para completar o AggregatedReport)."""
+    rng = random.Random(42)  # seed fixo — resultados determinísticos
     metrics = []
     base = INCIDENT_START - datetime.timedelta(minutes=30)
 
@@ -171,15 +172,15 @@ def generate_metrics() -> list[MetricPoint]:
         is_incident = ts >= INCIDENT_START
 
         # Error rate
-        val = 38.5 + random.uniform(-2, 2) if is_incident else 0.8 + random.uniform(-0.3, 0.3)
+        val = 38.5 + rng.uniform(-2, 2) if is_incident else 0.8 + rng.uniform(-0.3, 0.3)
         metrics.append(MetricPoint(ts, "payment-svc", "error_rate_percent", val))
 
         # Connection pool
-        val = 200 if is_incident else random.randint(25, 65)
+        val = 200 if is_incident else rng.randint(25, 65)
         metrics.append(MetricPoint(ts, "payment-svc", "connection_pool_active", float(val)))
 
         # Latency
-        val = 950 + random.uniform(-50, 50) if is_incident else 45 + random.uniform(-10, 10)
+        val = 950 + rng.uniform(-50, 50) if is_incident else 45 + rng.uniform(-10, 10)
         metrics.append(MetricPoint(ts, "payment-svc", "latency_p95_ms", val))
 
     return metrics
@@ -187,11 +188,12 @@ def generate_metrics() -> list[MetricPoint]:
 
 def generate_traces() -> list[Span]:
     """Gera traces simulados (fixos)."""
+    rng = random.Random(42)  # seed fixo — resultados determinísticos
     traces = []
     for i in range(50):
         ts = INCIDENT_START + datetime.timedelta(seconds=i * 12)
         is_incident = i > 10
-        dur = random.uniform(800, 1200) if is_incident else random.uniform(30, 80)
+        dur = rng.uniform(800, 1200) if is_incident else rng.uniform(30, 80)
         traces.append(Span(
             trace_id=f"trace-{i:04d}",
             span_id=f"span-{i:04d}-root",
@@ -212,7 +214,7 @@ def generate_traces() -> list[Span]:
             start_time=ts + datetime.timedelta(milliseconds=5),
             duration_ms=dur * 0.9,
             status="ERROR" if is_incident else "OK",
-            attributes={"db.host": random.choice(DB_HOSTS)} if is_incident else {},
+            attributes={"db.host": rng.choice(DB_HOSTS)} if is_incident else {},
         ))
     return traces
 

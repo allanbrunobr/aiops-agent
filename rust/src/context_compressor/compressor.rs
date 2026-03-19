@@ -32,53 +32,50 @@ fn py_float_str(v: f64) -> String {
     }
 }
 
-/// Espelha ContextCompressor._format_log_chunk()
-fn format_log_chunk(tpl: &LogTemplateProxy) -> String {
-    let mut svcs: Vec<&str> = tpl.services.iter().map(|s| s.as_str()).collect();
-    svcs.sort();
-    const MAX_SERVICES: usize = 2;
-    let svcs_str = svcs[..svcs.len().min(MAX_SERVICES)].join(", ");
-    format!(
-        "[{}][{}] \"{}\" x{} | score={}",
-        tpl.level,
-        svcs_str,
-        tpl.template,
-        tpl.count,
-        py_float_str(tpl.relevance_score)
-    )
+/// Trunca string a N codepoints Unicode para limitar tokens.
+fn truncate_str(s: &str, max_chars: usize) -> &str {
+    let mut end = s.len();
+    let mut count = 0;
+    for (i, _) in s.char_indices() {
+        if count >= max_chars {
+            end = i;
+            break;
+        }
+        count += 1;
+    }
+    &s[..end]
 }
 
-/// Espelha ContextCompressor._format_metric_chunk()
+/// Formato ultra-compacto de log: apenas template (level/svc omitidos — redundantes com header/marker)
+fn format_log_chunk(tpl: &LogTemplateProxy) -> String {
+    let tmpl = truncate_str(&tpl.template, 35);
+    let ellipsis = if tpl.template.chars().count() > 35 { "…" } else { "" };
+    format!("\"{}{}\"", tmpl, ellipsis)
+}
+
+/// Formato mínimo de métrica: svc/metric type σ (val omitido para reduzir tokens)
 fn format_metric_chunk(anomaly: &MetricAnomalyProxy) -> String {
+    // Abrevia anomaly_type para reduzir tokens: level_shift→ls, spike→sp
+    let atype = match anomaly.anomaly_type.as_str() {
+        "level_shift" => "ls",
+        "spike" => "sp",
+        other => other,
+    };
     format!(
-        "{}/{}: {} value={:.1} (baseline={:.1}, {:.1}\u{03c3})",
+        "{}/{} {} {:.0}\u{03c3}",
         anomaly.service,
         anomaly.metric_name,
-        anomaly.anomaly_type,
-        anomaly.value,
-        anomaly.mean,
+        atype,
         anomaly.deviation_sigma
     )
 }
 
-/// Espelha ContextCompressor._format_trace_chunk()
+/// Formato mínimo de trace: bottleneck Xms/Yms
 fn format_trace_chunk(trace: &SlowTraceProxy) -> String {
-    let path_str = trace.path.join(" \u{2192} ");
-    let attrs = trace
-        .attributes
-        .iter()
-        .map(|(k, v)| format!("{}={}", k, v))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let base = format!(
-        "{}: {:.0}ms (normal: {:.0}ms) bottleneck={}",
-        path_str, trace.total_duration_ms, trace.normal_duration_ms, trace.bottleneck_service
-    );
-    if attrs.is_empty() {
-        base
-    } else {
-        format!("{} | {}", base, attrs)
-    }
+    format!(
+        "{} {:.0}/{:.0}ms",
+        trace.bottleneck_service, trace.total_duration_ms, trace.normal_duration_ms
+    )
 }
 
 /// Espelha ContextCompressor._classify_chunks()
