@@ -44,6 +44,23 @@ class Aggregator:
             total_traces=len(traces),
         )
 
+    def process_with_templates(
+        self, templates: list, metrics: list, traces: list,
+        total_logs: int = 0,
+    ) -> AggregatedReport:
+        """Gera relatório usando templates já parseados (evita re-parse do LogParser)."""
+        metric_anomalies = self.metric_filter.detect_anomalies(metrics)
+        slow_traces = self.trace_filter.filter_slow_traces(traces)
+
+        return AggregatedReport(
+            log_templates=templates,
+            metric_anomalies=metric_anomalies,
+            slow_traces=slow_traces,
+            total_logs=total_logs,
+            total_metrics=len(metrics),
+            total_traces=len(traces),
+        )
+
 
 class AggregatedReport:
     """Relatório agregado com dados de observabilidade processados."""

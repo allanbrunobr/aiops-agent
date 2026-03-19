@@ -277,11 +277,9 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     traces = generate_traces()
 
     from pipeline.aggregator import Aggregator
-    aggregator = Aggregator()
-    # Inject the already-parsed templates to avoid re-parsing
-    # Actually, we need to run the full aggregator to get proper AggregatedReport
     aggregator_fresh = Aggregator()
-    report = aggregator_fresh.process(logs, metrics, traces)
+    # Usa templates já parseados para evitar re-parse do LogParser (economiza ~2s em 100K logs)
+    report = aggregator_fresh.process_with_templates(templates, metrics, traces, total_logs=len(logs))
     agg_time = time.time() - t0
     print(f"\n  [3/4] Aggregator: report gerado em {agg_time:.1f}s")
 
