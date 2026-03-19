@@ -271,17 +271,14 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
         svcs = ", ".join(sorted(tpl.services))
         print(f"         #{i+1} [{tpl.level}][{svcs}] \"{tpl.template[:80]}\" x{tpl.count}")
 
-    # 3. Aggregator (precisa de metricas e traces tambem)
+    # 3. Aggregator (reutiliza templates já parseados para evitar re-parse)
     t0 = time.time()
     metrics = generate_metrics()
     traces = generate_traces()
 
     from pipeline.aggregator import Aggregator
-    aggregator = Aggregator()
-    # Inject the already-parsed templates to avoid re-parsing
-    # Actually, we need to run the full aggregator to get proper AggregatedReport
     aggregator_fresh = Aggregator()
-    report = aggregator_fresh.process(logs, metrics, traces)
+    report = aggregator_fresh.process_with_templates(templates, metrics, traces, len(logs))
     agg_time = time.time() - t0
     print(f"\n  [3/4] Aggregator: report gerado em {agg_time:.1f}s")
 
