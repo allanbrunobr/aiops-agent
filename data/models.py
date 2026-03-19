@@ -67,6 +67,16 @@ class SimulatedIncident:
 
 
 @dataclass
+class PredictionReport:
+    """Relatório preditivo com score de risco e eventos de lifecycle."""
+    risk_score: float
+    eta_minutes: float | None
+    signals: list
+    event_level: str | None
+    matched_history: list = field(default_factory=list)
+
+
+@dataclass
 class MetricSeries:
     """Série temporal de uma métrica com suporte a projeção de limiar."""
     service: str

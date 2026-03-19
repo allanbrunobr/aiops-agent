@@ -829,6 +829,57 @@ def _serialize_result(result: dict, incident) -> dict:
     return serialized
 
 
+def step_predict(result: dict, report) -> None:
+    """Etapa 4d: Estágio preditivo — gera PredictionReport e emite eventos de lifecycle.
+
+    Executa análise preditiva sobre o aggregated_report e armazena o resultado
+    em result["stages"]["prediction"]. Emite evento de lifecycle se event_level
+    for definido. Nunca lança exceção — falhas retornam prediction=None.
+    """
+    console.print(Rule("[bold]Stage 4d: Predictive Analysis[/bold]", style="cyan"))
+    console.print()
+
+    try:
+        from pipeline.predictive_stage import run_predictive_stage
+        from core.lifecycle import LifecycleEvent, ALLOWED_EVENT_TYPES
+        from datetime import datetime, timezone
+        import uuid
+
+        prediction = run_predictive_stage(report)
+        result["stages"]["prediction"] = prediction
+
+        if prediction is not None:
+            console.print(f"  Risk score: [bold]{prediction.risk_score:.1f}/100[/bold]")
+            console.print(f"  Signals: {', '.join(prediction.signals) or 'none'}")
+            if prediction.event_level:
+                color = "red" if prediction.event_level == "prediction.alert" else "yellow"
+                console.print(f"  Event: [{color}]{prediction.event_level}[/{color}]")
+
+                # Emite evento de lifecycle
+                event = LifecycleEvent(
+                    event_type=prediction.event_level,
+                    node_name="predictive_stage",
+                    correlation_id=str(uuid.uuid4()),
+                    timestamp=datetime.now(timezone.utc),
+                    data={
+                        "risk_score": prediction.risk_score,
+                        "eta_minutes": prediction.eta_minutes,
+                        "signals": prediction.signals,
+                    },
+                )
+                console.print(f"  [dim]Lifecycle event emitted: {event.event_type}[/dim]")
+            else:
+                console.print("  [dim]No lifecycle event (risk below threshold)[/dim]")
+        else:
+            console.print("  [yellow]Predictive stage returned None (graceful degradation)[/yellow]")
+
+    except Exception as exc:
+        console.print(f"  [yellow]Predictive stage error (non-fatal): {exc}[/yellow]")
+        result["stages"]["prediction"] = None
+
+    console.print()
+
+
 def step_postmortem(result, incident, output_dir: str = "output",
                     output_format: str = "markdown",
                     tracker_url: str | None = None,
@@ -1097,6 +1148,17 @@ def print_summary(result, compression_stats=None, safety_result=None,
             f"[{rem_color}]{remediation_result.risk.name}[/{rem_color}]",
             f"{'safe ✅' if remediation_result.is_safe else 'blocked ❌'} | "
             f"{len(remediation_result.blocked_patterns)} blocked, {len(remediation_result.warnings)} warnings",
+        )
+
+    # Predictive Analysis
+    prediction = result.get("stages", {}).get("prediction")
+    if prediction is not None:
+        risk_color = "red" if prediction.risk_score >= 60 else "yellow" if prediction.risk_score >= 30 else "green"
+        event_str = prediction.event_level or "none"
+        table.add_row(
+            "Prediction",
+            f"[{risk_color}]risk={prediction.risk_score:.1f}/100[/{risk_color}]",
+            f"event={event_str} | signals={', '.join(prediction.signals) or 'none'}",
         )
 
     # Verification
@@ -1723,6 +1785,9 @@ def main() -> int:
         # 4. Agent Pipeline
         result = step_agents(report, retriever, use_llm=use_llm, llm_model=llm_model,
                              config=threshold_config)
+
+        # 4d. Predictive Analysis
+        step_predict(result, report)
 
         # 4b. Pre-Execution Safety Validation
         safety_result = step_safety_validation(result)

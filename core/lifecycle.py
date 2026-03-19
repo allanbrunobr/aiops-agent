@@ -10,11 +10,25 @@ class LifecycleEvent:
     """Evento emitido pelo BlueprintEngine durante execucao do pipeline."""
 
     event_type: str          # "node.started", "node.completed", "node.failed",
-                             # "pipeline.started", "pipeline.completed", "pipeline.failed"
+                             # "pipeline.started", "pipeline.completed", "pipeline.failed",
+                             # "prediction.warning", "prediction.alert"
     node_name: str | None    # None para eventos de pipeline
     correlation_id: str
     timestamp: datetime
     data: dict[str, Any] = field(default_factory=dict)  # Dados extras (duration_ms, error, etc.)
+
+
+# Tipos de evento de lifecycle suportados (inclui eventos preditivos FR-P7)
+ALLOWED_EVENT_TYPES: frozenset[str] = frozenset({
+    "node.started",
+    "node.completed",
+    "node.failed",
+    "pipeline.started",
+    "pipeline.completed",
+    "pipeline.failed",
+    "prediction.warning",
+    "prediction.alert",
+})
 
 
 @runtime_checkable
