@@ -67,8 +67,6 @@ class SimulatedIncident:
 
 
 @dataclass
-<<<<<<< HEAD
-=======
 class PredictionReport:
     """Relatório preditivo com score de risco e eventos de lifecycle."""
     risk_score: float
@@ -79,7 +77,6 @@ class PredictionReport:
 
 
 @dataclass
->>>>>>> autoresearch/wt3-mar19
 class MetricSeries:
     """Série temporal de uma métrica com suporte a projeção de limiar."""
     service: str
