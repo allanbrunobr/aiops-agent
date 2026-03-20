@@ -114,24 +114,31 @@ class ObservabilityIndexer:
             for t, emb in zip(uncached, new_embs):
                 _embedding_cache[t] = emb
 
-        embeddings = np.array([_embedding_cache[t] for t in texts], dtype=np.float32)
+        # Constrói índice FAISS apenas sobre embeddings únicos (menos vetores = treino+busca mais rápidos)
+        unique_embs = np.array([_embedding_cache[t] for t in unique_texts], dtype=np.float32)
 
-        dim = embeddings.shape[1]
-        n = len(embeddings)
-        if n >= 40:
-            # IVFFlat: busca aproximada O(log n), treina nlist clusters
-            nlist = min(100, max(4, n // 39))
+        # Mapeia posição no índice FAISS → índices de chunks (para retrieval correto)
+        unique_to_idx = {t: i for i, t in enumerate(unique_texts)}
+        self._faiss_to_chunks: list[list[int]] = [[] for _ in range(len(unique_texts))]
+        for ci, chunk in enumerate(self.chunks):
+            self._faiss_to_chunks[unique_to_idx[chunk.text]].append(ci)
+
+        dim = unique_embs.shape[1]
+        nu = len(unique_embs)
+        if nu >= 40:
+            # IVFFlat sobre únicos: treino muito mais rápido que sobre todos os chunks
+            nlist = min(100, max(4, nu // 39))
             quantizer = faiss.IndexFlatIP(dim)
             self.index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
             # Reduz iterações de k-means para treino mais rápido (5 suficiente para aproximação)
             self.index.cp.niter = 5
-            self.index.train(embeddings)
+            self.index.train(unique_embs)
             # Mantém ~50 vetores buscados/query para consistência de tempo entre volumes
-            self.index.nprobe = max(1, min(nlist, 50 * nlist // max(n, 1)))
+            self.index.nprobe = max(1, min(nlist, 50 * nlist // max(nu, 1)))
         else:
             # FlatIP: busca exata para volumes muito pequenos
             self.index = faiss.IndexFlatIP(dim)
-        self.index.add(embeddings)
+        self.index.add(unique_embs)
 
         return len(self.chunks)
 

@@ -88,9 +88,12 @@ class ObservabilityRetriever:
             # Busca mais do que top_k para compensar filtragem
             faiss_k = top_k * 3 if source_filter else top_k
 
+        # Índice FAISS contém apenas embeddings únicos; mapeia de volta para chunks
+        faiss_to_chunks = getattr(self.indexer, "_faiss_to_chunks", None)
+        n_faiss = self.indexer.index.ntotal
         distances, indices = self.indexer.index.search(
             query_embedding,
-            min(faiss_k, len(self.indexer.chunks)),
+            min(faiss_k, n_faiss),
         )
 
         results = []
@@ -98,8 +101,19 @@ class ObservabilityRetriever:
         for dist, idx in zip(distances[0], indices[0]):
             if idx < 0:
                 continue
-            chunk = self.indexer.chunks[idx]
-            if source_filter and chunk.source != source_filter:
+            # Resolve FAISS idx → chunk(s)
+            if faiss_to_chunks is not None:
+                chunk_indices = faiss_to_chunks[idx]
+                chunk = next(
+                    (self.indexer.chunks[ci] for ci in chunk_indices
+                     if not source_filter or self.indexer.chunks[ci].source == source_filter),
+                    None,
+                )
+            else:
+                chunk = self.indexer.chunks[idx]
+                if source_filter and chunk.source != source_filter:
+                    chunk = None
+            if chunk is None:
                 continue
             results.append(SearchResult(
                 chunk=chunk,
