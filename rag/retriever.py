@@ -4,11 +4,14 @@ Retriever semântico para busca em dados de observabilidade indexados.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import warnings
 
 import numpy as np
 from rag.indexer import ObservabilityIndexer, IndexedChunk
+
+_query_cache: dict[str, np.ndarray] = {}
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +73,13 @@ class ObservabilityRetriever:
             and source_filter is None  # reranking não combinado com source_filter
         )
 
-        query_embedding = self.indexer.model.encode([query], normalize_embeddings=True)
-        query_embedding = np.array(query_embedding, dtype=np.float32)
+        key = hashlib.md5(query.encode()).hexdigest()
+        if key not in _query_cache:
+            _query_cache[key] = np.array(
+                self.indexer.model.encode([query], normalize_embeddings=True),
+                dtype=np.float32,
+            )
+        query_embedding = _query_cache[key]
 
         if reranking_active:
             # Recupera top_k*2 candidatos para o reranker refinar

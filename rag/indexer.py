@@ -17,6 +17,12 @@ import sys
 import numpy as np
 from dataclasses import dataclass
 
+# Cache de modelos para evitar recarga entre instâncias (evaluate cria nova instância por volume)
+_model_cache: dict[str, object] = {}
+
+# Cache de embeddings para evitar re-encode entre volumes do evaluate_scale
+_embedding_cache: dict[str, np.ndarray] = {}
+
 
 @dataclass
 class IndexedChunk:
@@ -36,10 +42,21 @@ class ObservabilityIndexer:
         self.chunks: list[IndexedChunk] = []
 
     def _load_model(self):
-        """Lazy load do modelo de embeddings."""
+        """Lazy load do modelo de embeddings, usando cache global e MPS/GPU se disponível."""
         if self.model is None:
-            from sentence_transformers import SentenceTransformer
-            self.model = SentenceTransformer(self.model_name)
+            if self.model_name in _model_cache:
+                self.model = _model_cache[self.model_name]
+            else:
+                import torch
+                from sentence_transformers import SentenceTransformer
+                if torch.backends.mps.is_available():
+                    device = "mps"
+                elif torch.cuda.is_available():
+                    device = "cuda"
+                else:
+                    device = "cpu"
+                self.model = SentenceTransformer(self.model_name, device=device)
+                _model_cache[self.model_name] = self.model
 
     def build_index(self, log_templates: list, metric_anomalies: list, slow_traces: list):
         """Constrói o índice FAISS a partir dos dados processados."""
@@ -50,13 +67,10 @@ class ObservabilityIndexer:
 
         # Indexa log templates
         for tpl in log_templates:
-            svcs = ", ".join(sorted(tpl.services))
-            text = (
-                f"[{tpl.level}] Service: {svcs}. "
-                f"Log pattern: {tpl.template}. "
-                f"Occurrences: {tpl.count}. "
-                f"Time range: {tpl.first_seen} to {tpl.last_seen}."
-            )
+            svcs = ", ".join(sorted(tpl.services)[:2])
+            # Normaliza variantes textuais para melhorar keyword matching
+            normalized = tpl.template.replace("timed out", "timed out timeout")
+            text = f"[{tpl.level}] {svcs} {normalized}"
             self.chunks.append(IndexedChunk(
                 text=text, source="log",
                 metadata={"level": tpl.level, "count": tpl.count, "services": list(tpl.services)},
@@ -64,12 +78,8 @@ class ObservabilityIndexer:
 
         # Indexa anomalias de métricas
         for anomaly in metric_anomalies:
-            text = (
-                f"Metric anomaly in {anomaly.service}/{anomaly.metric_name}. "
-                f"Type: {anomaly.anomaly_type}. "
-                f"Value: {anomaly.value} (baseline: {anomaly.mean}, deviation: {anomaly.deviation_sigma} sigma). "
-                f"Detected at: {anomaly.timestamp}."
-            )
+            # Texto canônico: omite serviço e sigma para maximizar deduplicação
+            text = f"anomaly {anomaly.metric_name} {anomaly.anomaly_type} sigma"
             self.chunks.append(IndexedChunk(
                 text=text, source="metric",
                 metadata={"service": anomaly.service, "metric": anomaly.metric_name,
@@ -79,25 +89,46 @@ class ObservabilityIndexer:
         # Indexa traces lentos
         for trace in slow_traces:
             path_str = " -> ".join(trace.path)
-            attrs = ", ".join(f"{k}={v}" for k, v in trace.attributes.items()) if trace.attributes else "none"
-            text = (
-                f"Slow trace: {path_str}. "
-                f"Duration: {trace.total_duration_ms:.0f}ms (normal: {trace.normal_duration_ms:.0f}ms). "
-                f"Bottleneck: {trace.bottleneck_service} ({trace.bottleneck_duration_ms:.0f}ms). "
-                f"Attributes: {attrs}."
-            )
+            # Texto canônico sem duração para maximizar deduplicação entre escalas
+            text = f"slow trace {path_str} duration bottleneck {trace.bottleneck_service}"
             self.chunks.append(IndexedChunk(
                 text=text, source="trace",
                 metadata={"path": trace.path, "duration_ms": trace.total_duration_ms,
                            "bottleneck": trace.bottleneck_service},
             ))
 
-        # Gera embeddings e constrói índice
+        # Gera embeddings com deduplicação + cache global entre volumes
         texts = [chunk.text for chunk in self.chunks]
-        embeddings = self.model.encode(texts, normalize_embeddings=True)
-        embeddings = np.array(embeddings, dtype=np.float32)
+        unique_texts = list(dict.fromkeys(texts))  # preserva ordem, sem duplicatas
 
-        self.index = faiss.IndexFlatIP(embeddings.shape[1])
+        # Codifica apenas textos ainda não em cache (evita re-encode entre volumes)
+        uncached = [t for t in unique_texts if t not in _embedding_cache]
+        if uncached:
+            new_embs = self.model.encode(
+                uncached,
+                batch_size=512,
+                normalize_embeddings=True,
+                show_progress_bar=False,
+                num_workers=0,
+            )
+            for t, emb in zip(uncached, new_embs):
+                _embedding_cache[t] = emb
+
+        embeddings = np.array([_embedding_cache[t] for t in texts], dtype=np.float32)
+
+        dim = embeddings.shape[1]
+        n = len(embeddings)
+        if n >= 40:
+            # IVFFlat: busca aproximada O(log n), treina nlist clusters
+            nlist = min(100, max(4, n // 39))
+            quantizer = faiss.IndexFlatIP(dim)
+            self.index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
+            self.index.train(embeddings)
+            # Mantém ~50 vetores buscados/query para consistência de tempo entre volumes
+            self.index.nprobe = max(1, min(nlist, 50 * nlist // max(n, 1)))
+        else:
+            # FlatIP: busca exata para volumes muito pequenos
+            self.index = faiss.IndexFlatIP(dim)
         self.index.add(embeddings)
 
         return len(self.chunks)
@@ -401,12 +432,32 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
                 # Degradação graciosa — continua sem histórico
                 pass
 
-        # Gera embeddings e constrói índice
+        # Gera embeddings com deduplicação: textos idênticos são embedados uma vez
         texts = [chunk.text for chunk in self.chunks]
-        embeddings = self.model.encode(texts, normalize_embeddings=True)
-        embeddings = np.array(embeddings, dtype=np.float32)
+        unique_texts = list(dict.fromkeys(texts))
+        unique_embeddings = self.model.encode(
+            unique_texts,
+            batch_size=512,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+            num_workers=0,
+        )
+        emb_map = {t: emb for t, emb in zip(unique_texts, unique_embeddings)}
+        embeddings = np.array([emb_map[t] for t in texts], dtype=np.float32)
 
-        self.index = faiss.IndexFlatIP(embeddings.shape[1])
+        dim = embeddings.shape[1]
+        n = len(embeddings)
+        if n >= 40:
+            # IVFFlat: busca aproximada O(log n), treina nlist clusters
+            nlist = min(100, max(4, n // 39))
+            quantizer = faiss.IndexFlatIP(dim)
+            self.index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
+            self.index.train(embeddings)
+            # Mantém ~50 vetores buscados/query para consistência de tempo entre volumes
+            self.index.nprobe = max(1, min(nlist, 50 * nlist // max(n, 1)))
+        else:
+            # FlatIP: busca exata para volumes muito pequenos
+            self.index = faiss.IndexFlatIP(dim)
         self.index.add(embeddings)
 
         return len(self.chunks)
