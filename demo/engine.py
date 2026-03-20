@@ -117,7 +117,15 @@ class ScenarioEngine:
         self._comparison_active = True
         self._trad_player = ScenarioPlayer(corpus, speed_factor=self._player.speed_factor)
         self._trad_analyzer = DemoAnalyzer(enable_prediction=False)
-        self._trad_phase = DemoPhase.IDLE
+        self._trad_logs.clear()
+        self._trad_metrics.clear()
+        self._trad_spans.clear()
+        self._trad_warning_wall_time = None
+        # Se o motor principal já está rodando, inicia o motor tradicional também
+        if self._phase != DemoPhase.IDLE:
+            self._trad_phase = DemoPhase.PLAYING
+        else:
+            self._trad_phase = DemoPhase.IDLE
 
     def disable_comparison(self) -> None:
         """Desativa modo de comparação."""
