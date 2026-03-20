@@ -2,7 +2,7 @@
 # Simula um webhook do Grafana Alerting para o aiops-agent local
 # Usa o mesmo formato que o Grafana Unified Alerting envia
 
-WEBHOOK_URL="${1:-http://localhost:8000/webhook}"
+WEBHOOK_URL="${1:-http://localhost:47890/webhook}"
 TOKEN="test-grafana-token-local"
 
 echo "Enviando alerta Grafana simulado para $WEBHOOK_URL ..."

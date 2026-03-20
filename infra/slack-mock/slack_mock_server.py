@@ -12,16 +12,16 @@ Endpoints mocked:
   DELETE /_mock/messages        - Clear captured messages (test helper)
 
 Usage:
-  python slack_mock_server.py              # Runs on :8001
+  python slack_mock_server.py              # Runs on :47892
   SLACK_MOCK_PORT=9999 python slack_mock_server.py
 
   Then point your Slack SDK at this server:
     from slack_sdk import WebClient
-    client = WebClient(token="xoxb-mock-token", base_url="http://localhost:8001/api/")
+    client = WebClient(token="xoxb-mock-token", base_url="http://localhost:47892/api/")
 
 Docker:
   docker build -t slack-mock -f Dockerfile.slack-mock .
-  docker run -p 8001:8001 slack-mock
+  docker run -p 47892:47892 slack-mock
 """
 
 import json
@@ -201,7 +201,7 @@ async def health() -> JSONResponse:
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    port = int(os.environ.get("SLACK_MOCK_PORT", "8001"))
+    port = int(os.environ.get("SLACK_MOCK_PORT", "47892"))
     print(f"Slack Mock Server starting on :{port}")
     print(f"Point your Slack SDK at: http://localhost:{port}/api/")
     uvicorn.run(app, host="0.0.0.0", port=port)

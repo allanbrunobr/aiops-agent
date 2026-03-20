@@ -28,8 +28,8 @@ import pytest
 # Configuration
 # ---------------------------------------------------------------------------
 
-WEBHOOK_URL = "http://localhost:8000/webhook"
-SLACK_MOCK_URL = "http://localhost:8001"
+WEBHOOK_URL = "http://localhost:47890/webhook"
+SLACK_MOCK_URL = "http://localhost:47892"
 
 SAMPLE_PAYLOAD_PATH = Path(__file__).parent.parent.parent / "docker" / "grafana_webhook_payload_example.json"
 

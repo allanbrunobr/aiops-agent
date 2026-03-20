@@ -10,7 +10,7 @@ from data.models import MetricPoint, MetricSeries
 
 try:
     import _aiops_rust as _rust
-    _RUST_AVAILABLE = True
+    _RUST_AVAILABLE = hasattr(_rust, "compute_ewma_slope")
 except ImportError:
     _rust = None
     _RUST_AVAILABLE = False

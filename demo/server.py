@@ -6,7 +6,7 @@ Expõe endpoints REST para controle do cenário e WebSocket para
 streaming de TickFrames ao dashboard em tempo real.
 
 Uso:
-    python demo/server.py [--port 8080]
+    python demo/server.py [--port 47891]
 """
 
 import argparse
@@ -14,8 +14,17 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import Any
+
+# Garante que demo/ não obscurece o pacote server/ na raiz do projeto.
+# Quando demo/server.py é executado como script, Python adiciona 'demo' em sys.path[0],
+# o que faz 'server' resolver para demo/server.py em vez de server/.
+# Solução: remove 'demo' do sys.path e insere a raiz do projeto na frente.
+_PROJECT_ROOT = str(Path(__file__).parent.parent.resolve())
+_DEMO_DIR = str(Path(__file__).parent.resolve())
+sys.path[:] = [_PROJECT_ROOT] + [p for p in sys.path if Path(p).resolve() != Path(_DEMO_DIR).resolve() and p != ""]
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -26,6 +35,33 @@ from demo.engine import ScenarioEngine
 from demo.scenarios import DemoScenarioConfig, SCENARIOS, get_scenarios_list
 
 logger = logging.getLogger("demo.server")
+
+# Carrega .env.local se existir (credenciais locais não versionadas)
+_env_local = Path(__file__).parent.parent / ".env.local"
+if _env_local.exists():
+    for _line in _env_local.read_text().splitlines():
+        if _line.startswith("#") or "=" not in _line:
+            continue
+        _k, _v = _line.split("=", 1)
+        os.environ.setdefault(_k.strip(), _v.strip())
+
+# Slack notifier — inicializado se SLACK_BOT_TOKEN e SLACK_CHANNEL estiverem disponíveis
+try:
+    from core.credentials import EnvCredentialProvider
+    from server.notifications.slack import SlackNotifier
+    from core.lifecycle import LifecycleEvent
+    _slack_token = os.environ.get("SLACK_BOT_TOKEN")
+    _slack_channel = os.environ.get("SLACK_CHANNEL", "#aiops-alerts")
+    if _slack_token:
+        _slack: SlackNotifier | None = SlackNotifier(
+            channel=_slack_channel,
+            creds=EnvCredentialProvider(),
+        )
+    else:
+        _slack = None
+except Exception as _exc:
+    logger.warning("SlackNotifier init falhou: %s", _exc)
+    _slack = None
 
 # Diretório de arquivos estáticos
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -40,6 +76,8 @@ _engine: ScenarioEngine | None = None
 _tick_task: asyncio.Task | None = None
 _ws_connections: list[WebSocket] = []
 _current_corpus_name: str = "payment-pool-exhaustion"
+_slack_fired: set[str] = set()  # fases já notificadas no Slack (evita spam)
+_slack_warning_wall_time: float = 0.0  # timestamp wall-clock do último prediction.warning
 
 
 # ------------------------------------------------------------------ #
@@ -85,6 +123,9 @@ async def start_scenario(scenario_name: str) -> JSONResponse:
 
     config = DemoScenarioConfig(
         enable_llm=bool(os.environ.get("ANTHROPIC_API_KEY")),
+        risk_warning_threshold=float(scenario_meta.get("risk_warning_threshold", 60.0)),
+        risk_alert_threshold=float(scenario_meta.get("risk_alert_threshold", 80.0)),
+        ewma_threshold=float(scenario_meta.get("ewma_threshold", 0.90)),
     )
     _engine = ScenarioEngine(corpus, scenario_name=scenario_name, config=config)
     _engine.start()
@@ -219,20 +260,102 @@ async def _broadcast(payload: dict | Any) -> None:
 
 async def _tick_loop() -> None:
     """Loop assíncrono que gera ticks a 1fps e transmite TickFrames."""
+    global _slack_fired
+    _slack_fired = set()
     if _engine is None:
         return
     try:
         while _engine.is_running:
             frame = _engine.tick()
             await _broadcast(frame)
+            await _maybe_notify_slack(frame)
             await asyncio.sleep(1.0)
         # Envia frame final (RESOLVED/IDLE)
         frame = _engine.tick()
         await _broadcast(frame)
+        await _maybe_notify_slack(frame)
     except asyncio.CancelledError:
         pass
     except Exception as exc:
         logger.exception("Erro no tick loop: %s", exc)
+
+
+async def _maybe_notify_slack(frame: Any) -> None:
+    """Envia notificação Slack quando a fase muda para WARNING, ALERT ou RESOLVED."""
+    if _slack is None or _engine is None:
+        return
+
+    scenario = _engine.scenario_name
+    prediction = frame.prediction if hasattr(frame, "prediction") else frame.get("prediction")
+    if not isinstance(prediction, dict):
+        return
+
+    event_level = prediction.get("event_level")
+    if not event_level:
+        return
+
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    risk = frame.risk_score if hasattr(frame, "risk_score") else frame.get("risk_score", 0)
+    eta = prediction.get("eta_minutes")
+    signals = prediction.get("signals_fired", [])
+
+    # Dispara prediction.warning na primeira vez que aparecer
+    if event_level == "prediction.warning" and "warning" not in _slack_fired:
+        _slack_fired.add("warning")
+        event = LifecycleEvent(
+            event_type="prediction.warning",
+            node_name=None,
+            correlation_id=f"demo-{scenario}",
+            timestamp=now,
+            data={"event_level": "prediction.warning", "risk_score": risk,
+                  "eta_minutes": eta, "signals": signals, "matched_history": [],
+                  "scenario": scenario},
+        )
+        try:
+            await _slack.on_event(event)
+            logger.info("Slack: prediction.warning enviado — cenário %s, risk=%.0f, eta=%s",
+                        scenario, risk, f"{eta:.1f}min" if eta else "?")
+        except Exception as exc:
+            logger.warning("Slack notification falhou: %s", exc)
+
+    # Dispara prediction.alert na primeira vez que aparecer (risk >= 60)
+    elif event_level == "prediction.alert" and "alert" not in _slack_fired:
+        _slack_fired.add("alert")
+        event = LifecycleEvent(
+            event_type="prediction.alert",
+            node_name=None,
+            correlation_id=f"demo-{scenario}",
+            timestamp=now,
+            data={"event_level": "prediction.alert", "risk_score": risk,
+                  "eta_minutes": eta, "signals": signals, "matched_history": [],
+                  "scenario": scenario},
+        )
+        try:
+            await _slack.on_event(event)
+            logger.info("Slack: prediction.alert enviado — cenário %s, risk=%.0f",
+                        scenario, risk)
+        except Exception as exc:
+            logger.warning("Slack notification falhou: %s", exc)
+
+    # Dispara prediction.critical quando risk >= 80 (incidente iminente)
+    if event_level == "prediction.alert" and risk >= 80.0 and "critical" not in _slack_fired:
+        _slack_fired.add("critical")
+        event = LifecycleEvent(
+            event_type="prediction.alert",
+            node_name=None,
+            correlation_id=f"demo-{scenario}",
+            timestamp=now,
+            data={"event_level": "prediction.critical", "risk_score": risk,
+                  "eta_minutes": eta, "signals": signals, "matched_history": [],
+                  "scenario": scenario},
+        )
+        try:
+            await _slack.on_event(event)
+            logger.info("Slack: prediction.critical enviado — cenário %s, risk=%.0f",
+                        scenario, risk)
+        except Exception as exc:
+            logger.warning("Slack notification falhou: %s", exc)
 
 
 # ------------------------------------------------------------------ #
@@ -242,7 +365,7 @@ async def _tick_loop() -> None:
 def main() -> None:
     """Ponto de entrada para execução direta via CLI."""
     parser = argparse.ArgumentParser(description="AIOps Demo Server")
-    parser.add_argument("--port", type=int, default=8080, help="Porta HTTP (padrão: 8080)")
+    parser.add_argument("--port", type=int, default=47891, help="Porta HTTP (padrão: 47891)")
     parser.add_argument("--host", default="0.0.0.0", help="Host de escuta")
     args = parser.parse_args()
 

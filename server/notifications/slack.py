@@ -88,6 +88,8 @@ class SlackNotifier:
                 await self._post_final_message(event)
             elif event.event_type == "pipeline.failed":
                 await self._post_failure_message(event)
+            elif event.event_type in ("prediction.warning", "prediction.alert"):
+                await self._post_prediction_message(event)
         except SlackApiError as exc:
             log.warning(
                 "slack.api_error",
@@ -390,7 +392,9 @@ class SlackNotifier:
         matched_history = data.get("matched_history", [])
 
         # Header diferenciado por nível
-        if event_level == "prediction.alert":
+        if event_level == "prediction.critical":
+            header_text = f"🚨 Incident Imminent — ETA ~{eta:.1f} min" if eta is not None else "🚨 Incident Imminent"
+        elif event_level == "prediction.alert":
             header_text = f"⚠️ Degradation Alert — Incident likely in ~{eta:.1f} min" if eta is not None else "⚠️ Degradation Alert"
         else:
             header_text = f"📈 Degradation Warning — Risk {risk_score:.0f}%"
@@ -425,6 +429,30 @@ class SlackNotifier:
             {"type": "section", "text": {"type": "mrkdwn", "text": f"*Signals:* {signals_text}"}},
             {"type": "section", "text": {"type": "mrkdwn", "text": f"*Historical Match:* {history_text}"}},
         ]
+
+    async def _post_prediction_message(self, event: LifecycleEvent) -> None:
+        """Envia mensagem Slack para eventos prediction.warning, alert e critical."""
+        blocks = self._build_prediction_blocks(event.data)
+        event_level = event.data.get("event_level", event.event_type)
+        if event_level == "prediction.critical":
+            color = "#8b0000"  # vermelho escuro — iminente
+        elif event.event_type == "prediction.alert":
+            color = "#f2495c"  # vermelho
+        else:
+            color = "#ff780a"  # laranja
+        scenario = event.data.get("scenario", event.correlation_id)
+
+        async def _send() -> None:
+            await self._client.chat_postMessage(
+                channel=self._channel,
+                text=f"{event.event_type}: {scenario}",
+                attachments=[{"color": color, "blocks": blocks}],
+            )
+
+        await self._send_with_retry(_send, context="_post_prediction_message",
+                                    correlation_id=event.correlation_id)
+        log.info("slack.prediction_posted", event_type=event.event_type,
+                 correlation_id=event.correlation_id)
 
     def _build_final_blocks(self, event: LifecycleEvent) -> list[dict]:
         """Monta blocos finais com diagnostico completo para leitura mobile."""

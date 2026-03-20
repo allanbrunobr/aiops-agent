@@ -47,7 +47,7 @@ class ScenarioEngine:
 
         # Player e analisador preditivo (painel esquerdo / modo normal)
         self._player = ScenarioPlayer(corpus, speed_factor=cfg.speed_factor)
-        self._analyzer = DemoAnalyzer(enable_prediction=cfg.enable_prediction)
+        self._analyzer = DemoAnalyzer(enable_prediction=cfg.enable_prediction, ewma_threshold=cfg.ewma_threshold)
 
         # Buffers acumulados para análise
         self._logs: list[LogEntry] = []

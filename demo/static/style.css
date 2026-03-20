@@ -60,6 +60,8 @@ body {
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
+  position: relative;
+  z-index: 1001; /* acima do prediction-banner (1000) — mantém botões clicáveis */
 }
 
 .header h1 {

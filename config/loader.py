@@ -77,7 +77,7 @@ class WebhookConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     enabled: bool = False
-    port: int = 8000
+    port: int = 47890
 
 
 class SlackConfig(BaseModel):

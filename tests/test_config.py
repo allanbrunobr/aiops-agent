@@ -39,7 +39,7 @@ class TestAppConfigDefaults:
         """WebhookConfig carrega com valores padrao."""
         config = AppConfig()
         assert config.webhook.enabled is False
-        assert config.webhook.port == 8000
+        assert config.webhook.port == 47890
 
     def test_slack_defaults(self):
         """SlackConfig carrega com valores padrao."""

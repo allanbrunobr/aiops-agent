@@ -17,9 +17,13 @@ from pipeline.trace_predictor import analyze_trace_signals, LatencyDriftSignal
 class DemoAnalyzer:
     """Executa análise preditiva incremental sobre o buffer de eventos do tick."""
 
-    def __init__(self, enable_prediction: bool = True) -> None:
+    def __init__(self, enable_prediction: bool = True, ewma_threshold: float = 0.90) -> None:
         # Se False, usa apenas desvios 3-sigma sem sinais preditivos
         self.enable_prediction = enable_prediction
+        # Limiar para cálculo de ETA (ex: 7200.0 para memory_used_mb, 0.90 para métricas normalizadas)
+        self.ewma_threshold = ewma_threshold
+        # Contador de ticks sustentados acima do limiar de warning (escalação progressiva)
+        self._warning_ticks: int = 0
 
     def analyze(
         self,
@@ -79,7 +83,7 @@ class DemoAnalyzer:
         )
         if primary_metric and len(primary_metric) >= 2:
             slope, eta_minutes = compute_ewma_slope(
-                primary_metric, span=10, threshold=0.90
+                primary_metric, span=10, threshold=self.ewma_threshold
             )
             metric_signal = MetricTrendSignal(
                 slope=slope,
@@ -94,6 +98,17 @@ class DemoAnalyzer:
 
         # 4. Score de risco composto
         risk_score = compute_risk_score(metric_signal, log_signal, latency_signal)
+
+        # Escalação progressiva para demo: quanto mais tempo o sistema fica degradado,
+        # maior a confiança de incidente. A cada 15 ticks com risco >= 30, +5 pontos (máx +30).
+        # 15 ticks @ 1fps = ~15s reais → warning visível ~45s antes de virar alert.
+        if risk_score >= 30.0:
+            self._warning_ticks += 1
+            bonus = min(30.0, (self._warning_ticks // 15) * 5.0)
+            risk_score = min(100.0, risk_score + bonus)
+        else:
+            self._warning_ticks = 0
+
         event_level = get_event_level(risk_score)
 
         # 5. Monta sinais para o TickFrame

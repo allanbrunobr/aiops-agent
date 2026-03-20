@@ -8,7 +8,7 @@ contactPoints:
       - uid: aiops-webhook-receiver
         type: webhook
         settings:
-          url: "http://host.docker.internal:8000/webhook"
+          url: "http://host.docker.internal:47890/webhook"
           httpMethod: POST
           authorization_scheme: Bearer
           authorization_credentials: "test-grafana-token-local"

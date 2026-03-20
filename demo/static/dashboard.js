@@ -99,8 +99,13 @@ function initCompareCharts() {
   latRight = new uPlot(buildLineOpts("lat-right", ["p95 ms"]), [[], []], document.getElementById("lat-right"));
 }
 
-function buildGaugeOption(value) {
-  const color = value < 60 ? "#73bf69" : value < 80 ? "#ff780a" : "#f2495c";
+function buildGaugeOption(value, eventLevel) {
+  // Cor baseada no prediction.event_level (não no score bruto),
+  // pois o score varia por cenário mas o nível semântico é universal
+  let color;
+  if (eventLevel === "prediction.alert") color = "#f2495c";
+  else if (eventLevel === "prediction.warning") color = "#ff780a";
+  else color = "#73bf69";
   return {
     backgroundColor: "transparent",
     series: [{
@@ -150,7 +155,7 @@ function buildLineOpts(containerId, seriesNames, colors) {
 // ------------------------------------------------------------------ //
 function handleTickFrame(frame) {
   updateHeader(frame);
-  updateGauge(gaugeChart, "risk-value", frame.risk_score);
+  updateGauge(gaugeChart, "risk-value", frame.risk_score, frame.prediction && frame.prediction.event_level);
   updateLineSeries(frame);
   updateLogs("log-stream", frame.recent_logs);
   updatePredictionCard(frame);
@@ -180,12 +185,12 @@ function handleCompareFrame(data) {
   updateHeader(left);
 
   // Painéis esquerdos
-  updateGauge(gaugeLeft, "risk-left", left.risk_score);
+  updateGauge(gaugeLeft, "risk-left", left.risk_score, left.prediction && left.prediction.event_level);
   updateCompareLineSeries(left, cpuLeft, latLeft, series.cpuL, series.latL);
   updateLogs("logs-left", left.recent_logs);
 
   // Painéis direitos
-  updateGauge(gaugeRight, "risk-right", right.risk_score);
+  updateGauge(gaugeRight, "risk-right", right.risk_score, right.prediction && right.prediction.event_level);
   updateCompareLineSeries(right, cpuRight, latRight, series.cpuR, series.latR);
   updateLogs("logs-right", right.recent_logs);
 
@@ -219,13 +224,15 @@ function updateHeader(frame) {
   if (scenarioEl) scenarioEl.textContent = frame.scenario_name || "";
 }
 
-function updateGauge(chart, valueElId, riskScore) {
+function updateGauge(chart, valueElId, riskScore, eventLevel) {
   if (!chart) return;
-  chart.setOption(buildGaugeOption(Math.round(riskScore)));
+  chart.setOption(buildGaugeOption(Math.round(riskScore), eventLevel));
   const el = document.getElementById(valueElId);
   if (!el) return;
   el.textContent = Math.round(riskScore);
-  el.className = "risk-value" + (riskScore >= 80 ? " alert" : riskScore >= 60 ? " warning" : "");
+  el.className = "risk-value"
+    + (eventLevel === "prediction.alert" ? " alert"
+       : eventLevel === "prediction.warning" ? " warning" : "");
 }
 
 function updateLineSeries(frame) {
@@ -246,8 +253,8 @@ function updateLineSeries(frame) {
   if (memChart)     memChart.setData([series.ts, series.mem]);
   if (latencyChart) latencyChart.setData([series.ts, series.lat95, series.lat99]);
 
-  // WM2: cone de deriva de latência
-  drawLatencyCone(frame);
+  // WM2: cone de deriva de latência (isolado para não quebrar o resto do frame)
+  try { drawLatencyCone(frame); } catch (e) { /* ignora erros de canvas */ }
 }
 
 function updateCompareLineSeries(frame, cpuC, latC, cpuBuf, latBuf) {
@@ -300,6 +307,18 @@ function updatePredictionCard(frame) {
   levelEl.textContent = pred.event_level || "—";
   etaEl.textContent = pred.eta_minutes != null ? `ETA: ~${pred.eta_minutes.toFixed(1)}min` : "";
   sigEl.textContent = pred.signals_fired ? `Signals: ${pred.signals_fired.join(", ")}` : "";
+
+  // Sincroniza banner e eta-marker com o ETA em tempo real (evita valor congelado
+  // do momento da primeira transição WARNING)
+  if (pred.eta_minutes != null) {
+    const etaStr = pred.eta_minutes.toFixed(1);
+    const bannerEta = document.getElementById("banner-eta");
+    if (bannerEta) bannerEta.textContent = etaStr;
+    const etaMarker = document.getElementById("eta-marker");
+    if (etaMarker && etaMarker.style.opacity !== "0") {
+      etaMarker.textContent = `⏱ ETA ~${etaStr}min`;
+    }
+  }
 }
 
 function updateTimeline(frame) {
@@ -420,10 +439,8 @@ function drawLatencyCone(frame) {
   // Cone é desenhado via uPlot draw hook — configurado no buildLineOpts
   // para simplicidade, desenhamos sobre o canvas via over element
   if (!latencyChart || !_coneData) return;
-  const over = latencyChart.over;
-  if (!over) return;
-
-  const ctx = over.getContext("2d");
+  // uPlot: ctx é o CanvasRenderingContext2D diretamente; .over é um <div> de mouse overlay
+  const ctx = latencyChart.ctx;
   if (!ctx) return;
 
   const { currentP95, slope } = _coneData;

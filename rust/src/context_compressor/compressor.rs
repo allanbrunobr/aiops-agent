@@ -36,20 +36,6 @@ fn truncate_str(s: &str, max_chars: usize) -> &str {
     &s[..end]
 }
 
-/// Trunca string a N codepoints Unicode para limitar tokens.
-fn truncate_str(s: &str, max_chars: usize) -> &str {
-    let mut end = s.len();
-    let mut count = 0;
-    for (i, _) in s.char_indices() {
-        if count >= max_chars {
-            end = i;
-            break;
-        }
-        count += 1;
-    }
-    &s[..end]
-}
-
 /// Formato ultra-compacto de log: apenas template (level/svc omitidos — redundantes com header/marker)
 fn format_log_chunk(tpl: &LogTemplateProxy) -> String {
     let tmpl = truncate_str(&tpl.template, 35);

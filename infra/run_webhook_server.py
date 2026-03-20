@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
     """Lifecycle: inicia pipeline runner no startup, para no shutdown."""
     runner: PipelineRunner = app.state.pipeline_runner
     await runner.start()
-    log.info("webhook_server.started", port=8000)
+    log.info("webhook_server.started", port=47890)
     yield
     await runner.stop()
     log.info("webhook_server.stopped")
@@ -95,11 +95,11 @@ if __name__ == "__main__":
     print("=" * 60)
     print("AIOps Agent — Webhook Server")
     print("=" * 60)
-    print(f"  Listening:    http://0.0.0.0:8000")
-    print(f"  Health:       http://localhost:8000/health")
-    print(f"  Webhook:      POST http://localhost:8000/webhook")
+    print(f"  Listening:    http://0.0.0.0:47890")
+    print(f"  Health:       http://localhost:47890/health")
+    print(f"  Webhook:      POST http://localhost:47890/webhook")
     print(f"  .env.local:   {'loaded' if env_file.exists() else 'NOT FOUND'}")
     print(f"  GRAFANA_TOKEN: {'set' if os.environ.get('GRAFANA_WEBHOOK_TOKEN') else 'MISSING'}")
     print(f"  SLACK_TOKEN:   {'set' if os.environ.get('SLACK_BOT_TOKEN') else 'MISSING'}")
     print("=" * 60)
-    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+    uvicorn.run(app, host="0.0.0.0", port=47890, log_level="info")

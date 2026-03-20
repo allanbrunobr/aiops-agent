@@ -29,6 +29,7 @@ class DemoScenarioConfig:
     enable_llm: bool = False
     risk_warning_threshold: float = 60.0
     risk_alert_threshold: float = 80.0
+    ewma_threshold: float = 0.90  # limiar para ETA; override por cenário (ex: 7200.0 para MB)
 
 
 def build_payment_pool_corpus() -> list[CorpusItem]:
@@ -336,6 +337,10 @@ SCENARIOS: dict[str, dict] = {
         "duration_sim_minutes": 60,
         "requires_llm": False,
         "corpus_builder": build_memory_leak_corpus,
+        # Leak gradual: score estabiliza em ~38-54; limiares padrão 60/80 nunca seriam atingidos
+        "risk_warning_threshold": 35.0,
+        "risk_alert_threshold": 50.0,
+        "ewma_threshold": 7200.0,  # 90% de 7987MB para cálculo de ETA correto
     },
     "unknown-fault": {
         "name": "unknown-fault",

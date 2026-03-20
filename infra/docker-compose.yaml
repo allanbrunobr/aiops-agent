@@ -48,7 +48,7 @@ services:
       dockerfile: Dockerfile
     container_name: aiops-slack-mock
     ports:
-      - "8003:8001"
+      - "47892:47892"
     restart: unless-stopped
 
 volumes:
