@@ -123,6 +123,8 @@ class ObservabilityIndexer:
             nlist = min(100, max(4, n // 39))
             quantizer = faiss.IndexFlatIP(dim)
             self.index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
+            # Reduz iterações de k-means para treino mais rápido (5 suficiente para aproximação)
+            self.index.cp.niter = 5
             self.index.train(embeddings)
             # Mantém ~50 vetores buscados/query para consistência de tempo entre volumes
             self.index.nprobe = max(1, min(nlist, 50 * nlist // max(n, 1)))
@@ -452,6 +454,8 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
             nlist = min(100, max(4, n // 39))
             quantizer = faiss.IndexFlatIP(dim)
             self.index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
+            # Reduz iterações de k-means para treino mais rápido (5 suficiente para aproximação)
+            self.index.cp.niter = 5
             self.index.train(embeddings)
             # Mantém ~50 vetores buscados/query para consistência de tempo entre volumes
             self.index.nprobe = max(1, min(nlist, 50 * nlist // max(n, 1)))
