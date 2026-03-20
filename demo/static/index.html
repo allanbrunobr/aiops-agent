@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AIOps Agent — Live Demo</title>
+
+  <!-- uPlot -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.iife.min.js"></script>
+
+  <!-- ECharts -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+
+  <!-- GSAP -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+
+  <link rel="stylesheet" href="/demo/static/style.css" />
+</head>
+<body>
+
+<!-- Prediction Banner (WM1) -->
+<div id="prediction-banner">⚠️ Prediction: incident in <span id="banner-eta">?</span>min</div>
+
+<!-- HEADER -->
+<div class="header">
+  <h1>🔬 AIOps Agent</h1>
+  <span id="phase-badge" class="phase-badge IDLE">IDLE</span>
+  <span id="scenario-name" style="color: var(--text-muted); font-size: 11px;"></span>
+
+  <div class="header-controls">
+    <!-- Seletor de cenário -->
+    <span class="scenario-label">Scenario:</span>
+    <select id="scenario-select">
+      <option value="payment-pool-exhaustion">Payment Pool Exhaustion</option>
+      <option value="memory-leak">JVM Memory Leak</option>
+      <option value="unknown-fault">Unknown Fault Mode</option>
+    </select>
+
+    <!-- Seletor de velocidade -->
+    <span class="speed-label">Speed:</span>
+    <select id="speed-select">
+      <option value="1">1x</option>
+      <option value="2">2x</option>
+      <option value="4" selected>4x</option>
+      <option value="8">8x</option>
+    </select>
+
+    <!-- Botões de controle -->
+    <button class="btn" id="start-btn" onclick="startDemo()">▶ Start Demo</button>
+    <button class="btn danger" id="stop-btn" onclick="stopDemo()" style="display:none">⏹ Stop</button>
+    <button class="btn" id="compare-btn" onclick="toggleCompare()">⚖ Compare</button>
+    <button class="btn" id="postmortem-btn" onclick="downloadPostmortem()">📄 Postmortem</button>
+
+    <!-- Lead time counter (modo comparação) -->
+    <div id="lead-time-counter" class="hidden">🏆 Lead time: 0m 0s</div>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main-content" id="main-content">
+
+  <!-- Painel único (modo normal) -->
+  <div id="single-panel">
+    <div class="dashboard-grid">
+
+      <!-- Painel CPU -->
+      <div class="panel" style="position:relative;">
+        <div class="panel-title">CPU Usage</div>
+        <div class="anomaly-zone-overlay" id="anomaly-cpu"></div>
+        <div id="cpu-chart" style="height:130px;"></div>
+      </div>
+
+      <!-- Painel Gauge (Risk Score) -->
+      <div class="panel panel-gauge">
+        <div class="panel-title">Risk Score</div>
+        <div id="gauge-chart"></div>
+        <div class="risk-value" id="risk-value">0</div>
+        <div id="eta-marker"></div>
+      </div>
+
+      <!-- Painel Memory -->
+      <div class="panel" style="position:relative;">
+        <div class="panel-title">Memory Usage</div>
+        <div class="anomaly-zone-overlay" id="anomaly-mem"></div>
+        <div id="mem-chart" style="height:130px;"></div>
+      </div>
+
+      <!-- Painel Latency -->
+      <div class="panel">
+        <div class="panel-title">Latency p95/p99 (ms)</div>
+        <div id="latency-chart" style="height:130px;"></div>
+      </div>
+
+      <!-- Painel Prediction Status -->
+      <div class="panel">
+        <div class="panel-title">Prediction Status</div>
+        <div class="prediction-card" id="prediction-card">
+          <div class="pred-level" id="pred-level" style="color: var(--text-muted);">— No Prediction —</div>
+          <div class="pred-eta" id="pred-eta"></div>
+          <div class="pred-signals" id="pred-signals"></div>
+        </div>
+      </div>
+
+      <!-- Painel Log Stream -->
+      <div class="panel panel-logs">
+        <div class="panel-title">Log Stream</div>
+        <div class="log-stream" id="log-stream"></div>
+      </div>
+
+      <!-- Painel Incident Timeline -->
+      <div class="panel panel-timeline">
+        <div class="panel-title">Incident Timeline</div>
+        <div class="timeline-list" id="timeline-list"></div>
+        <!-- RAG Cards (WM3) -->
+        <div id="rag-cards"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Painéis duplos (modo comparação) -->
+  <div id="compare-left" class="compare-panel" style="display:none;">
+    <div class="compare-panel-label predictive">🔮 Predictive</div>
+    <div class="dashboard-grid" id="compare-left-grid">
+      <div class="panel"><div class="panel-title">CPU Usage</div><div id="cpu-left" style="height:110px;"></div></div>
+      <div class="panel panel-gauge"><div class="panel-title">Risk Score</div><div id="gauge-left" style="height:120px;"></div><div class="risk-value" id="risk-left">0</div></div>
+      <div class="panel"><div class="panel-title">Latency p95 (ms)</div><div id="lat-left" style="height:110px;"></div></div>
+      <div class="panel panel-logs"><div class="panel-title">Logs</div><div class="log-stream" id="logs-left"></div></div>
+    </div>
+  </div>
+
+  <div id="compare-right" class="compare-panel" style="display:none;">
+    <div class="compare-panel-label traditional">📊 Traditional</div>
+    <div class="dashboard-grid" id="compare-right-grid">
+      <div class="panel"><div class="panel-title">CPU Usage</div><div id="cpu-right" style="height:110px;"></div></div>
+      <div class="panel panel-gauge"><div class="panel-title">Risk Score</div><div id="gauge-right" style="height:120px;"></div><div class="risk-value" id="risk-right">0</div></div>
+      <div class="panel"><div class="panel-title">Latency p95 (ms)</div><div id="lat-right" style="height:110px;"></div></div>
+      <div class="panel panel-logs"><div class="panel-title">Logs</div><div class="log-stream" id="logs-right"></div></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="/demo/static/dashboard.js"></script>
+</body>
+</html>
