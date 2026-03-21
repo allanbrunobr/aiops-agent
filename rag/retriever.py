@@ -4,11 +4,14 @@ Retriever semântico para busca em dados de observabilidade indexados.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import warnings
 
 import numpy as np
 from rag.indexer import ObservabilityIndexer, IndexedChunk
+
+_query_cache: dict[str, np.ndarray] = {}
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +73,13 @@ class ObservabilityRetriever:
             and source_filter is None  # reranking não combinado com source_filter
         )
 
-        query_embedding = self.indexer.model.encode([query], normalize_embeddings=True)
-        query_embedding = np.array(query_embedding, dtype=np.float32)
+        key = hashlib.md5(query.encode()).hexdigest()
+        if key not in _query_cache:
+            _query_cache[key] = np.array(
+                self.indexer.model.encode([query], normalize_embeddings=True),
+                dtype=np.float32,
+            )
+        query_embedding = _query_cache[key]
 
         if reranking_active:
             # Recupera top_k*2 candidatos para o reranker refinar
@@ -80,9 +88,12 @@ class ObservabilityRetriever:
             # Busca mais do que top_k para compensar filtragem
             faiss_k = top_k * 3 if source_filter else top_k
 
+        # Índice FAISS contém apenas embeddings únicos; mapeia de volta para chunks
+        faiss_to_chunks = getattr(self.indexer, "_faiss_to_chunks", None)
+        n_faiss = self.indexer.index.ntotal
         distances, indices = self.indexer.index.search(
             query_embedding,
-            min(faiss_k, len(self.indexer.chunks)),
+            min(faiss_k, n_faiss),
         )
 
         results = []
@@ -90,8 +101,19 @@ class ObservabilityRetriever:
         for dist, idx in zip(distances[0], indices[0]):
             if idx < 0:
                 continue
-            chunk = self.indexer.chunks[idx]
-            if source_filter and chunk.source != source_filter:
+            # Resolve FAISS idx → chunk(s)
+            if faiss_to_chunks is not None:
+                chunk_indices = faiss_to_chunks[idx]
+                chunk = next(
+                    (self.indexer.chunks[ci] for ci in chunk_indices
+                     if not source_filter or self.indexer.chunks[ci].source == source_filter),
+                    None,
+                )
+            else:
+                chunk = self.indexer.chunks[idx]
+                if source_filter and chunk.source != source_filter:
+                    chunk = None
+            if chunk is None:
                 continue
             results.append(SearchResult(
                 chunk=chunk,
