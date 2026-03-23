@@ -157,6 +157,27 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.include_router(a2a_router)
     log.info("a2a.router.mounted")
 
+    # --------------------------------------------------------
+    # app.state — engine e retriever para handlers A2A
+    # --------------------------------------------------------
+    from blueprint.engine import BlueprintEngine
+    from rag.indexer import ObservabilityIndexer
+    from rag.retriever import ObservabilityRetriever
+
+    app.state.config = config
+    app.state.engine = BlueprintEngine(config=config)
+    app.state.retriever = ObservabilityRetriever(ObservabilityIndexer())
+    log.info("a2a.state.populated", engine=type(app.state.engine).__name__)
+
+    # --------------------------------------------------------
+    # Validação de configuração OAuth
+    # --------------------------------------------------------
+    if config.mcp.auth_method == "oauth21" and not config.mcp.oauth.jwt_secret:
+        log.warning(
+            "oauth.misconfiguration",
+            detail="auth_method=oauth21 with empty jwt_secret — all tokens accepted!",
+        )
+
     return app
 
 

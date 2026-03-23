@@ -149,6 +149,28 @@ class ObservabilityRetriever:
         """Busca apenas em traces lentos."""
         return self.search(query, top_k=top_k, source_filter="trace")
 
+    async def retrieve(self, query: str, top_k: int = 5) -> list[dict]:
+        """Interface async para uso em handlers A2A e MCP SSE.
+
+        Executa search() em thread separada (não bloqueia o event loop) e
+        serializa SearchResult para dicts compatíveis com o protocolo A2A.
+
+        Returns:
+            Lista de dicts com keys: id, summary, score, source.
+        """
+        import asyncio
+
+        raw: list[SearchResult] = await asyncio.to_thread(self.search, query, top_k)
+        return [
+            {
+                "id": f"{r.chunk.source}-{i}",
+                "summary": r.chunk.text,
+                "score": round(float(r.score), 4),
+                "source": r.chunk.source,
+            }
+            for i, r in enumerate(raw)
+        ]
+
     def format_results(self, results: list[SearchResult]) -> str:
         """Formata resultados para o LLM."""
         if not results:
