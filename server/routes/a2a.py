@@ -128,6 +128,13 @@ async def handle_task(request: Request) -> dict:
 # Handlers de skill — traduzem A2A → pipeline existente
 # ---------------------------------------------------------------------------
 
+def _map_severity(raw: str) -> str:
+    """Normaliza severity A2A → NormalizedAlert (critical/error/warning/info)."""
+    _MAP = {"high": "error", "medium": "warning", "low": "info", "p1": "critical", "p2": "error"}
+    normalized = raw.lower()
+    return _MAP.get(normalized, normalized) if normalized not in ("critical", "error", "warning", "info") else normalized
+
+
 async def _handle_diagnose(task_id: str, data: dict, request: Request) -> list[dict]:
     """Traduz task A2A diagnose_incident → BlueprintEngine."""
     engine = getattr(request.app.state, "engine", None)
@@ -135,19 +142,31 @@ async def _handle_diagnose(task_id: str, data: dict, request: Request) -> list[d
         return [_error_artifact("engine_unavailable", "BlueprintEngine not initialized")]
 
     try:
+        from datetime import datetime, timezone
         from core.models import IncidentState, NormalizedAlert
 
+        now = datetime.now(timezone.utc)
         alert = NormalizedAlert(
             source=data.get("source", "a2a"),
-            severity=data.get("severity", "high"),
-            title=data.get("title", ""),
-            description=data.get("description", ""),
-            service=data.get("service"),
+            source_id=data.get("source_id", task_id),
             correlation_id=task_id,
+            title=data.get("title", "Incident via A2A"),
+            description=data.get("description", ""),
+            severity=_map_severity(data.get("severity", "error")),
+            alert_type=data.get("alert_type", "A2ATask"),
+            timestamp=data.get("timestamp", now),
+            detection_timestamp=data.get("detection_timestamp", now),
+            service=data.get("service"),
         )
-        state = IncidentState(incident_id=task_id, alert=alert)
+        state = IncidentState(
+            incident_id=task_id,
+            correlation_id=task_id,
+            alert=alert,
+            received_at=now,
+            started_at=alert.timestamp,
+        )
 
-        from core.lifecycle import build_incident_response_pipeline
+        from blueprint.pipelines.incident_response import build_incident_response_pipeline
         config = getattr(request.app.state, "config", None)
         pipeline = build_incident_response_pipeline(config)
         result = engine.run(pipeline, state)
