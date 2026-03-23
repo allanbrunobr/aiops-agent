@@ -4,11 +4,13 @@ Transporte SSE do MCP Server para o AIOps Agent.
 Monta endpoints SSE do MCP em uma aplicação FastAPI existente.
 Autenticação via Bearer JWT (OAuth 2.1) ou header X-Client-Id (legado).
 
-auth_method="oauth21" — valida Bearer JWT, extrai sub + scopes do token.
-auth_method="header"  — comportamento legado: X-Client-Id obrigatório.
-auth_method="none"    — sem autenticação (confiança implícita, dev only).
+auth_method="oauth21"   — valida Bearer JWT HS256 local, extrai sub + scopes.
+auth_method="federated" — valida Bearer JWT RS256 de IdPs externos via OIDC (Phase 2).
+auth_method="header"    — comportamento legado: X-Client-Id obrigatório.
+auth_method="none"      — sem autenticação (confiança implícita, dev only).
 
 História 5.1: Fundação do servidor MCP com transporte dual.
+Phase 2: auth_method="federated" com OIDCValidator e trusted_issuers.
 Referência: architecture.md — MCP Transport Decision, Lines 334-341.
 """
 
@@ -54,18 +56,42 @@ def mount_sse(
 
     auth_method = "header"
     jwt_secret = "dev-secret-change-in-production"
+    _oidc_validator = None
     if config is not None:
         auth_method = getattr(config, "auth_method", "header")
         oauth_cfg = getattr(config, "oauth", None)
         if oauth_cfg is not None:
             jwt_secret = getattr(oauth_cfg, "jwt_secret", jwt_secret)
 
+        # Phase 2 — inicializa OIDCValidator se auth_method="federated"
+        if auth_method == "federated":
+            from auth.oidc_validator import OIDCValidator
+            from auth.oidc_validator import TrustedIssuerConfig as _OIDCTrustedIssuerCfg
+            import structlog as _structlog
+            _log = _structlog.get_logger()
+
+            trusted_raw = getattr(oauth_cfg, "trusted_issuers", []) if oauth_cfg else []
+            if not trusted_raw:
+                _log.warning(
+                    "oidc.no_trusted_issuers",
+                    detail="auth_method=federated mas trusted_issuers está vazio — nenhum token externo será aceito",
+                )
+            _oidc_issuers = [
+                _OIDCTrustedIssuerCfg(
+                    issuer=getattr(ti, "issuer", ""),
+                    audience=getattr(ti, "audience", ""),
+                    scope_claim=getattr(ti, "scope_claim", "scope"),
+                )
+                for ti in trusted_raw
+            ]
+            _oidc_validator = OIDCValidator(trusted_issuers=_oidc_issuers)
+
     @app.get("/mcp/sse")
     async def sse_endpoint(request: Request) -> Response:
         """Endpoint SSE — cliente conecta aqui para stream de eventos MCP."""
 
         if auth_method == "oauth21":
-            # OAuth 2.1: Bearer JWT obrigatório
+            # OAuth 2.1: Bearer JWT HS256 local obrigatório
             auth_header = request.headers.get("authorization", "")
             if not auth_header.startswith("Bearer "):
                 return Response(
@@ -86,6 +112,40 @@ def mount_sse(
                 return Response(
                     status_code=401,
                     content='{"error":"invalid_token","detail":"JWT is invalid"}',
+                    media_type="application/json",
+                )
+            effective_client_id = claims.sub
+            granted_scopes = claims.scopes
+
+        elif auth_method == "federated":
+            # Phase 2 — OIDC Federation: Bearer JWT RS256 de IdP externo
+            auth_header = request.headers.get("authorization", "")
+            if not auth_header.startswith("Bearer "):
+                return Response(
+                    status_code=401,
+                    content='{"error":"unauthorized","detail":"Bearer token required"}',
+                    media_type="application/json",
+                )
+            raw_token = auth_header[7:]
+            try:
+                import asyncio
+                claims = await _oidc_validator.validate(raw_token)  # type: ignore[union-attr]
+            except pyjwt.ExpiredSignatureError:
+                return Response(
+                    status_code=401,
+                    content='{"error":"token_expired","detail":"JWT has expired"}',
+                    media_type="application/json",
+                )
+            except pyjwt.InvalidTokenError as exc:
+                return Response(
+                    status_code=401,
+                    content=f'{{"error":"invalid_token","detail":"{exc}"}}',
+                    media_type="application/json",
+                )
+            except Exception:
+                return Response(
+                    status_code=503,
+                    content='{"error":"idp_unavailable","detail":"Falha ao contactar IdP externo"}',
                     media_type="application/json",
                 )
             effective_client_id = claims.sub

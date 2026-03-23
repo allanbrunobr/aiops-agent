@@ -144,14 +144,36 @@ class OAuthClientConfig(BaseModel):
     scopes: list[str] = []
 
 
+class TrustedIssuerConfig(BaseModel):
+    """Configuração de um IdP externo confiável (Phase 2 — OIDC Federation)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    issuer: str           # URL base do IdP (ex: "https://idp.partnera.example.com")
+    audience: str         # aud esperado nos tokens deste IdP
+    scope_claim: str = "scope"  # nome do claim que contém os scopes
+
+
 class OAuthConfig(BaseModel):
-    """Configuração OAuth 2.1 para o MCP Server."""
+    """Configuração OAuth 2.1 para o MCP Server.
+
+    Phase 1: jwt_secret + allowed_clients (HS256 simétrico).
+    Phase 2: private_key_path + public_key_path + trusted_issuers (RS256 + OIDC federation).
+    """
 
     model_config = ConfigDict(frozen=True)
 
     jwt_secret: str = ""
     token_ttl: int = 3600
     allowed_clients: list[OAuthClientConfig] = []
+
+    # Phase 2 — RS256 assimétrico
+    private_key_path: str = ""   # caminho para chave privada RSA PEM
+    public_key_path: str = ""    # caminho para chave pública RSA PEM
+    kid: str = "aiops-rs256-1"   # key ID para o JWK
+
+    # Phase 2 — OIDC Federation
+    trusted_issuers: list[TrustedIssuerConfig] = []
 
 
 class McpConfig(BaseModel):
@@ -163,7 +185,7 @@ class McpConfig(BaseModel):
     transport: str = "sse"
     sse_port: int = 3001
     enabled_tools: list[str] = ["diagnose_incident", "validate_action", "search_incidents"]
-    auth_method: str = "header"
+    auth_method: str = "header"  # "header" | "oauth21" | "federated" | "none"
     oauth: OAuthConfig = OAuthConfig()
     rate_limits: dict[str, int] = {"diagnose": 10, "search": 60, "validate": 30}
 

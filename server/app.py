@@ -137,6 +137,18 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         import auth.server as auth_server
         from auth.token_store import InMemoryTokenStore
 
+        # Phase 2 — carrega chaves RSA se configuradas
+        _rsa_private_pem = None
+        _rsa_public_pem = None
+        _oauth = config.mcp.oauth
+        if _oauth.private_key_path and _oauth.public_key_path:
+            from pathlib import Path as _Path
+            _priv_path = _Path(_oauth.private_key_path)
+            _pub_path = _Path(_oauth.public_key_path)
+            if _priv_path.exists() and _pub_path.exists():
+                _rsa_private_pem = _priv_path.read_text()
+                _rsa_public_pem = _pub_path.read_text()
+
         auth_server.configure(
             jwt_secret=config.mcp.oauth.jwt_secret,
             token_ttl=config.mcp.oauth.token_ttl,
@@ -146,6 +158,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             ],
             base_url="",
             token_store=InMemoryTokenStore(),
+            rsa_private_pem=_rsa_private_pem,
+            rsa_public_pem=_rsa_public_pem,
+            kid=config.mcp.oauth.kid,
         )
         app.include_router(auth_server.router)
         log.info("oauth.server.mounted", clients=len(config.mcp.oauth.allowed_clients))
@@ -177,6 +192,20 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             "oauth.misconfiguration",
             detail="auth_method=oauth21 with empty jwt_secret — all tokens accepted!",
         )
+
+    # Phase 2 — avisa se federated sem chaves RSA configuradas
+    if config.mcp.auth_method == "federated":
+        oauth = config.mcp.oauth
+        if not oauth.private_key_path or not oauth.public_key_path:
+            log.warning(
+                "federation.no_rsa_keys",
+                detail="auth_method=federated sem private_key_path/public_key_path — JWKS endpoint retornará conjunto vazio",
+            )
+        if not oauth.trusted_issuers:
+            log.warning(
+                "federation.no_trusted_issuers",
+                detail="auth_method=federated sem trusted_issuers — nenhum token externo será aceito",
+            )
 
     return app
 
