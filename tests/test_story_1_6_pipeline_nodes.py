@@ -6,6 +6,7 @@ e execucao dos adapters com dados simulados.
 from __future__ import annotations
 
 import pytest
+from datetime import datetime, timezone
 
 from config.loader import AppConfig
 from blueprint.pipelines.incident_response import build_incident_response_pipeline
@@ -65,9 +66,16 @@ def test_aggregator_adapter_produces_report():
     state = IncidentState(
         incident_id="test-001",
         correlation_id="test-001",
+        received_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         alert=NormalizedAlert(
             source="test", source_id="t1", correlation_id="test-001",
-            title="Test", severity="high",
+            title="Test",
+            description="Teste de pipeline node",
+            severity="error",
+            alert_type="TestAlert",
+            timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            detection_timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
         ),
         metadata={
             "raw_incident_data": {
@@ -99,9 +107,16 @@ def test_diagnoser_fallback_produces_diagnosis():
     state = IncidentState(
         incident_id="test-002",
         correlation_id="test-002",
+        received_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         alert=NormalizedAlert(
             source="test", source_id="t2", correlation_id="test-002",
-            title="Test", severity="high",
+            title="Test",
+            description="Teste de pipeline node",
+            severity="error",
+            alert_type="TestAlert",
+            timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            detection_timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
         ),
         metadata={
             "raw_incident_data": {
@@ -140,9 +155,16 @@ def test_full_pipeline_no_llm():
     state = IncidentState(
         incident_id="test-003",
         correlation_id="test-003",
+        received_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         alert=NormalizedAlert(
             source="test", source_id="t3", correlation_id="test-003",
-            title="Test", severity="high",
+            title="Test",
+            description="Teste de pipeline node",
+            severity="error",
+            alert_type="TestAlert",
+            timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            detection_timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
         ),
         no_llm=True,
         metadata={

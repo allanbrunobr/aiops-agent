@@ -38,6 +38,7 @@ def _make_fake_indexer(n_results: int = 5, source: str = "log") -> object:
     mock_model.encode.return_value = np.array([[0.1] * 128], dtype=np.float32)
 
     mock_index = MagicMock()
+    mock_index.ntotal = n_results
     # Simula distances e indices retornados pelo FAISS
     distances = [[0.9 - i * 0.1 for i in range(n_results)]]
     indices = [[i for i in range(n_results)]]
@@ -47,6 +48,7 @@ def _make_fake_indexer(n_results: int = 5, source: str = "log") -> object:
     indexer.model = mock_model
     indexer.index = mock_index
     indexer.chunks = chunks
+    indexer._faiss_to_chunks = None  # evita MagicMock truthy no getattr
     return indexer
 
 

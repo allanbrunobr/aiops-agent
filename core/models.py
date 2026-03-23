@@ -12,6 +12,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# Verditos validos para o endpoint de accuracy (importado por server/api/accuracy.py)
+VALID_ACCURACY_VERDICTS = frozenset({"correct", "partially_correct", "incorrect", "false_positive"})
+
 
 class NormalizedAlert(BaseModel):
     """Esquema unificado de alerta produzido por todos os normalizadores."""
@@ -92,3 +95,12 @@ class IncidentState(BaseModel):
     # Flags de modo
     no_llm: bool = False
     no_rag: bool = False
+
+    # Acurácia de diagnóstico (Story 3.3)
+    accuracy_status: str = "pending_review"  # "pending_review" | "reviewed"
+    accuracy_verdict: str | None = None      # "correct" | "partially_correct" | "incorrect" | "false_positive"
+    accuracy_notes: str | None = None
+    reviewed_at: datetime | None = None
+
+    # Dados brutos e resultados de processamento (usado pelo sanitizer adapter e testes)
+    metadata: dict[str, Any] = Field(default_factory=dict)

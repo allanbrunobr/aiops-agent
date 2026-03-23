@@ -6,6 +6,7 @@ aplicando regras de on_failure (ABORT, SKIP, FALLBACK).
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass, field as dc_field
 from typing import Any
 
 from core.logging import get_logger
@@ -29,6 +30,13 @@ class LLMCallLimitExceeded(Exception):
     """Limite de chamadas LLM excedido."""
 
 
+@dataclass
+class PipelineRunContext:
+    """Contexto de execucao de um run do pipeline — rastreia chamadas LLM."""
+
+    llm_calls: int = 0
+
+
 class BlueprintEngine:
     """Engine que executa PipelineDefinitions."""
 
@@ -37,6 +45,15 @@ class BlueprintEngine:
         self.store = store
         self.creds = creds
         self.results: list[NodeResult] = []
+
+    def increment_llm_calls(self, ctx: PipelineRunContext, count: int = 1) -> None:
+        """Incrementa contador de chamadas LLM e levanta excecao se limite excedido."""
+        ctx.llm_calls += count
+        max_calls = getattr(getattr(self.config, "blueprint", None), "max_llm_calls", 15)
+        if ctx.llm_calls > max_calls:
+            raise LLMCallLimitExceeded(
+                f"LLM call limit exceeded: {ctx.llm_calls} > {max_calls}"
+            )
 
     def run(self, pipeline: PipelineDefinition, state: IncidentState) -> IncidentState:
         """Executa o pipeline completo.
@@ -60,7 +77,18 @@ class BlueprintEngine:
 
         self.results = []
 
-        for node in pipeline.nodes:
+        pipeline_start = time.monotonic()
+        timeout_s = getattr(getattr(self.config, "blueprint", None), "pipeline_timeout_seconds", None)
+
+        for _node_idx, node in enumerate(pipeline.nodes):
+            if (
+                _node_idx > 0
+                and timeout_s is not None
+                and (time.monotonic() - pipeline_start) > timeout_s
+            ):
+                raise PipelineAborted("timeout")
+
+
             start = time.monotonic()
             try:
                 # Se agentic + no_llm, usa fallback diretamente
@@ -145,5 +173,8 @@ class BlueprintEngine:
             nodes_run=len(self.results),
             all_success=all(r.success for r in self.results),
         )
+
+        if self.store is not None:
+            self.store.save(state.incident_id, state)
 
         return state

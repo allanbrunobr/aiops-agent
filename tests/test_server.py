@@ -41,7 +41,7 @@ async def test_health_ready_before_startup(app):
         response = await client.get("/health/ready")
         data = response.json()
         assert "status" in data
-        assert "checks" in data
+        assert "components" in data
 
 
 def test_lazy_rag_no_heavy_imports():

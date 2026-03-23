@@ -28,3 +28,7 @@ class InMemoryStore:
             (iid, s) for iid, s in self._data.items()
             if s.state not in _TERMINAL_STATES
         ]
+
+    def list_all(self) -> list[tuple[str, IncidentState]]:
+        """Lista todos os incidentes, incluindo terminais."""
+        return list(self._data.items())

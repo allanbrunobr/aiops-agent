@@ -27,7 +27,7 @@ def _make_alert(cid: str) -> NormalizedAlert:
         correlation_id=cid,
         title="Test alert",
         description="Test",
-        severity="high",
+        severity="error",
         alert_type="test",
         timestamp=now,
         detection_timestamp=now,

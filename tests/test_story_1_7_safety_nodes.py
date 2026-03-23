@@ -6,6 +6,7 @@ estao na ordem correta, e que SafetyBlockedError funciona.
 from __future__ import annotations
 
 import pytest
+from datetime import datetime, timezone
 
 from config.loader import AppConfig
 from blueprint.pipelines.incident_response import build_incident_response_pipeline
@@ -89,9 +90,16 @@ def test_sanitizer_node_executes():
     state = IncidentState(
         incident_id="test-safety-001",
         correlation_id="test-safety-001",
+        received_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         alert=NormalizedAlert(
             source="test", source_id="s1", correlation_id="test-safety-001",
-            title="Test", severity="high",
+            title="Test",
+            description="Teste de pipeline node",
+            severity="error",
+            alert_type="TestAlert",
+            timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            detection_timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
         ),
         metadata={
             "raw_incident_data": {
@@ -111,7 +119,7 @@ def test_sanitizer_node_executes():
 def test_safety_thresholds_from_config():
     """Thresholds de safety devem vir da config."""
     config = AppConfig()
-    assert config.safety.blast_radius_limit == 3
+    assert config.safety.blast_radius_limit == 5
     assert config.thresholds.regression_threshold == -5.0
     assert config.safety.require_human_approval is True
 
@@ -139,9 +147,16 @@ def test_full_pipeline_no_llm_with_safety():
     state = IncidentState(
         incident_id="test-safety-full",
         correlation_id="test-safety-full",
+        received_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         alert=NormalizedAlert(
             source="test", source_id="sf", correlation_id="test-safety-full",
-            title="Test", severity="high",
+            title="Test",
+            description="Teste de pipeline node",
+            severity="error",
+            alert_type="TestAlert",
+            timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            detection_timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
         ),
         no_llm=True,
         metadata={

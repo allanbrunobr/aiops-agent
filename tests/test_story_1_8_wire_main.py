@@ -5,6 +5,7 @@ Valida que main.py usa o Blueprint Engine, preserva CLI flags e exit codes.
 from __future__ import annotations
 
 import pytest
+from datetime import datetime, timezone
 
 
 def test_create_incident_state_has_required_fields():
@@ -81,9 +82,16 @@ def test_display_results_with_diagnosis():
     state = IncidentState(
         incident_id="test-display",
         correlation_id="test-display",
+        received_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         alert=NormalizedAlert(
             source="test", source_id="d1", correlation_id="test-display",
             title="Test",
+            description="Teste de pipeline node",
+            severity="error",
+            alert_type="TestAlert",
+            timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            detection_timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
         ),
         diagnosis={
             "root_cause": "Test root cause",
