@@ -443,6 +443,10 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
 
         # Gera embeddings com deduplicação: textos idênticos são embedados uma vez
         texts = [chunk.text for chunk in self.chunks]
+        if not texts:
+            self.index = None
+            return 0
+
         unique_texts = list(dict.fromkeys(texts))
         unique_embeddings = self.model.encode(
             unique_texts,
@@ -453,6 +457,10 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
         )
         emb_map = {t: emb for t, emb in zip(unique_texts, unique_embeddings)}
         embeddings = np.array([emb_map[t] for t in texts], dtype=np.float32)
+
+        if embeddings.ndim < 2 or embeddings.shape[0] == 0:
+            self.index = None
+            return 0
 
         dim = embeddings.shape[1]
         n = len(embeddings)

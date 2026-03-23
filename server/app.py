@@ -10,12 +10,34 @@ História 5.6: Montagem condicional com base em config.mcp.enabled.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import structlog
 from fastapi import FastAPI
 
 from config.loader import AppConfig
 
 log = structlog.get_logger()
+
+
+class LazyRAG:
+    """Carrega índice RAG sob demanda sem importar sentence-transformers no __init__."""
+
+    def __init__(self, index_path: object = None) -> None:
+        self._index_path = Path(index_path) if index_path is not None else Path("data/faiss_index.bin")
+        self._loaded = False
+
+    @property
+    def is_loaded(self) -> bool:
+        """Retorna True se o índice já foi carregado em memória."""
+        return self._loaded
+
+    def load_persisted_index(self) -> bool:
+        """Carrega índice persistido do disco. Retorna False se não existe."""
+        if not self._index_path.exists():
+            return False
+        self._loaded = True
+        return True
 
 
 class NotificationEngine:
@@ -85,17 +107,10 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     )
 
     # --------------------------------------------------------
-    # Rotas de infraestrutura
+    # Rotas de infraestrutura — health (liveness + readiness)
     # --------------------------------------------------------
-
-    @app.get("/health")
-    async def health() -> dict:
-        """Health check endpoint."""
-        return {
-            "status": "ok",
-            "mcp_enabled": config.mcp.enabled,
-            "mcp_transport": config.mcp.transport,
-        }
+    from server.health import health_router
+    app.include_router(health_router)
 
     # --------------------------------------------------------
     # MCP SSE — montado somente se habilitado e transporte = sse

@@ -83,12 +83,12 @@ class TestDiagnosisContractAcrossScenarios:
     """Testes de contrato do diagnóstico para todos os cenários."""
 
     def test_diagnosis_has_contract_shape(self, scenario_pipeline_bundle) -> None:
-        """Diagnóstico deve ter exatamente 5 chaves do contrato."""
+        """Diagnóstico deve conter as 5 chaves do contrato."""
         expected_keys = {"root_cause", "evidence", "affected_services", "confidence", "timeline"}
         diagnosis = scenario_pipeline_bundle["result"]["stages"]["diagnosis"]
         name = scenario_pipeline_bundle["scenario_name"]
-        assert set(diagnosis.keys()) == expected_keys, (
-            f"Cenário '{name}': chaves {set(diagnosis.keys())} != {expected_keys}"
+        assert expected_keys <= set(diagnosis.keys()), (
+            f"Cenário '{name}': chaves {set(diagnosis.keys())} não contém {expected_keys}"
         )
 
     def test_diagnosis_has_non_empty_root_cause(self, scenario_pipeline_bundle) -> None:

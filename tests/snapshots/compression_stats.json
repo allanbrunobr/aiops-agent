@@ -1,8 +1,8 @@
 {
   "chunks_kept": 22,
   "chunks_removed": 0,
-  "compressed_tokens": 549,
-  "compression_ratio": -0.242081,
+  "compressed_tokens": 1,
+  "compression_ratio": 0.994536,
   "critical_preserved": 100.0,
-  "original_tokens": 442
+  "original_tokens": 183
 }

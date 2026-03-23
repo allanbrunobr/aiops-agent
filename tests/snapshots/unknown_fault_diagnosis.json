@@ -6,6 +6,7 @@
     "storage-gw"
   ],
   "confidence": "low",
+  "deployed_version": "v4.0.0",
   "evidence": [
     "Config change: Deployment data-processor updated: image=data-processor:v4.0.0, config=prod-2026-03-05-ser",
     "Config change: Configuration loaded: codec=avro-v2, batch_size=1000, compression=snappy",
@@ -13,6 +14,6 @@
     "Metric anomaly: data-processor/latency_p99_ms = 3349.45 (308.8sigma)",
     "Metric anomaly: data-processor/retry_rate_percent = 46.16 (216.5sigma)"
   ],
-  "root_cause": "Unknown fault type detected in data-processor",
+  "root_cause": "Data corruption or serialization/schema error detected in data-processor",
   "timeline": "Heuristic analysis - check logs for temporal correlation"
 }

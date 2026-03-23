@@ -52,33 +52,16 @@ fn extract_log_entries(
     logs: &Bound<'_, PyList>,
 ) -> PyResult<Vec<LogEntryData>> {
     let n = logs.len();
-    // Amostrar para volumes grandes: stride=128 para 100K → 781 entries (mínimo GIL overhead)
-    let stride = if n > 50_000 { 128 } else { 1 };
-    let mut entries = Vec::with_capacity(n / stride + 1);
+    let mut entries = Vec::with_capacity(n);
 
-    if stride == 1 {
-        // Path rápido: iteração direta sem overhead de get_item
-        for log in logs.iter() {
-            let message: String = log.getattr("message")?.extract()?;
-            let level: String = log.getattr("level")?.extract()?;
-            let service: String = log.getattr("service")?.extract()?;
-            let timestamp: f64 = log.getattr("timestamp")?.call_method0("timestamp")?.extract()?;
-            let str_repr: String = log.str()?.to_str()?.to_owned();
-            entries.push(LogEntryData { message, level, service, timestamp, str_repr });
-        }
-    } else {
-        // Path strided: acessa por índice, processa apenas 1:stride elementos
-        let mut i = 0usize;
-        while i < n {
-            let log = logs.get_item(i)?;
-            let message: String = log.getattr("message")?.extract()?;
-            let level: String = log.getattr("level")?.extract()?;
-            let service: String = log.getattr("service")?.extract()?;
-            let timestamp: f64 = log.getattr("timestamp")?.call_method0("timestamp")?.extract()?;
-            let str_repr: String = log.str()?.to_str()?.to_owned();
-            entries.push(LogEntryData { message, level, service, timestamp, str_repr });
-            i += stride;
-        }
+    // Processa todos os logs sem amostragem — Rust lida com volumes grandes sem cap
+    for log in logs.iter() {
+        let message: String = log.getattr("message")?.extract()?;
+        let level: String = log.getattr("level")?.extract()?;
+        let service: String = log.getattr("service")?.extract()?;
+        let timestamp: f64 = log.getattr("timestamp")?.call_method0("timestamp")?.extract()?;
+        let str_repr: String = log.str()?.to_str()?.to_owned();
+        entries.push(LogEntryData { message, level, service, timestamp, str_repr });
     }
 
     Ok(entries)

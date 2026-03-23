@@ -75,6 +75,7 @@ def configure_logging(log_level: str | None = None) -> None:
     ]
 
     # Configura structlog
+    # cache_logger_on_first_use=False para compatibilidade com structlog.testing.capture_logs()
     structlog.configure(
         processors=[
             *shared_processors,
@@ -82,7 +83,7 @@ def configure_logging(log_level: str | None = None) -> None:
         ],
         logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.stdlib.BoundLogger,
-        cache_logger_on_first_use=True,
+        cache_logger_on_first_use=False,
     )
 
     # Configura stdlib logging para rotear pela mesma cadeia

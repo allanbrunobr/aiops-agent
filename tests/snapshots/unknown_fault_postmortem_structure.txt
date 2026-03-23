@@ -12,7 +12,7 @@
 
 ## Root Cause
 
-Unknown fault type detected in data-processor
+Data corruption or serialization/schema error detected in data-processor
 
 **Confidence**: low
 
@@ -29,7 +29,7 @@ Unknown fault type detected in data-processor
 | Time | Event |
 |------|-------|
 | NORMALIZED_TIMESTAMP | Deployment or configuration change applied |
-| NORMALIZED_TIMESTAMP | Unknown fault type detected in data-processor |
+| NORMALIZED_TIMESTAMP | Data corruption or serialization/schema error detected in data-processor |
 | NORMALIZED_TIMESTAMP | Automated detection triggered |
 | NORMALIZED_TIMESTAMP | Mitigation applied |
 
@@ -43,15 +43,15 @@ Unknown fault type detected in data-processor
 
 ## Mitigation Applied
 
-- **Action**: Collect diagnostics and escalate to on-call engineer
-- **Command**: `kubectl logs deployment/data-processor --tail=500 > /tmp/data-processor-diag.log`
+- **Action**: Rollback deployment to v3.9.2 and verify schema/data compatibility with previous version
+- **Command**: `kubectl rollout undo deployment/data-processor`
 - **Risk Level**: LOW
-- **Rollback**: `N/A`
+- **Rollback**: `kubectl rollout undo deployment/data-processor`
 
 ## Pre-Execution Safety Check
 
 - **Risk Level**: HIGH
-- **Risk Score**: 60.0/100
+- **Risk Score**: 50.0/100
 - **Approval Status**: pending_approval
 - **Requires Human**: Yes
 - **Blast Radius**: N/A

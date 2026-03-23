@@ -760,6 +760,8 @@ def _json_default(obj):
         return obj.value
     if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
         return dataclasses.asdict(obj)
+    if isinstance(obj, dict):
+        return dict(obj)
     return str(obj)
 
 

@@ -176,6 +176,20 @@ class OAuthConfig(BaseModel):
     trusted_issuers: list[TrustedIssuerConfig] = []
 
 
+_VALID_TRANSPORTS = {"stdio", "sse"}
+_KNOWN_TOOLS = {"diagnose_incident", "validate_action", "search_incidents"}
+
+
+class McpRateLimitsConfig(BaseModel):
+    """Limites de taxa por ferramenta MCP (req/min)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    diagnose: int = 10
+    search: int = 60
+    validate: int = 30
+
+
 class McpConfig(BaseModel):
     """Configuração do MCP Toolshed."""
 
@@ -187,7 +201,22 @@ class McpConfig(BaseModel):
     enabled_tools: list[str] = ["diagnose_incident", "validate_action", "search_incidents"]
     auth_method: str = "header"  # "header" | "oauth21" | "federated" | "none"
     oauth: OAuthConfig = OAuthConfig()
-    rate_limits: dict[str, int] = {"diagnose": 10, "search": 60, "validate": 30}
+    rate_limits: McpRateLimitsConfig = McpRateLimitsConfig()
+
+    @field_validator("transport")
+    @classmethod
+    def validate_transport(cls, v: str) -> str:
+        if v not in _VALID_TRANSPORTS:
+            raise ValueError(f"transport must be 'stdio' or 'sse', got '{v}'")
+        return v
+
+    @field_validator("enabled_tools")
+    @classmethod
+    def validate_tools(cls, v: list[str]) -> list[str]:
+        unknown = set(v) - _KNOWN_TOOLS
+        if unknown:
+            raise ValueError(f"Unknown MCP tools: {unknown}")
+        return v
 
 
 class NotificationsConfig(BaseModel):

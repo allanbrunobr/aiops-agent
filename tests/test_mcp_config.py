@@ -133,7 +133,7 @@ class TestAppConfigMcpSection:
 
     def test_env_var_override_transport(self, monkeypatch):
         """Verifica que AIOPS__MCP__TRANSPORT sobrescreve YAML."""
-        monkeypatch.setenv("AIOPS__MCP__TRANSPORT", "stdio")
+        monkeypatch.setenv("AIOPS_MCP__TRANSPORT", "stdio")
         # Reimporta para evitar cache
         import importlib
         import config.loader as loader_mod
@@ -141,18 +141,18 @@ class TestAppConfigMcpSection:
         importlib.reload(loader_mod)
         cfg = loader_mod.AppConfig()
         assert cfg.mcp.transport == "stdio"
-        monkeypatch.delenv("AIOPS__MCP__TRANSPORT", raising=False)
+        monkeypatch.delenv("AIOPS_MCP__TRANSPORT", raising=False)
 
     def test_env_var_override_rate_limit(self, monkeypatch):
         """Verifica que AIOPS__MCP__RATE_LIMITS__DIAGNOSE sobrescreve nested value."""
-        monkeypatch.setenv("AIOPS__MCP__RATE_LIMITS__DIAGNOSE", "20")
+        monkeypatch.setenv("AIOPS_MCP__RATE_LIMITS__DIAGNOSE", "20")
         import importlib
         import config.loader as loader_mod
 
         importlib.reload(loader_mod)
         cfg = loader_mod.AppConfig()
         assert cfg.mcp.rate_limits.diagnose == 20
-        monkeypatch.delenv("AIOPS__MCP__RATE_LIMITS__DIAGNOSE", raising=False)
+        monkeypatch.delenv("AIOPS_MCP__RATE_LIMITS__DIAGNOSE", raising=False)
 
     def test_custom_yaml_loads_correctly(self, tmp_path):
         """Verifica que YAML custom com overrides MCP carrega corretamente."""

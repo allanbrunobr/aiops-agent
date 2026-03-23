@@ -73,11 +73,8 @@ class LogParser:
         """
         import random as _rng
         if _RUST_AVAILABLE:
-            if len(logs) > self._SAMPLE_THRESHOLD:
-                sampled = _rng.sample(logs, self._SAMPLE_THRESHOLD)
-            else:
-                sampled = logs
-            return self._rust_parse(sampled)
+            # Rust processa todos os logs sem cap de amostragem
+            return self._rust_parse(logs)
         return self._python_drain3_parse(logs)
 
     def _rust_parse(self, logs: list) -> list[LogTemplate]:

@@ -6,9 +6,9 @@
     "level": "ERROR",
     "relevance_score": 8.0,
     "sample_messages": [
-      "2026-03-04 14:23:08.000 ERROR [payment-svc] Circuit breaker OPEN for database calls (75 failures in 60s)",
-      "2026-03-04 14:23:20.000 ERROR [payment-svc] Circuit breaker OPEN for database calls (162 failures in 60s)",
-      "2026-03-04 14:23:22.000 ERROR [payment-svc] Circuit breaker OPEN for database calls (129 failures in 60s)"
+      "Circuit breaker OPEN for database calls (75 failures in 60s)",
+      "Circuit breaker OPEN for database calls (162 failures in 60s)",
+      "Circuit breaker OPEN for database calls (129 failures in 60s)"
     ],
     "services": [
       "payment-svc"
@@ -22,9 +22,9 @@
     "level": "ERROR",
     "relevance_score": 8.0,
     "sample_messages": [
-      "2026-03-04 14:23:28.000 ERROR [payment-svc] Transaction aborted: connection timeout after 26s",
-      "2026-03-04 14:23:46.000 ERROR [payment-svc] Transaction aborted: connection timeout after 33s",
-      "2026-03-04 14:23:56.000 ERROR [payment-svc] Transaction aborted: connection timeout after 32s"
+      "Transaction aborted: connection timeout after 26s",
+      "Transaction aborted: connection timeout after 33s",
+      "Transaction aborted: connection timeout after 32s"
     ],
     "services": [
       "payment-svc"
@@ -38,9 +38,9 @@
     "level": "ERROR",
     "relevance_score": 8.0,
     "sample_messages": [
-      "2026-03-04 14:23:34.000 ERROR [auth-svc] Token validation failed for request from payment-svc: connection refused",
-      "2026-03-04 14:23:38.000 ERROR [auth-svc] Token validation failed for request from payment-svc: connection refused",
-      "2026-03-04 14:23:38.000 ERROR [auth-svc] Token validation failed for request from payment-svc: connection refused"
+      "Token validation failed for request from payment-svc: connection refused",
+      "Token validation failed for request from payment-svc: connection refused",
+      "Token validation failed for request from payment-svc: connection refused"
     ],
     "services": [
       "auth-svc"
@@ -54,9 +54,9 @@
     "level": "ERROR",
     "relevance_score": 8.0,
     "sample_messages": [
-      "2026-03-04 14:23:53.000 ERROR [gateway] Circuit breaker tripped for payment-svc, routing to fallback",
-      "2026-03-04 14:23:54.000 ERROR [gateway] Circuit breaker tripped for payment-svc, routing to fallback",
-      "2026-03-04 14:24:07.000 ERROR [gateway] Circuit breaker tripped for payment-svc, routing to fallback"
+      "Circuit breaker tripped for payment-svc, routing to fallback",
+      "Circuit breaker tripped for payment-svc, routing to fallback",
+      "Circuit breaker tripped for payment-svc, routing to fallback"
     ],
     "services": [
       "gateway"
@@ -70,9 +70,9 @@
     "level": "ERROR",
     "relevance_score": 6.5,
     "sample_messages": [
-      "2026-03-04 14:23:01.000 ERROR [payment-svc] Connection to 10.0.1.47:5432 timed out after 30s",
-      "2026-03-04 14:23:18.000 ERROR [payment-svc] Connection to 10.0.1.46:5432 timed out after 30s",
-      "2026-03-04 14:23:26.000 ERROR [payment-svc] Connection to 10.0.1.47:5432 timed out after 30s"
+      "Connection to 10.0.1.47:5432 timed out after 30s",
+      "Connection to 10.0.1.46:5432 timed out after 30s",
+      "Connection to 10.0.1.47:5432 timed out after 30s"
     ],
     "services": [
       "payment-svc"
@@ -86,9 +86,9 @@
     "level": "ERROR",
     "relevance_score": 6.5,
     "sample_messages": [
-      "2026-03-04 14:23:04.000 ERROR [payment-svc] Failed to acquire connection: pool full (50/50)",
-      "2026-03-04 14:23:21.000 ERROR [payment-svc] Failed to acquire connection: pool full (50/50)",
-      "2026-03-04 14:23:21.000 ERROR [payment-svc] Failed to acquire connection: pool full (50/50)"
+      "Failed to acquire connection: pool full (50/50)",
+      "Failed to acquire connection: pool full (50/50)",
+      "Failed to acquire connection: pool full (50/50)"
     ],
     "services": [
       "payment-svc"
@@ -102,9 +102,9 @@
     "level": "ERROR",
     "relevance_score": 6.5,
     "sample_messages": [
-      "2026-03-04 14:23:07.000 ERROR [payment-svc] Connection pool exhausted, max=50, waiting=53",
-      "2026-03-04 14:23:11.000 ERROR [payment-svc] Connection pool exhausted, max=50, waiting=60",
-      "2026-03-04 14:23:17.000 ERROR [payment-svc] Connection pool exhausted, max=50, waiting=86"
+      "Connection pool exhausted, max=50, waiting=53",
+      "Connection pool exhausted, max=50, waiting=60",
+      "Connection pool exhausted, max=50, waiting=86"
     ],
     "services": [
       "payment-svc"
@@ -118,9 +118,9 @@
     "level": "ERROR",
     "relevance_score": 6.5,
     "sample_messages": [
-      "2026-03-04 14:23:36.000 ERROR [order-svc] Payment confirmation timeout for order 79391",
-      "2026-03-04 14:25:21.000 ERROR [order-svc] Payment confirmation timeout for order 69770",
-      "2026-03-04 14:25:33.000 ERROR [order-svc] Payment confirmation timeout for order 91235"
+      "Payment confirmation timeout for order 79391",
+      "Payment confirmation timeout for order 69770",
+      "Payment confirmation timeout for order 91235"
     ],
     "services": [
       "order-svc"
@@ -134,9 +134,9 @@
     "level": "ERROR",
     "relevance_score": 6.5,
     "sample_messages": [
-      "2026-03-04 14:23:37.000 ERROR [gateway] Upstream payment-svc returned 503 after 31735ms",
-      "2026-03-04 14:24:00.000 ERROR [gateway] Upstream payment-svc returned 503 after 34292ms",
-      "2026-03-04 14:24:17.000 ERROR [gateway] Upstream payment-svc returned 503 after 34387ms"
+      "Upstream payment-svc returned 503 after 31735ms",
+      "Upstream payment-svc returned 503 after 34292ms",
+      "Upstream payment-svc returned 503 after 34387ms"
     ],
     "services": [
       "gateway"
@@ -150,7 +150,7 @@
     "level": "INFO",
     "relevance_score": 3.46,
     "sample_messages": [
-      "2026-03-04 14:19:05.000 INFO [payment-svc] Configuration reloaded: max_connections=50, timeout=30s, pool_min_idle=5"
+      "Configuration reloaded: max_connections=50, timeout=30s, pool_min_idle=5"
     ],
     "services": [
       "payment-svc"
@@ -164,7 +164,7 @@
     "level": "WARN",
     "relevance_score": 3.46,
     "sample_messages": [
-      "2026-03-04 14:19:08.000 WARN [payment-svc] Connection pool resized from 200 to 50 active connections"
+      "Connection pool resized from 200 to 50 active connections"
     ],
     "services": [
       "payment-svc"
@@ -178,9 +178,9 @@
     "level": "WARN",
     "relevance_score": 2.9,
     "sample_messages": [
-      "2026-03-04 14:19:16.000 WARN [payment-svc] Connection wait time exceeded 267ms",
-      "2026-03-04 14:19:21.000 WARN [payment-svc] Connection wait time exceeded 334ms",
-      "2026-03-04 14:19:26.000 WARN [payment-svc] Connection wait time exceeded 419ms"
+      "Connection wait time exceeded 267ms",
+      "Connection wait time exceeded 334ms",
+      "Connection wait time exceeded 419ms"
     ],
     "services": [
       "payment-svc"
@@ -194,9 +194,9 @@
     "level": "WARN",
     "relevance_score": 2.86,
     "sample_messages": [
-      "2026-03-04 14:19:19.000 WARN [payment-svc] Connection pool utilization high: 44/50 active",
-      "2026-03-04 14:19:28.000 WARN [payment-svc] Connection pool utilization high: 41/50 active",
-      "2026-03-04 14:19:43.000 WARN [payment-svc] Connection pool utilization high: 48/50 active"
+      "Connection pool utilization high: 44/50 active",
+      "Connection pool utilization high: 41/50 active",
+      "Connection pool utilization high: 48/50 active"
     ],
     "services": [
       "payment-svc"
@@ -210,9 +210,9 @@
     "level": "WARN",
     "relevance_score": 2.74,
     "sample_messages": [
-      "2026-03-04 14:19:17.000 WARN [payment-svc] Slow query detected: 1480ms on SELECT from payments",
-      "2026-03-04 14:19:18.000 WARN [payment-svc] Slow query detected: 944ms on SELECT from payments",
-      "2026-03-04 14:19:49.000 WARN [payment-svc] Slow query detected: 959ms on SELECT from payments"
+      "Slow query detected: 1480ms on SELECT from payments",
+      "Slow query detected: 944ms on SELECT from payments",
+      "Slow query detected: 959ms on SELECT from payments"
     ],
     "services": [
       "payment-svc"
@@ -226,7 +226,7 @@
     "level": "INFO",
     "relevance_score": 1.96,
     "sample_messages": [
-      "2026-03-04 14:19:00.000 INFO [deployment-controller] Deployment payment-svc updated: image=payment:v2.3.1, config=prod-2026-03-04"
+      "Deployment payment-svc updated: image=payment:v2.3.1, config=prod-2026-03-04"
     ],
     "services": [
       "deployment-controller"
@@ -240,9 +240,9 @@
     "level": "INFO",
     "relevance_score": 0.85,
     "sample_messages": [
-      "2026-03-04 13:49:03.000 INFO [gateway] Connection acquired from pool (23/200 active)",
-      "2026-03-04 13:49:31.000 INFO [gateway] Connection acquired from pool (37/200 active)",
-      "2026-03-04 13:49:44.000 INFO [order-svc] Connection acquired from pool (10/200 active)"
+      "Connection acquired from pool (23/200 active)",
+      "Connection acquired from pool (37/200 active)",
+      "Connection acquired from pool (10/200 active)"
     ],
     "services": [
       "auth-svc",
@@ -259,9 +259,9 @@
     "level": "INFO",
     "relevance_score": 0.85,
     "sample_messages": [
-      "2026-03-04 13:51:20.000 INFO [payment-svc] Outbound request to order-svc completed in 27ms",
-      "2026-03-04 13:51:20.000 INFO [gateway] Outbound request to order-svc completed in 73ms",
-      "2026-03-04 13:51:41.000 INFO [order-svc] Outbound request to order-svc completed in 78ms"
+      "Outbound request to order-svc completed in 27ms",
+      "Outbound request to order-svc completed in 73ms",
+      "Outbound request to order-svc completed in 78ms"
     ],
     "services": [
       "auth-svc",
@@ -278,9 +278,9 @@
     "level": "INFO",
     "relevance_score": 0.77,
     "sample_messages": [
-      "2026-03-04 13:49:42.000 INFO [auth-svc] Cache hit for user session 3870",
-      "2026-03-04 13:51:29.000 INFO [order-svc] Cache hit for user session 4185",
-      "2026-03-04 13:51:55.000 INFO [gateway] Cache hit for user session 9004"
+      "Cache hit for user session 3870",
+      "Cache hit for user session 4185",
+      "Cache hit for user session 9004"
     ],
     "services": [
       "auth-svc",
@@ -297,9 +297,9 @@
     "level": "INFO",
     "relevance_score": 0.0,
     "sample_messages": [
-      "2026-03-04 13:49:28.000 INFO [order-svc] Request processed successfully in 61ms",
-      "2026-03-04 13:49:55.000 INFO [payment-svc] Request processed successfully in 132ms",
-      "2026-03-04 13:50:33.000 INFO [gateway] Request processed successfully in 148ms"
+      "Request processed successfully in 61ms",
+      "Request processed successfully in 132ms",
+      "Request processed successfully in 148ms"
     ],
     "services": [
       "auth-svc",
@@ -316,9 +316,9 @@
     "level": "INFO",
     "relevance_score": 0.0,
     "sample_messages": [
-      "2026-03-04 13:50:21.000 INFO [order-svc] Health check passed for order-svc",
-      "2026-03-04 13:52:09.000 INFO [order-svc] Health check passed for order-svc",
-      "2026-03-04 13:52:20.000 INFO [payment-svc] Health check passed for payment-svc"
+      "Health check passed for order-svc",
+      "Health check passed for order-svc",
+      "Health check passed for payment-svc"
     ],
     "services": [
       "auth-svc",

@@ -17,7 +17,6 @@ import pytest
 import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from unittest.mock import patch
 
 from server.routes.a2a import router as a2a_router, AGENT_CARD
 from agents.a2a_client import A2AClient
@@ -76,13 +75,6 @@ def _make_a2a_app(*, with_engine: bool = True, with_retriever: bool = True) -> F
     """App FastAPI com A2A router + state mockado."""
     app = FastAPI()
 
-    # Patch build_incident_response_pipeline para não depender do pipeline real
-    import blueprint.pipelines.incident_response as _bp
-    app.state._pipeline_patch = patch.object(
-        _bp, "build_incident_response_pipeline", return_value=None
-    )
-    app.state._pipeline_patch.start()
-
     app.include_router(a2a_router)
     if with_engine:
         app.state.engine = _MockEngine()
@@ -94,12 +86,6 @@ def _make_a2a_app(*, with_engine: bool = True, with_retriever: bool = True) -> F
 def _make_auth_a2a_app() -> FastAPI:
     """App FastAPI com OAuth + A2A router + state mockado."""
     app = FastAPI()
-
-    import blueprint.pipelines.incident_response as _bp
-    app.state._pipeline_patch = patch.object(
-        _bp, "build_incident_response_pipeline", return_value=None
-    )
-    app.state._pipeline_patch.start()
 
     auth_server.configure(
         jwt_secret=_JWT_SECRET,

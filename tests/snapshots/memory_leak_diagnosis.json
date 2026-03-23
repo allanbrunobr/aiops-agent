@@ -6,13 +6,14 @@
     "worker-svc"
   ],
   "confidence": "medium",
+  "deployed_version": "v3.1.0",
   "evidence": [
-    "Memory issue: OutOfMemoryError: heap space exhausted, triggering emergency GC (x39)",
     "Memory issue: Task dispatch failed: api-server unavailable (OOM restart in progress) (x13)",
-    "Memory issue: Memory allocation failed: cannot allocate <*> heap at <*> (x38)",
+    "Memory issue: OutOfMemoryError: heap space exhausted, triggering emergency GC (x39)",
     "Memory issue: OOM killer terminated process api-server <*> used <*> (x29)",
-    "Memory issue: Process restarted after OOM kill, uptime was <*> (x28)"
+    "Memory issue: Process restarted after OOM kill, uptime was <*> (x28)",
+    "Memory issue: Memory allocation failed: cannot allocate <*> heap at <*> (x38)"
   ],
-  "root_cause": "Memory leak detected in api-server",
+  "root_cause": "Memory leak (OOM/heap exhaustion) with unclosed connections detected in api-server",
   "timeline": "Heuristic analysis - check logs for temporal correlation"
 }

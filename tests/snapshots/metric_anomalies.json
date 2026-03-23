@@ -1,7 +1,7 @@
 [
   {
     "anomaly_type": "level_shift",
-    "description": "<gateway, error_rate_percent, level_shift: 14:25:00, value=47.7, baseline_mean=0.0, deviation=2139.1sigma>",
+    "description": "<gateway, error_rate_percent, level_shift: 14:25:00, value=47.7, baseline_mean=0.1, deviation=2139.1sigma>",
     "deviation_sigma": 2139.1,
     "mean": 0.05,
     "metric_name": "error_rate_percent",
@@ -23,7 +23,7 @@
   },
   {
     "anomaly_type": "spike",
-    "description": "<gateway, latency_p99_ms, spike: 14:27:00, value=5388.4, baseline_mean=80.9, deviation=543.7sigma>",
+    "description": "<gateway, latency_p99_ms, spike: 14:27:00, value=5388.4, baseline_mean=81.0, deviation=543.7sigma>",
     "deviation_sigma": 543.7,
     "mean": 80.95,
     "metric_name": "latency_p99_ms",
@@ -45,7 +45,7 @@
   },
   {
     "anomaly_type": "level_shift",
-    "description": "<payment-svc, cpu_usage_percent, level_shift: 14:44:00, value=91.6, baseline_mean=34.5, deviation=19.3sigma>",
+    "description": "<payment-svc, cpu_usage_percent, level_shift: 14:44:00, value=91.7, baseline_mean=34.5, deviation=19.3sigma>",
     "deviation_sigma": 19.3,
     "mean": 34.53,
     "metric_name": "cpu_usage_percent",

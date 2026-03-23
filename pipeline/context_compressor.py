@@ -22,6 +22,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 
+try:
+    import _aiops_rust as _rust
+    _RUST_AVAILABLE = True
+except ImportError:
+    _rust = None
+    _RUST_AVAILABLE = False
+
 
 class Priority(Enum):
     """Prioridade de informação para compressão."""
@@ -97,9 +104,26 @@ class ContextCompressor:
         """
         Comprime um AggregatedReport para caber no token budget.
 
+        Delega para Rust quando disponível. Fallback para Python puro.
+
         Returns:
             (compressed_text, stats)
         """
+        if _RUST_AVAILABLE and _rust is not None:
+            text, stats_dict = _rust.compress_context(report)
+            stats = CompressionStats(
+                original_tokens=stats_dict["original_tokens"],
+                compressed_tokens=stats_dict["compressed_tokens"],
+                chunks_kept=stats_dict["chunks_kept"],
+                chunks_removed=stats_dict["chunks_removed"],
+                critical_preserved=stats_dict["critical_preserved"],
+                compression_ratio=stats_dict["compression_ratio"],
+            )
+            return text, stats
+        return self._compress_python(report)
+
+    def _compress_python(self, report) -> tuple[str, CompressionStats]:
+        """Implementação Python pura — usada como fallback quando Rust não disponível."""
         # Fase 1: Classificar chunks com prioridades
         chunks = self._classify_chunks(report)
 

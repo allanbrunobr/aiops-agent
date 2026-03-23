@@ -17,9 +17,9 @@ safety:
   blast_radius_limit: 5          # Máximo de serviços afetados sem aprovação humana
   require_human_approval: true   # Sempre requer aprovação humana para ações
 
-# Blueprint Engine (stub — habilitado em épicos futuros)
+# Blueprint Engine
 blueprint:
-  enabled: false
+  enabled: true
 
 # Servidor webhook (stub — habilitado no épico 2)
 webhook:

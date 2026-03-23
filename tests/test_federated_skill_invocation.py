@@ -166,12 +166,6 @@ def _make_a2a_app() -> FastAPI:
     """App FastAPI com A2A router e infra mockada."""
     app = FastAPI()
 
-    import blueprint.pipelines.incident_response as _bp
-    app.state._pipeline_patch = patch.object(
-        _bp, "build_incident_response_pipeline", return_value=None
-    )
-    app.state._pipeline_patch.start()
-
     app.include_router(a2a_router)
     app.state.engine = _MockEngine()
     app.state.retriever = _MockRetriever()
