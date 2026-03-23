@@ -135,6 +135,39 @@ class ObservabilityConfig(BaseModel):
         return v
 
 
+class OAuthClientConfig(BaseModel):
+    """Configuração de um cliente OAuth autorizado."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    scopes: list[str] = []
+
+
+class OAuthConfig(BaseModel):
+    """Configuração OAuth 2.1 para o MCP Server."""
+
+    model_config = ConfigDict(frozen=True)
+
+    jwt_secret: str = ""
+    token_ttl: int = 3600
+    allowed_clients: list[OAuthClientConfig] = []
+
+
+class McpConfig(BaseModel):
+    """Configuração do MCP Toolshed."""
+
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = False
+    transport: str = "sse"
+    sse_port: int = 3001
+    enabled_tools: list[str] = ["diagnose_incident", "validate_action", "search_incidents"]
+    auth_method: str = "header"
+    oauth: OAuthConfig = OAuthConfig()
+    rate_limits: dict[str, int] = {"diagnose": 10, "search": 60, "validate": 30}
+
+
 class NotificationsConfig(BaseModel):
     """Configuracao de notificacoes — Story 3.6."""
 
@@ -162,6 +195,7 @@ class AppConfig(BaseSettings):
     webhook: WebhookConfig = WebhookConfig()
     slack: SlackConfig = SlackConfig()
     notifications: NotificationsConfig = NotificationsConfig()
+    mcp: McpConfig = McpConfig()
 
     @classmethod
     def settings_customise_sources(

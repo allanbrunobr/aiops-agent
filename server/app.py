@@ -130,6 +130,33 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             version_validator=version_validator,
         )
 
+    # --------------------------------------------------------
+    # OAuth 2.1 Authorization Server — sempre montado
+    # --------------------------------------------------------
+    if config.mcp.oauth.jwt_secret:
+        import auth.server as auth_server
+        from auth.token_store import InMemoryTokenStore
+
+        auth_server.configure(
+            jwt_secret=config.mcp.oauth.jwt_secret,
+            token_ttl=config.mcp.oauth.token_ttl,
+            allowed_clients=[
+                {"id": c.id, "scopes": c.scopes}
+                for c in config.mcp.oauth.allowed_clients
+            ],
+            base_url="",
+            token_store=InMemoryTokenStore(),
+        )
+        app.include_router(auth_server.router)
+        log.info("oauth.server.mounted", clients=len(config.mcp.oauth.allowed_clients))
+
+    # --------------------------------------------------------
+    # A2A (Agent-to-Agent) — sempre montado
+    # --------------------------------------------------------
+    from server.routes.a2a import router as a2a_router
+    app.include_router(a2a_router)
+    log.info("a2a.router.mounted")
+
     return app
 
 

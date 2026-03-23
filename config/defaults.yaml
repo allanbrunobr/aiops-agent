@@ -41,7 +41,17 @@ mcp:
     - diagnose_incident
     - validate_action
     - search_incidents
-  auth_method: header               # "header" (X-Client-Id) ou "none" (confiança implícita)
+  auth_method: header               # "header" (X-Client-Id), "oauth21" (Bearer JWT) ou "none"
+  oauth:
+    jwt_secret: ""                  # via env: AIOPS__MCP__OAUTH__JWT_SECRET
+    token_ttl: 3600
+    allowed_clients:
+      - id: assistant-agent
+        scopes: [aiops:diagnose, aiops:search]
+      - id: databricks-mcp
+        scopes: [aiops:search]
+      - id: sre-orchestrator
+        scopes: [aiops:diagnose, aiops:search, aiops:validate]
   rate_limits:
     diagnose: 10                    # diagnose_incident: 10 chamadas/min (caro: LLM + FAISS + safety)
     search: 60                      # search_incidents: 60 chamadas/min (barato: RAG read-only)
