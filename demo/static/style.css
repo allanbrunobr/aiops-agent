@@ -88,6 +88,14 @@ body {
 .phase-badge.WARNING    { background: var(--phase-warning); }
 .phase-badge.ALERT      { background: var(--phase-alert); }
 .phase-badge.INCIDENT   { background: var(--phase-incident); }
+.phase-badge.INCIDENT.recovering {
+  background: linear-gradient(90deg, var(--phase-incident), var(--phase-playing));
+  animation: pulse-recover 1.6s ease-in-out infinite;
+}
+@keyframes pulse-recover {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.65; }
+}
 .phase-badge.RESOLVED   { background: var(--phase-resolved); }
 
 .header-controls {
@@ -257,6 +265,33 @@ body {
 .risk-value.warning { color: var(--gauge-orange); }
 .risk-value.alert   { color: var(--gauge-red); }
 
+/* Delta de risco (+N / -N por tick) */
+.risk-delta {
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  min-height: 18px;
+  opacity: 0.6;
+  transition: opacity var(--anim-fast);
+}
+.risk-delta.falling { color: var(--gauge-green); }
+.risk-delta.rising  { color: var(--gauge-red); }
+
+/* Indicador de tendência (RECOVERING / WORSENING) */
+.risk-trend {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  text-align: center;
+  min-height: 16px;
+  margin-top: 3px;
+  transition: color var(--anim-fast);
+}
+.risk-trend.recovering { color: var(--gauge-green); }
+.risk-trend.worsening  { color: var(--gauge-red); }
+.risk-trend.sustained  { color: var(--gauge-orange); }
+
 /* ============================================================
    LOG STREAM
    ============================================================ */
@@ -271,6 +306,19 @@ body {
 .log-WARNING { color: var(--log-warning); }
 .log-ERROR   { color: var(--log-error); }
 .log-DEBUG   { color: var(--log-debug); }
+
+/* Separador de fase no log stream */
+.log-separator {
+  color: var(--text-muted);
+  font-size: 10px;
+  text-align: center;
+  padding: 3px 0;
+  border-top: 1px dashed var(--border-color);
+  border-bottom: 1px dashed var(--border-color);
+  margin: 3px 0;
+  letter-spacing: 1px;
+  opacity: 0.7;
+}
 
 /* ============================================================
    TIMELINE

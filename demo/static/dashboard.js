@@ -35,6 +35,11 @@ let leadTimeInterval = null;
 let leadTimeStartWall = null;
 let leadTimeFinished = false;
 
+// Risk trend tracking
+let prevRiskScore = 0;
+let riskTrend = "stable";   // "rising" | "falling" | "stable"
+let _lastLogPhase = "IDLE"; // controle de separadores no log stream
+
 // ------------------------------------------------------------------ //
 // WebSocket                                                            //
 // ------------------------------------------------------------------ //
@@ -155,9 +160,20 @@ function buildLineOpts(containerId, seriesNames, colors) {
 // ------------------------------------------------------------------ //
 function handleTickFrame(frame) {
   updateHeader(frame);
+
+  // Calcula tendência antes de atualizar gauge
+  const delta = frame.risk_score - prevRiskScore;
+  if (Math.abs(delta) > 1.5) {
+    riskTrend = delta > 0 ? "rising" : "falling";
+  } else {
+    riskTrend = "stable";
+  }
+  prevRiskScore = frame.risk_score;
+
   updateGauge(gaugeChart, "risk-value", frame.risk_score, frame.prediction && frame.prediction.event_level);
+  updateTrendIndicator(riskTrend, frame.risk_score, frame.phase);
   updateLineSeries(frame);
-  updateLogs("log-stream", frame.recent_logs);
+  updateLogs("log-stream", frame.recent_logs, frame.phase);
   updatePredictionCard(frame);
   updateTimeline(frame);
 
@@ -217,8 +233,15 @@ function handleCompareFrame(data) {
 // ------------------------------------------------------------------ //
 function updateHeader(frame) {
   const badge = document.getElementById("phase-badge");
-  badge.textContent = frame.phase;
-  badge.className = `phase-badge ${frame.phase}`;
+  const isRecovering = frame.phase === "INCIDENT" && riskTrend === "falling";
+
+  if (isRecovering) {
+    badge.textContent = "INCIDENT ↓";
+    badge.className = `phase-badge ${frame.phase} recovering`;
+  } else {
+    badge.textContent = frame.phase;
+    badge.className = `phase-badge ${frame.phase}`;
+  }
 
   const scenarioEl = document.getElementById("scenario-name");
   if (scenarioEl) scenarioEl.textContent = frame.scenario_name || "";
@@ -229,10 +252,46 @@ function updateGauge(chart, valueElId, riskScore, eventLevel) {
   chart.setOption(buildGaugeOption(Math.round(riskScore), eventLevel));
   const el = document.getElementById(valueElId);
   if (!el) return;
-  el.textContent = Math.round(riskScore);
+
+  const prev = parseInt(el.textContent) || 0;
+  const current = Math.round(riskScore);
+  const diff = current - prev;
+
+  el.textContent = current;
   el.className = "risk-value"
     + (eventLevel === "prediction.alert" ? " alert"
        : eventLevel === "prediction.warning" ? " warning" : "");
+
+  // Delta indicator (apenas painel único)
+  const deltaEl = document.getElementById(valueElId + "-delta");
+  if (deltaEl && diff !== 0) {
+    deltaEl.textContent = (diff > 0 ? "+" : "") + diff;
+    deltaEl.className = "risk-delta" + (diff < 0 ? " falling" : " rising");
+    deltaEl.style.opacity = "1";
+    setTimeout(() => { deltaEl.style.opacity = "0.6"; }, 500);
+  } else if (deltaEl && diff === 0) {
+    deltaEl.textContent = "";
+  }
+}
+
+function updateTrendIndicator(trend, score, phase) {
+  const el = document.getElementById("risk-trend");
+  if (!el) return;
+  if (score < 5) { el.textContent = ""; el.className = "risk-trend"; return; }
+
+  if (trend === "falling" && (phase === "INCIDENT" || phase === "ALERT")) {
+    el.textContent = "↓ recovering";
+    el.className = "risk-trend recovering";
+  } else if (trend === "rising" && score >= 30) {
+    el.textContent = "↑ worsening";
+    el.className = "risk-trend worsening";
+  } else if (trend === "stable" && score >= 60) {
+    el.textContent = "— sustained";
+    el.className = "risk-trend sustained";
+  } else {
+    el.textContent = "";
+    el.className = "risk-trend";
+  }
 }
 
 function updateLineSeries(frame) {
@@ -269,10 +328,19 @@ function updateCompareLineSeries(frame, cpuC, latC, cpuBuf, latBuf) {
   if (latC) latC.setData([tsBuf, latBuf]);
 }
 
-function updateLogs(containerId, logs) {
+function updateLogs(containerId, logs, phase) {
   if (!logs || !logs.length) return;
   const el = document.getElementById(containerId);
   if (!el) return;
+
+  // Separador visual quando a fase muda (apenas no painel principal)
+  if (phase && phase !== _lastLogPhase && containerId === "log-stream") {
+    _lastLogPhase = phase;
+    const sep = document.createElement("div");
+    sep.className = "log-separator";
+    sep.textContent = `── ${phase} ──`;
+    el.appendChild(sep);
+  }
 
   logs.slice(-5).forEach(log => {
     const div = document.createElement("div");
@@ -282,8 +350,8 @@ function updateLogs(containerId, logs) {
     el.appendChild(div);
   });
 
-  // Mantém apenas os últimos 20
-  while (el.children.length > 20) el.removeChild(el.firstChild);
+  // Mantém apenas os últimos 25 (espaço extra para separadores)
+  while (el.children.length > 25) el.removeChild(el.firstChild);
   el.scrollTop = el.scrollHeight;
 }
 
@@ -346,12 +414,40 @@ function checkWM1(frame) {
     handlePredictionWarning(frame);
   }
 
+  // Transição ALERT → INCIDENT: predição confirmada, dismiss banner
+  if (frame.phase === "INCIDENT" && prevPhase === "ALERT") {
+    dismissBannerAsConfirmed();
+  }
+
   // Reset ao voltar para IDLE/PLAYING
   if (frame.phase === "IDLE" || frame.phase === "PLAYING") {
     if (predictionFired) {
       resetWM1();
       predictionFired = false;
+      riskTrend = "stable";
+      prevRiskScore = 0;
+      _lastLogPhase = "IDLE";
+      // Limpa indicadores
+      const trendEl = document.getElementById("risk-trend");
+      if (trendEl) { trendEl.textContent = ""; trendEl.className = "risk-trend"; }
+      const deltaEl = document.getElementById("risk-value-delta");
+      if (deltaEl) { deltaEl.textContent = ""; }
     }
+  }
+}
+
+function dismissBannerAsConfirmed() {
+  const banner = document.getElementById("prediction-banner");
+  if (!banner) return;
+  // Muda texto para confirmar predição
+  banner.innerHTML = "✓ Prediction confirmed — incident detected as predicted";
+  banner.style.borderBottomColor = "#f2495c";
+  banner.style.background = "linear-gradient(90deg, #2a0000, #f2495c22)";
+  // Desliza para fora após 3 segundos
+  if (typeof gsap !== "undefined") {
+    gsap.to(banner, { top: "-80px", duration: 0.4, delay: 3.0 });
+  } else {
+    setTimeout(() => { banner.style.top = "-80px"; }, 3000);
   }
 }
 

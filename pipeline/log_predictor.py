@@ -92,6 +92,39 @@ def detect_novel_templates(
     return {"novel_templates": novel_templates}
 
 
+def analyze_log_signals_windowed(
+    window_1: list[LogEntry],
+    window_2: list[LogEntry],
+) -> LogBurstSignal:
+    """Analisa surto de logs com janelas pré-divididas externamente.
+
+    Útil quando o chamador já dividiu os logs por janela temporal
+    (em vez de divisão por índice). Permite detectar aumento real
+    de taxa de logs conforme o incidente evolui.
+
+    Parâmetros
+    ----------
+    window_1 : list[LogEntry]
+        Janela de baseline (período anterior).
+    window_2 : list[LogEntry]
+        Janela corrente (período mais recente).
+
+    Retorna
+    -------
+    LogBurstSignal com burst_detected, rate_ratio, dominant_template e novel_templates.
+    """
+    known_ids: set[str] = {_get_template_id(e) for e in window_1}
+    burst_result = compute_log_burst_rate(window_1, window_2)
+    novel_result = detect_novel_templates(known_ids, window_2)
+
+    return LogBurstSignal(
+        burst_detected=burst_result["burst_detected"],
+        rate_ratio=burst_result["rate_ratio"],
+        dominant_template=burst_result["dominant_template"],
+        novel_templates=novel_result["novel_templates"],
+    )
+
+
 def analyze_log_signals(log_entries: list[LogEntry]) -> LogBurstSignal:
     """Analisa o fluxo de logs e retorna um sinal combinado de surto e novidade.
 

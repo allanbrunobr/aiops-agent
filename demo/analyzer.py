@@ -8,9 +8,10 @@ adaptada para operar sobre snapshots incrementais do corpus.
 """
 
 from data.models import LogEntry, MetricPoint, Span
-from pipeline.log_predictor import analyze_log_signals, LogBurstSignal
+from pipeline.log_predictor import analyze_log_signals, analyze_log_signals_windowed, LogBurstSignal
 from pipeline.metric_predictor import compute_ewma_slope
 from pipeline.risk_scorer import compute_risk_score, get_event_level, MetricTrendSignal
+from pipeline.risk_tracker import RiskTracker
 from pipeline.trace_predictor import analyze_trace_signals, LatencyDriftSignal
 
 
@@ -22,8 +23,7 @@ class DemoAnalyzer:
         self.enable_prediction = enable_prediction
         # Limiar para cálculo de ETA (ex: 7200.0 para memory_used_mb, 0.90 para métricas normalizadas)
         self.ewma_threshold = ewma_threshold
-        # Contador de ticks sustentados acima do limiar de warning (escalação progressiva)
-        self._warning_ticks: int = 0
+        self._risk_tracker = RiskTracker()
 
     def analyze(
         self,
@@ -69,10 +69,28 @@ class DemoAnalyzer:
 
         # === Modo preditivo completo ===
 
-        # 1. Sinal de log burst
+        # 1. Sinal de log burst — baseline fixo (primeiros 5 min) vs janela recente (últimos 5 min)
+        # Garante que rate_ratio cresce monotonicamente: baseline é sempre tráfego normal,
+        # janela recente piora progressivamente com o incidente. Sem oscilação.
         log_signal: LogBurstSignal | None = None
         if log_entries:
-            log_signal = analyze_log_signals(log_entries)
+            from datetime import timedelta as _td
+            first_ts = min(e.timestamp for e in log_entries)
+            last_ts = max(e.timestamp for e in log_entries)
+            span_s = (last_ts - first_ts).total_seconds()
+            if span_s > 120:
+                # W1 = baseline: primeiros 5 min de simulação (tráfego normal, imutável)
+                # W2 = recente: últimos 5 min de simulação (piora com o incidente)
+                baseline_end = first_ts + _td(minutes=5)
+                recent_start = last_ts - _td(minutes=2)
+                w1 = [e for e in log_entries if e.timestamp <= baseline_end]
+                w2 = [e for e in log_entries if e.timestamp >= recent_start]
+                if w1 and w2:
+                    log_signal = analyze_log_signals_windowed(w1, w2)
+                else:
+                    log_signal = analyze_log_signals(log_entries)
+            else:
+                log_signal = analyze_log_signals(log_entries)
 
         # 2. Sinal de tendência de métrica (usa pool_active ou memory_mb ou cpu)
         metric_signal: MetricTrendSignal | None = None
@@ -94,20 +112,14 @@ class DemoAnalyzer:
         # 3. Sinal de drift de latência
         latency_signal: LatencyDriftSignal | None = None
         if spans and len(spans) >= 4:
-            latency_signal = analyze_trace_signals(spans)
+            latency_signal = analyze_trace_signals(spans, window=5)
 
         # 4. Score de risco composto
         risk_score = compute_risk_score(metric_signal, log_signal, latency_signal)
 
-        # Escalação progressiva para demo: quanto mais tempo o sistema fica degradado,
-        # maior a confiança de incidente. A cada 15 ticks com risco >= 30, +5 pontos (máx +30).
-        # 15 ticks @ 1fps = ~15s reais → warning visível ~45s antes de virar alert.
-        if risk_score >= 30.0:
-            self._warning_ticks += 1
-            bonus = min(30.0, (self._warning_ticks // 15) * 5.0)
-            risk_score = min(100.0, risk_score + bonus)
-        else:
-            self._warning_ticks = 0
+        # Bônus de persistência e suavização — delegados ao RiskTracker de produção.
+        # Decai quando os sinais melhoram (recovery), acumula quando pioram.
+        risk_score = self._risk_tracker.update(risk_score)
 
         event_level = get_event_level(risk_score)
 

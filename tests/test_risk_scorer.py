@@ -39,8 +39,9 @@ def test_score_metric_medium_slope():
 
 
 def test_score_metric_low_slope():
+    # Slope baixo (< 0.1) não é sinal de risco — sistema operando normalmente
     s = MetricTrendSignal(slope=0.05)
-    assert _score_metric_signal(s) == 10.0
+    assert _score_metric_signal(s) == 0.0
 
 
 # ---------------------------------------------------------------------------

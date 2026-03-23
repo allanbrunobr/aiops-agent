@@ -169,7 +169,7 @@ class ScenarioEngine:
             else:
                 lead_time = self._trad_warning_wall_time - self._warning_wall_time
 
-        frame_left = self._build_frame(result, self._phase, lead_time)
+        frame_left = self._build_frame(result, self._phase, lead_time, self._logs)
 
         if not self._comparison_active:
             return frame_left
@@ -184,7 +184,7 @@ class ScenarioEngine:
 
         self._advance_trad_phase(trad_result["risk_score"], now)
 
-        frame_right = self._build_frame(trad_result, self._trad_phase, None)
+        frame_right = self._build_frame(trad_result, self._trad_phase, None, self._trad_logs)
 
         return {
             "left": frame_left.dict(),
@@ -234,8 +234,13 @@ class ScenarioEngine:
                 self._phase = DemoPhase.INCIDENT
                 self._phase_entry_wall = wall_now
         elif self._phase == DemoPhase.INCIDENT:
-            # INCIDENT → RESOLVED após ~60s simulados
-            if (wall_now - self._phase_entry_wall) * self._player.speed_factor > 60.0:
+            time_elapsed = (wall_now - self._phase_entry_wall) * self._player.speed_factor
+            # Recovery real: score caiu abaixo de 15 após pelo menos 30s simulados
+            # Fallback: 900s simulados (15 min) — tempo suficiente para corpus de recovery
+            # atingir o minuto 25 (fix) e decair até RESOLVED naturalmente.
+            # Para cenários sem fix (payment-pool-exhaustion), o corpus exaure e o score
+            # não cai, disparando o fallback após ~15 min simulados de incidente.
+            if (risk_score < 15.0 and time_elapsed > 30.0) or time_elapsed > 1800.0:
                 self._phase = DemoPhase.RESOLVED
 
         if old_phase != self._phase:
@@ -267,8 +272,10 @@ class ScenarioEngine:
         result: dict,
         phase: DemoPhase,
         lead_time: float | None,
+        log_buffer: list[LogEntry] | None = None,
     ) -> TickFrame:
         """Constrói um TickFrame a partir do resultado da análise."""
+        logs_src = log_buffer if log_buffer is not None else self._logs
         recent_logs = [
             {
                 "timestamp": lg.timestamp.isoformat(),
@@ -276,7 +283,7 @@ class ScenarioEngine:
                 "service": lg.service,
                 "message": lg.message,
             }
-            for lg in self._logs[-20:]
+            for lg in logs_src[-20:]
         ]
 
         return TickFrame(
@@ -318,6 +325,11 @@ class ScenarioEngine:
             "payment-pool-exhaustion": (
                 "Config change reduziu max_connections de 200 para 50, "
                 "causando connection pool exhaustion sob carga normal."
+            ),
+            "payment-pool-recovery": (
+                "Surge de tráfego saturou o connection pool (max_connections=200). "
+                "Operador aumentou max_connections para 500 no minuto 25, "
+                "despressurizando o pool e normalizando latência e logs."
             ),
             "memory-leak": (
                 "Memory leak em heap Java — objeto retido por referência estática "

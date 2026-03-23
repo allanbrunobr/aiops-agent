@@ -33,6 +33,7 @@
     <span class="scenario-label">Scenario:</span>
     <select id="scenario-select">
       <option value="payment-pool-exhaustion">Payment Pool Exhaustion</option>
+      <option value="payment-pool-recovery">Pool Exhaustion + Recovery</option>
       <option value="memory-leak">JVM Memory Leak</option>
       <option value="unknown-fault">Unknown Fault Mode</option>
     </select>
@@ -76,6 +77,8 @@
         <div class="panel-title">Risk Score</div>
         <div id="gauge-chart"></div>
         <div class="risk-value" id="risk-value">0</div>
+        <div class="risk-delta" id="risk-value-delta"></div>
+        <div class="risk-trend" id="risk-trend"></div>
         <div id="eta-marker"></div>
       </div>
 

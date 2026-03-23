@@ -78,6 +78,7 @@ _ws_connections: list[WebSocket] = []
 _current_corpus_name: str = "payment-pool-exhaustion"
 _slack_fired: set[str] = set()  # fases já notificadas no Slack (evita spam)
 _slack_warning_wall_time: float = 0.0  # timestamp wall-clock do último prediction.warning
+_incident_start_wall_time: float = 0.0  # wall-clock quando incidente atingiu CRITICAL
 
 
 # ------------------------------------------------------------------ #
@@ -260,8 +261,9 @@ async def _broadcast(payload: dict | Any) -> None:
 
 async def _tick_loop() -> None:
     """Loop assíncrono que gera ticks a 1fps e transmite TickFrames."""
-    global _slack_fired
+    global _slack_fired, _incident_start_wall_time
     _slack_fired = set()
+    _incident_start_wall_time = 0.0
     if _engine is None:
         return
     try:
@@ -285,20 +287,47 @@ async def _maybe_notify_slack(frame: Any) -> None:
     if _slack is None or _engine is None:
         return
 
-    scenario = _engine.scenario_name
-    prediction = frame.prediction if hasattr(frame, "prediction") else frame.get("prediction")
-    if not isinstance(prediction, dict):
-        return
-
-    event_level = prediction.get("event_level")
-    if not event_level:
-        return
-
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
+    scenario = _engine.scenario_name
     risk = frame.risk_score if hasattr(frame, "risk_score") else frame.get("risk_score", 0)
-    eta = prediction.get("eta_minutes")
-    signals = prediction.get("signals_fired", [])
+    prediction = frame.prediction if hasattr(frame, "prediction") else frame.get("prediction")
+    event_level = prediction.get("event_level") if isinstance(prediction, dict) else None
+    eta = prediction.get("eta_minutes") if isinstance(prediction, dict) else None
+    signals = prediction.get("signals_fired", []) if isinstance(prediction, dict) else []
+
+    # ------------------------------------------------------------------ #
+    # incident.resolved — avaliado PRIMEIRO, antes de qualquer guard      #
+    # (quando risk < 30, prediction=None e o guard antigo bloqueava aqui) #
+    # ------------------------------------------------------------------ #
+    if ("critical" in _slack_fired and "resolved" not in _slack_fired
+            and risk < 15.0 and not event_level):
+        _slack_fired.add("resolved")
+        duration_min = (
+            (now.timestamp() - _incident_start_wall_time) / 60.0
+            if _incident_start_wall_time else None
+        )
+        event = LifecycleEvent(
+            event_type="incident.resolved",
+            node_name=None,
+            correlation_id=f"demo-{scenario}",
+            timestamp=now,
+            data={"risk_score": risk, "scenario": scenario,
+                  "incident_duration_minutes": duration_min,
+                  "fix_detected": "Sinais normalizaram — pool despressurizado"},
+        )
+        try:
+            await _slack.on_event(event)
+            logger.info("Slack: incident.resolved enviado — cenário %s, risk=%.0f, duração=%s",
+                        scenario, risk,
+                        f"{duration_min:.1f}min" if duration_min else "?")
+        except Exception as exc:
+            logger.warning("Slack notification falhou: %s", exc)
+        return
+
+    # Sem event_level (risk < 30): nada mais a disparar
+    if not event_level:
+        return
 
     # Dispara prediction.warning na primeira vez que aparecer
     if event_level == "prediction.warning" and "warning" not in _slack_fired:
@@ -341,6 +370,7 @@ async def _maybe_notify_slack(frame: Any) -> None:
     # Dispara prediction.critical quando risk >= 80 (incidente iminente)
     if event_level == "prediction.alert" and risk >= 80.0 and "critical" not in _slack_fired:
         _slack_fired.add("critical")
+        _incident_start_wall_time = now.timestamp()
         event = LifecycleEvent(
             event_type="prediction.alert",
             node_name=None,

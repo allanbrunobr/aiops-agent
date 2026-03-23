@@ -90,6 +90,8 @@ class SlackNotifier:
                 await self._post_failure_message(event)
             elif event.event_type in ("prediction.warning", "prediction.alert"):
                 await self._post_prediction_message(event)
+            elif event.event_type == "incident.resolved":
+                await self._post_resolved_message(event)
         except SlackApiError as exc:
             log.warning(
                 "slack.api_error",
@@ -453,6 +455,52 @@ class SlackNotifier:
                                     correlation_id=event.correlation_id)
         log.info("slack.prediction_posted", event_type=event.event_type,
                  correlation_id=event.correlation_id)
+
+    async def _post_resolved_message(self, event: LifecycleEvent) -> None:
+        """Envia mensagem de recuperação do incidente — risk voltou ao nível normal."""
+        blocks = self._build_resolved_blocks(event)
+        scenario = event.data.get("scenario", event.correlation_id)
+
+        async def _send() -> None:
+            await self._client.chat_postMessage(  # type: ignore[union-attr]
+                channel=self._channel,
+                text=f"Incident resolved: {scenario}",
+                attachments=[{"color": "#2eb886", "blocks": blocks}],  # verde
+            )
+
+        if self._dry_run:
+            log.info("slack.dry_run", action="post_resolved",
+                     correlation_id=event.correlation_id, blocks=blocks)
+            return
+
+        await self._send_with_retry(_send, context="_post_resolved_message",
+                                    correlation_id=event.correlation_id)
+        log.info("slack.resolved_posted", correlation_id=event.correlation_id)
+
+    def _build_resolved_blocks(self, event: LifecycleEvent) -> list[dict]:
+        """Monta blocos Block Kit para notificação de recuperação de incidente."""
+        data = event.data
+        risk_score = data.get("risk_score", 0.0)
+        duration_min = data.get("incident_duration_minutes")
+        fix_detected = data.get("fix_detected", "Sinais voltaram ao normal")
+
+        duration_text = f"{duration_min:.0f} min" if duration_min is not None else "—"
+
+        return [
+            {"type": "header", "text": {"type": "plain_text",
+                                        "text": "✅ Incident Resolved"}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": (
+                f"*{fix_detected}*\n"
+                f"Risk score voltou a `{risk_score:.0f}%` — sistema operando normalmente."
+            )}},
+            {"type": "section", "fields": [
+                {"type": "mrkdwn", "text": f"*Duração do incidente:*\n{duration_text}"},
+                {"type": "mrkdwn", "text": f"*Risk Score atual:*\n🟢 {risk_score:.0f}%"},
+            ]},
+            {"type": "context", "elements": [
+                {"type": "mrkdwn", "text": f"AIOps Agent | {event.correlation_id}"},
+            ]},
+        ]
 
     def _build_final_blocks(self, event: LifecycleEvent) -> list[dict]:
         """Monta blocos finais com diagnostico completo para leitura mobile."""

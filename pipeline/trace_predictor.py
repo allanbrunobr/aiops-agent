@@ -87,11 +87,17 @@ def detect_latency_drift(
     }
 
 
-def analyze_trace_signals(spans: list[Span]) -> LatencyDriftSignal:
+_TRACE_WINDOW = 20  # spans por janela (~5 min de dados a 2-4 spans/min)
+
+
+def analyze_trace_signals(spans: list[Span], window: int | None = None) -> LatencyDriftSignal:
     """Analisa spans de raiz e retorna sinal de drift de latência.
 
-    Extrai spans raiz (parent_span_id is None), divide em duas metades
-    e chama detect_latency_drift.
+    Usa janela fixa: primeiros _TRACE_WINDOW spans como baseline (fase normal)
+    e últimos _TRACE_WINDOW spans como janela corrente. Garante que durante
+    recovery os spans normalizados entrem no current e reduzam o ratio —
+    ao contrário do half-split que embute os spans do pico no current
+    permanentemente.
 
     Parâmetros
     ----------
@@ -107,10 +113,16 @@ def analyze_trace_signals(spans: list[Span]) -> LatencyDriftSignal:
         key=lambda s: s.start_time,
     )
     root_durations = [s.duration_ms for s in root_spans]
+    n = len(root_durations)
 
-    mid = len(root_durations) // 2
-    baseline = root_durations[:mid]
-    current = root_durations[mid:]
+    if n < 4:
+        return LatencyDriftSignal(drift_detected=False, p95_ratio=1.0, p99_ratio=1.0)
+
+    # Janela adaptativa: min(_TRACE_WINDOW, metade do total disponível)
+    effective_window = window if window is not None else _TRACE_WINDOW
+    win = min(effective_window, n // 2)
+    baseline = root_durations[:win]
+    current = root_durations[n - win:]
 
     result = detect_latency_drift(baseline, current)
 

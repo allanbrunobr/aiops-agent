@@ -30,7 +30,7 @@ def _score_metric_signal(signal: MetricTrendSignal | None) -> float:
         return 60.0
     if signal.slope > 0.1:
         return 30.0
-    return 10.0
+    return 0.0
 
 
 def _score_log_signal(signal: LogBurstSignal | None) -> float:
