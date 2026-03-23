@@ -20,8 +20,9 @@ from mcp.types import TextContent, Tool
 
 log = structlog.get_logger()
 
-# ContextVar para propagar client_id ao longo do ciclo de vida do tool call
+# ContextVars para propagar client_id e scopes ao longo do ciclo de vida do tool call
 _current_client_id: ContextVar[str] = ContextVar("client_id", default="unknown")
+_current_scopes: ContextVar[list[str]] = ContextVar("scopes", default=[])
 
 
 def _get_current_client_id() -> str:
@@ -100,6 +101,14 @@ def create_server(
             return [TextContent(type="text", text=error_body)]
 
         client_id = _get_current_client_id()
+
+        # Scope enforcement — obrigatório quando auth_method=oauth21
+        granted_scopes = _current_scopes.get()
+        if granted_scopes:  # lista vazia = modo legado sem enforcement
+            from auth.scopes import require_scope
+            scope_error = require_scope(name, granted_scopes)
+            if scope_error is not None:
+                return [scope_error]
 
         # Rate limit check — antes de qualquer lógica de negócio
         if rate_limiter is not None:
