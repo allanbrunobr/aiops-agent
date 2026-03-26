@@ -13,8 +13,11 @@ import json
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import structlog
+
+from core.models import NormalizedAlert
 
 log = structlog.get_logger()
 
@@ -722,14 +725,20 @@ def _normalize_alert(
         except Exception:
             pass  # Fallback para objeto simples
 
-    # Objeto simples compatível com pipeline
-    class _SimpleAlert:
-        pass
-
-    alert = _SimpleAlert()
-    alert.source = source  # type: ignore[attr-defined]
-    alert.severity = severity  # type: ignore[attr-defined]
-    alert.title = title  # type: ignore[attr-defined]
-    alert.description = description  # type: ignore[attr-defined]
-    alert.service = service or ""  # type: ignore[attr-defined]
-    return alert
+    # Fallback: objeto NormalizedAlert com defaults para campos obrigatórios
+    # Mapeia severidades MCP (critical/high/medium/low) para pipeline (critical/error/warning/info)
+    _severity_map = {"critical": "critical", "high": "error", "medium": "warning", "low": "info"}
+    pipeline_severity = _severity_map.get(severity.lower(), "warning")
+    now = datetime.now(timezone.utc)
+    return NormalizedAlert(
+        source=source,
+        source_id=f"mcp-{uuid.uuid4().hex[:8]}",
+        correlation_id=f"inc-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}",
+        title=title,
+        description=description,
+        severity=pipeline_severity,
+        alert_type="mcp_alert",
+        timestamp=now,
+        detection_timestamp=now,
+        service=service or None,
+    )
