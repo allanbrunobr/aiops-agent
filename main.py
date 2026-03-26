@@ -73,6 +73,7 @@ from pipeline.context_compressor import ContextCompressor
 from safety.pre_validator import PreExecutionValidator
 from pipeline.telemetry_sanitizer import TelemetrySanitizer
 from safety.version_validator import VersionValidator
+from safety.orchestrator import SafetyOrchestrator
 
 console = Console()
 
@@ -589,14 +590,16 @@ def step_safety_validation(result):
         console.print("  [dim]No mitigation to validate (skipping)[/dim]\n")
         return None
 
-    validator = PreExecutionValidator(
+    pre_validator = PreExecutionValidator(
         auto_approve_low_risk=True,
         max_blast_radius=3,
         require_rollback_plan=True,
     )
+    orchestrator = SafetyOrchestrator(pre_validator=pre_validator)
 
     action = mitigation["action"]
-    safety_result = validator.validate(action, diagnosis)
+    orch_result = orchestrator.validate(action, diagnosis)
+    safety_result = orch_result.layer_details["pre_validator"]
 
     # Display results
     table = Table(title="Pre-Execution Safety Check", border_style="red" if not safety_result.is_safe else "green",
@@ -656,10 +659,12 @@ def step_remediation_validation(result):
         return None
 
     action = mitigation["action"]
-    validator = VersionValidator()
+    version_validator = VersionValidator()
+    orchestrator = SafetyOrchestrator(version_validator=version_validator)
 
     t0 = time.time()
-    validation = validator.validate_mitigation_action(action)
+    orch_result = orchestrator.validate(action)
+    validation = orch_result.layer_details["version_validator"]
     elapsed = time.time() - t0
 
     # Display results
