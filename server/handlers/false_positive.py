@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import logging
 
+import structlog
+
 from core.models import IncidentState
 
 logger = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 
 async def handle_false_positive_side_effects(
@@ -26,7 +29,7 @@ async def handle_false_positive_side_effects(
                 incident, _ks, correlation_id,
             )
     except Exception:
-        pass
+        log.warning("false_positive_side_effect_error", exc_info=True)
 
     logger.info(
         "feedback.false_positive",
