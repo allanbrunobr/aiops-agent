@@ -433,52 +433,6 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
     return retriever
 
 
-def step_predict(report, memory_db: "IncidentMemoryDB | None" = None):
-    """Etapa preditiva: detecta degradação antes de incidente completo.
-
-    Tenta importar pipeline.predictive_stage (disponível após merge do wt3).
-    Retorna None silenciosamente se o módulo não estiver disponível.
-
-    Args:
-        report: AggregatedReport com dados pré-processados.
-        memory_db: Instância de IncidentMemoryDB para persistência RAG.
-
-    Returns:
-        PredictionReport se predictive_stage disponível, None caso contrário.
-    """
-    try:
-        from pipeline.predictive_stage import run_predictive_stage
-
-        prediction = run_predictive_stage(report)
-        if prediction is None:
-            return None
-
-        # Story 2.1: persiste assinatura pré-incidente no RAG
-        if memory_db is not None:
-            try:
-                signals = getattr(prediction, "signals", [])
-                risk_score = getattr(prediction, "risk_score", 0.0)
-                incident_id = getattr(prediction, "incident_id", str(id(prediction)))
-                memory_db.store_degradation_signature(signals, risk_score, incident_id)
-            except Exception:
-                pass
-
-        # Story 2.2: enriquece PredictionReport com histórico similar
-        if memory_db is not None:
-            try:
-                signals = getattr(prediction, "signals", [])
-                matched = memory_db.query_similar_signatures(signals, top_k=3)
-                prediction.matched_history = matched
-            except Exception:
-                pass
-
-        return prediction
-    except ImportError:
-        return None
-    except Exception:
-        return None
-
-
 def step_agents(report, retriever, use_llm: bool = True,
                 llm_model: str = "claude-sonnet-4-20250514",
                 config: AppConfig | None = None) -> dict:
