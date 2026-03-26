@@ -242,6 +242,92 @@ def snapshot_manager(request):
     return SnapshotManager(update=update)
 
 
+# ---------------------------------------------------------------------------
+# Fixtures para testes unitários de _tool_* do DiagnosisAgent (Story 2.2)
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def payload_correlate_signals():
+    """Payload típico para _tool_correlate_signals."""
+    return {"service": "payment-svc", "time_window_minutes": 5}
+
+
+@pytest.fixture
+def payload_reconstruct_timeline():
+    """Payload típico para _tool_reconstruct_timeline."""
+    return {"services": ["payment-svc"]}
+
+
+@pytest.fixture
+def payload_classify_fault_type():
+    """Payload típico para _tool_classify_fault_type."""
+    return {"service": "payment-svc"}
+
+
+@pytest.fixture
+def mock_aggregated_report_empty():
+    """AggregatedReport mock com listas vazias para testes de tool methods."""
+    from unittest.mock import MagicMock
+    report = MagicMock()
+    report.log_templates = []
+    report.metric_anomalies = []
+    report.slow_traces = []
+    report.affected_services = set()
+    return report
+
+
+@pytest.fixture
+def mock_aggregated_report_with_data():
+    """AggregatedReport mock com dados mínimos para testes de tool methods."""
+    from datetime import datetime
+    from unittest.mock import MagicMock
+    from pipeline.log_parser import LogTemplate
+    from pipeline.metric_filter import MetricAnomaly
+    from pipeline.trace_filter import SlowCallPath
+
+    now = datetime(2024, 1, 1, 10, 5, 0)
+
+    log_tpl = LogTemplate(
+        template="Connection pool exhausted — max_connections limit reached",
+        count=42,
+        level="ERROR",
+        services={"payment-svc"},
+        first_seen=now,
+        last_seen=now,
+    )
+
+    metric_anomaly = MetricAnomaly(
+        service="payment-svc",
+        metric_name="connection_pool",
+        anomaly_type="spike",
+        timestamp=now,
+        value=100.0,
+        mean=20.0,
+        std=5.0,
+        deviation_sigma=16.0,
+        description="Connection pool spike",
+    )
+
+    slow_trace = SlowCallPath(
+        trace_id="trace-001",
+        path=["gateway", "payment-svc", "postgres"],
+        operations=["GET /pay", "SELECT"],
+        total_duration_ms=5000.0,
+        bottleneck_service="payment-svc",
+        bottleneck_duration_ms=4800.0,
+        normal_duration_ms=200.0,
+        timestamp=now,
+        attributes={"pool": "exhausted"},
+    )
+
+    report = MagicMock()
+    report.log_templates = [log_tpl]
+    report.metric_anomalies = [metric_anomaly]
+    report.slow_traces = [slow_trace]
+    report.affected_services = {"payment-svc"}
+    return report
+
+
 @pytest.fixture(scope="class")
 def aggregated_report(simulated_incident):
     """Executa sanitização + agregação e retorna AggregatedReport.
