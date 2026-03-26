@@ -133,10 +133,16 @@ class TestPercentileBenchmark:
     N = 10_000  # tamanho da lista conforme AC
 
     def _time_python(self, values: list[float]) -> float:
-        """Tempo médio em segundos para _percentile Python."""
+        """Tempo médio em segundos para equivalente Python de detect_latency_drift.
+
+        detect_latency_drift computa p95 e p99 em DOIS arrays (baseline + current),
+        ou seja, 4 chamadas a _percentile — espelhamos aqui para comparação justa.
+        """
         start = time.perf_counter()
         for _ in range(self.REPS):
             _percentile(values, 95)
+            _percentile(values, 99)
+            _percentile(values, 95)  # segundo array (current)
             _percentile(values, 99)
         return (time.perf_counter() - start) / self.REPS
 
