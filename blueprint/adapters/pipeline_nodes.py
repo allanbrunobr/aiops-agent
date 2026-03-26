@@ -93,30 +93,39 @@ def make_context_compressor_node(config: AppConfig) -> Callable[[IncidentState],
 
 
 def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]:
-    """Cria funcao adaptadora para o DiagnosisAgent (ReAct loop com LLM).
+    """Cria node agentic que usa AgentOrchestrator (Estágio 2) ou fallback heurístico."""
 
-    Este e um node agentico — usa Claude API para diagnostico.
-    Fallback heuristico e fornecido separadamente via make_diagnoser_fallback().
-    """
     def execute(state: IncidentState) -> IncidentState:
         import os
-        from agents.diagnoser import DiagnosisAgent
+        from anthropic import Anthropic
+        from agents.orchestrator import AgentOrchestrator
+        from agents.skill_router import SkillRouter
+        from rag.memory import IncidentMemoryDB
 
-        model = os.environ.get("AIOPS_LLM_MODEL", "claude-sonnet-4-20250514")
-        diagnoser = DiagnosisAgent(model=model)
-
-        # Recupera o objeto AggregatedReport do metadata
         report_data = state.aggregated_report or {}
         report_obj = report_data.get("_report_obj")
         if report_obj is None:
             raise ValueError("AggregatedReport not available — aggregator node must run first")
 
-        # Recupera retriever se RAG disponivel
         retriever = state.metadata.get("_retriever")
+        model = os.environ.get("AIOPS_LLM_MODEL", "claude-sonnet-4-20250514")
 
-        diagnosis = diagnoser.diagnose(report_obj, retriever)
+        memory_db = IncidentMemoryDB()
+        skill_router = SkillRouter(memory_db)
+        skill_router.seed_default_skills()
 
-        return state.model_copy(update={"diagnosis": diagnosis})
+        client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        orchestrator = AgentOrchestrator(
+            client=client, model=model,
+            memory_db=memory_db, skill_router=skill_router,
+            config=config,
+        )
+        outcome = orchestrator.run(report_obj, retriever)
+
+        return state.model_copy(update={
+            "diagnosis": outcome.diagnosis,
+            "metadata": {**state.metadata, "_agent_outcome": outcome},
+        })
 
     return execute
 

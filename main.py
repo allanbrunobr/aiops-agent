@@ -491,13 +491,28 @@ def step_agents(report, retriever, use_llm: bool = True,
     )
     # ─────────────────────────────────────────────────────────────────────
 
-    # Inicializa agentes
+    # Inicializa agentes (Estágio 1 / fallback --no-llm)
     detector = DetectionAgent(
         error_threshold=config.thresholds.error_threshold,
         sigma_threshold=config.thresholds.detection_sigma_threshold,
     )
+
+    if use_llm:
+        # Estágio 2: agente autônomo com plan/execute/reflect
+        from anthropic import Anthropic
+        from agents.orchestrator import AgentOrchestrator
+
+        _client = Anthropic()
+        _orchestrator = AgentOrchestrator(
+            client=_client,
+            model=llm_model,
+            memory_db=_memory_db,
+            skill_router=_skill_router,
+            config=config,
+        )
+    # Estágio 1 (fallback --no-llm): DiagnosisAgent heurístico
     diagnoser = DiagnosisAgent(
-        max_iterations=5 if use_llm else 1,
+        max_iterations=1,
         model=llm_model,
         similar_incidents=_similar_incidents,
         skill=_skill,
@@ -508,7 +523,7 @@ def step_agents(report, retriever, use_llm: bool = True,
     if not use_llm:
         console.print("  [yellow]Running in no-LLM mode (heuristic diagnosis only)[/yellow]\n")
     else:
-        console.print(f"  [dim]Model: {llm_model}[/dim]\n")
+        console.print(f"  [dim]Model: {llm_model} — Stage 2 AgentOrchestrator[/dim]\n")
 
     # Executa pipeline de agentes (logica migrada de agents.orchestrator)
     t0 = time.time()
@@ -539,7 +554,16 @@ def step_agents(report, retriever, use_llm: bool = True,
     # 2. DIAGNOSING
     affected = ", ".join(detection.get("affected_services", []))
     _transition("DETECTING", "DIAGNOSING", f"Investigando incidente em {affected}")
-    diagnosis = diagnoser.diagnose(report, retriever)
+    if use_llm:
+        _outcome = _orchestrator.run(report, retriever)
+        diagnosis = _outcome.diagnosis
+        # Propaga atributos usados no REFLECT+WRITE do Estágio 1
+        diagnoser.tools_used = _outcome.tools_used
+        diagnoser.iteration_count = _outcome.iterations
+    else:
+        diagnosis = diagnoser._heuristic_diagnosis(report)
+        diagnoser.tools_used = []
+        diagnoser.iteration_count = 0
     result["stages"]["diagnosis"] = diagnosis
 
     if not diagnosis.get("root_cause"):
@@ -575,12 +599,15 @@ def step_agents(report, retriever, use_llm: bool = True,
     _tnr_str = result.get("stages", {}).get("verification", {}).get("result", "unknown")
     _tnr_passed = (_tnr_str == "success")
 
-    if use_llm:
+    if use_llm and _outcome.reflection:
+        _reflection = _outcome.reflection
+    elif use_llm:
         _reflection = diagnoser.reflect(
             diagnosis=diagnosis if diagnosis else {},
             tnr_result=_tnr_str,
             tools_used=diagnoser.tools_used,
         )
+    if use_llm:
         result["skill_reflection"] = _reflection
         console.print(
             f"  [dim]Reflection: {_reflection.get('lesson', '—')} "
