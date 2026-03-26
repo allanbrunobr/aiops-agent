@@ -96,20 +96,21 @@ class SkillRouter:
         return DEFAULT_SKILL
 
     def seed_default_skills(self) -> None:
-        """Popula skills iniciais para cenários conhecidos.
+        """Popula skills iniciais para cenários conhecidos (idempotente).
 
-        Chamado uma vez na primeira execução. As skills evoluem a partir daqui.
+        Usa skill_ids determinísticos para evitar duplicatas.
+        Não sobrescreve skills que já foram evoluídas (version > 1).
         """
         defaults = [
             DiagnosticSkill(
-                skill_id=str(uuid.uuid4()),
+                skill_id="seed-connection-pool",
                 name="connection-pool-diagnosis",
                 scenario_pattern="connection pool|pool exhausted|max_connections",
                 system_prompt=_POOL_EXHAUSTION_PROMPT,
                 priority_tools=["query_metrics", "correlate_signals", "query_logs"],
             ),
             DiagnosticSkill(
-                skill_id=str(uuid.uuid4()),
+                skill_id="seed-memory-leak",
                 name="memory-leak-diagnosis",
                 scenario_pattern="memory|oom|heap|leak",
                 system_prompt=_MEMORY_LEAK_PROMPT,
@@ -125,4 +126,6 @@ class SkillRouter:
             ),
         ]
         for skill in defaults:
-            self.db.save_skill(skill)
+            existing = self.db.get_skill(skill.skill_id)
+            if existing is None:
+                self.db.save_skill(skill)

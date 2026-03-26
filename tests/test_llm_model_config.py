@@ -104,6 +104,12 @@ class TestAiopsLlmModelEnvVar:
             # Setup mocks
             MockDetector.return_value = MagicMock()
             mock_diagnoser_instance = MagicMock()
+            mock_diagnoser_instance.reflect.return_value = {
+                "lesson": "test", "score": 0.5, "priority_tools": [],
+            }
+            mock_diagnoser_instance.tools_used = []
+            mock_diagnoser_instance.iteration_count = 0
+            mock_diagnoser_instance.skill = None
             MockDiagnoser.return_value = mock_diagnoser_instance
 
             from main import step_agents
@@ -159,10 +165,16 @@ class TestAiopsLlmModelEnvVar:
         mock_report.total_traces = 0
         mock_report.to_text.return_value = "test report"
 
-        with patch("main.DiagnosisAgent"), \
+        with patch("main.DiagnosisAgent") as MockDiag, \
              patch("main.DetectionAgent"), \
              patch("main.MitigationAgent"), \
              patch("main.TNRSafetyGuard"):
+
+            _inst = MockDiag.return_value
+            _inst.reflect.return_value = {"lesson": "test", "score": 0.5, "priority_tools": []}
+            _inst.tools_used = []
+            _inst.iteration_count = 0
+            _inst.skill = None
 
             from main import step_agents
             result = step_agents(mock_report, retriever=None, use_llm=True, llm_model="my-model")

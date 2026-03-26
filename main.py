@@ -482,6 +482,8 @@ def step_agents(report, retriever, use_llm: bool = True,
         limit=3,
     )
     _skill_router = SkillRouter(_memory_db)
+    # Seed default skills na primeira execução (idempotente se já existem)
+    _skill_router.seed_default_skills()
     _skill = _skill_router.route(_fault_tags, list(report.affected_services))
     console.print(
         f"  [dim]Skill selected: {_skill.name} "
