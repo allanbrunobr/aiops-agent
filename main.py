@@ -470,14 +470,22 @@ def step_agents(report, retriever, use_llm: bool = True,
     if config is None:
         config = AppConfig()
 
-    # ── Skill Evolution: READ ─────────────────────────────────────────────
-    # Consulta memória ANTES do diagnóstico para injetar precedentes relevantes.
+    # ── Skill Evolution: READ + ROUTE ─────────────────────────────────────
+    # 1. Consulta memória para injetar precedentes relevantes no diagnóstico.
+    # 2. Seleciona a melhor DiagnosticSkill para o tipo de incidente detectado.
+    from agents.skill_router import SkillRouter
     _memory_db = IncidentMemoryDB()
     _fault_tags = _extract_fault_tags(report)
     _similar_incidents = _memory_db.find_similar_incidents(
         affected_services=list(report.affected_services),
         tags=_fault_tags,
         limit=3,
+    )
+    _skill_router = SkillRouter(_memory_db)
+    _skill = _skill_router.route(_fault_tags, list(report.affected_services))
+    console.print(
+        f"  [dim]Skill selected: {_skill.name} "
+        f"(utility={_skill.utility_score:.2f})[/dim]"
     )
     # ─────────────────────────────────────────────────────────────────────
 
@@ -490,6 +498,7 @@ def step_agents(report, retriever, use_llm: bool = True,
         max_iterations=5 if use_llm else 1,
         model=llm_model,
         similar_incidents=_similar_incidents,
+        skill=_skill,
     )
     mitigator = MitigationAgent()
     tnr_guard = TNRSafetyGuard(regression_threshold=config.thresholds.regression_threshold)
