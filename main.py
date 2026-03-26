@@ -371,7 +371,8 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
     console.print()
 
     t0 = time.time()
-    indexer = ObservabilityIndexer()
+    from tools.faiss_setup import setup_faiss_index
+    indexer = setup_faiss_index() or ObservabilityIndexer()
 
     # Calcula hash do conteudo atual para deteccao de stale
     content_hash = ObservabilityIndexer._compute_content_hash(
@@ -1698,20 +1699,12 @@ def main_v1(args: argparse.Namespace) -> int:
     # Slack notifier — opcional, wired se SLACK_BOT_TOKEN estiver no ambiente
     from core.lifecycle import LifecycleEvent
     from datetime import timezone as _tz
-    _slack_notifier = None
-    _slack_token = os.environ.get("SLACK_BOT_TOKEN")
-    _slack_channel = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
-    if _slack_token and _slack_channel:
-        try:
-            from server.notifications.slack import SlackNotifier
-            _slack_notifier = SlackNotifier(
-                channel=_slack_channel,
-                creds=EnvCredentialProvider(),
-            )
-            log.info("slack.notifier_created", channel=_slack_channel)
-            console.print(f"[cyan]Slack: notifier created for #{_slack_channel}[/cyan]")
-        except Exception as _exc:
-            log.warning("slack.notifier_failed", error=str(_exc))
+    from tools.slack_setup import setup_slack_notifier
+    _slack_notifier = setup_slack_notifier()
+    if _slack_notifier is not None:
+        _slack_channel = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
+        log.info("slack.notifier_created", channel=_slack_channel)
+        console.print(f"[cyan]Slack: notifier created for #{_slack_channel}[/cyan]")
 
     def _fire(event_type: str, node_name: str | None = None, data: dict | None = None, cid: str = "") -> None:
         """Dispara evento de ciclo de vida para o SlackNotifier (sync wrapper)."""
@@ -1865,17 +1858,11 @@ def main() -> int:
     import asyncio as _asyncio
     from core.lifecycle import LifecycleEvent as _LifecycleEvent
     from datetime import timezone as _tz2
-    _notifier = None
-    _slack_tok = os.environ.get("SLACK_BOT_TOKEN")
-    _slack_ch = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
-    if _slack_tok and _slack_ch:
-        try:
-            from server.notifications.slack import SlackNotifier as _SlackNotifier
-            from core.credentials import EnvCredentialProvider as _ECP
-            _notifier = _SlackNotifier(channel=_slack_ch, creds=_ECP())
-            console.print(f"[cyan]Slack: notificacoes ativas em #{_slack_ch}[/cyan]")
-        except Exception as _se:
-            console.print(f"[yellow]Slack: nao disponivel ({_se})[/yellow]")
+    from tools.slack_setup import setup_slack_notifier as _setup_slack
+    _notifier = _setup_slack()
+    if _notifier is not None:
+        _slack_ch = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
+        console.print(f"[cyan]Slack: notificacoes ativas em #{_slack_ch}[/cyan]")
 
     def _slack_fire(event_type: str, data: dict | None = None, cid: str = "unknown") -> None:
         if _notifier is None:
