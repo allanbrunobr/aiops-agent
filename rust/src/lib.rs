@@ -7,6 +7,7 @@ mod log_parser;
 mod metric_filter;
 mod telemetry_sanitizer;
 mod trace_filter;
+mod trace_predictor;
 
 /// Detecta ponto de mudança CUSUM em série temporal.
 /// Fallback direto em lib.rs para garantir registro no módulo.
@@ -66,5 +67,7 @@ fn _aiops_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // CUSUM change-point detection e EWMA slope (Story 1.2)
     m.add_function(wrap_pyfunction!(detect_cusum, m)?)?;
     m.add_function(wrap_pyfunction!(compute_ewma_slope, m)?)?;
+    // TracePredictor: _percentile + detect_latency_drift (Story 6.1)
+    m.add_function(wrap_pyfunction!(trace_predictor::detect_latency_drift, m)?)?;
     Ok(())
 }
