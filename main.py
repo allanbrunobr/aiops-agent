@@ -575,23 +575,39 @@ def step_agents(report, retriever, use_llm: bool = True,
 
     # 3. MITIGATING
     _transition("DIAGNOSING", "MITIGATING", "Propondo remediação...")
-    mitigation = mitigator.propose(diagnosis)
+    if use_llm:
+        # Reutiliza mitigation já computada dentro do orchestrator (evita duplicata)
+        mitigation = _outcome.mitigation
+    else:
+        mitigation = mitigator.propose(diagnosis)
     result["stages"]["mitigation"] = mitigation
 
     # 4. VERIFYING (TNR)
     _transition("MITIGATING", "VERIFYING", "Verificando impacto (TNR)...")
-    tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
-    result["stages"]["verification"] = {
-        "result": tnr_result.result.value,
-        "health_delta": tnr_result.health_delta,
-        "message": tnr_result.message,
-    }
+    if use_llm:
+        # Reutiliza resultado TNR já computado dentro do orchestrator (evita duplicata)
+        _tnr_regression = not _outcome.tnr_passed
+        _tnr_msg = _outcome.tnr_message
+        result["stages"]["verification"] = {
+            "result": "success" if _outcome.tnr_passed else "regression",
+            "health_delta": _outcome.tnr_health_delta,
+            "message": _tnr_msg,
+        }
+    else:
+        tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
+        _tnr_regression = tnr_result.result.value == "regression"
+        _tnr_msg = tnr_result.message
+        result["stages"]["verification"] = {
+            "result": tnr_result.result.value,
+            "health_delta": tnr_result.health_delta,
+            "message": _tnr_msg,
+        }
 
-    if tnr_result.result.value == "regression":
-        _transition("VERIFYING", "ROLLBACK", f"Regressão detectada: {tnr_result.message}")
+    if _tnr_regression:
+        _transition("VERIFYING", "ROLLBACK", f"Regressão detectada: {_tnr_msg}")
         result["stages"]["rollback"] = {"message": "Rollback executado, retornando ao diagnostico"}
     else:
-        _transition("VERIFYING", "RESOLVED", f"Incidente resolvido: {tnr_result.message}")
+        _transition("VERIFYING", "RESOLVED", f"Incidente resolvido: {_tnr_msg}")
         result["success"] = True
 
     # ── Skill Evolution: REFLECT + WRITE ─────────────────────────────────
@@ -599,6 +615,8 @@ def step_agents(report, retriever, use_llm: bool = True,
     _tnr_str = result.get("stages", {}).get("verification", {}).get("result", "unknown")
     _tnr_passed = (_tnr_str == "success")
 
+    # Fix 3: inicializa antes dos branches para evitar NameError em fluxos inesperados
+    _reflection: dict = {"lesson": "no-llm mode", "score": 0.5, "priority_tools": []}
     if use_llm and _outcome.reflection:
         _reflection = _outcome.reflection
     elif use_llm:
@@ -613,14 +631,13 @@ def step_agents(report, retriever, use_llm: bool = True,
             f"  [dim]Reflection: {_reflection.get('lesson', '—')} "
             f"(score={_reflection.get('score', 0.5):.2f})[/dim]"
         )
-    else:
-        _reflection = {"lesson": "no-llm mode", "score": 0.5, "priority_tools": []}
 
     # Persiste outcome independente do modo (write funciona em --no-llm)
     try:
         from rag.memory import SkillOutcome
         import datetime as _dt
-        _outcome = SkillOutcome(
+        # Fix 2: renomeado para _skill_outcome — evita shadow sobre AgentOutcome
+        _skill_outcome = SkillOutcome(
             outcome_id=str(uuid.uuid4()),
             skill_id=getattr(getattr(diagnoser, "skill", None), "skill_id", "default"),
             incident_id=str(uuid.uuid4()),
@@ -631,15 +648,16 @@ def step_agents(report, retriever, use_llm: bool = True,
             iteration_count=diagnoser.iteration_count,
             timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
         )
-        _memory_db.save_skill_outcome(_outcome)
+        _memory_db.save_skill_outcome(_skill_outcome)
 
         # ── Fase 5: EVOLVE — reescreve skills fracas ─────────────────────
         from agents.skill_evolver import SkillEvolver
 
         _active_skill = getattr(diagnoser, "skill", None)
         if _active_skill is not None:
+            # Fix 6: usa client do orchestrator (diagnoser.client é None no Estágio 2)
             _evolver = SkillEvolver(
-                client=diagnoser.client if use_llm else None,
+                client=_orchestrator.client if use_llm else None,
                 memory_db=_memory_db,
             )
             if _evolver.should_evolve(_active_skill):

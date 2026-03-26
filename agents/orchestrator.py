@@ -199,6 +199,9 @@ class AgentOutcome:
     iterations: int = 0
     replans: int = 0
     tnr_passed: bool = False
+    tnr_health_delta: float = 0.0
+    tnr_message: str = ""
+    mitigation: dict = field(default_factory=dict)
     reflection: dict | None = None
 
 
@@ -225,8 +228,10 @@ class AgentOrchestrator:
       1. CONTEXTUALIZE — consulta skills + memória (Estágio 1)
       2. PLAN          — LLM gera plano de investigação
       3. EXECUTE       — executa steps com reflect entre cada um
-      4. SAFETY        — valida ação proposta (invariante, nunca pelo LLM)
-      5. LEARN         — atualiza skills e memória (Estágio 1)
+      4. SAFETY        — Mitigation + TNR internamente (para replanning);
+                         VersionValidator e PreValidator ficam no pipeline externo
+                         (step_safety_validation / step_remediation_validation em main.py).
+      5. LEARN         — reflexão final; persistência fica no caller (main.py)
     """
 
     MAX_REPLANS = 2
@@ -289,7 +294,7 @@ class AgentOrchestrator:
                 decision = step_reflection.get("decision", "continue")
 
                 if decision == "finalize":
-                    diagnosis = self._synthesize_diagnosis(plan, report, step_reflection)
+                    diagnosis = self._synthesize_diagnosis(plan, report, step_reflection, skill)
                     break
 
                 if decision == "replan":
@@ -304,7 +309,7 @@ class AgentOrchestrator:
                 break
 
         if not diagnosis:
-            diagnosis = self._synthesize_diagnosis(plan, report, {})
+            diagnosis = self._synthesize_diagnosis(plan, report, {}, skill)
 
         # ── 4. SAFETY (invariante — nunca controlada pelo LLM) ────────
         mitigator = MitigationAgent()
@@ -328,7 +333,7 @@ class AgentOrchestrator:
             for step in plan.steps:
                 step.result = self._execute_step(step, report, retriever)
                 tools_used.append(step.tool)
-            diagnosis = self._synthesize_diagnosis(plan, report, {})
+            diagnosis = self._synthesize_diagnosis(plan, report, {}, skill)
             mitigation = mitigator.propose(diagnosis)
             tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
             tnr_passed = getattr(getattr(tnr_result, "result", None), "value", None) == "success"
@@ -339,10 +344,13 @@ class AgentOrchestrator:
         return AgentOutcome(
             diagnosis=diagnosis,
             plan=plan,
+            mitigation=mitigation,
+            tnr_passed=tnr_passed,
+            tnr_health_delta=getattr(tnr_result, "health_delta", 0.0),
+            tnr_message=getattr(tnr_result, "message", ""),
             tools_used=tools_used,
             iterations=sum(1 for s in plan.steps if s.result is not None),
             replans=replans,
-            tnr_passed=tnr_passed,
             reflection=final_reflection,
         )
 
@@ -509,27 +517,36 @@ class AgentOrchestrator:
             return old_plan  # fallback: mantém plano original
 
     def _synthesize_diagnosis(
-        self, plan: InvestigationPlan, report, last_reflection: dict
+        self, plan: InvestigationPlan, report, last_reflection: dict, skill=None
     ) -> dict:
-        """LLM sintetiza diagnóstico final a partir das evidências coletadas."""
+        """LLM sintetiza diagnóstico final a partir das evidências coletadas.
+
+        O skill.system_prompt é injetado como system message para que o domínio
+        de conhecimento da skill guie não só o plano mas também a síntese.
+        """
         evidence = [
             f"[{s.tool}] {s.goal}: {(s.result or 'no data')[:200]}"
             for s in plan.steps
             if s.result
         ]
+        skill_prompt = getattr(skill, "system_prompt", None)
+        system_msg = skill_prompt[:300] if skill_prompt else None
+        kwargs: dict = {
+            "model": self.model,
+            "max_tokens": 1024,
+            "messages": [{
+                "role": "user",
+                "content": SYNTHESIZE_PROMPT.format(
+                    hypothesis=plan.hypothesis,
+                    evidence="\n".join(evidence) or "(no evidence collected)",
+                    incident_summary=report.to_compact_text()[:500],
+                ),
+            }],
+        }
+        if system_msg:
+            kwargs["system"] = system_msg
         try:
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=1024,
-                messages=[{
-                    "role": "user",
-                    "content": SYNTHESIZE_PROMPT.format(
-                        hypothesis=plan.hypothesis,
-                        evidence="\n".join(evidence) or "(no evidence collected)",
-                        incident_summary=report.to_compact_text()[:500],
-                    ),
-                }],
-            )
+            response = self.client.messages.create(**kwargs)
             return json.loads(response.content[0].text)
         except Exception:  # noqa: BLE001
             return DiagnosisAgent()._heuristic_diagnosis(report)
