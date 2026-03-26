@@ -11,11 +11,15 @@ História 5.6: Montagem condicional com base em config.mcp.enabled.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import structlog
 from fastapi import FastAPI
 
 from config.loader import AppConfig
+
+if TYPE_CHECKING:
+    from rag.knowledge_store import KnowledgeStore
 
 log = structlog.get_logger()
 
@@ -294,9 +298,10 @@ class AppState:
     config: AppConfig | None = None
     store: object = None  # IncidentStore
     engine: object = None  # BlueprintEngine
+    knowledge_store: KnowledgeStore | None = None
 
 
 app_state = AppState()
 
-# Placeholder — knowledge_store não inicializado nesta versão
-knowledge_store: object = None
+# Compatibilidade retroativa — referenciado por server/handlers/false_positive.py
+knowledge_store: KnowledgeStore | None = None

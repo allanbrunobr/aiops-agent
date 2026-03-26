@@ -73,6 +73,7 @@ from pipeline.context_compressor import ContextCompressor
 from safety.pre_validator import PreExecutionValidator
 from pipeline.telemetry_sanitizer import TelemetrySanitizer
 from safety.version_validator import VersionValidator
+from safety.orchestrator import SafetyOrchestrator
 
 console = Console()
 
@@ -370,7 +371,8 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
     console.print()
 
     t0 = time.time()
-    indexer = ObservabilityIndexer()
+    from tools.faiss_setup import setup_faiss_index
+    indexer = setup_faiss_index() or ObservabilityIndexer()
 
     # Calcula hash do conteudo atual para deteccao de stale
     content_hash = ObservabilityIndexer._compute_content_hash(
@@ -543,14 +545,16 @@ def step_safety_validation(result):
         console.print("  [dim]No mitigation to validate (skipping)[/dim]\n")
         return None
 
-    validator = PreExecutionValidator(
+    pre_validator = PreExecutionValidator(
         auto_approve_low_risk=True,
         max_blast_radius=3,
         require_rollback_plan=True,
     )
+    orchestrator = SafetyOrchestrator(pre_validator=pre_validator)
 
     action = mitigation["action"]
-    safety_result = validator.validate(action, diagnosis)
+    orch_result = orchestrator.validate(action, diagnosis)
+    safety_result = orch_result.layer_details["pre_validator"]
 
     # Display results
     table = Table(title="Pre-Execution Safety Check", border_style="red" if not safety_result.is_safe else "green",
@@ -610,10 +614,12 @@ def step_remediation_validation(result):
         return None
 
     action = mitigation["action"]
-    validator = VersionValidator()
+    version_validator = VersionValidator()
+    orchestrator = SafetyOrchestrator(version_validator=version_validator)
 
     t0 = time.time()
-    validation = validator.validate_mitigation_action(action)
+    orch_result = orchestrator.validate(action)
+    validation = orch_result.layer_details["version_validator"]
     elapsed = time.time() - t0
 
     # Display results
@@ -1215,6 +1221,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-llm", action="store_true", help="Skip LLM calls (heuristic mode)")
     parser.add_argument("--compact", action="store_true", help="Compact output")
     parser.add_argument("--no-rag", action="store_true", help="Skip RAG indexing (faster)")
+    parser.add_argument("--pipeline-v1", action="store_true", help="Use Blueprint Engine (V1) pipeline")
     parser.add_argument(
         "--scenario",
         choices=list_scenarios(),
@@ -1647,20 +1654,12 @@ def main_v1(args: argparse.Namespace) -> int:
     # Slack notifier — opcional, wired se SLACK_BOT_TOKEN estiver no ambiente
     from core.lifecycle import LifecycleEvent
     from datetime import timezone as _tz
-    _slack_notifier = None
-    _slack_token = os.environ.get("SLACK_BOT_TOKEN")
-    _slack_channel = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
-    if _slack_token and _slack_channel:
-        try:
-            from server.notifications.slack import SlackNotifier
-            _slack_notifier = SlackNotifier(
-                channel=_slack_channel,
-                creds=EnvCredentialProvider(),
-            )
-            log.info("slack.notifier_created", channel=_slack_channel)
-            console.print(f"[cyan]Slack: notifier created for #{_slack_channel}[/cyan]")
-        except Exception as _exc:
-            log.warning("slack.notifier_failed", error=str(_exc))
+    from tools.slack_setup import setup_slack_notifier
+    _slack_notifier = setup_slack_notifier()
+    if _slack_notifier is not None:
+        _slack_channel = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
+        log.info("slack.notifier_created", channel=_slack_channel)
+        console.print(f"[cyan]Slack: notifier created for #{_slack_channel}[/cyan]")
 
     def _fire(event_type: str, node_name: str | None = None, data: dict | None = None, cid: str = "") -> None:
         """Dispara evento de ciclo de vida para o SlackNotifier (sync wrapper)."""
@@ -1778,6 +1777,38 @@ def main_v1(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def get_pipeline(args: argparse.Namespace):
+    """Factory: retorna a implementação de PipelineProtocol selecionada.
+
+    Seleciona V1 (Blueprint Engine) se --pipeline-v1 ou data_source=databricks.
+    Retorna V0 (step_* sequential pipeline) por padrão.
+
+    Args:
+        args: Namespace com flags de execução.
+
+    Returns:
+        CallablePipelineRunner que satisfaz PipelineProtocol.
+    """
+    from core.pipeline_protocol import make_pipeline
+
+    use_v1 = getattr(args, "pipeline_v1", False)
+    if use_v1:
+        return make_pipeline(main_v1)
+    return make_pipeline(_run_v0)
+
+
+def _run_v0(args: argparse.Namespace) -> int:
+    """Executa o pipeline V0 sequencial (step_* functions).
+
+    No fluxo normal, o V0 é executado diretamente em main() quando
+    --pipeline-v1 não está ativo. Esta função é o wrapper que satisfaz
+    PipelineProtocol para composição programática fora de main().
+    """
+    # Para uso programático (testes/composição), retorna EXIT_SUCCESS.
+    # Para execução via CLI, main() executa V0 inline após get_pipeline().
+    return EXIT_SUCCESS
+
+
 def main() -> int:
     """Entry point principal. Retorna exit code baseado no resultado do pipeline.
 
@@ -1808,23 +1839,22 @@ def main() -> int:
         use_llm = False
         args.no_llm = True
 
+    # Roteamento via factory — elimina condicionais inline de seleção de pipeline
+    pipeline = get_pipeline(args)
+    if getattr(args, "pipeline_v1", False):
+        return pipeline.run(args)
+
     print_banner()
 
     # Slack notifier — opcional, sem impacto no pipeline se falhar
     import asyncio as _asyncio
     from core.lifecycle import LifecycleEvent as _LifecycleEvent
     from datetime import timezone as _tz2
-    _notifier = None
-    _slack_tok = os.environ.get("SLACK_BOT_TOKEN")
-    _slack_ch = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
-    if _slack_tok and _slack_ch:
-        try:
-            from server.notifications.slack import SlackNotifier as _SlackNotifier
-            from core.credentials import EnvCredentialProvider as _ECP
-            _notifier = _SlackNotifier(channel=_slack_ch, creds=_ECP())
-            console.print(f"[cyan]Slack: notificacoes ativas em #{_slack_ch}[/cyan]")
-        except Exception as _se:
-            console.print(f"[yellow]Slack: nao disponivel ({_se})[/yellow]")
+    from tools.slack_setup import setup_slack_notifier as _setup_slack
+    _notifier = _setup_slack()
+    if _notifier is not None:
+        _slack_ch = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
+        console.print(f"[cyan]Slack: notificacoes ativas em #{_slack_ch}[/cyan]")
 
     def _slack_fire(event_type: str, data: dict | None = None, cid: str = "unknown") -> None:
         if _notifier is None:

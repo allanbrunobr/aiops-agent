@@ -13,8 +13,12 @@ import json
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 import structlog
+
+from core.models import MitigationAction, NormalizedAlert
+from safety.orchestrator import SafetyOrchestrator
 
 log = structlog.get_logger()
 
@@ -284,8 +288,32 @@ async def handle_validate_action(
         correlation_id=correlation_id,
     )
 
-    # Camada 2: PreExecutionValidator — blast radius + blocklist
-    layer_2 = _check_pre_validator(command, target_service, blast_radius, pre_validator)
+    # Camadas 2-4: SafetyOrchestrator — PreValidator → TNR → VersionValidator
+    orchestrator = SafetyOrchestrator(
+        pre_validator=pre_validator,
+        tnr=tnr,
+        version_validator=version_validator,
+    )
+    action = MitigationAction(
+        description=f"MCP validate_action: {command[:80]}",
+        command=command,
+        risk_level="MEDIUM",
+        rollback_command=None,
+    )
+    orch_result = orchestrator.validate(
+        action,
+        diagnosis={"affected_services": [target_service], "confidence": "medium"},
+        correlation_id=correlation_id or "",
+    )
+
+    # Adapta resultado do orquestrador para LayerResult por camada
+    pre_detail = orch_result.layer_details.get("pre_validator")
+    layer_2 = LayerResult(
+        layer_name="PreExecutionValidator",
+        passed="pre_validator" not in orch_result.blocked_by,
+        risk_contribution=float(getattr(pre_detail, "risk_score", 0) or 0) / 100.0,
+        detail=getattr(pre_detail, "recommendation", "Passed") or "Passed",
+    )
     layer_results.append(layer_2)
     log.info(
         "mcp.validate_action.layer",
@@ -295,8 +323,14 @@ async def handle_validate_action(
         correlation_id=correlation_id,
     )
 
-    # Camada 3: TNR — snapshot de saúde (simulado)
-    layer_3 = _check_tnr(command, target_service, tnr)
+    tnr_detail = orch_result.layer_details.get("tnr")
+    tnr_msg = getattr(tnr_detail, "message", "TNR check passed") or "TNR check passed"
+    layer_3 = LayerResult(
+        layer_name="TNR",
+        passed="tnr" not in orch_result.blocked_by,
+        risk_contribution=0.3 if "tnr" in orch_result.blocked_by else 0.0,
+        detail=tnr_msg if isinstance(tnr_msg, str) else "TNR check passed",
+    )
     layer_results.append(layer_3)
     log.info(
         "mcp.validate_action.layer",
@@ -306,8 +340,13 @@ async def handle_validate_action(
         correlation_id=correlation_id,
     )
 
-    # Camada 4: VersionValidator — CVE e versões
-    layer_4 = _check_version_validator(command, version_validator)
+    ver_detail = orch_result.layer_details.get("version_validator")
+    layer_4 = LayerResult(
+        layer_name="VersionValidator",
+        passed="version_validator" not in orch_result.blocked_by,
+        risk_contribution=0.5 if "version_validator" in orch_result.blocked_by else 0.0,
+        detail=getattr(ver_detail, "recommendation", "Passed") or "Passed",
+    )
     layer_results.append(layer_4)
     log.info(
         "mcp.validate_action.layer",
@@ -722,14 +761,20 @@ def _normalize_alert(
         except Exception:
             pass  # Fallback para objeto simples
 
-    # Objeto simples compatível com pipeline
-    class _SimpleAlert:
-        pass
-
-    alert = _SimpleAlert()
-    alert.source = source  # type: ignore[attr-defined]
-    alert.severity = severity  # type: ignore[attr-defined]
-    alert.title = title  # type: ignore[attr-defined]
-    alert.description = description  # type: ignore[attr-defined]
-    alert.service = service or ""  # type: ignore[attr-defined]
-    return alert
+    # Fallback: objeto NormalizedAlert com defaults para campos obrigatórios
+    # Mapeia severidades MCP (critical/high/medium/low) para pipeline (critical/error/warning/info)
+    _severity_map = {"critical": "critical", "high": "error", "medium": "warning", "low": "info"}
+    pipeline_severity = _severity_map.get(severity.lower(), "warning")
+    now = datetime.now(timezone.utc)
+    return NormalizedAlert(
+        source=source,
+        source_id=f"mcp-{uuid.uuid4().hex[:8]}",
+        correlation_id=f"inc-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}",
+        title=title,
+        description=description,
+        severity=pipeline_severity,
+        alert_type="mcp_alert",
+        timestamp=now,
+        detection_timestamp=now,
+        service=service or None,
+    )
