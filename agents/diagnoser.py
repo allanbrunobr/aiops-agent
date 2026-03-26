@@ -21,7 +21,12 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.markdown import Markdown
 
+from config.loader import LLMConfig as _LLMConfig
+
 console = Console()
+
+# Modelo padrão lido do AppConfig.llm.model_name — evita string hardcoded no agente.
+_DEFAULT_MODEL: str = _LLMConfig().model_name
 
 SYSTEM_PROMPT = """You are an expert SRE agent performing Root Cause Analysis on a production incident.
 
@@ -57,7 +62,7 @@ IMPORTANT: Wrap your final answer in <DIAGNOSIS> tags like:
 class DiagnosisAgent:
     """Agente de diagnóstico usando ReAct loop com Claude."""
 
-    def __init__(self, max_iterations: int = 8, model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, max_iterations: int = 8, model: str = _DEFAULT_MODEL):
         self.max_iterations = max_iterations
         self.model = model
         self.client = None

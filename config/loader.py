@@ -228,6 +228,14 @@ class NotificationsConfig(BaseModel):
     observability: ObservabilityConfig = ObservabilityConfig()
 
 
+class LLMConfig(BaseModel):
+    """Configuração do modelo LLM usado pelo DiagnosisAgent."""
+
+    model_config = ConfigDict(frozen=True)
+
+    model_name: str = "claude-sonnet-4-20250514"
+
+
 class AppConfig(BaseSettings):
     """Configuracao raiz do AIOps Agent."""
 
@@ -247,6 +255,7 @@ class AppConfig(BaseSettings):
     slack: SlackConfig = SlackConfig()
     notifications: NotificationsConfig = NotificationsConfig()
     mcp: McpConfig = McpConfig()
+    llm: LLMConfig = LLMConfig()
 
     @classmethod
     def settings_customise_sources(
