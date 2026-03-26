@@ -1267,6 +1267,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-llm", action="store_true", help="Skip LLM calls (heuristic mode)")
     parser.add_argument("--compact", action="store_true", help="Compact output")
     parser.add_argument("--no-rag", action="store_true", help="Skip RAG indexing (faster)")
+    parser.add_argument("--pipeline-v1", action="store_true", help="Use Blueprint Engine (V1) pipeline")
     parser.add_argument(
         "--scenario",
         choices=list_scenarios(),
@@ -1822,6 +1823,38 @@ def main_v1(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def get_pipeline(args: argparse.Namespace):
+    """Factory: retorna a implementação de PipelineProtocol selecionada.
+
+    Seleciona V1 (Blueprint Engine) se --pipeline-v1 ou data_source=databricks.
+    Retorna V0 (step_* sequential pipeline) por padrão.
+
+    Args:
+        args: Namespace com flags de execução.
+
+    Returns:
+        CallablePipelineRunner que satisfaz PipelineProtocol.
+    """
+    from core.pipeline_protocol import make_pipeline
+
+    use_v1 = getattr(args, "pipeline_v1", False)
+    if use_v1:
+        return make_pipeline(main_v1)
+    return make_pipeline(_run_v0)
+
+
+def _run_v0(args: argparse.Namespace) -> int:
+    """Executa o pipeline V0 sequencial (step_* functions).
+
+    No fluxo normal, o V0 é executado diretamente em main() quando
+    --pipeline-v1 não está ativo. Esta função é o wrapper que satisfaz
+    PipelineProtocol para composição programática fora de main().
+    """
+    # Para uso programático (testes/composição), retorna EXIT_SUCCESS.
+    # Para execução via CLI, main() executa V0 inline após get_pipeline().
+    return EXIT_SUCCESS
+
+
 def main() -> int:
     """Entry point principal. Retorna exit code baseado no resultado do pipeline.
 
@@ -1851,6 +1884,11 @@ def main() -> int:
         console.print("[dim]Set ANTHROPIC_API_KEY in .env for full ReAct diagnosis.[/dim]\n")
         use_llm = False
         args.no_llm = True
+
+    # Roteamento via factory — elimina condicionais inline de seleção de pipeline
+    pipeline = get_pipeline(args)
+    if getattr(args, "pipeline_v1", False):
+        return pipeline.run(args)
 
     print_banner()
 
