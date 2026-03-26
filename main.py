@@ -435,6 +435,22 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
     return retriever
 
 
+def _extract_fault_tags(report) -> list[str]:
+    """Extrai fault tags do AggregatedReport para roteamento de skills."""
+    tags: list[str] = []
+    for tpl in getattr(report, "log_templates", []):
+        tpl_lower = tpl.template.lower()
+        if "connection pool" in tpl_lower or "pool exhausted" in tpl_lower:
+            tags.append("connection_pool")
+        if "memory" in tpl_lower or "oom" in tpl_lower or "heap" in tpl_lower:
+            tags.append("memory_leak")
+        if "timeout" in tpl_lower:
+            tags.append("timeout")
+        if "serial" in tpl_lower or "schema" in tpl_lower:
+            tags.append("serialization_error")
+    return list(set(tags)) or ["unknown"]
+
+
 def step_agents(report, retriever, use_llm: bool = True,
                 llm_model: str = "claude-sonnet-4-20250514",
                 config: AppConfig | None = None) -> dict:
@@ -453,12 +469,27 @@ def step_agents(report, retriever, use_llm: bool = True,
     if config is None:
         config = AppConfig()
 
+    # ── Skill Evolution: READ ─────────────────────────────────────────────
+    # Consulta memória ANTES do diagnóstico para injetar precedentes relevantes.
+    _memory_db = IncidentMemoryDB()
+    _fault_tags = _extract_fault_tags(report)
+    _similar_incidents = _memory_db.find_similar_incidents(
+        affected_services=list(report.affected_services),
+        tags=_fault_tags,
+        limit=3,
+    )
+    # ─────────────────────────────────────────────────────────────────────
+
     # Inicializa agentes
     detector = DetectionAgent(
         error_threshold=config.thresholds.error_threshold,
         sigma_threshold=config.thresholds.detection_sigma_threshold,
     )
-    diagnoser = DiagnosisAgent(max_iterations=5 if use_llm else 1, model=llm_model)
+    diagnoser = DiagnosisAgent(
+        max_iterations=5 if use_llm else 1,
+        model=llm_model,
+        similar_incidents=_similar_incidents,
+    )
     mitigator = MitigationAgent()
     tnr_guard = TNRSafetyGuard(regression_threshold=config.thresholds.regression_threshold)
 
@@ -526,6 +557,23 @@ def step_agents(report, retriever, use_llm: bool = True,
     else:
         _transition("VERIFYING", "RESOLVED", f"Incidente resolvido: {tnr_result.message}")
         result["success"] = True
+
+    # ── Skill Evolution: REFLECT ──────────────────────────────────────────
+    # Reflexão pós-TNR: LLM avalia o resultado e gera lição aprendida.
+    # Apenas em modo LLM; em modo heurístico retorna fallback.
+    if use_llm:
+        _tnr_str = result.get("stages", {}).get("verification", {}).get("result", "unknown")
+        _reflection = diagnoser.reflect(
+            diagnosis=diagnosis if diagnosis else {},
+            tnr_result=_tnr_str,
+            tools_used=diagnoser.tools_used,
+        )
+        result["skill_reflection"] = _reflection
+        console.print(
+            f"  [dim]Reflection: {_reflection.get('lesson', '—')} "
+            f"(score={_reflection.get('score', 0.5):.2f})[/dim]"
+        )
+    # ─────────────────────────────────────────────────────────────────────
 
     result["timeline"] = timeline
     result["llm_model"] = llm_model if use_llm else "heuristic"

@@ -58,14 +58,40 @@ IMPORTANT: Wrap your final answer in <DIAGNOSIS> tags like:
 <DIAGNOSIS>{"root_cause": "...", ...}</DIAGNOSIS>
 """
 
+REFLECT_PROMPT = """You are reflecting on a completed incident diagnosis.
+
+DIAGNOSIS: {diagnosis}
+TNR RESULT: {tnr_result}
+TOOLS USED: {tools_used}
+ITERATIONS: {iterations}
+
+Analyze what worked, what didn't, and what to do differently next time.
+Respond ONLY with valid JSON (no markdown, no extra text):
+{{
+    "lesson": "Key takeaway in one sentence",
+    "score": 0.0,
+    "priority_tools": ["tool1", "tool2"],
+    "prompt_suggestion": "What to add to the prompt for this incident type"
+}}"""
+
 
 class DiagnosisAgent:
     """Agente de diagnóstico usando ReAct loop com Claude."""
 
-    def __init__(self, max_iterations: int = 8, model: str = _DEFAULT_MODEL):
+    def __init__(
+        self,
+        max_iterations: int = 8,
+        model: str = _DEFAULT_MODEL,
+        similar_incidents: list | None = None,
+        skill=None,
+    ):
         self.max_iterations = max_iterations
         self.model = model
         self.client = None
+        self.similar_incidents: list = similar_incidents or []
+        self.skill = skill
+        self.tools_used: list[str] = []
+        self.iteration_count: int = 0
 
     def _get_client(self) -> Anthropic:
         if self.client is None:
@@ -85,8 +111,18 @@ class DiagnosisAgent:
         except ImportError:
             pass
 
+        # Reinicia rastreamento por execução
+        self.tools_used = []
+        self.iteration_count = 0
+
         # Prepara contexto inicial com dados pré-processados
         initial_context = report.to_text()
+
+        # Fase 1 READ: enriquece contexto com incidentes similares da memória
+        if self.similar_incidents:
+            precedents = self._format_precedents(self.similar_incidents)
+            if precedents:
+                initial_context += f"\n\nSIMILAR PAST INCIDENTS:\n{precedents}"
 
         # Cria as tools simuladas
         tools = self._build_tools(report, retriever)
@@ -103,6 +139,7 @@ class DiagnosisAgent:
 
         diagnosis = None
         for iteration in range(1, self.max_iterations + 1):
+            self.iteration_count = iteration
             console.print(f"\n  [dim]--- Iteration {iteration}/{self.max_iterations} ---[/dim]")
 
             try:
@@ -149,6 +186,7 @@ class DiagnosisAgent:
                     console.print(f"  🔧 Action: {tool_name}({json.dumps(tool_input, ensure_ascii=False)[:80]})")
 
                     result = self._execute_tool(tool_name, tool_input, report, retriever)
+                    self.tools_used.append(tool_name)
                     console.print(f"  👁️ Observation: {result[:100]}...")
 
                     tool_results.append({
@@ -181,12 +219,13 @@ class DiagnosisAgent:
         return diagnosis
 
     def _call_llm(self, messages: list, tools: list) -> object:
-        """Chama Claude com tools."""
+        """Chama Claude com tools, usando prompt da skill se disponível."""
         client = self._get_client()
+        prompt = self.skill.system_prompt if self.skill else SYSTEM_PROMPT
         return client.messages.create(
             model=self.model,
             max_tokens=2048,
-            system=SYSTEM_PROMPT,
+            system=prompt,
             messages=messages,
             tools=tools,
         )
@@ -381,6 +420,51 @@ class DiagnosisAgent:
 
         except Exception as e:
             return f"Tool error: {e}"
+
+    def _format_precedents(self, incidents: list) -> str:
+        """Formata até 3 incidentes anteriores para contexto do LLM."""
+        lines = []
+        for inc in incidents[:3]:
+            lines.append(
+                f"- [{inc.scenario}] {inc.root_cause} "
+                f"(confidence: {inc.diagnosis_confidence:.2f}, "
+                f"resolution: {inc.resolution_time_sec:.0f}s)"
+            )
+        return "\n".join(lines)
+
+    def reflect(
+        self,
+        diagnosis: dict,
+        tnr_result: str,
+        tools_used: list[str],
+    ) -> dict:
+        """Reflexão pós-diagnóstico — LLM avalia o próprio resultado.
+
+        Retorna fallback heurístico quando LLM não está disponível.
+        """
+        try:
+            client = self._get_client()
+            response = client.messages.create(
+                model=self.model,
+                max_tokens=512,
+                messages=[{
+                    "role": "user",
+                    "content": REFLECT_PROMPT.format(
+                        diagnosis=json.dumps(diagnosis, default=str)[:500],
+                        tnr_result=tnr_result,
+                        tools_used=tools_used,
+                        iterations=self.iteration_count,
+                    ),
+                }],
+            )
+            return json.loads(response.content[0].text)
+        except Exception:
+            return {
+                "lesson": "Reflection unavailable",
+                "score": 0.5,
+                "priority_tools": tools_used[:3],
+                "prompt_suggestion": "",
+            }
 
     def _parse_diagnosis(self, text: str) -> dict | None:
         """Extrai diagnóstico das tags <DIAGNOSIS>."""
