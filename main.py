@@ -1890,7 +1890,7 @@ def main() -> int:
         # 2b. Context Compression
         compressor, compressed_text, compression_stats = step_compression(report)
 
-        # 2c. Predictive Stage (wt3 — no-op se não disponível)
+        # 2c. Predictive Stage (no-op se não disponível)
         try:
             _mem_db = IncidentMemoryDB()
             step_predict(report, memory_db=_mem_db)
