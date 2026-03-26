@@ -11,6 +11,14 @@ from dataclasses import dataclass
 from data.models import Span
 
 
+try:
+    import _aiops_rust as _rust
+    _RUST_AVAILABLE = True
+except ImportError:
+    _rust = None
+    _RUST_AVAILABLE = False
+
+
 @dataclass
 class LatencyDriftSignal:
     """Sinal de drift de latência detectado no fluxo de spans."""
@@ -53,6 +61,9 @@ def detect_latency_drift(
 ) -> dict:
     """Detecta drift de latência comparando p95 e p99 entre duas janelas.
 
+    Usa implementação Rust (_aiops_rust) quando disponível; cai no fallback
+    Python com resultado idêntico quando a extensão não está compilada.
+
     Parâmetros
     ----------
     baseline : list[float]
@@ -69,6 +80,9 @@ def detect_latency_drift(
         p95_ratio (float): p95_current / max(p95_baseline, 0.001)
         p99_ratio (float): p99_current / max(p99_baseline, 0.001)
     """
+    if _RUST_AVAILABLE:
+        return _rust.detect_latency_drift(baseline, current, threshold_pct)
+
     p95_baseline = _percentile(baseline, 95)
     p95_current = _percentile(current, 95)
     p99_baseline = _percentile(baseline, 99)

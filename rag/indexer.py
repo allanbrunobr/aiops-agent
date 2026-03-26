@@ -321,18 +321,15 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
         super().__init__(model_name=model_name)
         self.db_path = db_path
 
-    def build_index_with_history(
+    def _carregar_documentos(
         self,
         log_templates: list,
         metric_anomalies: list,
         slow_traces: list,
         include_history: bool = True,
         max_historical_chunks: int = 3,
-    ) -> int:
-        """Constrói índice FAISS com chunks atuais e opcionalmente históricos.
-
-        Chunks atuais recebem chunk_weight=1.0 nos metadados.
-        Chunks históricos recebem chunk_weight=0.5 e is_historical=True.
+    ) -> list:
+        """Converte log_templates, metric_anomalies, slow_traces e histórico em chunks indexáveis.
 
         Args:
             log_templates: Templates de log do aggregator.
@@ -342,14 +339,10 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
             max_historical_chunks: Máximo de chunks históricos a incluir.
 
         Returns:
-            Número total de chunks indexados.
+            Lista de IndexedChunk prontos para embedding.
         """
-        import faiss
+        chunks: list = []
 
-        self._load_model()
-        self.chunks = []
-
-        # Indexa chunks atuais (lógica idêntica ao build_index base)
         for tpl in log_templates:
             svcs = ", ".join(sorted(tpl.services))
             text = (
@@ -358,7 +351,7 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
                 f"Occurrences: {tpl.count}. "
                 f"Time range: {tpl.first_seen} to {tpl.last_seen}."
             )
-            self.chunks.append(IndexedChunk(
+            chunks.append(IndexedChunk(
                 text=text,
                 source="log",
                 metadata={"level": tpl.level, "count": tpl.count, "services": list(tpl.services), "chunk_weight": 1.0},
@@ -371,7 +364,7 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
                 f"Value: {anomaly.value} (baseline: {anomaly.mean}, deviation: {anomaly.deviation_sigma} sigma). "
                 f"Detected at: {anomaly.timestamp}."
             )
-            self.chunks.append(IndexedChunk(
+            chunks.append(IndexedChunk(
                 text=text,
                 source="metric",
                 metadata={
@@ -391,7 +384,7 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
                 f"Bottleneck: {trace.bottleneck_service} ({trace.bottleneck_duration_ms:.0f}ms). "
                 f"Attributes: {attrs}."
             )
-            self.chunks.append(IndexedChunk(
+            chunks.append(IndexedChunk(
                 text=text,
                 source="trace",
                 metadata={
@@ -402,7 +395,6 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
                 },
             ))
 
-        # Adiciona chunks históricos (degradação graciosa em caso de erro)
         if include_history:
             try:
                 from rag.memory import IncidentMemoryDB
@@ -427,7 +419,7 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
                         f"Confidence: {row['diagnosis_confidence']:.2f}. "
                         f"Resolution time: {row['resolution_time_sec']:.0f}s."
                     )
-                    self.chunks.append(IndexedChunk(
+                    chunks.append(IndexedChunk(
                         text=text,
                         source="historical",
                         metadata={
@@ -441,8 +433,24 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
                 # Degradação graciosa — continua sem histórico
                 pass
 
-        # Gera embeddings com deduplicação: textos idênticos são embedados uma vez
-        texts = [chunk.text for chunk in self.chunks]
+        return chunks
+
+    def _embedar_e_indexar(self, chunks: list) -> int:
+        """Gera embeddings para os chunks e constrói o índice FAISS interno.
+
+        Usa deduplicação: textos idênticos são embedados uma única vez.
+        Para volumes >= 40 chunks usa IVFFlat (busca aproximada);
+        para volumes menores usa FlatIP (busca exata).
+
+        Args:
+            chunks: Lista de IndexedChunk a indexar.
+
+        Returns:
+            Número de chunks indexados (0 se lista vazia).
+        """
+        import faiss
+
+        texts = [chunk.text for chunk in chunks]
         if not texts:
             self.index = None
             return 0
@@ -465,18 +473,56 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
         dim = embeddings.shape[1]
         n = len(embeddings)
         if n >= 40:
-            # IVFFlat: busca aproximada O(log n), treina nlist clusters
             nlist = min(100, max(4, n // 39))
             quantizer = faiss.IndexFlatIP(dim)
             self.index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
-            # Reduz iterações de k-means para treino mais rápido (5 suficiente para aproximação)
             self.index.cp.niter = 5
             self.index.train(embeddings)
-            # Mantém ~50 vetores buscados/query para consistência de tempo entre volumes
             self.index.nprobe = max(1, min(nlist, 50 * nlist // max(n, 1)))
         else:
-            # FlatIP: busca exata para volumes muito pequenos
             self.index = faiss.IndexFlatIP(dim)
         self.index.add(embeddings)
 
-        return len(self.chunks)
+        return len(chunks)
+
+    def _persistir_indice(self, cache_dir: str, content_hash: str) -> None:
+        """Persiste o índice FAISS e chunks em disco.
+
+        Args:
+            cache_dir: Diretório de destino para os arquivos de cache.
+            content_hash: SHA-256 do conteúdo indexado para detecção de stale.
+        """
+        self.save_index(cache_dir, content_hash)
+
+    def build_index_with_history(
+        self,
+        log_templates: list,
+        metric_anomalies: list,
+        slow_traces: list,
+        include_history: bool = True,
+        max_historical_chunks: int = 3,
+    ) -> int:
+        """Constrói índice FAISS com chunks atuais e opcionalmente históricos.
+
+        Chunks atuais recebem chunk_weight=1.0 nos metadados.
+        Chunks históricos recebem chunk_weight=0.5 e is_historical=True.
+
+        Args:
+            log_templates: Templates de log do aggregator.
+            metric_anomalies: Anomalias de métricas.
+            slow_traces: Traces lentos.
+            include_history: Se True, adiciona chunks históricos ao índice.
+            max_historical_chunks: Máximo de chunks históricos a incluir.
+
+        Returns:
+            Número total de chunks indexados.
+        """
+        self._load_model()
+        self.chunks = self._carregar_documentos(
+            log_templates,
+            metric_anomalies,
+            slow_traces,
+            include_history,
+            max_historical_chunks,
+        )
+        return self._embedar_e_indexar(self.chunks)
