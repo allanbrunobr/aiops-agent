@@ -500,8 +500,8 @@ class DiagnosisAgent:
                 fs in ",".join(tpl.services).lower() for fs in filter_services
             ):
                 continue
+            svcs = ", ".join(sorted(tpl.services))
             if tpl.first_seen:
-                svcs = ", ".join(sorted(tpl.services))
                 events.append((
                     tpl.first_seen,
                     f"[LOG][{tpl.level}][{svcs}] \"{tpl.template}\" (first of {tpl.count})"
@@ -668,7 +668,7 @@ class DiagnosisAgent:
                 for svc in tpl.services:
                     service_errors[svc] = service_errors.get(svc, 0) + tpl.count
 
-        primary_service = max(service_errors, key=service_errors.get) if service_errors else "unknown"
+        primary_service = max(service_errors, key=lambda k: service_errors.get(k, 0)) if service_errors else "unknown"
 
         # Extrai versão do deploy dos templates de log
         import re as _re

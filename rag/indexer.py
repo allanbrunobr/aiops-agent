@@ -37,8 +37,8 @@ class ObservabilityIndexer:
 
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         self.model_name = model_name
-        self.model = None
-        self.index = None
+        self.model: object | None = None
+        self.index: object | None = None
         self.chunks: list[IndexedChunk] = []
 
     def _load_model(self):

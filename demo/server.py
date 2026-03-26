@@ -45,11 +45,12 @@ if _env_local.exists():
         _k, _v = _line.split("=", 1)
         os.environ.setdefault(_k.strip(), _v.strip())
 
+from core.lifecycle import LifecycleEvent
+
 # Slack notifier — inicializado se SLACK_BOT_TOKEN e SLACK_CHANNEL estiverem disponíveis
 try:
     from core.credentials import EnvCredentialProvider
     from server.notifications.slack import SlackNotifier
-    from core.lifecycle import LifecycleEvent
     _slack_token = os.environ.get("SLACK_BOT_TOKEN")
     _slack_channel = os.environ.get("SLACK_CHANNEL", "#aiops-alerts")
     if _slack_token:

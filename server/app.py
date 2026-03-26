@@ -278,3 +278,25 @@ async def handle_prediction_event(
             event_type=event_type,
             exc_info=True,
         )
+
+
+# ------------------------------------------------------------------ #
+# Estado global para injeção de dependência (server/dependencies.py)  #
+# ------------------------------------------------------------------ #
+
+from dataclasses import dataclass as _dataclass
+
+
+@_dataclass
+class AppState:
+    """Estado global da aplicação para injeção de dependência FastAPI."""
+
+    config: AppConfig | None = None
+    store: object = None  # IncidentStore
+    engine: object = None  # BlueprintEngine
+
+
+app_state = AppState()
+
+# Placeholder — knowledge_store não inicializado nesta versão
+knowledge_store: object = None
