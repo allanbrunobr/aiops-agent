@@ -980,12 +980,19 @@ def _serialize_result(result: dict, incident) -> dict:
     return serialized
 
 
-def step_predict(result: dict, report) -> None:
+def step_predict(result: dict, report, *,
+                 slack_fire=None, correlation_id: str = "") -> None:
     """Etapa 4d: Estágio preditivo — gera PredictionReport e emite eventos de lifecycle.
 
     Executa análise preditiva sobre o aggregated_report e armazena o resultado
     em result["stages"]["prediction"]. Emite evento de lifecycle se event_level
     for definido. Nunca lança exceção — falhas retornam prediction=None.
+
+    Args:
+        result: Dict com estágios do pipeline — recebe prediction em stages.prediction.
+        report: AggregatedReport com dados pré-processados.
+        slack_fire: Callback opcional para envio de evento ao Slack.
+        correlation_id: ID de correlação do incidente para rastreio no Slack.
     """
     console.print(Rule("[bold]Stage 4d: Predictive Analysis[/bold]", style="cyan"))
     console.print()
@@ -1010,15 +1017,25 @@ def step_predict(result: dict, report) -> None:
                 event = LifecycleEvent(
                     event_type=prediction.event_level,
                     node_name="predictive_stage",
-                    correlation_id=str(uuid.uuid4()),
+                    correlation_id=correlation_id or str(uuid.uuid4()),
                     timestamp=datetime.now(timezone.utc),
                     data={
+                        "event_level": prediction.event_level,
                         "risk_score": prediction.risk_score,
                         "eta_minutes": prediction.eta_minutes,
                         "signals": prediction.signals,
+                        "matched_history": getattr(prediction, "matched_history", []),
                     },
                 )
                 console.print(f"  [dim]Lifecycle event emitted: {event.event_type}[/dim]")
+
+                # Envia para o Slack se callback disponível
+                if slack_fire is not None:
+                    slack_fire(
+                        prediction.event_level,
+                        cid=event.correlation_id,
+                        data=event.data,
+                    )
             else:
                 console.print("  [dim]No lifecycle event (risk below threshold)[/dim]")
         else:
@@ -2085,13 +2102,37 @@ def main() -> int:
                              config=threshold_config)
 
         # 4d. Predictive Analysis
-        step_predict(result, report)
+        step_predict(result, report,
+                     slack_fire=_slack_fire, correlation_id=_pipeline_cid)
 
         # 4b. Pre-Execution Safety Validation
         safety_result = step_safety_validation(result)
 
         # 4c. Remediation Version/CVE Validation
         remediation_result = step_remediation_validation(result)
+
+        # 4e. Notificação Slack: diagnóstico + correção proposta
+        _diag_for_slack = result.get("stages", {}).get("diagnosis", {})
+        _mitigation_for_slack = result.get("stages", {}).get("mitigation", {})
+        _fix_action = _mitigation_for_slack.get("action") if _mitigation_for_slack else None
+        _proposed_fix_slack = (
+            _diag_for_slack.get("proposed_fix")
+            or _diag_for_slack.get("fix_command")
+            or (getattr(_fix_action, "command", None) if _fix_action else None)
+            or ""
+        )
+        _conf_for_slack = _diag_for_slack.get("confidence") or 0.0
+        _CONF_MAP_SLACK = {"high": 0.85, "medium": 0.5, "low": 0.25}
+        if not isinstance(_conf_for_slack, (int, float)):
+            _conf_for_slack = _CONF_MAP_SLACK.get(str(_conf_for_slack).lower(), 0.0)
+        _slack_fire("diagnosis.completed", cid=_pipeline_cid, data={
+            "root_cause": _diag_for_slack.get("root_cause", ""),
+            "proposed_fix": _proposed_fix_slack,
+            "risk_level": safety_result.risk_level.value if safety_result else "unknown",
+            "requires_human": safety_result.requires_human if safety_result else False,
+            "confidence": float(_conf_for_slack),
+            "evidence": list(_diag_for_slack.get("evidence", []))[:5],
+        })
 
         # Armazena nome do cenário e config no resultado para postmortem e summary.
         result["scenario_name"] = scenario_name

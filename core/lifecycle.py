@@ -28,6 +28,7 @@ ALLOWED_EVENT_TYPES: frozenset[str] = frozenset({
     "pipeline.failed",
     "prediction.warning",
     "prediction.alert",
+    "diagnosis.completed",
     "incident.resolved",
 })
 

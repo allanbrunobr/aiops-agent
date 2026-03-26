@@ -90,6 +90,8 @@ class SlackNotifier:
                 await self._post_failure_message(event)
             elif event.event_type in ("prediction.warning", "prediction.alert"):
                 await self._post_prediction_message(event)
+            elif event.event_type == "diagnosis.completed":
+                await self._post_diagnosis_message(event)
             elif event.event_type == "incident.resolved":
                 await self._post_resolved_message(event)
         except SlackApiError as exc:
@@ -501,6 +503,80 @@ class SlackNotifier:
                 {"type": "mrkdwn", "text": f"AIOps Agent | {event.correlation_id}"},
             ]},
         ]
+
+    async def _post_diagnosis_message(self, event: LifecycleEvent) -> None:
+        """Envia mensagem dedicada com diagnóstico + correção proposta."""
+        cid = event.correlation_id
+        blocks = self._build_diagnosis_blocks(event)
+
+        requires_human = event.data.get("requires_human", False)
+        status = "Aguardando aprovação" if requires_human else "Correção proposta"
+
+        if self._dry_run:
+            log.info("slack.dry_run", action="post_diagnosis",
+                     correlation_id=cid, blocks=blocks)
+            return
+
+        async def _send() -> None:
+            await self._client.chat_postMessage(  # type: ignore[union-attr]
+                channel=self._channel,
+                blocks=blocks,
+                text=f"Diagnosis {cid}: {status}",
+            )
+
+        await self._send_with_retry(_send, context="diagnosis_message",
+                                    correlation_id=cid)
+        log.info("slack.diagnosis_posted", correlation_id=cid)
+
+    def _build_diagnosis_blocks(self, event: LifecycleEvent) -> list[dict]:
+        """Monta blocos Block Kit com diagnóstico e correção proposta."""
+        cid = event.correlation_id
+        data = event.data
+
+        root_cause = data.get("root_cause", "N/A")
+        proposed_fix = data.get("proposed_fix") or "N/A"
+        risk_level = data.get("risk_level", "unknown")
+        requires_human = data.get("requires_human", False)
+        confidence = data.get("confidence", 0.0)
+        evidence = data.get("evidence", [])
+
+        confidence_pct = int(confidence * 100)
+        if confidence >= 0.8:
+            conf_emoji = ":large_green_circle:"
+        elif confidence >= 0.5:
+            conf_emoji = ":large_yellow_circle:"
+        else:
+            conf_emoji = ":red_circle:"
+
+        evidence_text = "\n".join(f"  • {e}" for e in evidence[:5]) if evidence else "  (sem evidências)"
+
+        blocks: list[dict] = [
+            {"type": "header", "text": {"type": "plain_text",
+                                        "text": "🔍 Diagnóstico + Correção Proposta"}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": (
+                f"*Root Cause:*\n{root_cause}\n\n"
+                f"*Evidências:*\n{evidence_text}"
+            )}},
+            {"type": "divider"},
+            {"type": "section", "text": {"type": "mrkdwn", "text": (
+                f"*Correção Proposta:*\n```{proposed_fix}```"
+            )}},
+            {"type": "section", "fields": [
+                {"type": "mrkdwn", "text": f"*Risk Level:*\n`{risk_level}`"},
+                {"type": "mrkdwn", "text": f"*Confidence:*\n{conf_emoji} {confidence_pct}%"},
+            ]},
+        ]
+
+        if requires_human:
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": (
+                ":warning: *Aguardando aprovação humana antes da execução*"
+            )}})
+
+        blocks.append({"type": "context", "elements": [
+            {"type": "mrkdwn", "text": f"AIOps Agent | {cid}"},
+        ]})
+
+        return blocks
 
     def _build_final_blocks(self, event: LifecycleEvent) -> list[dict]:
         """Monta blocos finais com diagnostico completo para leitura mobile."""
