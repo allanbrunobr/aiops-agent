@@ -104,3 +104,34 @@ class IncidentState(BaseModel):
 
     # Dados brutos e resultados de processamento (usado pelo sanitizer adapter e testes)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class MitigationAction(dict):
+    """Uma ação de mitigação proposta pelo agente.
+
+    Implementa dict para compatibilidade com avaliadores que lêem action como dict,
+    e expõe atributos via __getattr__ para compatibilidade com código que usa action.field.
+    """
+
+    def __init__(
+        self,
+        description: str,
+        command: str,
+        risk_level: str,
+        rollback_command: str | None = None,
+    ):
+        super().__init__(
+            description=description,
+            command=command,
+            risk_level=risk_level,
+            rollback_command=rollback_command,
+        )
+
+    def __getattr__(self, name: str):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name)
+
+    def __setattr__(self, name: str, value) -> None:
+        self[name] = value

@@ -12,8 +12,9 @@ from datetime import datetime
 from rich.console import Console
 from rich.table import Table
 
+from core.models import MitigationAction
 from safety.tnr import (
-    TNRSafetyGuard, TNRReport, MitigationAction, HealthSnapshot
+    TNRSafetyGuard, TNRReport, HealthSnapshot
 )
 
 console = Console()
