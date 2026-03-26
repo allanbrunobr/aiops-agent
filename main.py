@@ -603,8 +603,24 @@ def step_agents(report, retriever, use_llm: bool = True,
             timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
         )
         _memory_db.save_skill_outcome(_outcome)
+
+        # ── Fase 5: EVOLVE — reescreve skills fracas ─────────────────────
+        from agents.skill_evolver import SkillEvolver
+
+        _active_skill = getattr(diagnoser, "skill", None)
+        if _active_skill is not None:
+            _evolver = SkillEvolver(
+                client=diagnoser.client if use_llm else None,
+                memory_db=_memory_db,
+            )
+            if _evolver.should_evolve(_active_skill):
+                _evolved = _evolver.evolve(_active_skill)
+                if _evolved:
+                    console.print(
+                        f"  [dim]Skill evolved: {_evolved.name} → v{_evolved.version}[/dim]"
+                    )
     except Exception:
-        pass  # write é best-effort; não bloqueia o pipeline
+        pass  # write/evolve é best-effort; não bloqueia o pipeline
     # ─────────────────────────────────────────────────────────────────────
 
     result["timeline"] = timeline
