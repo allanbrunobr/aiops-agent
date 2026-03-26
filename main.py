@@ -44,6 +44,7 @@ import re
 import sys
 import time
 import traceback
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -558,11 +559,12 @@ def step_agents(report, retriever, use_llm: bool = True,
         _transition("VERIFYING", "RESOLVED", f"Incidente resolvido: {tnr_result.message}")
         result["success"] = True
 
-    # ── Skill Evolution: REFLECT ──────────────────────────────────────────
-    # Reflexão pós-TNR: LLM avalia o resultado e gera lição aprendida.
-    # Apenas em modo LLM; em modo heurístico retorna fallback.
+    # ── Skill Evolution: REFLECT + WRITE ─────────────────────────────────
+    # Reflexão pós-TNR e persistência de outcome no SQLite.
+    _tnr_str = result.get("stages", {}).get("verification", {}).get("result", "unknown")
+    _tnr_passed = (_tnr_str == "success")
+
     if use_llm:
-        _tnr_str = result.get("stages", {}).get("verification", {}).get("result", "unknown")
         _reflection = diagnoser.reflect(
             diagnosis=diagnosis if diagnosis else {},
             tnr_result=_tnr_str,
@@ -573,6 +575,27 @@ def step_agents(report, retriever, use_llm: bool = True,
             f"  [dim]Reflection: {_reflection.get('lesson', '—')} "
             f"(score={_reflection.get('score', 0.5):.2f})[/dim]"
         )
+    else:
+        _reflection = {"lesson": "no-llm mode", "score": 0.5, "priority_tools": []}
+
+    # Persiste outcome independente do modo (write funciona em --no-llm)
+    try:
+        from rag.memory import SkillOutcome
+        import datetime as _dt
+        _outcome = SkillOutcome(
+            outcome_id=str(uuid.uuid4()),
+            skill_id=getattr(getattr(diagnoser, "skill", None), "skill_id", "default"),
+            incident_id=str(uuid.uuid4()),
+            tnr_passed=_tnr_passed,
+            reflection_score=float(_reflection.get("score", 0.5)),
+            reflection_lesson=str(_reflection.get("lesson", "")),
+            tools_used=diagnoser.tools_used,
+            iteration_count=diagnoser.iteration_count,
+            timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+        )
+        _memory_db.save_skill_outcome(_outcome)
+    except Exception:
+        pass  # write é best-effort; não bloqueia o pipeline
     # ─────────────────────────────────────────────────────────────────────
 
     result["timeline"] = timeline

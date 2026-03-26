@@ -79,6 +79,81 @@ CREATE INDEX IF NOT EXISTS idx_incidents_services
 """
 
 
+@dataclass
+class DiagnosticSkill:
+    """Skill de diagnóstico que evolui com a experiência acumulada."""
+
+    skill_id: str
+    name: str
+    scenario_pattern: str          # ex: "connection pool|pool exhausted"
+    system_prompt: str             # prompt especializado para este tipo de incidente
+    priority_tools: list[str]      # ex: ["correlate_signals", "query_metrics"]
+    utility_score: float = 0.5    # 0.0–1.0, começa neutro
+    total_uses: int = 0
+    success_count: int = 0
+    last_reflection: str = ""     # lição mais recente gerada pelo LLM
+    version: int = 1
+    created_at: str = ""          # ISO 8601
+    updated_at: str = ""          # ISO 8601
+
+
+@dataclass
+class SkillOutcome:
+    """Registro de uma execução de skill com seu resultado."""
+
+    outcome_id: str
+    skill_id: str
+    incident_id: str
+    tnr_passed: bool
+    reflection_score: float
+    reflection_lesson: str
+    tools_used: list[str]
+    iteration_count: int
+    timestamp: str                 # ISO 8601
+
+
+_DDL_SKILLS = """
+CREATE TABLE IF NOT EXISTS diagnostic_skills (
+    skill_id            TEXT PRIMARY KEY,
+    name                TEXT NOT NULL,
+    scenario_pattern    TEXT NOT NULL,
+    system_prompt       TEXT NOT NULL,
+    priority_tools      TEXT NOT NULL,
+    utility_score       REAL NOT NULL DEFAULT 0.5,
+    total_uses          INTEGER NOT NULL DEFAULT 0,
+    success_count       INTEGER NOT NULL DEFAULT 0,
+    last_reflection     TEXT NOT NULL DEFAULT '',
+    version             INTEGER NOT NULL DEFAULT 1,
+    created_at          TEXT NOT NULL DEFAULT '',
+    updated_at          TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_skills_scenario
+    ON diagnostic_skills (scenario_pattern);
+
+CREATE INDEX IF NOT EXISTS idx_skills_score
+    ON diagnostic_skills (utility_score DESC);
+"""
+
+_DDL_SKILL_OUTCOMES = """
+CREATE TABLE IF NOT EXISTS skill_outcomes (
+    outcome_id          TEXT PRIMARY KEY,
+    skill_id            TEXT NOT NULL,
+    incident_id         TEXT NOT NULL,
+    tnr_passed          INTEGER NOT NULL,
+    reflection_score    REAL NOT NULL,
+    reflection_lesson   TEXT NOT NULL,
+    tools_used          TEXT NOT NULL,
+    iteration_count     INTEGER NOT NULL,
+    timestamp           TEXT NOT NULL,
+    FOREIGN KEY (skill_id) REFERENCES diagnostic_skills(skill_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_outcomes_skill
+    ON skill_outcomes (skill_id, timestamp DESC);
+"""
+
+
 _DDL_SIGNATURES = """
 CREATE TABLE IF NOT EXISTS degradation_signatures (
     incident_id   TEXT PRIMARY KEY,
@@ -106,6 +181,8 @@ class IncidentMemoryDB:
         os.makedirs(os.path.dirname(db_path) if os.path.dirname(db_path) else ".", exist_ok=True)
         with self._connect() as conn:
             conn.executescript(_DDL)
+            conn.executescript(_DDL_SKILLS)
+            conn.executescript(_DDL_SKILL_OUTCOMES)
 
     def _connect(self) -> sqlite3.Connection:
         """Abre conexão SQLite com suporte a chaves estrangeiras."""
@@ -198,6 +275,173 @@ class IncidentMemoryDB:
 
         scored.sort(key=lambda x: x[0], reverse=True)
         return [r for _, r in scored[:limit]]
+
+    # --- Skill Evolution: DiagnosticSkill CRUD ---
+
+    def save_skill(self, skill: DiagnosticSkill) -> None:
+        """Persiste ou atualiza uma DiagnosticSkill (upsert por skill_id)."""
+        import datetime
+
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        created_at = skill.created_at or now
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO diagnostic_skills
+                    (skill_id, name, scenario_pattern, system_prompt, priority_tools,
+                     utility_score, total_uses, success_count, last_reflection,
+                     version, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    skill.skill_id,
+                    skill.name,
+                    skill.scenario_pattern,
+                    skill.system_prompt,
+                    json.dumps(skill.priority_tools),
+                    skill.utility_score,
+                    skill.total_uses,
+                    skill.success_count,
+                    skill.last_reflection,
+                    skill.version,
+                    created_at,
+                    now,
+                ),
+            )
+
+    def get_skill(self, skill_id: str) -> DiagnosticSkill | None:
+        """Busca skill por ID. Retorna None se não encontrada."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM diagnostic_skills WHERE skill_id = ?", (skill_id,)
+            ).fetchone()
+        return self._row_to_skill(row) if row else None
+
+    def find_best_skill(
+        self,
+        tags: list[str],
+        services: list[str],
+    ) -> DiagnosticSkill | None:
+        """Busca skill com maior utility_score cujo scenario_pattern sobreponha as tags."""
+        if not tags and not services:
+            return None
+
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM diagnostic_skills ORDER BY utility_score DESC"
+            ).fetchall()
+
+        search_text = " ".join(tags + services).lower()
+        for row in rows:
+            pattern = row["scenario_pattern"].lower()
+            # Verifica se qualquer token do padrão aparece no texto de busca
+            tokens = [t.strip() for t in pattern.replace("|", " ").split()]
+            if any(tok in search_text for tok in tokens if tok not in (".*", ".")):
+                return self._row_to_skill(row)
+        return None
+
+    def update_skill_score(
+        self,
+        skill_id: str,
+        tnr_passed: bool,
+        reflection_score: float,
+    ) -> None:
+        """Atualiza utility_score via EMA (α=0.3) e incrementa contadores."""
+        import datetime
+
+        skill = self.get_skill(skill_id)
+        if skill is None:
+            return
+
+        alpha = 0.3
+        new_score = alpha * reflection_score + (1 - alpha) * skill.utility_score
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+        with self._connect() as conn:
+            conn.execute(
+                """
+                UPDATE diagnostic_skills
+                SET utility_score = ?,
+                    total_uses = total_uses + 1,
+                    success_count = success_count + ?,
+                    updated_at = ?
+                WHERE skill_id = ?
+                """,
+                (new_score, 1 if tnr_passed else 0, now, skill_id),
+            )
+
+    def save_skill_outcome(self, outcome: SkillOutcome) -> None:
+        """Registra o resultado de uma execução de skill."""
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO skill_outcomes
+                    (outcome_id, skill_id, incident_id, tnr_passed,
+                     reflection_score, reflection_lesson, tools_used,
+                     iteration_count, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    outcome.outcome_id,
+                    outcome.skill_id,
+                    outcome.incident_id,
+                    1 if outcome.tnr_passed else 0,
+                    outcome.reflection_score,
+                    outcome.reflection_lesson,
+                    json.dumps(outcome.tools_used),
+                    outcome.iteration_count,
+                    outcome.timestamp,
+                ),
+            )
+
+    def get_skill_outcomes(
+        self,
+        skill_id: str,
+        limit: int = 5,
+    ) -> list[SkillOutcome]:
+        """Retorna os outcomes mais recentes de uma skill."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM skill_outcomes
+                WHERE skill_id = ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+                """,
+                (skill_id, limit),
+            ).fetchall()
+        return [self._row_to_outcome(r) for r in rows]
+
+    @staticmethod
+    def _row_to_skill(row) -> DiagnosticSkill:
+        return DiagnosticSkill(
+            skill_id=row["skill_id"],
+            name=row["name"],
+            scenario_pattern=row["scenario_pattern"],
+            system_prompt=row["system_prompt"],
+            priority_tools=json.loads(row["priority_tools"]),
+            utility_score=row["utility_score"],
+            total_uses=row["total_uses"],
+            success_count=row["success_count"],
+            last_reflection=row["last_reflection"],
+            version=row["version"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _row_to_outcome(row) -> SkillOutcome:
+        return SkillOutcome(
+            outcome_id=row["outcome_id"],
+            skill_id=row["skill_id"],
+            incident_id=row["incident_id"],
+            tnr_passed=bool(row["tnr_passed"]),
+            reflection_score=row["reflection_score"],
+            reflection_lesson=row["reflection_lesson"],
+            tools_used=json.loads(row["tools_used"]),
+            iteration_count=row["iteration_count"],
+            timestamp=row["timestamp"],
+        )
 
     # --- Métodos de assinatura pré-incidente (Story 2.1 / Story 2.2) ---
 
