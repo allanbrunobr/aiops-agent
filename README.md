@@ -107,6 +107,79 @@ com connection pool exhaustion apos deploy ruim). Output via `rich` no terminal.
 
 ---
 
+## Demo UI — Dashboard Interativo
+
+O projeto inclui um dashboard web interativo com 4 cenários de simulação em tempo real.
+O backend (FastAPI + WebSocket) e o frontend (HTML/CSS/JS) são servidos pelo mesmo processo.
+
+### Iniciar
+
+```bash
+# Backend + frontend — comando único
+python demo/server.py
+```
+
+Acesse no navegador:
+
+```
+http://localhost:47891/demo/
+```
+
+### Os 4 cenários de teste
+
+| Cenário | Duração simulada | O que simula |
+|---------|-----------------|--------------|
+| **Payment Pool Exhaustion** | 32 min | `connection_pool_active` sobe de 5% a 86% com curva logística |
+| **Pool Exhaustion + Recovery** | 40 min | Esgotamento + Ops aumenta `max_connections` no minuto 25, sistema recupera |
+| **JVM Memory Leak** | 60 min | `memory_used_mb` cresce linearmente de 2048MB a 7987MB |
+| **Unknown Fault Mode** | 40 min | Templates de log nunca vistos aparecem no minuto 5, latência spika no minuto 10 |
+
+### Como funciona
+
+1. A página exibe os 4 cenários como cards
+2. Clique **Start** em um cenário
+3. O `ScenarioEngine` começa a gerar ticks com logs, métricas e traces simulados
+4. Via **WebSocket**, cada tick é enviado ao dashboard em tempo real
+5. O dashboard mostra gráficos de métricas, logs chegando, risk score subindo e a análise do agente
+6. Quando o risk score ultrapassa o limiar, o agente diagnostica e propõe correção
+
+### Com notificações Slack (opcional)
+
+Se `SLACK_BOT_TOKEN` e `SLACK_CHANNEL` estiverem configurados no `.env.local`,
+a demo envia notificações ao Slack simultaneamente com o dashboard:
+
+- **prediction.warning** — degradação detectada com ETA
+- **prediction.critical** — incidente iminente
+- **diagnosis.completed** — root cause + correção proposta
+- **incident.resolved** — sistema recuperado
+
+```bash
+# .env.local
+SLACK_BOT_TOKEN=xoxb-seu-token
+SLACK_CHANNEL=#aiops-alerts
+
+python demo/server.py
+```
+
+### Com diagnóstico via LLM (opcional)
+
+Por padrão a demo usa heurística (sem custo). Para usar Claude:
+
+```bash
+# .env.local
+ANTHROPIC_API_KEY=sk-ant-...
+
+python demo/server.py
+```
+
+### Porta customizada
+
+```bash
+python demo/server.py --port 8080
+```
+
+---
+
 ## Teste End-to-End com Infraestrutura Local
 
 Alem do `main.py`, o projeto inclui uma infraestrutura Docker completa em `infra/`

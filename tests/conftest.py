@@ -6,6 +6,9 @@ em modo --no-llm --no-rag sem efeitos colaterais de ML.
 """
 from __future__ import annotations
 
+# Deve estar no conftest top-level para pytest 9.x (não-top-level não é suportado)
+pytest_plugins = ("anyio",)
+
 import io
 import random
 import sys

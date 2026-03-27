@@ -10,8 +10,11 @@ import time
 
 import pytest
 
-# Configura anyio para usar asyncio e trio como backends
-pytest_plugins = ("anyio",)
+
+@pytest.fixture
+def anyio_backend() -> str:
+    """Restringe testes anyio ao backend asyncio (trio nao instalado)."""
+    return "asyncio"
 
 
 def _ensure_normalizers_registered() -> None:

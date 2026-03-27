@@ -326,6 +326,70 @@ async def _maybe_notify_slack(frame: Any) -> None:
             logger.warning("Slack notification falhou: %s", exc)
         return
 
+    # Dispara diagnosis.completed quando fase entra em INCIDENT (diagnóstico pronto)
+    # Verificado ANTES do guard de event_level — fase INCIDENT pode ter event_level=None
+    _frame_phase = frame.phase if hasattr(frame, "phase") else frame.get("phase", "")
+    if _frame_phase == "INCIDENT" and "diagnosis" not in _slack_fired:
+        _slack_fired.add("diagnosis")
+        _root_cause_map = {
+            "payment-pool-exhaustion": (
+                "Config change reduziu max_connections de 200→50, "
+                "causando connection pool exhaustion sob carga normal."
+            ),
+            "payment-pool-recovery": (
+                "Surge de tráfego saturou o connection pool (max_connections=200). "
+                "Operador aumentou max_connections para 500 no minuto 25."
+            ),
+            "memory-leak": (
+                "Memory leak em heap Java — objeto retido por referência estática "
+                "acumulou 7987MB ao longo de 60 minutos até OOM."
+            ),
+            "unknown-fault": (
+                "Falha de hardware (IRQ storm) causou comportamento não documentado "
+                "no kernel scheduler, gerando timeouts em cascata."
+            ),
+        }
+        _proposed_fix_map = {
+            "payment-pool-exhaustion": (
+                "Reverter deploy v2.3.1 ou aumentar max_connections para 200 via:\n"
+                "kubectl set env deploy/payment-svc DB_POOL_MAX=200"
+            ),
+            "payment-pool-recovery": (
+                "Aumentar max_connections para 500 permanentemente no ConfigMap:\n"
+                "kubectl patch cm payment-config --patch '{\"data\":{\"DB_POOL_MAX\":\"500\"}}'"
+            ),
+            "memory-leak": (
+                "Reiniciar payment-svc e aplicar patch de hotfix para liberar referência estática:\n"
+                "kubectl rollout restart deploy/payment-svc"
+            ),
+            "unknown-fault": (
+                "Isolar nó afetado e acionar runbook IRQ-STORM-001:\n"
+                "kubectl cordon node/<affected-node>"
+            ),
+        }
+        _diag_root_cause = _root_cause_map.get(scenario, "Causa raiz não determinada.")
+        _diag_proposed_fix = _proposed_fix_map.get(scenario, "Aguardando análise manual.")
+        _diag_event = LifecycleEvent(
+            event_type="diagnosis.completed",
+            node_name=None,
+            correlation_id=f"demo-{scenario}",
+            timestamp=now,
+            data={
+                "root_cause": _diag_root_cause,
+                "evidence": signals,
+                "proposed_fix": _diag_proposed_fix,
+                "risk_level": "critical",
+                "confidence": "high",
+                "requires_human_approval": True,
+                "scenario": scenario,
+            },
+        )
+        try:
+            await _slack.on_event(_diag_event)
+            logger.info("Slack: diagnosis.completed enviado — cenário %s", scenario)
+        except Exception as exc:
+            logger.warning("Slack notification falhou: %s", exc)
+
     # Sem event_level (risk < 30): nada mais a disparar
     if not event_level:
         return
@@ -387,6 +451,7 @@ async def _maybe_notify_slack(frame: Any) -> None:
                         scenario, risk)
         except Exception as exc:
             logger.warning("Slack notification falhou: %s", exc)
+
 
 
 # ------------------------------------------------------------------ #
