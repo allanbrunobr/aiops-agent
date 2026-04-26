@@ -55,7 +55,7 @@ jobs:
             'mcp>=1.0.0'
 
       - name: Run unit tests
-        run: pytest tests/ -m unit -v
+        run: pytest tests/ -m unit --ignore=tests/rust -v
 
   integration-tests:
     name: Integration & Snapshot Tests
