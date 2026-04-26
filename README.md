@@ -136,6 +136,19 @@ Acesse no navegador:
 http://localhost:47891/demo/
 ```
 
+### Janela nativa (macOS) — opcional
+
+Para abrir o dashboard numa janela nativa em vez do browser:
+
+```bash
+.venv/bin/pip install pywebview        # primeira vez
+.venv/bin/python demo/desktop_app.py
+```
+
+O launcher sobe `demo/server.py` em subprocesso, espera `/demo/` responder e abre uma janela WebKit nativa. Ao fechar a janela, o servidor é encerrado.
+
+> Distribuível como `.app` apenas se houver objetivo real de empacotamento — para uso local, o launcher Python já basta.
+
 ### Os 4 cenários de teste
 
 | Cenário | Duração simulada | O que simula |
