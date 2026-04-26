@@ -2,13 +2,13 @@ from __future__ import annotations
 
 """
 Testes para Story 4.4: New Diagnostic Scenario Template.
-Cobre utils/golden_validator.py.
+Cobre tests/support/golden_validator.py.
 """
 
 import json
 import pytest
 
-from utils.golden_validator import validate_against_golden, ValidationResult
+from tests.support.golden_validator import validate_against_golden, ValidationResult
 
 
 # ── fixtures ──────────────────────────────────────────────────────────────────

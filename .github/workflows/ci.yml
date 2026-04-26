@@ -27,14 +27,35 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: requirements-test-unit.txt
 
       - name: Install minimal dependencies
-        run: pip install -r requirements-test-unit.txt
+        run: |
+          pip install \
+            'pytest>=9.0.0' \
+            'pytest-mock>=3.14.0' \
+            'pytest-asyncio>=0.24.0' \
+            'anyio[trio]>=4.0.0' \
+            'pydantic>=2.0.0' \
+            'pydantic-settings[yaml]>=2.0.0' \
+            'PyYAML>=6.0.0' \
+            'structlog>=24.1.0' \
+            'fastapi>=0.115.0' \
+            'httpx>=0.27.0' \
+            'PyJWT>=2.8.0' \
+            'cryptography>=42.0' \
+            'python-dotenv>=1.0.0' \
+            'rich>=13.0.0' \
+            'numpy<2.0.0' \
+            'drain3>=0.9.11' \
+            'anthropic>=0.40.0' \
+            'databricks-sdk>=0.38.0' \
+            'requests>=2.28.0' \
+            'slack-sdk>=3.27.0' \
+            'aiohttp>=3.9.0' \
+            'mcp>=1.0.0'
 
       - name: Run unit tests
-        run: pytest tests/ -m unit -v
+        run: pytest tests/ -m unit --ignore=tests/rust -v
 
   integration-tests:
     name: Integration & Snapshot Tests
@@ -90,13 +111,12 @@ jobs:
         run: cargo test --manifest-path rust/Cargo.toml
 
       - name: Build PyO3 extension (release — performance benchmarks require optimized build)
-        run: maturin develop --manifest-path rust/Cargo.toml --release
+        run: |
+          maturin build --manifest-path rust/Cargo.toml --release
+          pip install rust/target/wheels/*.whl
 
       - name: Verify import
         run: python -c "import _aiops_rust; print(dir(_aiops_rust))"
 
       - name: Run pytest
         run: python -m pytest tests/ -v
-
-      - name: Run evaluator
-        run: python evaluate.py

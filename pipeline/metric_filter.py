@@ -102,18 +102,22 @@ class MetricFilter:
                 deviation = abs(values[i] - mean) / std
                 if deviation >= self.sigma_threshold:
                     anomaly_type = self._classify_shape(values, i, baseline_end)
+                    rounded_value = round(values[i], 2)
+                    rounded_mean = round(mean, 2)
+                    rounded_std = round(std, 2)
+                    rounded_deviation = round(deviation, 1)
                     anomalies.append(MetricAnomaly(
                         service=service,
                         metric_name=metric_name,
                         anomaly_type=anomaly_type,
                         timestamp=timestamps[i],
-                        value=round(values[i], 2),
-                        mean=round(mean, 2),
-                        std=round(std, 2),
-                        deviation_sigma=round(deviation, 1),
+                        value=rounded_value,
+                        mean=rounded_mean,
+                        std=rounded_std,
+                        deviation_sigma=rounded_deviation,
                         description=self._describe(
                             service, metric_name, anomaly_type,
-                            timestamps[i], values[i], mean, deviation
+                            timestamps[i], rounded_value, rounded_mean, rounded_deviation
                         ),
                     ))
 

@@ -153,7 +153,7 @@ python main.py --no-llm
 Use the golden-file validator to verify output:
 
 ```python
-from utils.golden_validator import validate_against_golden
+from tests.support.golden_validator import validate_against_golden
 
 result = validate_against_golden(
     actual_output={
