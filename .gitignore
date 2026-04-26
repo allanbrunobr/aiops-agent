@@ -57,6 +57,10 @@ requirements-test-unit.txt
 territory_map.json
 evaluate.py
 evaluate_autolab.py
+evaluate_rag.py
+features.md
+run.log
+*.log
 .hive/
 .codex/
 demo/desktop_app.log
