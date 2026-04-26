@@ -428,14 +428,26 @@ class ContextCompressor:
     # --- Formatters ---
 
     def _format_log_chunk(self, tpl) -> str:
-        return tpl.template
+        template = tpl.template
+        truncated = template[:35]
+        suffix = "…" if len(template) > 35 else ""
+        return f"\"{truncated}{suffix}\""
 
     def _format_metric_chunk(self, anomaly) -> str:
-        return f"{anomaly.service}/{anomaly.metric_name}"
+        anomaly_type = {
+            "level_shift": "ls",
+            "spike": "sp",
+        }.get(anomaly.anomaly_type, anomaly.anomaly_type)
+        return (
+            f"{anomaly.service}/{anomaly.metric_name} "
+            f"{anomaly_type} {anomaly.deviation_sigma:.0f}σ"
+        )
 
     def _format_trace_chunk(self, trace) -> str:
-        ratio = int(trace.total_duration_ms / max(trace.normal_duration_ms, 1))
-        return f"{trace.bottleneck_service}: {ratio}x slow"
+        return (
+            f"{trace.bottleneck_service} "
+            f"{trace.total_duration_ms:.0f}/{trace.normal_duration_ms:.0f}ms"
+        )
 
     # --- Utils ---
 

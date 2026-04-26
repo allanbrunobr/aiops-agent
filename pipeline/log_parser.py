@@ -143,7 +143,7 @@ class LogParser:
                 tpl.last_seen = log.timestamp
 
             if len(tpl.sample_messages) < 3:
-                tpl.sample_messages.append(str(log))
+                tpl.sample_messages.append(log.message)
 
         self._compute_relevance()
         return sorted(self.templates.values(), key=lambda t: t.relevance_score, reverse=True)
