@@ -88,7 +88,9 @@ jobs:
         run: cargo test --manifest-path rust/Cargo.toml
 
       - name: Build PyO3 extension (release — performance benchmarks require optimized build)
-        run: maturin develop --manifest-path rust/Cargo.toml --release
+        run: |
+          maturin build --manifest-path rust/Cargo.toml --release
+          pip install rust/target/wheels/*.whl
 
       - name: Verify import
         run: python -c "import _aiops_rust; print(dir(_aiops_rust))"
