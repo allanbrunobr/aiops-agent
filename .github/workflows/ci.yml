@@ -29,7 +29,7 @@ jobs:
           python-version: '3.12'
 
       - name: Install minimal dependencies
-        run: pip install 'pytest>=9.0.0' 'pytest-mock>=3.14.0'
+        run: pip install 'pytest>=9.0.0' 'pytest-mock>=3.14.0' 'anyio>=4.0.0'
 
       - name: Run unit tests
         run: pytest tests/ -m unit -v
