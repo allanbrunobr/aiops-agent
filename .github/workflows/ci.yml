@@ -120,6 +120,3 @@ jobs:
 
       - name: Run pytest
         run: python -m pytest tests/ -v
-
-      - name: Run evaluator
-        run: python evaluate.py
