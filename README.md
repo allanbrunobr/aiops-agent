@@ -114,9 +114,20 @@ O backend (FastAPI + WebSocket) e o frontend (HTML/CSS/JS) são servidos pelo me
 
 ### Iniciar
 
+> **Importante:** use o Python do virtualenv (`.venv`). O alias `python` do shell pode
+> apontar para o Python do sistema, que não tem as dependências instaladas (ex: `structlog`).
+> Se o servidor iniciar com `SlackNotifier init falhou`, o Slack não funcionará e o pipeline
+> pode apresentar comportamento incompleto (risk score não sobe, ticks param).
+
 ```bash
-# Backend + frontend — comando único
+# 1. Ativar o virtualenv
+source .venv/bin/activate
+
+# 2. Iniciar backend + frontend — comando único
 python demo/server.py
+
+# Alternativa sem ativar o venv:
+.venv/bin/python demo/server.py
 ```
 
 Acesse no navegador:
