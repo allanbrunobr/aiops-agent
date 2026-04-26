@@ -50,3 +50,13 @@ rust/target/
 .DS_Store
 Thumbs.db
 CLAUDE.local.md
+
+# Local-only configs and artifacts
+requirements-test-unit.txt
+*.tsv
+territory_map.json
+evaluate.py
+evaluate_autolab.py
+.hive/
+.codex/
+demo/desktop_app.log
