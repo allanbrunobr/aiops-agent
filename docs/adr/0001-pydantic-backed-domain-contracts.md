@@ -1,9 +1,9 @@
 # ADR 0001 — Contratos do domínio temporariamente Pydantic-backed
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Data:** 2026-04-26
 - **Decisores:** allanbrunobr
-- **Subfase relacionada:** Fase 1b (PRs #2, #4, #5, #6)
+- **Subfase relacionada:** Fase 1 estrutural — 1a (PR #2) e 1b (PRs #4, #5, #6)
 
 ## Contexto
 
