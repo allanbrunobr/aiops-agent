@@ -1,8 +1,9 @@
 """
-Contratos de dados (dataclasses) compartilhados pelo pipeline AIOps.
+Contratos de dados compartilhados pelo pipeline AIOps.
 
-Estas dataclasses são os contratos "hub" usados por todo o sistema:
-LogEntry, MetricPoint, Span e SimulatedIncident.
+Estes tipos são os contratos "hub" usados por todo o sistema:
+LogEntry, MetricPoint, Span, SimulatedIncident, PredictionReport,
+MetricSeries e MitigationAction.
 
 ATENÇÃO: Adicionar ou remover campos é uma breaking change — todos os
 consumidores dependem da forma exata destes contratos.
@@ -84,3 +85,34 @@ class MetricSeries:
     points: list[MetricPoint]
     threshold: float | None = None
     eta_minutes: float | None = None
+
+
+class MitigationAction(dict):
+    """Uma ação de mitigação proposta pelo agente.
+
+    Implementa dict para compatibilidade com avaliadores que lêem action como dict,
+    e expõe atributos via __getattr__ para compatibilidade com código que usa action.field.
+    """
+
+    def __init__(
+        self,
+        description: str,
+        command: str,
+        risk_level: str,
+        rollback_command: str | None = None,
+    ):
+        super().__init__(
+            description=description,
+            command=command,
+            risk_level=risk_level,
+            rollback_command=rollback_command,
+        )
+
+    def __getattr__(self, name: str):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name)
+
+    def __setattr__(self, name: str, value) -> None:
+        self[name] = value
