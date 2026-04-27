@@ -1,6 +1,6 @@
 # ADR 0002 — `LLMClient` como seam de teste e containment boundary
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Data:** 2026-04-26
 - **Decisores:** allanbrunobr
 - **Relacionado:** ADR 0001, plano original da Fase 2a (spike `refactor/fase-2a-llm-port`, revertido)
@@ -35,13 +35,14 @@ estruturais:
 |---|---|---|---|
 | `main.py:502, 505` | sim | sim | não |
 | `blueprint/adapters/pipeline_nodes.py:117` | sim | sim | não |
-| `agents/diagnoser.py:19, 101` | sim | sim (com fallback via env) | sim, 1 call site |
+| `agents/diagnoser.py:19, 101` | sim | sim (com fallback via env) | sim, 2 call sites (`_call_llm`, `reflect`) |
 | `agents/orchestrator.py:247` | não — recebe via DI | não | sim, 5 call sites |
 | `agents/skill_evolver.py:47, 82` | não — recebe via DI | não | sim, 1 call site |
 
-`diagnoser.py`, `orchestrator.py` e `skill_evolver.py` consomem **diretamente o shape
-Anthropic da resposta** (blocos `text`/`tool_use`, atributos `id`/`name`/`input`,
-`stop_reason`, `usage`). Isso é o acoplamento real — não os imports do SDK.
+`diagnoser.py`, `orchestrator.py` e `skill_evolver.py` somam **8 call sites** que
+consomem **diretamente o shape Anthropic da resposta** — campos efetivamente
+referenciados hoje: `response.content[*].type`, `block.text`, `tc.id`, `tc.name`,
+`tc.input`. Isso é o acoplamento real — não os imports do SDK.
 
 ## Decisão
 
@@ -52,8 +53,9 @@ como abstração para provider-swap.
 
 - Substituir `Anthropic()` direto nos instanciadores (`main.py`, `pipeline_nodes.py`,
   `diagnoser.py` fallback) por uma única factory que devolve um adapter.
-- Permitir mock estrutural nos testes sem depender do shape específico do SDK
-  Anthropic em cada teste.
+- Permitir testes sem monkey-patch do SDK Anthropic. Fixtures continuam devolvendo
+  objetos Anthropic-shaped (a porta é passthrough), mas deixam de depender do
+  import direto do SDK e do `client.messages.create` real.
 - Centralizar políticas transversais futuras (timeout, retry, métricas, rate limit)
   em um único lugar — o adapter.
 
@@ -111,9 +113,12 @@ Esta decisão deve ser revisitada quando **qualquer um** dos itens abaixo ocorre
 3. **Refactor planejado de tool-calling.** Mudança de schema de tools que toque
    múltiplos call sites — momento natural para tipar `ToolDef`, `ToolCall`,
    `ToolUseBlock` no domínio.
-4. **Custo de manter dialeto Anthropic torna-se proibitivo.** Quando 3+ campos do
-   shape de resposta precisarem ser referenciados em código fora de `adapters/llm/`,
-   o custo de tipar passa a ser menor que o de não tipar.
+4. **Shape Anthropic precisa se espalhar para novos módulos.** Quando *novos* campos
+   provider-specific (além dos já consumidos hoje: `content[*].type`, `block.text`,
+   `tc.id/name/input`) tiverem que ser referenciados em **mais de um módulo novo**
+   fora de `adapters/llm/` — ou quando um módulo novo precisar tocar o shape pela
+   primeira vez. O critério é incremental sobre o estado atual, não absoluto: hoje
+   3 módulos já tocam o shape e a decisão é deliberadamente conviver com isso.
 
 A saída exige ADR sucessor (0003+) cobrindo:
 
