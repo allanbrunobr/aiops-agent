@@ -16,11 +16,11 @@ import json
 import os
 from datetime import datetime
 
-from anthropic import Anthropic
 from rich.console import Console
 from rich.panel import Panel
 from rich.markdown import Markdown
 
+from adapters.llm.anthropic_client import AnthropicLLMClient, create_anthropic_llm_client
 from config.loader import LLMConfig as _LLMConfig
 
 console = Console()
@@ -93,12 +93,12 @@ class DiagnosisAgent:
         self.tools_used: list[str] = []
         self.iteration_count: int = 0
 
-    def _get_client(self) -> Anthropic:
+    def _get_client(self) -> AnthropicLLMClient:
         if self.client is None:
             api_key = os.environ.get("ANTHROPIC_API_KEY")
             if not api_key:
                 raise ValueError("API key not configured")
-            self.client = Anthropic(api_key=api_key)
+            self.client = create_anthropic_llm_client(api_key=api_key)
         return self.client
 
     def diagnose(self, report, retriever) -> dict:
