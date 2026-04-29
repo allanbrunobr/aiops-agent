@@ -9,15 +9,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from rich.console import Console
-from rich.table import Table
-
+from application.ports.reporter import (
+    HUMAN_APPROVAL_REQUESTED,
+    MITIGATION_PROPOSED,
+    NullReporter,
+    Reporter,
+    TNR_VERIFIED,
+)
 from core.models import MitigationAction
 from safety.tnr import (
     TNRSafetyGuard, TNRReport, HealthSnapshot
 )
-
-console = Console()
 
 # Mapeamento de versões implantadas → versão estável anterior para rollback
 ROLLBACK_VERSIONS = {
@@ -69,6 +71,9 @@ REMEDIATION_PATTERNS = {
 class MitigationAgent:
     """Agente que propõe ações de mitigação."""
 
+    def __init__(self, reporter: Reporter | None = None) -> None:
+        self.reporter = reporter or NullReporter()
+
     def propose(self, diagnosis: dict) -> dict:
         """Propõe ação de mitigação baseada no diagnóstico."""
         root_cause = diagnosis.get("root_cause", "").lower()
@@ -113,15 +118,15 @@ class MitigationAgent:
             ) if pattern.get("rollback") else None,
         )
 
-        # Display
-        table = Table(title="Proposed Mitigation", show_header=False, border_style="yellow")
-        table.add_row("Action", action.description)
-        table.add_row("Command", f"[bold]{action.command}[/bold]")
-        table.add_row("Risk", f"[{'green' if action.risk_level == 'LOW' else 'yellow'}]{action.risk_level}[/]")
-        table.add_row("Rollback", action.rollback_command or "N/A")
-        table.add_row("Pattern", matched_pattern)
-        console.print(table)
-        console.print("  ⚠️  [bold yellow]Aguardando aprovação humana...[/bold yellow]")
+        self.reporter.emit(
+            MITIGATION_PROPOSED,
+            description=action.description,
+            command=action.command,
+            risk_level=action.risk_level,
+            rollback_command=action.rollback_command,
+            pattern_matched=matched_pattern,
+        )
+        self.reporter.emit(HUMAN_APPROVAL_REQUESTED)
 
         return {
             "action": action,
@@ -155,10 +160,12 @@ class MitigationAgent:
 
         report = tnr_guard.simulate_check(action, pre_health, post_health)
 
-        # Display
-        result_style = "green" if report.result.value == "success" else "red"
-        console.print(f"\n  Pre-health:  {report.pre_snapshot}", style="dim")
-        console.print(f"  Post-health: {report.post_snapshot}", style="dim")
-        console.print(f"  Result: [{result_style}]{report.message}[/{result_style}]")
+        self.reporter.emit(
+            TNR_VERIFIED,
+            pre_snapshot=str(report.pre_snapshot),
+            post_snapshot=str(report.post_snapshot),
+            result=report.result.value,
+            message=report.message,
+        )
 
         return report

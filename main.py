@@ -66,6 +66,7 @@ from rag.indexer import ObservabilityIndexer
 from rag.retriever import ObservabilityRetriever
 from rag.retriever_history import ObservabilityRetrieverWithHistory
 from rag.memory import IncidentMemoryDB, IncidentRecord
+from adapters.reporter import RichConsoleReporter
 from agents.detector import DetectionAgent
 from agents.diagnoser import DiagnosisAgent
 from agents.mitigator import MitigationAgent
@@ -491,10 +492,14 @@ def step_agents(report, retriever, use_llm: bool = True,
     )
     # ─────────────────────────────────────────────────────────────────────
 
+    # Reporter compartilhado: preserva o output Rich da CLI.
+    _reporter = RichConsoleReporter(console=console)
+
     # Inicializa agentes (Estágio 1 / fallback --no-llm)
     detector = DetectionAgent(
         error_threshold=config.thresholds.error_threshold,
         sigma_threshold=config.thresholds.detection_sigma_threshold,
+        reporter=_reporter,
     )
 
     if use_llm:
@@ -509,6 +514,7 @@ def step_agents(report, retriever, use_llm: bool = True,
             memory_db=_memory_db,
             skill_router=_skill_router,
             config=config,
+            reporter=_reporter,
         )
     # Estágio 1 (fallback --no-llm): DiagnosisAgent heurístico
     diagnoser = DiagnosisAgent(
@@ -516,8 +522,9 @@ def step_agents(report, retriever, use_llm: bool = True,
         model=llm_model,
         similar_incidents=_similar_incidents,
         skill=_skill,
+        reporter=_reporter,
     )
-    mitigator = MitigationAgent()
+    mitigator = MitigationAgent(reporter=_reporter)
     tnr_guard = TNRSafetyGuard(regression_threshold=config.thresholds.regression_threshold)
 
     if not use_llm:

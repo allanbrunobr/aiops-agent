@@ -16,15 +16,20 @@ import json
 import os
 from datetime import datetime
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.markdown import Markdown
-
 from adapters.llm.anthropic_client import create_anthropic_llm_client
 from application.ports.llm_client import LLMClient
+from application.ports.reporter import (
+    DIAGNOSIS_COMPLETED,
+    DIAGNOSIS_STARTED,
+    ITERATION_STARTED,
+    LLM_CALL_FAILED,
+    NullReporter,
+    Reporter,
+    THOUGHT_OBSERVED,
+    TOOL_CALLED,
+    TOOL_OBSERVED,
+)
 from config.loader import LLMConfig as _LLMConfig
-
-console = Console()
 
 # Modelo padrão lido do AppConfig.llm.model_name — evita string hardcoded no agente.
 _DEFAULT_MODEL: str = _LLMConfig().model_name
@@ -85,6 +90,7 @@ class DiagnosisAgent:
         model: str = _DEFAULT_MODEL,
         similar_incidents: list | None = None,
         skill=None,
+        reporter: Reporter | None = None,
     ):
         self.max_iterations = max_iterations
         self.model = model
@@ -93,6 +99,7 @@ class DiagnosisAgent:
         self.skill = skill
         self.tools_used: list[str] = []
         self.iteration_count: int = 0
+        self.reporter = reporter or NullReporter()
 
     def _get_client(self) -> LLMClient:
         if self.client is None:
@@ -115,6 +122,12 @@ class DiagnosisAgent:
         # Reinicia rastreamento por execução
         self.tools_used = []
         self.iteration_count = 0
+
+        self.reporter.emit(
+            DIAGNOSIS_STARTED,
+            max_iterations=self.max_iterations,
+            similar_count=len(self.similar_incidents),
+        )
 
         # Prepara contexto inicial com dados pré-processados
         initial_context = report.to_text()
@@ -139,16 +152,22 @@ class DiagnosisAgent:
         ]
 
         diagnosis = None
+        mode = "llm"
         for iteration in range(1, self.max_iterations + 1):
             self.iteration_count = iteration
-            console.print(f"\n  [dim]--- Iteration {iteration}/{self.max_iterations} ---[/dim]")
+            self.reporter.emit(
+                ITERATION_STARTED, current=iteration, total=self.max_iterations
+            )
 
             try:
                 response = self._call_llm(messages, tools)
             except Exception as e:
-                console.print("  [red]LLM call failed. Falling back to heuristic mode.[/red]")
+                self.reporter.emit(LLM_CALL_FAILED, error=str(e))
                 # Fallback: diagnóstico baseado em heurística
-                return self._heuristic_diagnosis(report)
+                diagnosis = self._heuristic_diagnosis(report)
+                mode = "heuristic"
+                self._emit_diagnosis_completed(diagnosis, mode)
+                return diagnosis
 
             # Processa a resposta
             assistant_text = ""
@@ -167,7 +186,7 @@ class DiagnosisAgent:
                     line = line.strip()
                     if line:
                         if any(line.startswith(p) for p in ["Thought:", "Let me", "I need", "Looking", "The", "Based", "This"]):
-                            console.print(f"  💭 Thought: {line[:120]}", style="italic")
+                            self.reporter.emit(THOUGHT_OBSERVED, text=line[:120])
                         break
 
             # Verifica se tem diagnóstico final
@@ -184,11 +203,12 @@ class DiagnosisAgent:
                 for tc in tool_calls:
                     tool_name = tc.name
                     tool_input = tc.input
-                    console.print(f"  🔧 Action: {tool_name}({json.dumps(tool_input, ensure_ascii=False)[:80]})")
+                    args_str = json.dumps(tool_input, ensure_ascii=False)[:80]
+                    self.reporter.emit(TOOL_CALLED, tool_name=tool_name, args=args_str)
 
                     result = self._execute_tool(tool_name, tool_input, report, retriever)
                     self.tools_used.append(tool_name)
-                    console.print(f"  👁️ Observation: {result[:100]}...")
+                    self.reporter.emit(TOOL_OBSERVED, tool_name=tool_name, result=result[:100])
 
                     tool_results.append({
                         "type": "tool_result",
@@ -207,17 +227,19 @@ class DiagnosisAgent:
 
         if not diagnosis:
             diagnosis = self._heuristic_diagnosis(report)
+            mode = "heuristic"
 
-        # Mostra diagnóstico
-        console.print(Panel(
-            f"[bold]Root Cause:[/bold] {diagnosis.get('root_cause', 'Unknown')}\n"
-            f"[bold]Confidence:[/bold] {diagnosis.get('confidence', 'unknown')}\n"
-            f"[bold]Evidence:[/bold] {', '.join(diagnosis.get('evidence', [])[:3])}",
-            title="Diagnosis Result",
-            border_style="green",
-        ))
-
+        self._emit_diagnosis_completed(diagnosis, mode)
         return diagnosis
+
+    def _emit_diagnosis_completed(self, diagnosis: dict, mode: str) -> None:
+        self.reporter.emit(
+            DIAGNOSIS_COMPLETED,
+            root_cause=diagnosis.get("root_cause", "Unknown"),
+            confidence=diagnosis.get("confidence", "unknown"),
+            evidence=list(diagnosis.get("evidence", [])),
+            mode=mode,
+        )
 
     def _call_llm(self, messages: list, tools: list) -> object:
         """Chama Claude com tools, usando prompt da skill se disponível."""
@@ -396,7 +418,6 @@ class DiagnosisAgent:
                                 ctx = retriever.search_history[-1]
                                 if ctx.query_expansion:
                                     formatted = f"[Query expanded to: {ctx.query_expansion}]\n{formatted}"
-                            console.print(retriever.get_search_summary())
                             return formatted
                     except ImportError:
                         pass
@@ -749,8 +770,6 @@ class DiagnosisAgent:
 
     def _heuristic_diagnosis(self, report) -> dict:
         """Diagnóstico fallback baseado em heurística (sem LLM)."""
-        console.print("  [yellow]Using heuristic fallback (no LLM)[/yellow]")
-
         # Encontra o serviço mais afetado
         service_errors = {}
         for tpl in report.log_templates:

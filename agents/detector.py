@@ -7,18 +7,21 @@ recebe dados pré-processados e classifica severidade.
 
 from __future__ import annotations
 
-from rich.console import Console
-from rich.tree import Tree
-
-console = Console()
+from application.ports.reporter import INCIDENT_DETECTED, NullReporter, Reporter
 
 
 class DetectionAgent:
     """Agente de detecção de incidentes."""
 
-    def __init__(self, error_threshold: int = 50, sigma_threshold: float = 3.0):
+    def __init__(
+        self,
+        error_threshold: int = 50,
+        sigma_threshold: float = 3.0,
+        reporter: Reporter | None = None,
+    ):
         self.error_threshold = error_threshold
         self.sigma_threshold = sigma_threshold
+        self.reporter = reporter or NullReporter()
 
     def detect(self, report) -> dict:
         """Analisa o relatório agregado e decide se há incidente."""
@@ -43,18 +46,15 @@ class DetectionAgent:
 
         is_incident = len(signals) >= 2  # ≥2 sinais correlacionados
 
-        # Output visual
-        tree = Tree(f"[bold]Detection Analysis[/bold]")
-        tree.add(f"Logs: {report.total_logs} processed → {len(report.log_templates)} templates (Drain3)")
-        tree.add(f"Metrics: {len(report.metric_anomalies)} anomalies detected (3-sigma)")
-        tree.add(f"Traces: {len(report.slow_traces)} slow patterns identified (>p95)")
-
-        if is_incident:
-            tree.add(f"[bold red]INCIDENT DETECTED[/bold red]: {len(signals)} correlated signals")
-        else:
-            tree.add(f"[green]No incident[/green]: insufficient correlated signals")
-
-        console.print(tree)
+        self.reporter.emit(
+            INCIDENT_DETECTED,
+            total_logs=report.total_logs,
+            template_count=len(report.log_templates),
+            anomaly_count=len(report.metric_anomalies),
+            trace_count=len(report.slow_traces),
+            is_incident=is_incident,
+            signals=signals,
+        )
 
         return {
             "is_incident": is_incident,
