@@ -1,9 +1,16 @@
 # ADR 0001 — Contratos do domínio temporariamente Pydantic-backed
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0003](./0003-domain-purity.md)
 - **Data:** 2026-04-26
+- **Substituído em:** 2026-04-29
 - **Decisores:** allanbrunobr
 - **Subfase relacionada:** Fase 1 estrutural — 1a (PR #2) e 1b (PRs #4, #5, #6)
+
+> **Nota (2026-04-29):** Esta decisão foi substituída por ADR 0003. A Fase 2 estrutural
+> removeu `core/models.py` e os shims; a Fase 3 sai do Pydantic-backed domain via DTOs
+> de borda em `server/webhook/schemas.py` e dataclasses puros em `domain/`. O conteúdo
+> abaixo é mantido como histórico — qualquer afirmação que contradiga ADR 0003 está
+> desatualizada.
 
 ## Contexto
 
