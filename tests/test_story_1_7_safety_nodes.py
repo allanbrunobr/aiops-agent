@@ -80,7 +80,8 @@ def test_pipeline_node_order_with_safety():
 def test_sanitizer_node_executes():
     """Sanitizer node deve sanitizar dados brutos no estado."""
     from blueprint.adapters.safety_nodes import make_sanitizer_node
-    from core.models import IncidentState, NormalizedAlert
+    from domain.alert import NormalizedAlert
+    from domain.incident_state import IncidentState
     from data.sample_incident import create_incident
 
     config = AppConfig()
@@ -136,7 +137,8 @@ def test_safety_blocked_error_import():
 def test_full_pipeline_no_llm_with_safety():
     """Pipeline completo em modo --no-llm com safety deve funcionar."""
     from blueprint.engine import BlueprintEngine
-    from core.models import IncidentState, NormalizedAlert
+    from domain.alert import NormalizedAlert
+    from domain.incident_state import IncidentState
     from data.sample_incident import create_incident
 
     config = AppConfig()

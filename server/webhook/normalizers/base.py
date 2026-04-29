@@ -3,8 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from core.models import NormalizedAlert
 from core.protocols import CredentialProvider
+from domain.alert import NormalizedAlert
 
 
 class AlertNormalizer(ABC):

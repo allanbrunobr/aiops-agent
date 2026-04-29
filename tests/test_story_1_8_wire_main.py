@@ -77,7 +77,8 @@ def test_exit_code_labels_preserved():
 def test_display_results_with_diagnosis():
     """display_results() deve exibir diagnosis sem erro."""
     from main import display_results
-    from core.models import IncidentState, NormalizedAlert
+    from domain.alert import NormalizedAlert
+    from domain.incident_state import IncidentState
 
     state = IncidentState(
         incident_id="test-display",

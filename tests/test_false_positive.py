@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from core.models import IncidentState
+from domain.incident_state import IncidentState
 
 
 def _make_incident() -> IncidentState:

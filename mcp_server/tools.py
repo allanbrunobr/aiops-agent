@@ -17,7 +17,8 @@ from datetime import datetime, timezone
 
 import structlog
 
-from core.models import MitigationAction, NormalizedAlert
+from domain.alert import NormalizedAlert
+from domain.incident import MitigationAction
 from safety.orchestrator import SafetyOrchestrator
 
 log = structlog.get_logger()

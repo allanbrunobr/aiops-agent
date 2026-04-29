@@ -5,7 +5,7 @@ import time
 
 import structlog
 
-from core.models import NormalizedAlert
+from domain.alert import NormalizedAlert
 
 log = structlog.get_logger()
 

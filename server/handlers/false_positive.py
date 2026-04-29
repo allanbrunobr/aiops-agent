@@ -4,7 +4,7 @@ import logging
 
 import structlog
 
-from core.models import IncidentState
+from domain.incident_state import IncidentState
 
 logger = logging.getLogger(__name__)
 log = structlog.get_logger(__name__)

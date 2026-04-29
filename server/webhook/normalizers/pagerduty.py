@@ -8,8 +8,8 @@ from typing import Any
 
 import structlog
 
-from core.models import NormalizedAlert
 from core.protocols import CredentialProvider
+from domain.alert import NormalizedAlert
 from server.webhook.normalizers.base import AlertNormalizer
 from server.webhook.normalizers.registry import register_normalizer
 

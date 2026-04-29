@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
-from core.models import MitigationAction  # deprecated — use core.models directly
+from domain.incident import MitigationAction
 
 
 class TNRResult(Enum):

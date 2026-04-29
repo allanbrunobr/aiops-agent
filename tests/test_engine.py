@@ -15,10 +15,11 @@ from blueprint.nodes import (
     PipelineDefinition,
 )
 from config.loader import AppConfig
+from adapters.persistence.in_memory_store import InMemoryStore
 from core.credentials import EnvCredentialProvider
 from core.logging import configure_logging
-from core.models import IncidentState, NormalizedAlert
-from core.store import InMemoryStore
+from domain.alert import NormalizedAlert
+from domain.incident_state import IncidentState
 
 
 @pytest.fixture(autouse=True)

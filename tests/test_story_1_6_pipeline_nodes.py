@@ -56,7 +56,8 @@ def test_agentic_nodes_have_fallback():
 def test_aggregator_adapter_produces_report():
     """Aggregator adapter deve produzir aggregated_report no estado."""
     from blueprint.adapters.pipeline_nodes import make_aggregator_node
-    from core.models import IncidentState, NormalizedAlert
+    from domain.alert import NormalizedAlert
+    from domain.incident_state import IncidentState
     from data.sample_incident import create_incident
 
     config = AppConfig()
@@ -96,7 +97,8 @@ def test_aggregator_adapter_produces_report():
 def test_diagnoser_fallback_produces_diagnosis():
     """Diagnoser fallback deve produzir diagnosis dict com shape correta."""
     from blueprint.adapters.pipeline_nodes import make_aggregator_node, make_diagnoser_fallback
-    from core.models import IncidentState, NormalizedAlert
+    from domain.alert import NormalizedAlert
+    from domain.incident_state import IncidentState
     from data.sample_incident import create_incident
 
     config = AppConfig()
@@ -144,7 +146,8 @@ def test_diagnoser_fallback_produces_diagnosis():
 def test_full_pipeline_no_llm():
     """Pipeline completo em modo --no-llm deve produzir diagnosis e postmortem."""
     from blueprint.engine import BlueprintEngine
-    from core.models import IncidentState, NormalizedAlert
+    from domain.alert import NormalizedAlert
+    from domain.incident_state import IncidentState
     from data.sample_incident import create_incident
 
     config = AppConfig()

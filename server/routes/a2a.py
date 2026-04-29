@@ -143,7 +143,8 @@ async def _handle_diagnose(task_id: str, data: dict, request: Request) -> list[d
 
     try:
         from datetime import datetime, timezone
-        from core.models import IncidentState, NormalizedAlert
+        from domain.alert import NormalizedAlert
+        from domain.incident_state import IncidentState
 
         now = datetime.now(timezone.utc)
         alert = NormalizedAlert(

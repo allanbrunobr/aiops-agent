@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from core.models import IncidentState
+from domain.incident_state import IncidentState
 
 
 @runtime_checkable

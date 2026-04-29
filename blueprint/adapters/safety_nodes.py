@@ -13,7 +13,7 @@ from typing import Callable
 
 from config.loader import AppConfig
 from core.logging import get_logger
-from core.models import IncidentState
+from domain.incident_state import IncidentState
 
 log = get_logger("safety")
 

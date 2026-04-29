@@ -10,7 +10,7 @@ from dataclasses import dataclass, field as dc_field
 from typing import Any
 
 from core.logging import get_logger
-from core.models import IncidentState
+from domain.incident_state import IncidentState
 from blueprint.nodes import (
     BlueprintNode,
     NodeResult,
