@@ -499,10 +499,10 @@ def step_agents(report, retriever, use_llm: bool = True,
 
     if use_llm:
         # Estágio 2: agente autônomo com plan/execute/reflect
-        from anthropic import Anthropic
+        from adapters.llm.anthropic_client import create_anthropic_llm_client
         from agents.orchestrator import AgentOrchestrator
 
-        _client = Anthropic()
+        _client = create_anthropic_llm_client()
         _orchestrator = AgentOrchestrator(
             client=_client,
             model=llm_model,

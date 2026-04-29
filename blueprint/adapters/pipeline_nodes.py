@@ -97,7 +97,7 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
 
     def execute(state: IncidentState) -> IncidentState:
         import os
-        from anthropic import Anthropic
+        from adapters.llm.anthropic_client import create_anthropic_llm_client
         from agents.orchestrator import AgentOrchestrator
         from agents.skill_router import SkillRouter
         from rag.memory import IncidentMemoryDB
@@ -114,7 +114,7 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
         skill_router = SkillRouter(memory_db)
         skill_router.seed_default_skills()
 
-        client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        client = create_anthropic_llm_client(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
         orchestrator = AgentOrchestrator(
             client=client, model=model,
             memory_db=memory_db, skill_router=skill_router,
