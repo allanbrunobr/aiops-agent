@@ -1,20 +1,15 @@
-"""Shim temporario — Protocols redirecionados para suas novas localizacoes.
+"""Protocols residuais em ``core/`` apos a Fase 2e.
 
-``IncidentStore`` migrou para ``application.ports.incident_store`` (Fase 2d).
-``CredentialProvider`` permanece definido aqui ate uma fase futura decidir
-seu novo lar.
-
-Este shim sera removido na Fase 2e. Imports remanescentes em testes podem
-continuar usando ``core.protocols`` enquanto durar a transicao.
+``IncidentStore`` migrou para ``application.ports.incident_store`` e ``InMemoryStore``
+para ``adapters.persistence.in_memory_store``. ``CredentialProvider`` permanece aqui
+ate uma fase futura definir um lar dedicado para portas de infraestrutura.
 """
 
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from application.ports.incident_store import IncidentStore
-
-__all__ = ["CredentialProvider", "IncidentStore"]
+__all__ = ["CredentialProvider"]
 
 
 @runtime_checkable
