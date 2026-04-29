@@ -1,32 +1,20 @@
-"""Protocolos (interfaces) para injecao de dependencia.
+"""Shim temporario — Protocols redirecionados para suas novas localizacoes.
 
-Define IncidentStore e CredentialProvider como Protocols (PEP 544)
-para structural subtyping. Decorados com @runtime_checkable para
-validacao no composition root via isinstance().
+``IncidentStore`` migrou para ``application.ports.incident_store`` (Fase 2d).
+``CredentialProvider`` permanece definido aqui ate uma fase futura decidir
+seu novo lar.
+
+Este shim sera removido na Fase 2e. Imports remanescentes em testes podem
+continuar usando ``core.protocols`` enquanto durar a transicao.
 """
 
 from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
-from core.models import IncidentState
+from application.ports.incident_store import IncidentStore
 
-
-@runtime_checkable
-class IncidentStore(Protocol):
-    """Protocolo para persistencia de estado de incidentes."""
-
-    def save(self, incident_id: str, state: IncidentState) -> None:
-        """Armazena ou atualiza estado de um incidente."""
-        ...
-
-    def get(self, incident_id: str) -> IncidentState | None:
-        """Recupera estado por ID. Retorna None se nao encontrado."""
-        ...
-
-    def list_active(self) -> list[tuple[str, IncidentState]]:
-        """Lista incidentes ativos (nao-terminais) como (id, state)."""
-        ...
+__all__ = ["CredentialProvider", "IncidentStore"]
 
 
 @runtime_checkable

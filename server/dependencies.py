@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from application.ports.incident_store import IncidentStore
 from blueprint.engine import BlueprintEngine
 from config.loader import AppConfig
-from core.protocols import CredentialProvider, IncidentStore
+from core.protocols import CredentialProvider
 
 if TYPE_CHECKING:
     from rag.knowledge_store import KnowledgeStore

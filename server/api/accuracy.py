@@ -7,8 +7,8 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, field_validator
 
+from application.ports.incident_store import IncidentStore
 from core.models import VALID_ACCURACY_VERDICTS, IncidentState
-from core.protocols import IncidentStore
 
 log = structlog.get_logger()
 
