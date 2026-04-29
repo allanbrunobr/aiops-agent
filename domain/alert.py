@@ -1,28 +1,25 @@
 """Contrato compartilhado de alerta normalizado.
 
 NormalizedAlert é o esquema unificado produzido pelos normalizadores de
-webhook (PagerDuty, Grafana, Databricks) e consumido por todo o pipeline:
-server/webhook, mcp_server, server/routes/a2a, blueprint, core/store.
+webhook (PagerDuty, Grafana, Databricks) e consumido por todo o pipeline.
 
-NOTA: temporariamente Pydantic-backed. Mantém-se como BaseModel por enquanto
-para preservar validações e a interface dos 33 import sites existentes em
-``core/models.py`` sem refactor amplo. Em fase posterior pode ser separado
-em duas representações: dataclass na camada de domínio + DTO Pydantic na
-borda HTTP.
+Validação de severity ocorre na borda HTTP (server/webhook/schemas.NormalizedAlertDTO
++ helper ``normalize_severity``) ou nos próprios normalizers, que usam mapas para
+o vocabulário canônico {critical, error, warning, info}. O domínio confia que a
+entrada já está normalizada — qualquer construção programática que precise de
+validação deve usar o DTO da borda.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
-class NormalizedAlert(BaseModel):
+@dataclass(frozen=True)
+class NormalizedAlert:
     """Esquema unificado de alerta produzido por todos os normalizadores."""
-
-    model_config = ConfigDict(frozen=True)
 
     # Identificacao da fonte
     source: str           # "pagerduty", "grafana", "databricks"
@@ -45,15 +42,5 @@ class NormalizedAlert(BaseModel):
     environment: str | None = None
 
     # Metadata extensivel
-    tags: dict[str, str] = Field(default_factory=dict)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-    @field_validator("severity")
-    @classmethod
-    def validate_severity(cls, v: str) -> str:
-        """Severity deve ser um dos valores permitidos."""
-        allowed = {"critical", "error", "warning", "info"}
-        v_lower = v.lower()
-        if v_lower not in allowed:
-            raise ValueError(f"severity must be one of {allowed}, got '{v}'")
-        return v_lower
+    tags: dict[str, str] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)

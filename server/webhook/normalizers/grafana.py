@@ -11,6 +11,7 @@ from core.protocols import CredentialProvider
 from domain.alert import NormalizedAlert
 from server.webhook.normalizers.base import AlertNormalizer
 from server.webhook.normalizers.registry import register_normalizer
+from server.webhook.schemas import NormalizedAlertDTO
 
 log = structlog.get_logger()
 
@@ -122,7 +123,7 @@ class GrafanaNormalizer(AlertNormalizer):
         now = datetime.now(timezone.utc)
         correlation_id = f"inc-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
 
-        return NormalizedAlert(
+        return NormalizedAlertDTO(
             source="grafana",
             source_id=source_id,
             correlation_id=correlation_id,
@@ -140,4 +141,4 @@ class GrafanaNormalizer(AlertNormalizer):
                 "alert_count": len(alerts),
                 "common_labels": payload.get("commonLabels", {}),
             },
-        )
+        ).to_domain()

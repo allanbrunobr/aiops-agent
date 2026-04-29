@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+import json
 from datetime import datetime, timezone
 
 import pytest
@@ -12,6 +14,7 @@ from core.credentials import EnvCredentialProvider
 from core.protocols import CredentialProvider
 from domain.alert import NormalizedAlert
 from domain.incident_state import IncidentState
+from server.webhook.schemas import NormalizedAlertDTO, normalize_severity
 
 
 def _make_alert(**overrides) -> NormalizedAlert:
@@ -56,21 +59,39 @@ class TestNormalizedAlert:
         assert alert.severity == "critical"
         assert alert.service == "payment-svc"
 
-    def test_invalid_severity_rejected(self):
-        """Severity invalida deve gerar ValidationError."""
+    def test_invalid_severity_rejected_at_dto_boundary(self):
+        """Severity invalida deve gerar erro no DTO/helper da borda (ADR 0003)."""
         with pytest.raises(Exception, match="severity must be one of"):
-            _make_alert(severity="extreme")
+            normalize_severity("extreme")
 
-    def test_severity_normalized_to_lowercase(self):
-        """Severity deve ser normalizada para minusculo."""
-        alert = _make_alert(severity="WARNING")
-        assert alert.severity == "warning"
+    def test_dto_severity_normalized_to_lowercase(self):
+        """DTO da borda normaliza severity para minusculo."""
+        dto = NormalizedAlertDTO(
+            source="pagerduty",
+            source_id="PD-1",
+            correlation_id="inc-20260308-a7f3b2c1",
+            title="t",
+            description="d",
+            severity="WARNING",
+            alert_type="HighErrorRate",
+            timestamp=datetime(2026, 3, 8, tzinfo=timezone.utc),
+            detection_timestamp=datetime(2026, 3, 8, tzinfo=timezone.utc),
+        )
+        assert dto.severity == "warning"
+        assert dto.to_domain().severity == "warning"
 
     def test_json_round_trip(self):
-        """Serializacao JSON ida-e-volta deve preservar dados."""
+        """Serializacao JSON ida-e-volta via stdlib (dataclasses.asdict + json)."""
         alert = _make_alert()
-        json_str = alert.model_dump_json()
-        restored = NormalizedAlert.model_validate_json(json_str)
+        payload = dataclasses.asdict(alert)
+        json_str = json.dumps(payload, default=str)
+        restored_dict = json.loads(json_str)
+        # Reconstrói datetime a partir do ISO string
+        restored_dict["timestamp"] = datetime.fromisoformat(restored_dict["timestamp"])
+        restored_dict["detection_timestamp"] = datetime.fromisoformat(
+            restored_dict["detection_timestamp"]
+        )
+        restored = NormalizedAlert(**restored_dict)
         assert restored == alert
 
     def test_optional_fields_default_none(self):

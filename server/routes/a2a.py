@@ -129,10 +129,16 @@ async def handle_task(request: Request) -> dict:
 # ---------------------------------------------------------------------------
 
 def _map_severity(raw: str) -> str:
-    """Normaliza severity A2A → NormalizedAlert (critical/error/warning/info)."""
+    """Normaliza severity A2A → NormalizedAlert (critical/error/warning/info).
+
+    Levanta ValueError se o valor mapeado não pertencer ao vocabulário canônico —
+    handler externo captura e devolve artifact ``pipeline_error``.
+    """
+    from server.webhook.schemas import normalize_severity
     _MAP = {"high": "error", "medium": "warning", "low": "info", "p1": "critical", "p2": "error"}
     normalized = raw.lower()
-    return _MAP.get(normalized, normalized) if normalized not in ("critical", "error", "warning", "info") else normalized
+    mapped = _MAP.get(normalized, normalized)
+    return normalize_severity(mapped)
 
 
 async def _handle_diagnose(task_id: str, data: dict, request: Request) -> list[dict]:

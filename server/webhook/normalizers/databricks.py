@@ -11,6 +11,7 @@ from core.protocols import CredentialProvider
 from domain.alert import NormalizedAlert
 from server.webhook.normalizers.base import AlertNormalizer
 from server.webhook.normalizers.registry import register_normalizer
+from server.webhook.schemas import NormalizedAlertDTO
 
 log = structlog.get_logger()
 
@@ -104,7 +105,7 @@ class DatabricksNormalizer(AlertNormalizer):
 
         correlation_id = f"inc-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
 
-        return NormalizedAlert(
+        return NormalizedAlertDTO(
             source="databricks",
             source_id=str(source_id),
             correlation_id=correlation_id,
@@ -120,7 +121,7 @@ class DatabricksNormalizer(AlertNormalizer):
                 "query_name": payload.get("query_name"),
                 "alert_type": "sql_alert",
             },
-        )
+        ).to_domain()
 
     def _normalize_job_notification(self, payload: dict[str, Any]) -> NormalizedAlert:
         """Normaliza notificacao de job do Databricks."""
@@ -142,7 +143,7 @@ class DatabricksNormalizer(AlertNormalizer):
 
         correlation_id = f"inc-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
 
-        return NormalizedAlert(
+        return NormalizedAlertDTO(
             source="databricks",
             source_id=source_id,
             correlation_id=correlation_id,
@@ -162,4 +163,4 @@ class DatabricksNormalizer(AlertNormalizer):
                 "job_id": payload.get("job_id"),
                 "alert_type": "job_notification",
             },
-        )
+        ).to_domain()
