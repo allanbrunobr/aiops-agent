@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 
+from application.ports.llm_client import LLMClient
 from rag.memory import DiagnosticSkill, IncidentMemoryDB
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ _EVOLVE_MIN_USES = 3
 class SkillEvolver:
     """Decide quando e como evoluir uma DiagnosticSkill com baixa performance."""
 
-    def __init__(self, client, memory_db: IncidentMemoryDB | None) -> None:
+    def __init__(self, client: LLMClient | None, memory_db: IncidentMemoryDB | None) -> None:
         self.client = client
         self.memory_db = memory_db
 
@@ -79,7 +80,7 @@ class SkillEvolver:
         )
 
         try:
-            response = self.client.messages.create(
+            response = self.client.create_message(
                 model="claude-haiku-4-5-20251001",
                 max_tokens=1024,
                 messages=[{"role": "user", "content": prompt}],

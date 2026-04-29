@@ -18,6 +18,7 @@ from agents.detector import DetectionAgent
 from agents.diagnoser import DiagnosisAgent
 from agents.mitigator import MitigationAgent
 from agents.skill_router import DEFAULT_SKILL, SkillRouter
+from application.ports.llm_client import LLMClient
 from rag.memory import IncidentMemoryDB
 from safety.tnr import TNRSafetyGuard
 
@@ -238,7 +239,7 @@ class AgentOrchestrator:
 
     def __init__(
         self,
-        client,
+        client: LLMClient | None,
         model: str,
         memory_db: IncidentMemoryDB | None,
         skill_router: SkillRouter | None,
@@ -366,7 +367,7 @@ class AgentOrchestrator:
         ) or "(nenhum incidente similar encontrado)"
 
         try:
-            response = self.client.messages.create(
+            response = self.client.create_message(
                 model=self.model,
                 max_tokens=1024,
                 messages=[{
@@ -451,7 +452,7 @@ class AgentOrchestrator:
             if s.step_id > step.step_id and s.result is None
         ])
         try:
-            response = self.client.messages.create(
+            response = self.client.create_message(
                 model=self.model,
                 max_tokens=512,
                 messages=[{
@@ -483,7 +484,7 @@ class AgentOrchestrator:
             for s in old_plan.steps
         ]
         try:
-            response = self.client.messages.create(
+            response = self.client.create_message(
                 model=self.model,
                 max_tokens=1024,
                 messages=[{
@@ -546,7 +547,7 @@ class AgentOrchestrator:
         if system_msg:
             kwargs["system"] = system_msg
         try:
-            response = self.client.messages.create(**kwargs)
+            response = self.client.create_message(**kwargs)
             return json.loads(response.content[0].text)
         except Exception:  # noqa: BLE001
             return DiagnosisAgent()._heuristic_diagnosis(report)
@@ -560,7 +561,7 @@ class AgentOrchestrator:
     ) -> dict:
         """Reflexão final sobre toda a investigação."""
         try:
-            response = self.client.messages.create(
+            response = self.client.create_message(
                 model=self.model,
                 max_tokens=512,
                 messages=[{

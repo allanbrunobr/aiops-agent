@@ -42,7 +42,7 @@ def _mock_client(response: dict) -> MagicMock:
     msg = MagicMock()
     msg.content = [MagicMock(text=json.dumps(response))]
     client = MagicMock()
-    client.messages.create.return_value = msg
+    client.create_message.return_value = msg
     return client
 
 
@@ -58,7 +58,7 @@ def _mock_client_seq(responses: list[dict]) -> MagicMock:
         return msg
 
     client = MagicMock()
-    client.messages.create.side_effect = side_effect
+    client.create_message.side_effect = side_effect
     return client
 
 
@@ -218,7 +218,7 @@ class TestGeneratePlan:
         msg = MagicMock()
         msg.content = [MagicMock(text="not json")]
         client = MagicMock()
-        client.messages.create.return_value = msg
+        client.create_message.return_value = msg
         orch = AgentOrchestrator(client=client, model="t", memory_db=None, skill_router=None)
         plan = orch._generate_plan(_make_report(), _make_skill(), [])
         assert isinstance(plan, InvestigationPlan)
@@ -295,7 +295,7 @@ class TestReflectOnStep:
         msg = MagicMock()
         msg.content = [MagicMock(text="not json")]
         client = MagicMock()
-        client.messages.create.return_value = msg
+        client.create_message.return_value = msg
         orch = AgentOrchestrator(client=client, model="t", memory_db=None, skill_router=None)
         plan = InvestigationPlan(hypothesis="h", steps=[])
         step = InvestigationStep(step_id=1, goal="g", tool="query_logs",
@@ -345,7 +345,7 @@ class TestReplan:
         msg = MagicMock()
         msg.content = [MagicMock(text="not json")]
         client = MagicMock()
-        client.messages.create.return_value = msg
+        client.create_message.return_value = msg
         orch = AgentOrchestrator(client=client, model="t", memory_db=None, skill_router=None)
         old_plan = InvestigationPlan(hypothesis="original", steps=[])
         result = orch._replan(old_plan, {}, _make_report(), _make_skill())
@@ -381,7 +381,7 @@ class TestSynthesizeDiagnosis:
         msg = MagicMock()
         msg.content = [MagicMock(text="not json")]
         client = MagicMock()
-        client.messages.create.return_value = msg
+        client.create_message.return_value = msg
         orch = AgentOrchestrator(client=client, model="t", memory_db=None, skill_router=None)
         plan = InvestigationPlan(hypothesis="h", steps=[])
         report = MagicMock()
