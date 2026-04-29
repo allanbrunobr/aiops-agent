@@ -19,6 +19,7 @@ from agents.diagnoser import DiagnosisAgent
 from agents.mitigator import MitigationAgent
 from agents.skill_router import DEFAULT_SKILL, SkillRouter
 from application.ports.llm_client import LLMClient
+from application.ports.reporter import NullReporter, Reporter
 from rag.memory import IncidentMemoryDB
 from safety.tnr import TNRSafetyGuard
 
@@ -244,12 +245,14 @@ class AgentOrchestrator:
         memory_db: IncidentMemoryDB | None,
         skill_router: SkillRouter | None,
         config=None,
+        reporter: Reporter | None = None,
     ) -> None:
         self.client = client
         self.model = model
         self.memory_db = memory_db
         self.skill_router = skill_router
         self.config = config
+        self.reporter = reporter or NullReporter()
 
     # ------------------------------------------------------------------
     # Public
@@ -258,7 +261,7 @@ class AgentOrchestrator:
     def run(self, report, retriever) -> AgentOutcome:
         """Execução completa: detect → plan → execute → safety → learn."""
         # ── DETECT (determinístico — não muda) ────────────────────────
-        detector = DetectionAgent()
+        detector = DetectionAgent(reporter=self.reporter)
         detection = detector.detect(report)
 
         if not detection.get("is_incident"):
@@ -313,7 +316,7 @@ class AgentOrchestrator:
             diagnosis = self._synthesize_diagnosis(plan, report, {}, skill)
 
         # ── 4. SAFETY (invariante — nunca controlada pelo LLM) ────────
-        mitigator = MitigationAgent()
+        mitigator = MitigationAgent(reporter=self.reporter)
         mitigation = mitigator.propose(diagnosis)
         tnr_guard = TNRSafetyGuard()
         tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
