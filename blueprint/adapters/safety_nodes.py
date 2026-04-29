@@ -9,6 +9,7 @@ INVARIANTE: Se safety falha, pipeline aborta.
 """
 from __future__ import annotations
 
+import dataclasses
 from typing import Callable
 
 from config.loader import AppConfig
@@ -70,7 +71,7 @@ def make_sanitizer_node(config: AppConfig) -> Callable[[IncidentState], Incident
             "_sanitizer": sanitizer,  # Preserva abstraction map para pipeline
         }
 
-        return state.model_copy(update={"metadata": updated_metadata})
+        return dataclasses.replace(state, metadata=updated_metadata)
 
     return execute
 
@@ -126,9 +127,10 @@ def make_version_validator_node(config: AppConfig) -> Callable[[IncidentState], 
                 f"VersionValidator blocked action: {result.risk.name} — {result.blocked_patterns}"
             )
 
-        return state.model_copy(update={
-            "safety_reasons": [*state.safety_reasons, f"VersionValidator: {result.risk.name}"],
-        })
+        return dataclasses.replace(
+            state,
+            safety_reasons=[*state.safety_reasons, f"VersionValidator: {result.risk.name}"],
+        )
 
     return execute
 
@@ -192,13 +194,14 @@ def make_pre_validator_node(config: AppConfig) -> Callable[[IncidentState], Inci
 
         safety_verdict = "APPROVED" if result.approval_status.value in ("auto_approved", "approved") else "NEEDS_REVIEW"
 
-        return state.model_copy(update={
-            "safety_verdict": safety_verdict,
-            "safety_reasons": [
+        return dataclasses.replace(
+            state,
+            safety_verdict=safety_verdict,
+            safety_reasons=[
                 *state.safety_reasons,
                 f"PreValidator: {result.risk_level.value} — {result.approval_status.value}",
             ],
-        })
+        )
 
     return execute
 
@@ -280,11 +283,12 @@ def make_tnr_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]
                 f"below threshold {config.thresholds.regression_threshold}"
             )
 
-        return state.model_copy(update={
-            "safety_reasons": [
+        return dataclasses.replace(
+            state,
+            safety_reasons=[
                 *state.safety_reasons,
                 f"TNR: {tnr_report.result.value} (delta={tnr_report.health_delta:.1f})",
             ],
-        })
+        )
 
     return execute

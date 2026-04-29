@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import time
 from datetime import datetime, timezone
 
@@ -108,7 +109,7 @@ class TestEngineExecution:
         state = _make_state()
 
         def set_diagnosis(s):
-            return s.model_copy(update={"diagnosis": {"root_cause": "pool exhaustion"}})
+            return dataclasses.replace(s, diagnosis={"root_cause": "pool exhaustion"})
 
         pipeline = PipelineDefinition(
             name="test",
@@ -194,7 +195,7 @@ class TestAgenticFallback:
             raise ConnectionError("API unreachable")
 
         def heuristic(s):
-            return s.model_copy(update={"diagnosis": {"root_cause": "heuristic"}})
+            return dataclasses.replace(s, diagnosis={"root_cause": "heuristic"})
 
         pipeline = PipelineDefinition(
             name="test",
@@ -254,7 +255,7 @@ class TestNoLLMMode:
             return s
 
         def heuristic(s):
-            return s.model_copy(update={"diagnosis": {"root_cause": "heuristic_nollm"}})
+            return dataclasses.replace(s, diagnosis={"root_cause": "heuristic_nollm"})
 
         pipeline = PipelineDefinition(
             name="test",

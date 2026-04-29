@@ -8,6 +8,7 @@ O inverso NUNCA e verdadeiro.
 """
 from __future__ import annotations
 
+import dataclasses
 from typing import Any, Callable
 
 from config.loader import AppConfig
@@ -45,8 +46,9 @@ def make_aggregator_node(config: AppConfig) -> Callable[[IncidentState], Inciden
         report = aggregator.process(logs, metrics, traces)
 
         # Armazena report como dict serializavel no IncidentState
-        return state.model_copy(update={
-            "aggregated_report": {
+        return dataclasses.replace(
+            state,
+            aggregated_report={
                 "log_templates_count": len(report.log_templates),
                 "metric_anomalies_count": len(report.metric_anomalies),
                 "slow_traces_count": len(report.slow_traces),
@@ -57,7 +59,7 @@ def make_aggregator_node(config: AppConfig) -> Callable[[IncidentState], Inciden
                 # Referencia ao objeto vivo para nodes downstream
                 "_report_obj": report,
             },
-        })
+        )
 
     return execute
 
@@ -87,7 +89,7 @@ def make_context_compressor_node(config: AppConfig) -> Callable[[IncidentState],
 
         # Atualiza o campo de texto comprimido
         updated_report = {**report_data, "compressed_text": compressed_text}
-        return state.model_copy(update={"aggregated_report": updated_report})
+        return dataclasses.replace(state, aggregated_report=updated_report)
 
     return execute
 
@@ -122,10 +124,11 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
         )
         outcome = orchestrator.run(report_obj, retriever)
 
-        return state.model_copy(update={
-            "diagnosis": outcome.diagnosis,
-            "metadata": {**state.metadata, "_agent_outcome": outcome},
-        })
+        return dataclasses.replace(
+            state,
+            diagnosis=outcome.diagnosis,
+            metadata={**state.metadata, "_agent_outcome": outcome},
+        )
 
     return execute
 
@@ -144,18 +147,19 @@ def make_diagnoser_fallback(config: AppConfig) -> Callable[[IncidentState], Inci
         report_data = state.aggregated_report or {}
         report_obj = report_data.get("_report_obj")
         if report_obj is None:
-            return state.model_copy(update={
-                "diagnosis": {
+            return dataclasses.replace(
+                state,
+                diagnosis={
                     "root_cause": "Unable to diagnose — no aggregated report available",
                     "evidence": [],
                     "affected_services": [],
                     "confidence": "low",
                     "timeline": "No data",
                 },
-            })
+            )
 
         diagnosis = diagnoser._heuristic_diagnosis(report_obj)
-        return state.model_copy(update={"diagnosis": diagnosis})
+        return dataclasses.replace(state, diagnosis=diagnosis)
 
     return execute
 
@@ -197,7 +201,7 @@ def make_postmortem_node(config: AppConfig) -> Callable[[IncidentState], Inciden
 - [ ] Update monitoring thresholds if needed
 - [ ] Document lessons learned in knowledge base
 """
-        return state.model_copy(update={"postmortem_md": postmortem})
+        return dataclasses.replace(state, postmortem_md=postmortem)
 
     return execute
 

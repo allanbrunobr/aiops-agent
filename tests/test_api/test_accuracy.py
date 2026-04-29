@@ -5,6 +5,7 @@ Testes para Story 3.3: Diagnostic Accuracy Tracking.
 Cobre endpoints PATCH /accuracy e GET /metrics/accuracy.
 """
 
+import dataclasses
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
@@ -133,16 +134,18 @@ async def test_get_accuracy_metrics_aggregates_correctly():
     store = InMemoryStore()
 
     # 3 incidentes: 2 reviewed (1 correct, 1 false_positive), 1 pending
-    inc1 = _make_incident("c1").model_copy(update={
-        "accuracy_status": "reviewed",
-        "accuracy_verdict": "correct",
-        "reviewed_at": datetime.datetime(2026, 3, 4, 15, 0, 0),
-    })
-    inc2 = _make_incident("c2").model_copy(update={
-        "accuracy_status": "reviewed",
-        "accuracy_verdict": "false_positive",
-        "reviewed_at": datetime.datetime(2026, 3, 4, 16, 0, 0),
-    })
+    inc1 = dataclasses.replace(
+        _make_incident("c1"),
+        accuracy_status="reviewed",
+        accuracy_verdict="correct",
+        reviewed_at=datetime.datetime(2026, 3, 4, 15, 0, 0),
+    )
+    inc2 = dataclasses.replace(
+        _make_incident("c2"),
+        accuracy_status="reviewed",
+        accuracy_verdict="false_positive",
+        reviewed_at=datetime.datetime(2026, 3, 4, 16, 0, 0),
+    )
     inc3 = _make_incident("c3")  # pending_review
 
     for cid, inc in [("c1", inc1), ("c2", inc2), ("c3", inc3)]:

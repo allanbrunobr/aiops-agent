@@ -5,19 +5,16 @@ detecção → diagnóstico → mitigação → verificação → resolução. �
 por blueprint/, server/webhook, server/routes/a2a, server/api/accuracy,
 adapters/persistence, main.py e testes.
 
-NOTA: temporariamente Pydantic-backed. O uso dominante de
-``state.model_copy(update={...})`` (atualização imutável funcional) torna
-Pydantic a escolha pragmática nesta subfase. Em fase posterior pode ser
-separado em duas representações: dataclass na camada de domínio + DTO
-Pydantic na borda HTTP.
+Pós ADR 0003: entidade pura — ``@dataclass(frozen=True)`` da stdlib, sem
+Pydantic, sem validação de borda, sem dependências externas. Atualizações
+imutáveis usam ``dataclasses.replace(state, **kwargs)``.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
-
-from pydantic import BaseModel, ConfigDict, Field
 
 from domain.alert import NormalizedAlert
 
@@ -25,10 +22,9 @@ from domain.alert import NormalizedAlert
 VALID_ACCURACY_VERDICTS = frozenset({"correct", "partially_correct", "incorrect", "false_positive"})
 
 
-class IncidentState(BaseModel):
+@dataclass(frozen=True)
+class IncidentState:
     """Contexto de incidente passado por todo o pipeline Blueprint."""
-
-    model_config = ConfigDict(populate_by_name=True)
 
     # Identificadores
     incident_id: str        # Formato: inc-{YYYYMMDD}-{uuid4_short_8chars}
@@ -51,7 +47,7 @@ class IncidentState(BaseModel):
 
     # Seguranca
     safety_verdict: str | None = None               # "APPROVED", "BLOCKED", "NEEDS_REVIEW"
-    safety_reasons: list[str] = Field(default_factory=list)
+    safety_reasons: list[str] = field(default_factory=list)
 
     # Saude pos-acao (TNR)
     pre_action_health: dict[str, Any] | None = None
@@ -72,4 +68,4 @@ class IncidentState(BaseModel):
     reviewed_at: datetime | None = None
 
     # Dados brutos e resultados de processamento (usado pelo sanitizer adapter e testes)
-    metadata: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)

@@ -1877,9 +1877,10 @@ def main_v1(args: argparse.Namespace) -> int:
             retriever = ObservabilityRetriever(indexer)
 
             # Injeta retriever no metadata do estado
-            state = state.model_copy(update={
-                "metadata": {**state.metadata, "_retriever": retriever},
-            })
+            state = dataclasses.replace(
+                state,
+                metadata={**state.metadata, "_retriever": retriever},
+            )
         except Exception as exc:
             console.print(f"[yellow]RAG skipped: {exc}[/yellow]")
 

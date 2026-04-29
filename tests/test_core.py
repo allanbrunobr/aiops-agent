@@ -113,10 +113,19 @@ class TestIncidentState:
         assert state.state == "DETECTING"
 
     def test_json_round_trip(self):
-        """Serializacao JSON ida-e-volta deve preservar dados."""
+        """Serializacao JSON ida-e-volta via stdlib (dataclasses.asdict + json)."""
         state = _make_state()
-        json_str = state.model_dump_json()
-        restored = IncidentState.model_validate_json(json_str)
+        payload = dataclasses.asdict(state)
+        json_str = json.dumps(payload, default=str)
+        restored_dict = json.loads(json_str)
+        # Reconstrói datetimes (alert + state) a partir do ISO string
+        alert_dict = restored_dict["alert"]
+        alert_dict["timestamp"] = datetime.fromisoformat(alert_dict["timestamp"])
+        alert_dict["detection_timestamp"] = datetime.fromisoformat(alert_dict["detection_timestamp"])
+        restored_dict["alert"] = NormalizedAlert(**alert_dict)
+        restored_dict["received_at"] = datetime.fromisoformat(restored_dict["received_at"])
+        restored_dict["started_at"] = datetime.fromisoformat(restored_dict["started_at"])
+        restored = IncidentState(**restored_dict)
         assert restored.incident_id == state.incident_id
         assert restored.alert.source == state.alert.source
 
@@ -126,10 +135,10 @@ class TestIncidentState:
         assert state.no_llm is False
         assert state.no_rag is False
 
-    def test_mutable_fields(self):
-        """Campos do pipeline devem ser mutaveis via model_copy."""
+    def test_immutable_replace(self):
+        """Campos do pipeline devem ser atualizaveis via dataclasses.replace."""
         state = _make_state()
-        updated = state.model_copy(update={"diagnosis": {"root_cause": "pool exhaustion"}})
+        updated = dataclasses.replace(state, diagnosis={"root_cause": "pool exhaustion"})
         assert updated.diagnosis == {"root_cause": "pool exhaustion"}
         assert state.diagnosis is None  # Original inalterado
 
@@ -212,6 +221,6 @@ class TestPipelineIsolation:
         """Duas instancias de IncidentState nao compartilham estado."""
         state1 = _make_state(incident_id="inc-001")
         state2 = _make_state(incident_id="inc-002")
-        updated1 = state1.model_copy(update={"diagnosis": {"root_cause": "pool"}})
+        updated1 = dataclasses.replace(state1, diagnosis={"root_cause": "pool"})
         assert state2.diagnosis is None
         assert updated1.diagnosis is not None

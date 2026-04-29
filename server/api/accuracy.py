@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime
 from typing import Any
 
@@ -75,12 +76,13 @@ async def update_accuracy(
 
     now = datetime.utcnow()
 
-    updated = state.model_copy(update={
-        "accuracy_status": "reviewed",
-        "accuracy_verdict": body.accuracy,
-        "accuracy_notes": body.notes,
-        "reviewed_at": now,
-    })
+    updated = dataclasses.replace(
+        state,
+        accuracy_status="reviewed",
+        accuracy_verdict=body.accuracy,
+        accuracy_notes=body.notes,
+        reviewed_at=now,
+    )
     store.save(correlation_id, updated)
 
     # Tratamento especial para falso positivo (Story 4.5)
