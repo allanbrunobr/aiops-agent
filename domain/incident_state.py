@@ -21,6 +21,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from domain.alert import NormalizedAlert
 
+# Verditos validos para o endpoint de accuracy (consumido por server/api/accuracy.py)
+VALID_ACCURACY_VERDICTS = frozenset({"correct", "partially_correct", "incorrect", "false_positive"})
+
 
 class IncidentState(BaseModel):
     """Contexto de incidente passado por todo o pipeline Blueprint."""

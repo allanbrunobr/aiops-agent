@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from domain.alert import NormalizedAlert
 from domain.incident import MitigationAction
-from domain.incident_state import IncidentState
+from domain.incident_state import VALID_ACCURACY_VERDICTS, IncidentState
 
 __all__ = [
     "VALID_ACCURACY_VERDICTS",
@@ -23,6 +23,3 @@ __all__ = [
     "IncidentState",
     "MitigationAction",
 ]
-
-# Verditos validos para o endpoint de accuracy (importado por server/api/accuracy.py)
-VALID_ACCURACY_VERDICTS = frozenset({"correct", "partially_correct", "incorrect", "false_positive"})
