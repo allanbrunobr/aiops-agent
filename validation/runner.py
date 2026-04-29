@@ -67,8 +67,8 @@ class ValidationRunner:
 
         for scenario in self._scenarios:
             with tempfile.TemporaryDirectory() as tmpdir:
+                from adapters.persistence.in_memory_store import InMemoryStore
                 from rag.knowledge_store import KnowledgeStore
-                from core.store import InMemoryStore
 
                 isolated_store = InMemoryStore()
                 isolated_knowledge = KnowledgeStore(
