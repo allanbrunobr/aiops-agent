@@ -20,7 +20,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.markdown import Markdown
 
-from adapters.llm.anthropic_client import AnthropicLLMClient, create_anthropic_llm_client
+from adapters.llm.anthropic_client import create_anthropic_llm_client
+from application.ports.llm_client import LLMClient
 from config.loader import LLMConfig as _LLMConfig
 
 console = Console()
@@ -93,7 +94,7 @@ class DiagnosisAgent:
         self.tools_used: list[str] = []
         self.iteration_count: int = 0
 
-    def _get_client(self) -> AnthropicLLMClient:
+    def _get_client(self) -> LLMClient:
         if self.client is None:
             api_key = os.environ.get("ANTHROPIC_API_KEY")
             if not api_key:
@@ -222,7 +223,7 @@ class DiagnosisAgent:
         """Chama Claude com tools, usando prompt da skill se disponível."""
         client = self._get_client()
         prompt = self.skill.system_prompt if self.skill else SYSTEM_PROMPT
-        return client.messages.create(
+        return client.create_message(
             model=self.model,
             max_tokens=2048,
             system=prompt,
@@ -444,7 +445,7 @@ class DiagnosisAgent:
         """
         try:
             client = self._get_client()
-            response = client.messages.create(
+            response = client.create_message(
                 model=self.model,
                 max_tokens=512,
                 messages=[{

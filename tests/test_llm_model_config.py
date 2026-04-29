@@ -40,13 +40,13 @@ class TestDiagnosisAgentModelConfig:
         agent = DiagnosisAgent(model="test-model-42")
 
         mock_client = MagicMock()
-        mock_client.messages.create.return_value = MagicMock(content=[])
+        mock_client.create_message.return_value = MagicMock(content=[])
 
         with patch.object(agent, "_get_client", return_value=mock_client):
             agent._call_llm(messages=[{"role": "user", "content": "test"}], tools=[])
 
-        mock_client.messages.create.assert_called_once()
-        call_kwargs = mock_client.messages.create.call_args
+        mock_client.create_message.assert_called_once()
+        call_kwargs = mock_client.create_message.call_args
         assert call_kwargs.kwargs.get("model") == "test-model-42"
 
     @pytest.mark.unit
