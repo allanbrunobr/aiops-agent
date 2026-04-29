@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from core.models import IncidentState
 from config.loader import AppConfig
+from domain.incident_state import IncidentState
 
 
 def make_aggregator_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]:

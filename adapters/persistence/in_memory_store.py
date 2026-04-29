@@ -9,7 +9,7 @@ mesma convencao de ``AnthropicLLMClient``/``RichConsoleReporter``.
 
 from __future__ import annotations
 
-from core.models import IncidentState
+from domain.incident_state import IncidentState
 
 # Estados terminais — incidentes nestes estados nao aparecem em list_active()
 _TERMINAL_STATES = {"RESOLVED", "CANCELLED", "FAILED"}

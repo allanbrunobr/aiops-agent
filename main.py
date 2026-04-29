@@ -1706,7 +1706,8 @@ def create_incident_state(
     """
     import uuid
     from datetime import timezone
-    from core.models import IncidentState, NormalizedAlert
+    from domain.alert import NormalizedAlert
+    from domain.incident_state import IncidentState
 
     now = datetime.now(timezone.utc)
     correlation_id = f"inc-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"

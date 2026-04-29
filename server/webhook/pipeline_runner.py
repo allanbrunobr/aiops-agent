@@ -7,7 +7,8 @@ from typing import Any
 import structlog
 
 from application.ports.incident_store import IncidentStore
-from core.models import IncidentState, NormalizedAlert
+from domain.alert import NormalizedAlert
+from domain.incident_state import IncidentState
 
 log = structlog.get_logger()
 

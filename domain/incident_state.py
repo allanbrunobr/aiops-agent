@@ -3,7 +3,7 @@
 IncidentState é o contexto canônico que atravessa o pipeline Blueprint:
 detecção → diagnóstico → mitigação → verificação → resolução. É consumido
 por blueprint/, server/webhook, server/routes/a2a, server/api/accuracy,
-core/store, main.py e testes.
+adapters/persistence, main.py e testes.
 
 NOTA: temporariamente Pydantic-backed. O uso dominante de
 ``state.model_copy(update={...})`` (atualização imutável funcional) torna
@@ -20,6 +20,9 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from domain.alert import NormalizedAlert
+
+# Verditos validos para o endpoint de accuracy (consumido por server/api/accuracy.py)
+VALID_ACCURACY_VERDICTS = frozenset({"correct", "partially_correct", "incorrect", "false_positive"})
 
 
 class IncidentState(BaseModel):

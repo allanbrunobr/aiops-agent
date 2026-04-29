@@ -16,7 +16,7 @@ from application.ports.reporter import (
     Reporter,
     TNR_VERIFIED,
 )
-from core.models import MitigationAction
+from domain.incident import MitigationAction
 from safety.tnr import (
     TNRSafetyGuard, TNRReport, HealthSnapshot
 )

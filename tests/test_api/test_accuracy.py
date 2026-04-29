@@ -9,8 +9,9 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from core.models import IncidentState, NormalizedAlert
-from core.store import InMemoryStore
+from adapters.persistence.in_memory_store import InMemoryStore
+from domain.alert import NormalizedAlert
+from domain.incident_state import IncidentState
 from server.api.accuracy import router, get_store
 from fastapi import FastAPI
 import datetime

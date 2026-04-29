@@ -250,7 +250,7 @@ def test_databricks_normalize_unknown_payload_raises():
 
 def test_all_normalizers_produce_identical_schema():
     """AC4: todos os normalizers produzem NormalizedAlert com campos identicos."""
-    from core.models import NormalizedAlert
+    from domain.alert import NormalizedAlert
 
     pd_normalizer = PagerDutyNormalizer()
     gf_normalizer = GrafanaNormalizer()

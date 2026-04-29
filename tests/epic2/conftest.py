@@ -43,9 +43,9 @@ def app():
     Inicializa app.state manualmente porque ASGITransport nao
     executa o lifespan. Registra normalizers se necessario.
     """
+    from adapters.persistence.in_memory_store import InMemoryStore
     from config.loader import load_config
     from core.credentials import EnvCredentialProvider
-    from core.store import InMemoryStore
     from server.app import create_app
     from server.health import set_start_time
     from server.webhook.dedup import DedupStore

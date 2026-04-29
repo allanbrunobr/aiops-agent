@@ -205,7 +205,7 @@ class SafetyOrchestrator:
 
 def demo_safety_orchestrator() -> None:
     """Demonstração do SafetyOrchestrator com cenários safe e unsafe."""
-    from core.models import MitigationAction
+    from domain.incident import MitigationAction
 
     orchestrator = SafetyOrchestrator()
 

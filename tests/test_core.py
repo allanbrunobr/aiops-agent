@@ -6,10 +6,12 @@ from datetime import datetime, timezone
 
 import pytest
 
+from adapters.persistence.in_memory_store import InMemoryStore
+from application.ports.incident_store import IncidentStore
 from core.credentials import EnvCredentialProvider
-from core.models import IncidentState, NormalizedAlert
-from core.protocols import CredentialProvider, IncidentStore
-from core.store import InMemoryStore
+from core.protocols import CredentialProvider
+from domain.alert import NormalizedAlert
+from domain.incident_state import IncidentState
 
 
 def _make_alert(**overrides) -> NormalizedAlert:

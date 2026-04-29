@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from core.models import NormalizedAlert
+from domain.alert import NormalizedAlert
 from server.webhook.dedup import DedupStore, generate_fingerprint
 
 
