@@ -3,7 +3,7 @@
 IncidentState é o contexto canônico que atravessa o pipeline Blueprint:
 detecção → diagnóstico → mitigação → verificação → resolução. É consumido
 por blueprint/, server/webhook, server/routes/a2a, server/api/accuracy,
-core/store, main.py e testes.
+adapters/persistence, main.py e testes.
 
 NOTA: temporariamente Pydantic-backed. O uso dominante de
 ``state.model_copy(update={...})`` (atualização imutável funcional) torna
