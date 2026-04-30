@@ -70,7 +70,7 @@ def create_engine(config: AppConfig) -> NotificationEngine:
     slack_cfg = config.notifications.slack
     if slack_cfg.enabled:
         from core.credentials import EnvCredentialProvider
-        from server.notifications.slack import SlackNotifier
+        from interfaces.http.notifications.slack import SlackNotifier
 
         creds = EnvCredentialProvider()
         if creds.get("SLACK_BOT_TOKEN") is not None:
@@ -113,7 +113,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # --------------------------------------------------------
     # Rotas de infraestrutura — health (liveness + readiness)
     # --------------------------------------------------------
-    from server.health import health_router
+    from interfaces.http.health import health_router
     app.include_router(health_router)
 
     # --------------------------------------------------------
@@ -121,8 +121,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # --------------------------------------------------------
 
     if config.mcp.enabled and config.mcp.transport == "sse":
-        from mcp_server.sse import mount_sse
-        from mcp_server.rate_limiter import InMemoryRateLimiter
+        from interfaces.mcp.sse import mount_sse
+        from interfaces.mcp.rate_limiter import InMemoryRateLimiter
         from safety.pre_validator import PreExecutionValidator
         from safety.tnr import TNRSafetyGuard
         from safety.version_validator import VersionValidator
@@ -187,7 +187,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # --------------------------------------------------------
     # A2A (Agent-to-Agent) — sempre montado
     # --------------------------------------------------------
-    from server.routes.a2a import router as a2a_router
+    from interfaces.http.routes.a2a import router as a2a_router
     app.include_router(a2a_router)
     log.info("a2a.router.mounted")
 

@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from server.metrics.pipeline import PipelineMetricsCollector
+from interfaces.http.metrics.pipeline import PipelineMetricsCollector
 
 router = APIRouter(prefix="/api/v1", tags=["metrics"])
 

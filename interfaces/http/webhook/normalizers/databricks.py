@@ -9,9 +9,9 @@ import structlog
 
 from core.protocols import CredentialProvider
 from domain.alert import NormalizedAlert
-from server.webhook.normalizers.base import AlertNormalizer
-from server.webhook.normalizers.registry import register_normalizer
-from server.webhook.schemas import NormalizedAlertDTO
+from interfaces.http.webhook.normalizers.base import AlertNormalizer
+from interfaces.http.webhook.normalizers.registry import register_normalizer
+from interfaces.http.webhook.schemas import NormalizedAlertDTO
 
 log = structlog.get_logger()
 

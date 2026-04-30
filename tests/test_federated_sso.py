@@ -183,8 +183,8 @@ def _make_federated_app(
     mock_mcp_server.run = AsyncMock()
     mock_mcp_server.create_initialization_options = MagicMock(return_value={})
 
-    with patch("mcp_server.sse.create_server", return_value=mock_mcp_server):
-        from mcp_server.sse import mount_sse
+    with patch("interfaces.mcp.sse.create_server", return_value=mock_mcp_server):
+        from interfaces.mcp.sse import mount_sse
         mount_sse(app, config=config)
 
     return app
@@ -356,7 +356,7 @@ class TestFederatedAuthSuccess:
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERA), partnera_jwks)
 
         # Patcha connect_sse para responder imediatamente (sem bloquear)
-        with patch("mcp_server.sse._sse_transport") as mock_transport:
+        with patch("interfaces.mcp.sse._sse_transport") as mock_transport:
             mock_transport.connect_sse = _noop_connect_sse
             with patch("httpx.AsyncClient", return_value=mock_client):
                 with TestClient(app, raise_server_exceptions=False) as client:
@@ -374,7 +374,7 @@ class TestFederatedAuthSuccess:
         self, partnera_keypair: tuple[str, str], partnera_jwks: dict
     ) -> None:
         """sub do token deve ser propagado como client_id no ContextVar."""
-        from mcp_server.server import _current_client_id
+        from interfaces.mcp.server import _current_client_id
 
         priv, _ = partnera_keypair
         token = _make_token(priv, sub="partnera-orchestrator")
@@ -389,7 +389,7 @@ class TestFederatedAuthSuccess:
 
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERA), partnera_jwks)
 
-        with patch("mcp_server.sse._sse_transport") as mock_transport:
+        with patch("interfaces.mcp.sse._sse_transport") as mock_transport:
             mock_transport.connect_sse = _capture_context
             with patch("httpx.AsyncClient", return_value=mock_client):
                 with TestClient(app, raise_server_exceptions=False) as client:
@@ -405,7 +405,7 @@ class TestFederatedAuthSuccess:
         self, partnera_keypair: tuple[str, str], partnera_jwks: dict
     ) -> None:
         """scope do token deve ser propagado como granted_scopes no ContextVar."""
-        from mcp_server.server import _current_scopes
+        from interfaces.mcp.server import _current_scopes
 
         priv, _ = partnera_keypair
         token = _make_token(priv, scopes="aiops:diagnose aiops:validate")
@@ -420,7 +420,7 @@ class TestFederatedAuthSuccess:
 
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERA), partnera_jwks)
 
-        with patch("mcp_server.sse._sse_transport") as mock_transport:
+        with patch("interfaces.mcp.sse._sse_transport") as mock_transport:
             mock_transport.connect_sse = _capture_scopes
             with patch("httpx.AsyncClient", return_value=mock_client):
                 with TestClient(app, raise_server_exceptions=False) as client:
@@ -452,7 +452,7 @@ class TestFederatedJwksCache:
         # Primeiro request: 2 calls HTTP (discovery + jwks)
         m1 = _mock_idp_client(_make_discovery(_ISSUER_PARTNERA), partnera_jwks)
 
-        with patch("mcp_server.sse._sse_transport") as mock_transport:
+        with patch("interfaces.mcp.sse._sse_transport") as mock_transport:
             mock_transport.connect_sse = _noop_connect_sse
             with patch("httpx.AsyncClient", return_value=m1):
                 with TestClient(app, raise_server_exceptions=False) as client:
@@ -462,7 +462,7 @@ class TestFederatedJwksCache:
                     )
 
         # Segundo request: deve usar cache — httpx.AsyncClient NÃO deve ser chamado
-        with patch("mcp_server.sse._sse_transport") as mock_transport:
+        with patch("interfaces.mcp.sse._sse_transport") as mock_transport:
             mock_transport.connect_sse = _noop_connect_sse
             with patch("httpx.AsyncClient") as mock_cls:
                 with TestClient(app, raise_server_exceptions=False) as client:
@@ -497,7 +497,7 @@ class TestFederatedMultipleIssuers:
         token = _make_token(priv, iss=_ISSUER_PARTNERA, kid="partnera-key-1")
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERA), partnera_jwks)
 
-        with patch("mcp_server.sse._sse_transport") as mock_transport:
+        with patch("interfaces.mcp.sse._sse_transport") as mock_transport:
             mock_transport.connect_sse = _noop_connect_sse
             with patch("httpx.AsyncClient", return_value=mock_client):
                 with TestClient(self._app, raise_server_exceptions=False) as client:
@@ -517,7 +517,7 @@ class TestFederatedMultipleIssuers:
         )
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERB), partnerb_jwks)
 
-        with patch("mcp_server.sse._sse_transport") as mock_transport:
+        with patch("interfaces.mcp.sse._sse_transport") as mock_transport:
             mock_transport.connect_sse = _noop_connect_sse
             with patch("httpx.AsyncClient", return_value=mock_client):
                 with TestClient(self._app, raise_server_exceptions=False) as client:

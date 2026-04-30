@@ -99,7 +99,7 @@ class TestHandleValidateAction:
     @pytest.mark.asyncio
     async def test_safe_action_returns_approved(self):
         """Verifica que ação segura retorna approved=True."""
-        from mcp_server.tools import handle_validate_action
+        from interfaces.mcp.tools import handle_validate_action
 
         result_json = await handle_validate_action(
             arguments={
@@ -119,7 +119,7 @@ class TestHandleValidateAction:
     @pytest.mark.asyncio
     async def test_blocked_command_returns_unapproved(self):
         """Verifica que comando bloqueado retorna approved=False."""
-        from mcp_server.tools import handle_validate_action
+        from interfaces.mcp.tools import handle_validate_action
 
         result_json = await handle_validate_action(
             arguments={
@@ -138,7 +138,7 @@ class TestHandleValidateAction:
     @pytest.mark.asyncio
     async def test_pii_in_command_detected(self):
         """Verifica que PII no comando é detectado pela camada 1."""
-        from mcp_server.tools import handle_validate_action
+        from interfaces.mcp.tools import handle_validate_action
 
         result_json = await handle_validate_action(
             arguments={
@@ -156,7 +156,7 @@ class TestHandleValidateAction:
     @pytest.mark.asyncio
     async def test_all_4_layers_execute_even_on_failure(self):
         """Verifica que todas as 4 camadas executam mesmo quando a primeira falha."""
-        from mcp_server.tools import handle_validate_action
+        from interfaces.mcp.tools import handle_validate_action
 
         result_json = await handle_validate_action(
             arguments={
@@ -180,7 +180,7 @@ class TestHandleValidateAction:
     @pytest.mark.asyncio
     async def test_verdict_includes_rationale(self):
         """Verifica que veredicto inclui rationale combinando camadas bloqueantes."""
-        from mcp_server.tools import handle_validate_action
+        from interfaces.mcp.tools import handle_validate_action
 
         result_json = await handle_validate_action(
             arguments={
@@ -201,7 +201,7 @@ class TestHandleValidateAction:
     @pytest.mark.asyncio
     async def test_empty_command_returns_validation_error(self):
         """Verifica que comando vazio retorna erro RFC 7807."""
-        from mcp_server.tools import handle_validate_action
+        from interfaces.mcp.tools import handle_validate_action
 
         result_json = await handle_validate_action(
             arguments={"command": "", "target_service": "svc"},
@@ -217,7 +217,7 @@ class TestHandleValidateAction:
     @pytest.mark.asyncio
     async def test_empty_target_service_returns_validation_error(self):
         """Verifica que target_service vazio retorna erro RFC 7807."""
-        from mcp_server.tools import handle_validate_action
+        from interfaces.mcp.tools import handle_validate_action
 
         result_json = await handle_validate_action(
             arguments={"command": "kubectl get pods", "target_service": ""},
@@ -232,7 +232,7 @@ class TestHandleValidateAction:
     @pytest.mark.asyncio
     async def test_response_includes_latency(self):
         """Verifica que resposta inclui latency_ms."""
-        from mcp_server.tools import handle_validate_action
+        from interfaces.mcp.tools import handle_validate_action
 
         result_json = await handle_validate_action(
             arguments={"command": "kubectl get pods", "target_service": "svc"},

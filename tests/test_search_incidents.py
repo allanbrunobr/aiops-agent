@@ -45,7 +45,7 @@ class TestHandleSearchIncidents:
     @pytest.mark.asyncio
     async def test_valid_query_returns_results(self):
         """Verifica que query válida retorna resultados com campos esperados."""
-        from mcp_server.tools import handle_search_incidents
+        from interfaces.mcp.tools import handle_search_incidents
 
         mock_result = _make_mock_result()
 
@@ -75,7 +75,7 @@ class TestHandleSearchIncidents:
     @pytest.mark.asyncio
     async def test_top_k_limits_results(self):
         """Verifica que top_k=3 retorna no máximo 3 resultados."""
-        from mcp_server.tools import handle_search_incidents
+        from interfaces.mcp.tools import handle_search_incidents
 
         class MockRetriever:
             def search(self, query, top_k=5):
@@ -91,7 +91,7 @@ class TestHandleSearchIncidents:
     @pytest.mark.asyncio
     async def test_service_filter_narrows_results(self):
         """Verifica que filtro de serviço remove resultados de outros serviços."""
-        from mcp_server.tools import handle_search_incidents
+        from interfaces.mcp.tools import handle_search_incidents
 
         class MockRetriever:
             def search(self, query, top_k=5):
@@ -112,7 +112,7 @@ class TestHandleSearchIncidents:
     @pytest.mark.asyncio
     async def test_faiss_unavailable_returns_graceful_error(self):
         """Verifica que FAISS indisponível retorna erro gracioso (não crash)."""
-        from mcp_server.tools import handle_search_incidents
+        from interfaces.mcp.tools import handle_search_incidents
 
         class BrokenRetriever:
             def search(self, query, top_k=5):
@@ -129,7 +129,7 @@ class TestHandleSearchIncidents:
     @pytest.mark.asyncio
     async def test_pii_sanitized_in_results(self):
         """Verifica que PII é sanitizado antes de retornar resultados."""
-        from mcp_server.tools import handle_search_incidents
+        from interfaces.mcp.tools import handle_search_incidents
 
         sanitized_calls = []
 
@@ -154,7 +154,7 @@ class TestHandleSearchIncidents:
     @pytest.mark.asyncio
     async def test_empty_query_returns_validation_error(self):
         """Verifica que query vazia retorna erro de validação."""
-        from mcp_server.tools import handle_search_incidents
+        from interfaces.mcp.tools import handle_search_incidents
 
         class MockRetriever:
             def search(self, query, top_k=5):
@@ -170,7 +170,7 @@ class TestHandleSearchIncidents:
     @pytest.mark.asyncio
     async def test_latency_measured_and_in_response(self):
         """Verifica que latência é medida e incluída na resposta."""
-        from mcp_server.tools import handle_search_incidents
+        from interfaces.mcp.tools import handle_search_incidents
 
         class MockRetriever:
             def search(self, query, top_k=5):
@@ -187,7 +187,7 @@ class TestHandleSearchIncidents:
     @pytest.mark.asyncio
     async def test_top_k_capped_at_20(self):
         """Verifica que top_k acima de 20 é limitado a 20."""
-        from mcp_server.tools import handle_search_incidents
+        from interfaces.mcp.tools import handle_search_incidents
 
         received_top_k = []
 

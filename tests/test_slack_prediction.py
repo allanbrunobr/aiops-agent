@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from server.notifications.slack import SlackNotifier
-from server.app import handle_prediction_event
+from interfaces.http.notifications.slack import SlackNotifier
+from interfaces.http.app import handle_prediction_event
 
 
 def _make_notifier(has_token: bool = True) -> SlackNotifier:
@@ -21,7 +21,7 @@ def _make_notifier(has_token: bool = True) -> SlackNotifier:
     creds = MagicMock()
     creds.get.return_value = "xoxb-fake-token" if has_token else None
 
-    with patch("server.notifications.slack.AsyncWebClient"):
+    with patch("interfaces.http.notifications.slack.AsyncWebClient"):
         notifier = SlackNotifier(channel="#ops", creds=creds)
         if not has_token:
             notifier._client = None

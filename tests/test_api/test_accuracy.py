@@ -13,7 +13,7 @@ from httpx import AsyncClient, ASGITransport
 from adapters.persistence.in_memory_store import InMemoryStore
 from domain.alert import NormalizedAlert
 from domain.incident_state import IncidentState
-from server.api.accuracy import router, get_store
+from interfaces.http.api.accuracy import router, get_store
 from fastapi import FastAPI
 import datetime
 

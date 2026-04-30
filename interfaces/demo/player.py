@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from demo.scenarios import CorpusItem
+    from interfaces.demo.scenarios import CorpusItem
 
 
 class ScenarioPlayer:

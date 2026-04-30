@@ -15,7 +15,7 @@ class TestRateLimitResult:
 
     def test_allowed_result(self):
         """Verifica campos de resultado permitido."""
-        from mcp_server.rate_limiter import RateLimitResult
+        from interfaces.mcp.rate_limiter import RateLimitResult
 
         r = RateLimitResult(allowed=True, remaining=9, retry_after=0.0, limit=10)
         assert r.allowed is True
@@ -25,7 +25,7 @@ class TestRateLimitResult:
 
     def test_denied_result(self):
         """Verifica campos de resultado negado."""
-        from mcp_server.rate_limiter import RateLimitResult
+        from interfaces.mcp.rate_limiter import RateLimitResult
 
         r = RateLimitResult(allowed=False, remaining=0, retry_after=42.3, limit=10)
         assert r.allowed is False
@@ -39,7 +39,7 @@ class TestRateLimiterProtocol:
 
     def test_implements_protocol(self):
         """Verifica isinstance check via @runtime_checkable."""
-        from mcp_server.rate_limiter import InMemoryRateLimiter, RateLimiter
+        from interfaces.mcp.rate_limiter import InMemoryRateLimiter, RateLimiter
 
         limiter = InMemoryRateLimiter()
         assert isinstance(limiter, RateLimiter)
@@ -51,7 +51,7 @@ class TestInMemoryRateLimiter:
 
     def test_calls_within_limit_allowed(self):
         """Verifica que chamadas dentro do limite são permitidas."""
-        from mcp_server.rate_limiter import InMemoryRateLimiter
+        from interfaces.mcp.rate_limiter import InMemoryRateLimiter
 
         limiter = InMemoryRateLimiter(limits={"diagnose_incident": 3})
 
@@ -73,7 +73,7 @@ class TestInMemoryRateLimiter:
         current_time = 1000.0
         monkeypatch.setattr("time.monotonic", lambda: current_time)
 
-        from mcp_server.rate_limiter import InMemoryRateLimiter
+        from interfaces.mcp.rate_limiter import InMemoryRateLimiter
 
         limiter = InMemoryRateLimiter(limits={"diagnose_incident": 2})
 
@@ -96,7 +96,7 @@ class TestInMemoryRateLimiter:
         current_time = 1000.0
         monkeypatch.setattr("time.monotonic", lambda: current_time)
 
-        from mcp_server.rate_limiter import InMemoryRateLimiter
+        from interfaces.mcp.rate_limiter import InMemoryRateLimiter
 
         limiter = InMemoryRateLimiter(limits={"diagnose_incident": 2})
 
@@ -115,7 +115,7 @@ class TestInMemoryRateLimiter:
         current_time = 1000.0
         monkeypatch.setattr("time.monotonic", lambda: current_time)
 
-        from mcp_server.rate_limiter import InMemoryRateLimiter
+        from interfaces.mcp.rate_limiter import InMemoryRateLimiter
 
         limiter = InMemoryRateLimiter(limits={"diagnose_incident": 2})
 
@@ -135,7 +135,7 @@ class TestInMemoryRateLimiter:
 
     def test_different_tools_have_different_limits(self):
         """Verifica que diferentes ferramentas têm limites diferentes."""
-        from mcp_server.rate_limiter import InMemoryRateLimiter
+        from interfaces.mcp.rate_limiter import InMemoryRateLimiter
 
         limiter = InMemoryRateLimiter(
             limits={"diagnose_incident": 2, "search_incidents": 5}
@@ -154,7 +154,7 @@ class TestInMemoryRateLimiter:
     def test_from_config(self):
         """Verifica criação a partir de McpRateLimitsConfig."""
         from config.loader import McpRateLimitsConfig
-        from mcp_server.rate_limiter import InMemoryRateLimiter
+        from interfaces.mcp.rate_limiter import InMemoryRateLimiter
 
         rate_cfg = McpRateLimitsConfig(diagnose=5, search=30, validate=15)
         limiter = InMemoryRateLimiter.from_config(rate_cfg)
@@ -171,7 +171,7 @@ class TestInMemoryRateLimiter:
 
     def test_unknown_tool_uses_default_limit(self):
         """Verifica que ferramenta desconhecida usa limite default (30)."""
-        from mcp_server.rate_limiter import InMemoryRateLimiter
+        from interfaces.mcp.rate_limiter import InMemoryRateLimiter
 
         limiter = InMemoryRateLimiter()
         r = limiter.check("client-a", "unknown_tool")
@@ -183,7 +183,7 @@ class TestInMemoryRateLimiter:
         current_time = 1000.0
         monkeypatch.setattr("time.monotonic", lambda: current_time)
 
-        from mcp_server.rate_limiter import InMemoryRateLimiter
+        from interfaces.mcp.rate_limiter import InMemoryRateLimiter
 
         limiter = InMemoryRateLimiter(limits={"diagnose_incident": 1})
 

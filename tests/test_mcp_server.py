@@ -18,7 +18,7 @@ class TestCreateServer:
     def test_returns_server_instance(self):
         """Verifica que create_server() retorna Server MCP válido."""
         from mcp.server import Server
-        from mcp_server.server import create_server
+        from interfaces.mcp.server import create_server
 
         server = create_server()
         assert isinstance(server, Server)
@@ -27,7 +27,7 @@ class TestCreateServer:
     async def test_list_tools_returns_three_tools(self):
         """Verifica que servidor tem handler de list_tools registrado."""
         from mcp.types import ListToolsRequest
-        from mcp_server.server import create_server
+        from interfaces.mcp.server import create_server
 
         server = create_server()
         # Verifica que ListToolsRequest handler está registrado
@@ -37,7 +37,7 @@ class TestCreateServer:
     async def test_tool_names_present(self):
         """Verifica que as 3 ferramentas estão registradas."""
         from mcp.types import ListToolsRequest
-        from mcp_server.server import _build_tool_definitions
+        from interfaces.mcp.server import _build_tool_definitions
 
         tools = _build_tool_definitions()
         tool_names = {t.name for t in tools}
@@ -47,7 +47,7 @@ class TestCreateServer:
 
     def test_both_transports_register_identical_tools(self):
         """Verifica que ambos os transportes usam as mesmas definições."""
-        from mcp_server.server import create_server, _build_tool_definitions
+        from interfaces.mcp.server import create_server, _build_tool_definitions
 
         # Mesmo factory, mesmas definições
         server1 = create_server()
@@ -62,15 +62,15 @@ class TestCreateServer:
         class FakeConfig:
             enabled_tools = ["search_incidents"]
 
-        from mcp_server.server import create_server
+        from interfaces.mcp.server import create_server
 
         server = create_server(config=FakeConfig())
         # Servidor criado sem erro — filtro aplicado
 
     def test_rate_limiter_injected(self):
         """Verifica que rate limiter é aceito como dependência."""
-        from mcp_server.rate_limiter import InMemoryRateLimiter
-        from mcp_server.server import create_server
+        from interfaces.mcp.rate_limiter import InMemoryRateLimiter
+        from interfaces.mcp.server import create_server
 
         limiter = InMemoryRateLimiter()
         server = create_server(rate_limiter=limiter)
@@ -86,8 +86,8 @@ class TestCallToolRateLimit:
         """Verifica que call_tool retorna erro quando rate limit excedido."""
         from unittest.mock import patch
 
-        from mcp_server.rate_limiter import InMemoryRateLimiter, RateLimitResult
-        from mcp_server.server import create_server, _current_client_id
+        from interfaces.mcp.rate_limiter import InMemoryRateLimiter, RateLimitResult
+        from interfaces.mcp.server import create_server, _current_client_id
 
         # Limiter que sempre nega
         class AlwaysDenyLimiter:
@@ -120,7 +120,7 @@ class TestSSETransport:
     def test_mount_sse_creates_endpoints(self):
         """Verifica que mount_sse adiciona rotas ao FastAPI app."""
         from fastapi import FastAPI
-        from mcp_server.sse import mount_sse
+        from interfaces.mcp.sse import mount_sse
 
         app = FastAPI()
         mount_sse(app)
@@ -135,7 +135,7 @@ class TestSSETransport:
         import httpx
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
-        from mcp_server.sse import mount_sse
+        from interfaces.mcp.sse import mount_sse
 
         app = FastAPI()
         mount_sse(app)
@@ -151,7 +151,7 @@ class TestSSETransport:
         apenas que autenticação passa (status != 401) via headers.
         """
         from fastapi import FastAPI
-        from mcp_server.sse import mount_sse
+        from interfaces.mcp.sse import mount_sse
 
         app = FastAPI()
         mount_sse(app)
@@ -171,7 +171,7 @@ class TestSSETransport:
         e não adequados para TestClient síncrono.
         """
         from fastapi import FastAPI
-        from mcp_server.sse import mount_sse
+        from interfaces.mcp.sse import mount_sse
 
         class FakeConfig:
             auth_method = "none"
@@ -194,7 +194,7 @@ class TestServerApp:
     def test_create_app_returns_fastapi(self):
         """Verifica que create_app retorna FastAPI instance."""
         from fastapi import FastAPI
-        from server.app import create_app
+        from interfaces.http.app import create_app
 
         app = create_app()
         assert isinstance(app, FastAPI)
@@ -202,7 +202,7 @@ class TestServerApp:
     def test_health_endpoint_exists(self):
         """Verifica que /health endpoint existe."""
         from fastapi.testclient import TestClient
-        from server.app import create_app
+        from interfaces.http.app import create_app
 
         app = create_app()
         client = TestClient(app)
@@ -215,7 +215,7 @@ class TestServerApp:
         """Verifica que SSE não é montado quando mcp.enabled=False."""
         from config.loader import AppConfig
         from fastapi.testclient import TestClient
-        from server.app import create_app
+        from interfaces.http.app import create_app
 
         cfg = AppConfig()  # mcp.enabled=False por padrão
         assert cfg.mcp.enabled is False

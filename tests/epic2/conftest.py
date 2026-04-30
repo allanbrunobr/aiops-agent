@@ -23,10 +23,10 @@ def _ensure_normalizers_registered() -> None:
     Importar o modulo so funciona na primeira vez (Python cacheia imports).
     Apos clear() do registry, registramos as instancias diretamente.
     """
-    from server.webhook.normalizers.databricks import DatabricksNormalizer
-    from server.webhook.normalizers.grafana import GrafanaNormalizer
-    from server.webhook.normalizers.pagerduty import PagerDutyNormalizer
-    from server.webhook.normalizers.registry import NormalizerRegistry
+    from interfaces.http.webhook.normalizers.databricks import DatabricksNormalizer
+    from interfaces.http.webhook.normalizers.grafana import GrafanaNormalizer
+    from interfaces.http.webhook.normalizers.pagerduty import PagerDutyNormalizer
+    from interfaces.http.webhook.normalizers.registry import NormalizerRegistry
 
     if "pagerduty" not in NormalizerRegistry.list_sources():
         NormalizerRegistry.register("pagerduty", PagerDutyNormalizer())
@@ -46,9 +46,9 @@ def app():
     from adapters.persistence.in_memory_store import InMemoryStore
     from config.loader import load_config
     from core.credentials import EnvCredentialProvider
-    from server.app import create_app
-    from server.health import set_start_time
-    from server.webhook.dedup import DedupStore
+    from interfaces.http.app import create_app
+    from interfaces.http.health import set_start_time
+    from interfaces.http.webhook.dedup import DedupStore
 
     _ensure_normalizers_registered()
 
@@ -66,7 +66,7 @@ def app():
 @pytest.fixture
 async def app_with_pipeline(app):
     """App com PipelineRunner inicializado (requer event loop asyncio)."""
-    from server.webhook.pipeline_runner import PipelineRunner
+    from interfaces.http.webhook.pipeline_runner import PipelineRunner
 
     config = app.state.config
     runner = PipelineRunner(

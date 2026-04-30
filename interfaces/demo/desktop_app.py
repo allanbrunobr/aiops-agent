@@ -1,4 +1,4 @@
-"""Launcher desktop — sobe demo/server.py e abre janela nativa com loading."""
+"""Launcher desktop — sobe interfaces/demo/server.py e abre janela nativa com loading."""
 from __future__ import annotations
 
 import os
@@ -9,17 +9,19 @@ import urllib.request
 
 import webview
 
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_HERE = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(os.path.dirname(_HERE))
+SERVER_PY = os.path.join(_HERE, "server.py")
 SERVER_URL = "http://localhost:47891"
 DASHBOARD_URL = f"{SERVER_URL}/demo/"
-LOG_PATH = os.path.join(PROJECT_ROOT, "demo", "desktop_app.log")
+LOG_PATH = os.path.join(_HERE, "desktop_app.log")
 
 
 def _start_server() -> subprocess.Popen:
-    """Sobe demo/server.py como subprocesso com log em arquivo."""
+    """Sobe interfaces/demo/server.py como subprocesso com log em arquivo."""
     log_file = open(LOG_PATH, "w")
     return subprocess.Popen(
-        [sys.executable, os.path.join(PROJECT_ROOT, "demo", "server.py")],
+        [sys.executable, SERVER_PY],
         cwd=PROJECT_ROOT,
         stdout=log_file,
         stderr=log_file,

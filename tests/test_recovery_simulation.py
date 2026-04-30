@@ -22,15 +22,15 @@ from unittest.mock import patch
 
 import pytest
 
-from demo.engine import ScenarioEngine
-from demo.scenarios import (
+from interfaces.demo.engine import ScenarioEngine
+from interfaces.demo.scenarios import (
     DemoScenarioConfig,
     build_payment_pool_corpus,
     build_payment_pool_recovery_corpus,
     build_memory_leak_corpus,
     build_unknown_fault_corpus,
 )
-from demo.schemas import DemoPhase, TickFrame
+from interfaces.demo.schemas import DemoPhase, TickFrame
 
 
 # ---------------------------------------------------------------------------

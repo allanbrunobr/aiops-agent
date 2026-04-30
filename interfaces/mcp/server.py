@@ -176,7 +176,7 @@ async def _dispatch(
     Returns:
         JSON string com resultado ou erro.
     """
-    from mcp_server.tools import (
+    from interfaces.mcp.tools import (
         handle_diagnose_incident,
         handle_search_incidents,
         handle_validate_action,

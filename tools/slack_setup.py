@@ -28,7 +28,7 @@ def setup_slack_notifier(config: object = None) -> object | None:
         return None
 
     try:
-        from server.notifications.slack import SlackNotifier  # lazy import
+        from interfaces.http.notifications.slack import SlackNotifier  # lazy import
         from core.credentials import EnvCredentialProvider
 
         return SlackNotifier(

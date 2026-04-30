@@ -25,7 +25,7 @@ from fastapi.testclient import TestClient
 
 from auth.keys import generate_rsa_keypair, public_key_to_jwk
 from auth.oidc_validator import OIDCValidator, TrustedIssuerConfig
-from server.routes.a2a import router as a2a_router
+from interfaces.http.routes.a2a import router as a2a_router
 
 
 # ---------------------------------------------------------------------------

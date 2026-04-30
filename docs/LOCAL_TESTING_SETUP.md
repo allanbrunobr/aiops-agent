@@ -59,7 +59,7 @@ export SLACK_API_BASE_URL=http://localhost:8001/api/
 export SLACK_BOT_TOKEN=xoxb-mock-token-for-testing
 export SLACK_CHANNEL=C_TEST_CHANNEL
 
-python -m uvicorn server.webhook:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn interfaces.http.webhook:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### 4. Watch it work
@@ -223,7 +223,7 @@ SLACK_CHANNEL=C07XXXXXXXX
 python infra/slack-mock/slack_mock_server.py
 
 # Terminal 2: Start aiops-agent webhook server
-python -m uvicorn server.webhook:app --port 8000
+python -m uvicorn interfaces.http.webhook:app --port 8000
 
 # Terminal 3: Run tests
 pytest tests/integration/test_webhook_to_slack_flow.py -v
@@ -239,7 +239,7 @@ docker compose -f infra/docker-compose.yaml up -d --build
 python infra/slack-mock/slack_mock_server.py
 
 # Terminal 3: aiops-agent
-python -m uvicorn server.webhook:app --port 8000
+python -m uvicorn interfaces.http.webhook:app --port 8000
 
 # Wait ~90 seconds for the first spike cycle, then check:
 curl http://localhost:8003/_mock/messages | python -m json.tool

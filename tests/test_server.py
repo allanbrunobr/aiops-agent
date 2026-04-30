@@ -7,7 +7,7 @@ import sys
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from server.app import LazyRAG, create_app
+from interfaces.http.app import LazyRAG, create_app
 
 
 @pytest.fixture
@@ -83,7 +83,7 @@ def test_create_app_returns_fastapi():
 
 def test_dependency_helpers():
     """Dependency helpers devem existir e ser importaveis."""
-    from server.dependencies import get_config, get_engine, get_store
+    from interfaces.http.dependencies import get_config, get_engine, get_store
     # Funcoes devem existir — falham com AssertionError se app_state nao inicializado
     assert callable(get_config)
     assert callable(get_store)

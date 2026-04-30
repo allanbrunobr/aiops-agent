@@ -20,8 +20,8 @@ import pytest
 from slack_sdk.errors import SlackApiError
 
 from core.lifecycle import LifecycleEvent
-from server.notifications.slack import SlackNotifier
-from server.notifications.fallback import LocalFallbackWriter
+from interfaces.http.notifications.slack import SlackNotifier
+from interfaces.http.notifications.fallback import LocalFallbackWriter
 from rag.models import KnowledgePattern, KnowledgeSearchResult
 from rag.knowledge_store import KnowledgeStore
 from rag.enrichment_node import RAGEnrichmentNode

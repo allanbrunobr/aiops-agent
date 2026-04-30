@@ -13,8 +13,8 @@ import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
 from core.lifecycle import LifecycleEvent
-from server.metrics.pipeline import PipelineMetricsCollector, _percentile
-from server.api.metrics import router, get_metrics_collector
+from interfaces.http.metrics.pipeline import PipelineMetricsCollector, _percentile
+from interfaces.http.api.metrics import router, get_metrics_collector
 from fastapi import FastAPI
 
 

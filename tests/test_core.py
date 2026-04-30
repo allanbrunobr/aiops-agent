@@ -14,7 +14,7 @@ from core.credentials import EnvCredentialProvider
 from core.protocols import CredentialProvider
 from domain.alert import NormalizedAlert
 from domain.incident_state import IncidentState
-from server.webhook.schemas import NormalizedAlertDTO, normalize_severity
+from interfaces.http.webhook.schemas import NormalizedAlertDTO, normalize_severity
 
 
 def _make_alert(**overrides) -> NormalizedAlert:

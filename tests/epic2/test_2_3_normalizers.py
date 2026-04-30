@@ -8,9 +8,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-from server.webhook.normalizers.pagerduty import PagerDutyNormalizer
-from server.webhook.normalizers.grafana import GrafanaNormalizer
-from server.webhook.normalizers.databricks import DatabricksNormalizer
+from interfaces.http.webhook.normalizers.pagerduty import PagerDutyNormalizer
+from interfaces.http.webhook.normalizers.grafana import GrafanaNormalizer
+from interfaces.http.webhook.normalizers.databricks import DatabricksNormalizer
 
 
 class MockCredentials:

@@ -124,10 +124,10 @@ O backend (FastAPI + WebSocket) e o frontend (HTML/CSS/JS) são servidos pelo me
 source .venv/bin/activate
 
 # 2. Iniciar backend + frontend — comando único
-python demo/server.py
+python interfaces/demo/server.py
 
 # Alternativa sem ativar o venv:
-.venv/bin/python demo/server.py
+.venv/bin/python interfaces/demo/server.py
 ```
 
 Acesse no navegador:
@@ -142,10 +142,10 @@ Para abrir o dashboard numa janela nativa em vez do browser:
 
 ```bash
 .venv/bin/pip install pywebview        # primeira vez
-.venv/bin/python demo/desktop_app.py
+.venv/bin/python interfaces/demo/desktop_app.py
 ```
 
-O launcher sobe `demo/server.py` em subprocesso, espera `/demo/` responder e abre uma janela WebKit nativa. Ao fechar a janela, o servidor é encerrado.
+O launcher sobe `interfaces/demo/server.py` em subprocesso, espera `/demo/` responder e abre uma janela WebKit nativa. Ao fechar a janela, o servidor é encerrado.
 
 > Distribuível como `.app` apenas se houver objetivo real de empacotamento — para uso local, o launcher Python já basta.
 
@@ -182,7 +182,7 @@ a demo envia notificações ao Slack simultaneamente com o dashboard:
 SLACK_BOT_TOKEN=xoxb-seu-token
 SLACK_CHANNEL=#aiops-alerts
 
-python demo/server.py
+python interfaces/demo/server.py
 ```
 
 ### Com diagnóstico via LLM (opcional)
@@ -193,13 +193,13 @@ Por padrão a demo usa heurística (sem custo). Para usar Claude:
 # .env.local
 ANTHROPIC_API_KEY=sk-ant-...
 
-python demo/server.py
+python interfaces/demo/server.py
 ```
 
 ### Porta customizada
 
 ```bash
-python demo/server.py --port 8080
+python interfaces/demo/server.py --port 8080
 ```
 
 ---

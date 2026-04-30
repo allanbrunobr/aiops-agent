@@ -20,14 +20,14 @@ def _make_incident() -> IncidentState:
 
 def _inject_server_app(knowledge_store_value: object) -> None:
     """Injeta módulo server.app fake em sys.modules para isolar testes."""
-    fake_app = types.ModuleType("server.app")
+    fake_app = types.ModuleType("interfaces.http.app")
     fake_app.knowledge_store = knowledge_store_value  # type: ignore[attr-defined]
-    sys.modules["server.app"] = fake_app
+    sys.modules["interfaces.http.app"] = fake_app
 
 
 def _cleanup_server_app() -> None:
     """Remove módulo fake de sys.modules."""
-    sys.modules.pop("server.app", None)
+    sys.modules.pop("interfaces.http.app", None)
 
 
 @pytest.mark.unit
@@ -45,9 +45,9 @@ class TestHandleFalsePositiveSideEffects:
         _inject_server_app(bad_ks)
 
         try:
-            from server.handlers.false_positive import handle_false_positive_side_effects
+            from interfaces.http.handlers.false_positive import handle_false_positive_side_effects
 
-            with patch("server.handlers.false_positive.log") as mock_log:
+            with patch("interfaces.http.handlers.false_positive.log") as mock_log:
                 await handle_false_positive_side_effects(
                     correlation_id="test-123",
                     notes="teste",
@@ -71,9 +71,9 @@ class TestHandleFalsePositiveSideEffects:
         _inject_server_app(bad_ks)
 
         try:
-            from server.handlers.false_positive import handle_false_positive_side_effects
+            from interfaces.http.handlers.false_positive import handle_false_positive_side_effects
 
-            with patch("server.handlers.false_positive.log"):
+            with patch("interfaces.http.handlers.false_positive.log"):
                 # Não deve lançar exceção
                 await handle_false_positive_side_effects(
                     correlation_id="test-456",
@@ -92,9 +92,9 @@ class TestHandleFalsePositiveSideEffects:
         _inject_server_app(None)
 
         try:
-            from server.handlers.false_positive import handle_false_positive_side_effects
+            from interfaces.http.handlers.false_positive import handle_false_positive_side_effects
 
-            with patch("server.handlers.false_positive.log") as mock_log:
+            with patch("interfaces.http.handlers.false_positive.log") as mock_log:
                 await handle_false_positive_side_effects(
                     correlation_id="test-789",
                     notes="no error test",

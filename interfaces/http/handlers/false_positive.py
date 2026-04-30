@@ -23,7 +23,7 @@ async def handle_false_positive_side_effects(
     pattern_id = None
 
     try:
-        from server.app import knowledge_store as _ks
+        from interfaces.http.app import knowledge_store as _ks
         if _ks is not None:
             pattern_id = _mark_knowledge_pattern_negative(
                 incident, _ks, correlation_id,

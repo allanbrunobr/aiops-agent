@@ -174,7 +174,7 @@ class TestJwksEndpoint:
 
     @pytest.mark.unit
     def test_returns_empty_keys_without_rsa(self) -> None:
-        from server.app import create_app
+        from interfaces.http.app import create_app
         from config.loader import AppConfig
 
         config = AppConfig(
@@ -197,7 +197,7 @@ class TestJwksEndpoint:
         priv_path.write_text(private_pem)
         pub_path.write_text(public_pem)
 
-        from server.app import create_app
+        from interfaces.http.app import create_app
         from config.loader import AppConfig
 
         config = AppConfig(
@@ -230,7 +230,7 @@ class TestDiscoveryWithJwksUri:
 
     @pytest.mark.unit
     def test_discovery_without_rsa_has_no_jwks_uri(self) -> None:
-        from server.app import create_app
+        from interfaces.http.app import create_app
         from config.loader import AppConfig
 
         config = AppConfig(
@@ -252,7 +252,7 @@ class TestDiscoveryWithJwksUri:
         priv_path.write_text(private_pem)
         pub_path.write_text(public_pem)
 
-        from server.app import create_app
+        from interfaces.http.app import create_app
         from config.loader import AppConfig
 
         config = AppConfig(

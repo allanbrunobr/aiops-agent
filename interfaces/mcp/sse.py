@@ -21,7 +21,7 @@ from fastapi import FastAPI, Request, Response
 from mcp.server.sse import SseServerTransport
 
 from auth.jwt_validator import validate_token
-from mcp_server.server import _current_client_id, _current_scopes, create_server
+from interfaces.mcp.server import _current_client_id, _current_scopes, create_server
 
 # Estado do módulo — transporte e servidor MCP compartilhados
 _sse_transport: SseServerTransport | None = None

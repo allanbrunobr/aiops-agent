@@ -12,10 +12,10 @@ from datetime import datetime, timezone
 from typing import Any
 
 from data.models import LogEntry, MetricPoint, Span
-from demo.analyzer import DemoAnalyzer
-from demo.player import ScenarioPlayer
-from demo.schemas import DemoPhase, TickFrame
-from demo.scenarios import CorpusItem, DemoScenarioConfig
+from interfaces.demo.analyzer import DemoAnalyzer
+from interfaces.demo.player import ScenarioPlayer
+from interfaces.demo.schemas import DemoPhase, TickFrame
+from interfaces.demo.scenarios import CorpusItem, DemoScenarioConfig
 
 
 @dataclass

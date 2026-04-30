@@ -19,7 +19,7 @@ import pytest
 from slack_sdk.errors import SlackApiError
 
 from core.lifecycle import LifecycleEvent
-from server.notifications.slack import SlackNotifier, _NODE_LABELS
+from interfaces.http.notifications.slack import SlackNotifier, _NODE_LABELS
 
 
 # ---------------------------------------------------------------------------

@@ -5,8 +5,8 @@ import pytest
 
 from core.protocols import CredentialProvider
 from domain.alert import NormalizedAlert
-from server.webhook.normalizers.base import AlertNormalizer
-from server.webhook.normalizers.registry import NormalizerRegistry, register_normalizer
+from interfaces.http.webhook.normalizers.base import AlertNormalizer
+from interfaces.http.webhook.normalizers.registry import NormalizerRegistry, register_normalizer
 
 
 @pytest.fixture(autouse=True)

@@ -134,7 +134,7 @@ def _map_severity(raw: str) -> str:
     Levanta ValueError se o valor mapeado não pertencer ao vocabulário canônico —
     handler externo captura e devolve artifact ``pipeline_error``.
     """
-    from server.webhook.schemas import normalize_severity
+    from interfaces.http.webhook.schemas import normalize_severity
     _MAP = {"high": "error", "medium": "warning", "low": "info", "p1": "critical", "p2": "error"}
     normalized = raw.lower()
     mapped = _MAP.get(normalized, normalized)

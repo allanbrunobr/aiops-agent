@@ -31,10 +31,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from demo.engine import ScenarioEngine
-from demo.scenarios import DemoScenarioConfig, SCENARIOS, get_scenarios_list
+from interfaces.demo.engine import ScenarioEngine
+from interfaces.demo.scenarios import DemoScenarioConfig, SCENARIOS, get_scenarios_list
 
-logger = logging.getLogger("demo.server")
+logger = logging.getLogger("interfaces.demo.server")
 
 # Carrega .env.local se existir (credenciais locais não versionadas)
 _env_local = Path(__file__).parent.parent / ".env.local"
@@ -50,7 +50,7 @@ from core.lifecycle import LifecycleEvent
 # Slack notifier — inicializado se SLACK_BOT_TOKEN e SLACK_CHANNEL estiverem disponíveis
 try:
     from core.credentials import EnvCredentialProvider
-    from server.notifications.slack import SlackNotifier
+    from interfaces.http.notifications.slack import SlackNotifier
     _slack_token = os.environ.get("SLACK_BOT_TOKEN")
     _slack_channel = os.environ.get("SLACK_CHANNEL", "#aiops-alerts")
     if _slack_token:

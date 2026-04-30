@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 import pytest
 
 from domain.alert import NormalizedAlert
-from server.webhook.pipeline_runner import PipelineRunner
+from interfaces.http.webhook.pipeline_runner import PipelineRunner
 
 
 # Restringe este modulo ao backend asyncio

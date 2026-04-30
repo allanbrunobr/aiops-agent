@@ -10,7 +10,7 @@ from httpx import AsyncClient, ASGITransport
 from fastapi import FastAPI
 
 from rag.knowledge_store import KnowledgeStore
-from server.routes.knowledge import router, get_knowledge_store
+from interfaces.http.routes.knowledge import router, get_knowledge_store
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

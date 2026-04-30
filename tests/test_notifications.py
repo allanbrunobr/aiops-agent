@@ -14,8 +14,8 @@ import pytest
 from slack_sdk.errors import SlackApiError
 
 from core.lifecycle import LifecycleEvent, LifecycleObserver
-from server.notifications.fallback import LocalFallbackWriter
-from server.notifications.slack import SlackNotifier
+from interfaces.http.notifications.fallback import LocalFallbackWriter
+from interfaces.http.notifications.slack import SlackNotifier
 from core.credentials import EnvCredentialProvider
 
 
@@ -248,7 +248,7 @@ class TestSlackNotifierDisabledMode:
 
     def test_disabled_config_creates_no_observer(self):
         from config.loader import AppConfig, NotificationsConfig, SlackConfig
-        from server.app import create_engine
+        from interfaces.http.app import create_engine
 
         config = AppConfig(
             notifications=NotificationsConfig(
@@ -305,7 +305,7 @@ class TestObserverRegistration:
     async def test_observer_registered_when_slack_enabled(self, monkeypatch):
         monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-fake-token")
         from config.loader import AppConfig, NotificationsConfig, SlackConfig
-        from server.app import create_engine
+        from interfaces.http.app import create_engine
 
         config = AppConfig(
             notifications=NotificationsConfig(
@@ -609,7 +609,7 @@ class TestDisabledNotifications:
 
     def test_disabled_slack_no_observer(self):
         from config.loader import AppConfig, NotificationsConfig, SlackConfig
-        from server.app import create_engine
+        from interfaces.http.app import create_engine
 
         config = AppConfig(
             notifications=NotificationsConfig(slack=SlackConfig(enabled=False))

@@ -88,7 +88,7 @@ async def update_accuracy(
     # Tratamento especial para falso positivo (Story 4.5)
     if body.accuracy == "false_positive":
         try:
-            from server.handlers.false_positive import handle_false_positive_side_effects
+            from interfaces.http.handlers.false_positive import handle_false_positive_side_effects
             await handle_false_positive_side_effects(correlation_id, body.notes, updated)
         except Exception:
             pass  # side-effects não bloqueiam a resposta principal

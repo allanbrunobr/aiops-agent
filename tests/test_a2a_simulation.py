@@ -18,7 +18,7 @@ import httpx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from server.routes.a2a import router as a2a_router, AGENT_CARD
+from interfaces.http.routes.a2a import router as a2a_router, AGENT_CARD
 from agents.a2a_client import A2AClient
 import auth.server as auth_server
 from auth.token_store import InMemoryTokenStore

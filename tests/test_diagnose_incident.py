@@ -47,7 +47,7 @@ class TestHandleDiagnoseIncident:
     @pytest.mark.asyncio
     async def test_valid_alert_returns_diagnosis(self):
         """Verifica que alerta válido retorna diagnóstico estruturado."""
-        from mcp_server.tools import handle_diagnose_incident
+        from interfaces.mcp.tools import handle_diagnose_incident
 
         result_json = await handle_diagnose_incident(
             arguments={
@@ -72,7 +72,7 @@ class TestHandleDiagnoseIncident:
     @pytest.mark.asyncio
     async def test_response_has_required_fields(self):
         """Verifica que todos os campos obrigatórios estão na resposta."""
-        from mcp_server.tools import handle_diagnose_incident
+        from interfaces.mcp.tools import handle_diagnose_incident
 
         result_json = await handle_diagnose_incident(
             arguments={
@@ -104,7 +104,7 @@ class TestHandleDiagnoseIncident:
     @pytest.mark.asyncio
     async def test_invalid_severity_returns_validation_error(self):
         """Verifica que severidade inválida retorna erro RFC 7807."""
-        from mcp_server.tools import handle_diagnose_incident
+        from interfaces.mcp.tools import handle_diagnose_incident
 
         result_json = await handle_diagnose_incident(
             arguments={
@@ -125,7 +125,7 @@ class TestHandleDiagnoseIncident:
     @pytest.mark.asyncio
     async def test_missing_required_field_returns_error(self):
         """Verifica que campo obrigatório faltando retorna erro."""
-        from mcp_server.tools import handle_diagnose_incident
+        from interfaces.mcp.tools import handle_diagnose_incident
 
         result_json = await handle_diagnose_incident(
             arguments={
@@ -143,7 +143,7 @@ class TestHandleDiagnoseIncident:
     @pytest.mark.asyncio
     async def test_engine_unavailable_returns_error(self):
         """Verifica que engine=None retorna erro gracioso."""
-        from mcp_server.tools import handle_diagnose_incident
+        from interfaces.mcp.tools import handle_diagnose_incident
 
         result_json = await handle_diagnose_incident(
             arguments={
@@ -163,7 +163,7 @@ class TestHandleDiagnoseIncident:
     @pytest.mark.asyncio
     async def test_pipeline_exception_returns_error_with_correlation_id(self):
         """Verifica que exceção do pipeline retorna RFC 7807 com correlation_id."""
-        from mcp_server.tools import handle_diagnose_incident
+        from interfaces.mcp.tools import handle_diagnose_incident
 
         result_json = await handle_diagnose_incident(
             arguments={
@@ -184,7 +184,7 @@ class TestHandleDiagnoseIncident:
     @pytest.mark.asyncio
     async def test_engine_run_called_with_normalized_alert(self):
         """Verifica que BlueprintEngine.run() é chamado (mesmo caminho que webhook)."""
-        from mcp_server.tools import handle_diagnose_incident
+        from interfaces.mcp.tools import handle_diagnose_incident
 
         run_calls = []
 
@@ -219,7 +219,7 @@ class TestHandleDiagnoseIncident:
     @pytest.mark.asyncio
     async def test_nollm_mode_in_response(self):
         """Verifica que mode='heuristic' é incluído na resposta."""
-        from mcp_server.tools import handle_diagnose_incident
+        from interfaces.mcp.tools import handle_diagnose_incident
 
         result_json = await handle_diagnose_incident(
             arguments={

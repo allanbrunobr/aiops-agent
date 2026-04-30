@@ -4,7 +4,7 @@ from typing import Any
 
 import structlog
 
-from server.webhook.normalizers.base import AlertNormalizer
+from interfaces.http.webhook.normalizers.base import AlertNormalizer
 
 log = structlog.get_logger()
 

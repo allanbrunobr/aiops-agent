@@ -336,7 +336,7 @@ FastAPI app que monta o pipeline completo:
 5. Deduplicacao por fingerprint (janela de 5min)
 6. Submete ao pipeline runner (max 3 concorrentes, fila de 10)
 
-### SlackNotifier (`server/notifications/slack.py`)
+### SlackNotifier (`interfaces/http/notifications/slack.py`)
 
 Notificacoes Block Kit progressivas:
 

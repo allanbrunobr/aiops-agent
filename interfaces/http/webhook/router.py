@@ -9,11 +9,11 @@ import structlog
 from fastapi import APIRouter, Request
 
 from core.protocols import CredentialProvider
-from server.webhook.dedup import DedupStore, generate_fingerprint
-from server.webhook.errors import WebhookError
-from server.webhook.normalizers.registry import NormalizerRegistry
-from server.webhook.pipeline_runner import PipelineRunner
-from server.webhook.schemas import ProblemDetail, WebhookResponse
+from interfaces.http.webhook.dedup import DedupStore, generate_fingerprint
+from interfaces.http.webhook.errors import WebhookError
+from interfaces.http.webhook.normalizers.registry import NormalizerRegistry
+from interfaces.http.webhook.pipeline_runner import PipelineRunner
+from interfaces.http.webhook.schemas import ProblemDetail, WebhookResponse
 
 log = structlog.get_logger()
 

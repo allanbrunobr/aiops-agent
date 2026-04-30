@@ -290,7 +290,7 @@ class SlackNotifier:
                 correlation_id=cid,
                 max_retries=self._max_retries,
             )
-            from server.notifications.fallback import LocalFallbackWriter
+            from interfaces.http.notifications.fallback import LocalFallbackWriter
             fallback = LocalFallbackWriter(str(self._fallback_dir))
             fallback.write(cid, event.data)
 
