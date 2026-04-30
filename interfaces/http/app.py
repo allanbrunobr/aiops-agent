@@ -194,13 +194,11 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # --------------------------------------------------------
     # app.state — engine e retriever para handlers A2A
     # --------------------------------------------------------
-    from blueprint.engine import BlueprintEngine
-    from rag.indexer import ObservabilityIndexer
-    from rag.retriever import ObservabilityRetriever
+    from app.builders import build_engine, build_rag
 
     app.state.config = config
-    app.state.engine = BlueprintEngine(config=config)
-    app.state.retriever = ObservabilityRetriever(ObservabilityIndexer())
+    app.state.engine = build_engine(config)
+    _, app.state.retriever = build_rag()
     log.info("a2a.state.populated", engine=type(app.state.engine).__name__)
 
     # --------------------------------------------------------

@@ -173,9 +173,9 @@ async def _handle_diagnose(task_id: str, data: dict, request: Request) -> list[d
             started_at=alert.timestamp,
         )
 
-        from blueprint.pipelines.incident_response import build_incident_response_pipeline
+        from app.builders import build_pipeline
         config = getattr(request.app.state, "config", None)
-        pipeline = build_incident_response_pipeline(config)
+        pipeline = build_pipeline(config)
         result = engine.run(pipeline, state)
 
         return [

@@ -1799,8 +1799,8 @@ def main_v1(args: argparse.Namespace) -> int:
     from core.logging import configure_logging, get_logger
     from core.credentials import EnvCredentialProvider
     from config.loader import load_config as load_app_config
-    from blueprint.engine import BlueprintEngine, PipelineAborted, LLMCallLimitExceeded
-    from blueprint.pipelines.incident_response import build_incident_response_pipeline
+    from blueprint.engine import PipelineAborted, LLMCallLimitExceeded
+    from app.builders import build_engine, build_pipeline, build_rag
 
     # Carrega .env.local se existir (sem dependencia de python-dotenv)
     _env_file = _Path(".env.local")
@@ -1862,19 +1862,18 @@ def main_v1(args: argparse.Namespace) -> int:
     # 3. Composicao de dependencias
     store = InMemoryStore()
     creds = EnvCredentialProvider()
-    engine = BlueprintEngine(app_config, store, creds)
+    engine = build_engine(app_config, store, creds)
 
     # 4. Constroi pipeline e estado inicial
-    pipeline = build_incident_response_pipeline(app_config)
+    pipeline = build_pipeline(app_config)
     state = create_incident_state(args, incident_data)
 
     # 5. RAG (se habilitado)
     if not args.no_rag:
         try:
             console.print(Rule("[bold]Stage 3: RAG Indexing[/bold]", style="cyan"))
-            indexer = ObservabilityIndexer()
             # Indexa apos aggregator ter processado — por ora, sem report pre-pipeline
-            retriever = ObservabilityRetriever(indexer)
+            indexer, retriever = build_rag()
 
             # Injeta retriever no metadata do estado
             state = dataclasses.replace(
