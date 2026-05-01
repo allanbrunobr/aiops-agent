@@ -10,7 +10,7 @@ import pytest
 
 from adapters.persistence.in_memory_store import InMemoryStore
 from application.ports.incident_store import IncidentStore
-from core.credentials import EnvCredentialProvider
+from adapters.credentials import EnvCredentialProvider
 from application.ports.credential_provider import CredentialProvider
 from domain.alert import NormalizedAlert
 from domain.incident_state import IncidentState

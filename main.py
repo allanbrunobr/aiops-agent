@@ -1797,7 +1797,7 @@ def main_v1(args: argparse.Namespace) -> int:
     from pathlib import Path as _Path
     from adapters.persistence.in_memory_store import InMemoryStore
     from core.logging import configure_logging, get_logger
-    from core.credentials import EnvCredentialProvider
+    from adapters.credentials import EnvCredentialProvider
     from config.loader import load_config as load_app_config
     from blueprint.engine import PipelineAborted, LLMCallLimitExceeded
     from app.builders import build_engine, build_pipeline, build_rag

@@ -16,7 +16,7 @@ from slack_sdk.errors import SlackApiError
 from core.lifecycle import LifecycleEvent, LifecycleObserver
 from interfaces.http.notifications.fallback import LocalFallbackWriter
 from interfaces.http.notifications.slack import SlackNotifier
-from core.credentials import EnvCredentialProvider
+from adapters.credentials import EnvCredentialProvider
 
 
 # ---------------------------------------------------------------------------

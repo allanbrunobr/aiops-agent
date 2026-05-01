@@ -45,7 +45,7 @@ def app():
     """
     from adapters.persistence.in_memory_store import InMemoryStore
     from config.loader import load_config
-    from core.credentials import EnvCredentialProvider
+    from adapters.credentials import EnvCredentialProvider
     from interfaces.http.app import create_app
     from interfaces.http.health import set_start_time
     from interfaces.http.webhook.dedup import DedupStore

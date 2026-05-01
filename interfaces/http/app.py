@@ -69,7 +69,7 @@ def create_engine(config: AppConfig) -> NotificationEngine:
     engine = NotificationEngine()
     slack_cfg = config.notifications.slack
     if slack_cfg.enabled:
-        from core.credentials import EnvCredentialProvider
+        from adapters.credentials import EnvCredentialProvider
         from interfaces.http.notifications.slack import SlackNotifier
 
         creds = EnvCredentialProvider()

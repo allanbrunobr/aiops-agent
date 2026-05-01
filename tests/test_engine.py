@@ -17,7 +17,7 @@ from blueprint.nodes import (
 )
 from config.loader import AppConfig
 from adapters.persistence.in_memory_store import InMemoryStore
-from core.credentials import EnvCredentialProvider
+from adapters.credentials import EnvCredentialProvider
 from core.logging import configure_logging
 from domain.alert import NormalizedAlert
 from domain.incident_state import IncidentState
