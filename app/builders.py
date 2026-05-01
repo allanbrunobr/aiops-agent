@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from application.ports.incident_store import IncidentStore
     from blueprint.nodes import PipelineDefinition
     from config.loader import AppConfig
-    from core.protocols import CredentialProvider
+    from application.ports.credential_provider import CredentialProvider
 
 
 def build_engine(

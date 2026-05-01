@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from application.ports.incident_store import IncidentStore
 from blueprint.engine import BlueprintEngine
 from config.loader import AppConfig
-from core.protocols import CredentialProvider
+from application.ports.credential_provider import CredentialProvider
 
 if TYPE_CHECKING:
     from rag.knowledge_store import KnowledgeStore

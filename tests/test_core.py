@@ -11,7 +11,7 @@ import pytest
 from adapters.persistence.in_memory_store import InMemoryStore
 from application.ports.incident_store import IncidentStore
 from core.credentials import EnvCredentialProvider
-from core.protocols import CredentialProvider
+from application.ports.credential_provider import CredentialProvider
 from domain.alert import NormalizedAlert
 from domain.incident_state import IncidentState
 from interfaces.http.webhook.schemas import NormalizedAlertDTO, normalize_severity

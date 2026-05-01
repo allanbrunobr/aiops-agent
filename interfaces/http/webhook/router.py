@@ -8,7 +8,7 @@ from typing import Any
 import structlog
 from fastapi import APIRouter, Request
 
-from core.protocols import CredentialProvider
+from application.ports.credential_provider import CredentialProvider
 from interfaces.http.webhook.dedup import DedupStore, generate_fingerprint
 from interfaces.http.webhook.errors import WebhookError
 from interfaces.http.webhook.normalizers.registry import NormalizerRegistry

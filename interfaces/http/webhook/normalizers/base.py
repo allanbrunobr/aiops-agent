@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from core.protocols import CredentialProvider
+from application.ports.credential_provider import CredentialProvider
 from domain.alert import NormalizedAlert
 
 

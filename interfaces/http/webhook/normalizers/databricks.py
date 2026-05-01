@@ -7,7 +7,7 @@ from typing import Any
 
 import structlog
 
-from core.protocols import CredentialProvider
+from application.ports.credential_provider import CredentialProvider
 from domain.alert import NormalizedAlert
 from interfaces.http.webhook.normalizers.base import AlertNormalizer
 from interfaces.http.webhook.normalizers.registry import register_normalizer
