@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1920, initial-scale=1.0" />
+  <title>AIOps Agent — Storytelling Demo</title>
+
+  <!-- uPlot -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.iife.min.js"></script>
+
+  <!-- ECharts -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+
+  <!-- GSAP -->
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3/dist/gsap.min.js"></script>
+
+  <link rel="stylesheet" href="/demo/static/story.css" />
+  <script src="/demo/static/story.js" defer></script>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- A. STORY HEADER (linha 1)                                    -->
+<!-- ============================================================ -->
+<header id="story-header">
+  <span class="story-header-text">Carregando narrativa...</span>
+</header>
+
+<!-- ============================================================ -->
+<!-- F. HERO / LEAD-TIME BAR (linha 2 — oculta por default)       -->
+<!-- ============================================================ -->
+<section id="hero-bar" class="hidden" data-mode="lead">
+  <span id="hero-text"></span>
+  <div id="hero-progress-track">
+    <div id="hero-progress" style="width:100%"></div>
+  </div>
+  <span id="hero-progress-label">—</span>
+</section>
+
+<!-- ============================================================ -->
+<!-- MAIN GRID (linha 3): risk+impact | compare | slack mock      -->
+<!-- ============================================================ -->
+<main id="story-main">
+
+  <!-- Coluna 1 — Risk Gauge + Business Impact -->
+  <div class="story-col col-risk">
+    <div class="panel panel-risk">
+      <div class="panel-title">Risk Score</div>
+      <div id="risk-gauge"></div>
+    </div>
+    <div class="panel panel-impact">
+      <div class="panel-title">Impacto financeiro</div>
+      <div id="business-impact" class="impact-green">
+        <div id="business-impact-value">R$ 0/min</div>
+        <div class="impact-sub">vs receita base</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Coluna 2 — Risk Score (modelo preditivo) -->
+  <div class="story-col col-compare">
+    <div class="panel panel-compare">
+      <div class="panel-title">Predictive Risk Score</div>
+      <div id="compare-chart"></div>
+    </div>
+  </div>
+
+  <!-- Coluna 3 — Slack Mock Panel -->
+  <div class="story-col col-slack">
+    <div class="panel panel-slack">
+      <div class="panel-title">Slack · #payments-incidents</div>
+      <div id="slack-mock-panel">
+        <div class="slack-empty">Nenhum alerta disparado ainda.</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ============================================================ -->
+<!-- BOTTOM ROW (linha 4): latency | prediction status            -->
+<!-- ============================================================ -->
+<section id="story-bottom">
+  <div class="panel panel-latency">
+    <div class="panel-title">Latency p95/p99 (ms)</div>
+    <div id="latency-chart"></div>
+  </div>
+
+  <div class="panel panel-prediction">
+    <div class="panel-title">Prediction Status</div>
+    <div id="prediction-status">
+      <div class="pred-level" id="pred-level">— No Prediction —</div>
+      <div class="pred-eta" id="pred-eta"></div>
+      <div class="pred-signals" id="pred-signals"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<!-- C. STORY TIMELINE (linha 5)                                  -->
+<!-- ============================================================ -->
+<footer id="story-timeline">
+  <div class="timeline-track">
+    <div class="timeline-line"></div>
+    <div id="timeline-cursor"></div>
+    <div class="timeline-node" data-phase="PLAYING">
+      <div class="timeline-dot"></div>
+      <div class="timeline-label">Normal</div>
+    </div>
+    <div class="timeline-node" data-phase="DEGRADING">
+      <div class="timeline-dot"></div>
+      <div class="timeline-label">Drift</div>
+    </div>
+    <div class="timeline-node" data-phase="WARNING">
+      <div class="timeline-dot"></div>
+      <div class="timeline-label">Warning</div>
+    </div>
+    <div class="timeline-node" data-phase="ALERT">
+      <div class="timeline-dot"></div>
+      <div class="timeline-label">Alert</div>
+    </div>
+    <div class="timeline-node" data-phase="INCIDENT">
+      <div class="timeline-dot"></div>
+      <div class="timeline-label">Incident</div>
+    </div>
+    <div class="timeline-node" data-phase="RESOLVED">
+      <div class="timeline-dot"></div>
+      <div class="timeline-label">Resolved</div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

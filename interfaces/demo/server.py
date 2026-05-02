@@ -11,6 +11,7 @@ Uso:
 
 import argparse
 import asyncio
+import dataclasses
 import json
 import logging
 import os
@@ -18,26 +19,29 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Garante que demo/ não obscurece o pacote server/ na raiz do projeto.
-# Quando demo/server.py é executado como script, Python adiciona 'demo' em sys.path[0],
-# o que faz 'server' resolver para demo/server.py em vez de server/.
-# Solução: remove 'demo' do sys.path e insere a raiz do projeto na frente.
-_PROJECT_ROOT = str(Path(__file__).parent.parent.resolve())
+# Garante que interfaces/demo/ não obscurece pacotes da raiz e que stdlib não
+# é shadowed pelo pacote interfaces/http/. Quando interfaces/demo/server.py
+# roda como script, Python adiciona 'interfaces/demo' em sys.path[0]; sem
+# fixar a raiz na frente, imports como `from http import cookies` (starlette)
+# resolvem para interfaces/http/__init__.py.
+# Solução: remove 'interfaces/demo' do sys.path e insere a raiz do projeto na frente.
+_PROJECT_ROOT = str(Path(__file__).parent.parent.parent.resolve())
 _DEMO_DIR = str(Path(__file__).parent.resolve())
 sys.path[:] = [_PROJECT_ROOT] + [p for p in sys.path if Path(p).resolve() != Path(_DEMO_DIR).resolve() and p != ""]
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from interfaces.demo.engine import ScenarioEngine
+from interfaces.demo.narratives import get_narrative
 from interfaces.demo.scenarios import DemoScenarioConfig, SCENARIOS, get_scenarios_list
 
 logger = logging.getLogger("interfaces.demo.server")
 
 # Carrega .env.local se existir (credenciais locais não versionadas)
-_env_local = Path(__file__).parent.parent / ".env.local"
+_env_local = Path(__file__).parent.parent.parent / ".env.local"
 if _env_local.exists():
     for _line in _env_local.read_text().splitlines():
         if _line.startswith("#") or "=" not in _line:
@@ -91,6 +95,24 @@ async def serve_index() -> HTMLResponse:
     """Serve o dashboard HTML principal."""
     index_path = _STATIC_DIR / "index.html"
     return HTMLResponse(content=index_path.read_text(encoding="utf-8"))
+
+
+@app.get("/demo/story")
+async def serve_story() -> FileResponse:
+    """Serve a página /demo/story (camada de narrativa)."""
+    return FileResponse(_STATIC_DIR / "story.html")
+
+
+@app.get("/demo/api/narrative/{scenario}")
+async def get_narrative_endpoint(scenario: str) -> JSONResponse:
+    """Retorna narrativa PT-BR do cenário ou 404 se desconhecido."""
+    narrative = get_narrative(scenario)
+    if narrative is None:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"Narrativa '{scenario}' não encontrada."},
+        )
+    return JSONResponse(content=dataclasses.asdict(narrative))
 
 
 @app.get("/demo/scenarios")
