@@ -167,6 +167,23 @@ O launcher sobe `interfaces/demo/server.py` em subprocesso, espera `/demo/` resp
 5. O dashboard mostra gráficos de métricas, logs chegando, risk score subindo e a análise do agente
 6. Quando o risk score ultrapassa o limiar, o agente diagnostica e propõe correção
 
+### Camada de storytelling — `/demo/story` (opcional)
+
+Página alternativa que consome o mesmo WebSocket do dashboard mas sobrepõe
+narrativa em PT-BR sobre o pipeline técnico. Útil para apresentações: cada
+fase (`PLAYING → DEGRADING → WARNING → ALERT → INCIDENT → RESOLVED`) recebe
+texto de contexto, mensagem Slack mockada inline, impacto financeiro projetado
+e timeline visual com cursor animado.
+
+```
+http://localhost:47891/demo/story?scenario=payment-pool-exhaustion
+http://localhost:47891/demo/story?scenario=payment-pool-recovery
+```
+
+Apenas os cenários acima têm narrativa autorada — os outros caem em modo
+degradado (mantém os 4 painéis técnicos sem o overlay narrativo). O JSON
+da narrativa é exposto em `GET /demo/api/narrative/{scenario}`.
+
 ### Com notificações Slack (opcional)
 
 Se `SLACK_BOT_TOKEN` e `SLACK_CHANNEL` estiverem configurados no `.env.local`,
