@@ -82,8 +82,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Pequeno delay para garantir que o WS está aceito antes do primeiro tick.
   // Caso contrário, ticks anteriores ao on_open são perdidos.
+  // speed_factor=4 = mesmo default do dashboard original (~3 min por cenário).
   setTimeout(() => {
     fetch("/demo/start/" + encodeURIComponent(scenarioName), { method: "POST" })
+      .then(() => fetch("/demo/speed", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ speed_factor: 4 }),
+      }))
       .catch((err) => console.error("Falha ao iniciar cenário:", err));
   }, 250);
 });

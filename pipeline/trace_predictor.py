@@ -13,7 +13,7 @@ from data.models import Span
 
 try:
     import _aiops_rust as _rust
-    _RUST_AVAILABLE = True
+    _RUST_AVAILABLE = hasattr(_rust, "detect_latency_drift")
 except ImportError:
     _rust = None
     _RUST_AVAILABLE = False
