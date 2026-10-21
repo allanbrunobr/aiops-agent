@@ -20,7 +20,7 @@ pub fn filter_traces(py: Python<'_>, spans: &Bound<'_, PyList>) -> PyResult<Py<P
     let span_data = extract_spans(py, spans)?;
 
     // ── Fase 2: processar p95 + DFS sem GIL ──────────────────────────────────
-    let slow_paths = py.allow_threads(|| filter_slow_traces(span_data, 95.0, 3));
+    let slow_paths = py.detach(|| filter_slow_traces(span_data, 95.0, 3));
 
     // ── Fase 3: construir dicts Python enquanto segura o GIL ─────────────────
     build_python_result(py, slow_paths)
@@ -74,7 +74,7 @@ fn extract_attributes(attrs: &Bound<'_, PyAny>) -> PyResult<Vec<(String, String)
     }
 
     // Tentar iterar como dict
-    match attrs.downcast::<PyDict>() {
+    match attrs.cast::<PyDict>() {
         Ok(d) => {
             let mut result = Vec::new();
             for (k, v) in d.iter() {
@@ -93,12 +93,12 @@ fn build_python_result(
     py: Python<'_>,
     paths: Vec<super::types::SlowCallPathData>,
 ) -> PyResult<Py<PyList>> {
-    let result = PyList::empty_bound(py);
-    let datetime_mod = py.import_bound("datetime")?;
+    let result = PyList::empty(py);
+    let datetime_mod = py.import("datetime")?;
     let datetime_cls = datetime_mod.getattr("datetime")?;
 
     for p in paths {
-        let dict = PyDict::new_bound(py);
+        let dict = PyDict::new(py);
         dict.set_item("trace_id", &p.trace_id)?;
         dict.set_item("path", &p.path)?;
         dict.set_item("operations", &p.operations)?;
@@ -112,7 +112,7 @@ fn build_python_result(
         dict.set_item("timestamp", dt)?;
 
         // Reconstrói attributes como dict Python
-        let attrs_dict = PyDict::new_bound(py);
+        let attrs_dict = PyDict::new(py);
         for (k, v) in &p.attributes {
             attrs_dict.set_item(k, v)?;
         }

@@ -17,17 +17,17 @@ pub fn detect_taint_batch(py: Python<'_>, texts: &Bound<'_, PyList>) -> PyResult
     let strings: Vec<String> = texts
         .iter()
         .map(|item| {
-            item.downcast::<PyString>()
+            item.cast::<PyString>()
                 .map(|s| s.to_str().unwrap_or("").to_owned())
                 .unwrap_or_default()
         })
         .collect();
 
     // Processar em paralelo sem GIL
-    let levels = py.allow_threads(|| detect_taint_batch_parallel(strings));
+    let levels = py.detach(|| detect_taint_batch_parallel(strings));
 
     // Construir resultado Python
-    let result = PyList::empty_bound(py);
+    let result = PyList::empty(py);
     for level in levels {
         result.append(level.as_str())?;
     }
@@ -38,6 +38,6 @@ pub fn detect_taint_batch(py: Python<'_>, texts: &Bound<'_, PyList>) -> PyResult
 /// Detecta taint de um único texto (conveniência para casos não-batch).
 #[pyfunction]
 pub fn detect_taint_single(py: Python<'_>, text: &str) -> PyResult<String> {
-    let result = py.allow_threads(|| detect_taint(text));
+    let result = py.detach(|| detect_taint(text));
     Ok(result.as_str().to_owned())
 }

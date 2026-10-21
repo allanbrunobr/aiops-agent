@@ -23,7 +23,7 @@ pub fn parse_logs(py: Python<'_>, logs: &Bound<'_, PyList>) -> PyResult<Py<PyLis
     let entries = extract_log_entries(py, logs)?;
 
     // ── Fase 2: processar Drain3 sem GIL (libera GIL para concorrência) ───────
-    let mut templates = py.allow_threads(|| run_drain3_pipeline(entries));
+    let mut templates = py.detach(|| run_drain3_pipeline(entries));
 
     // ── Fase 3: calcular relevância em paralelo com Rayon (ainda sem GIL) ─────
     let total_logs: u64 = templates.iter().map(|t| t.count).sum();
@@ -136,12 +136,12 @@ fn run_drain3_pipeline(entries: Vec<LogEntryData>) -> Vec<LogTemplateData> {
 
 /// Constrói lista Python de dicts com campos equivalentes ao LogTemplate.
 fn build_python_result(py: Python<'_>, templates: Vec<LogTemplateData>) -> PyResult<Py<PyList>> {
-    let result = PyList::empty_bound(py);
-    let datetime_mod = py.import_bound("datetime")?;
+    let result = PyList::empty(py);
+    let datetime_mod = py.import("datetime")?;
     let datetime_cls = datetime_mod.getattr("datetime")?;
 
     for tpl in templates {
-        let dict = PyDict::new_bound(py);
+        let dict = PyDict::new(py);
         dict.set_item("template", &tpl.template)?;
         dict.set_item("level", &tpl.level)?;
         dict.set_item("count", tpl.count)?;

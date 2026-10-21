@@ -20,11 +20,11 @@ pub fn detect_latency_drift(
     baseline: Vec<f64>,
     current: Vec<f64>,
     threshold_pct: f64,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     // Libera o GIL para o cálculo de percentis (CPU-bound)
-    let result = py.allow_threads(|| detect_latency_drift_inner(&baseline, &current, threshold_pct));
+    let result = py.detach(|| detect_latency_drift_inner(&baseline, &current, threshold_pct));
 
-    let dict = PyDict::new_bound(py);
+    let dict = PyDict::new(py);
     dict.set_item("drift_detected", result.drift_detected)?;
     dict.set_item("p95_ratio", result.p95_ratio)?;
     dict.set_item("p99_ratio", result.p99_ratio)?;
