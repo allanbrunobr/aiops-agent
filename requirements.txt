@@ -20,7 +20,7 @@ pydantic-settings[yaml]>=2.0.0
 PyYAML>=6.0.0
 
 # Structured Logging
-structlog>=24.1.0
+structlog>=26.1.0
 
 # Server
 fastapi>=0.115.0
