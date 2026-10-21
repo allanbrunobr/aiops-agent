@@ -1,392 +1,383 @@
 # AIOps Agent
 
-Plataforma de resposta autonoma a incidentes usando LLM + RAG + maquina de estados multi-agente.
+[![CI](https://github.com/allanbrunobr/aiops-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/allanbrunobr/aiops-agent/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.12%2B-blue)
+![Rust](https://img.shields.io/badge/rust-PyO3%20(opcional)-orange)
+![Status](https://img.shields.io/badge/status-proof--of--concept-yellow)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Processa dados de observabilidade (logs, metricas, traces) atraves de um pipeline completo:
-sanitizacao → pre-processamento → compressao de contexto → busca semantica FAISS →
-diagnostico ReAct multi-agente → proposta de mitigacao → verificacao de seguranca →
-geracao de postmortem.
+Plataforma de **resposta autônoma a incidentes** que combina LLM, RAG e uma máquina de estados multiagente para diagnosticar e propor mitigações a partir de dados de observabilidade (logs, métricas e traces).
 
-Baseado em 7 papers academicos (2024-2025): STRATUS, OpsAgent, RCACopilot, Acon², AOI, TAMO e "When AIOps Become AI Oops".
+O pipeline cobre o ciclo completo de um incidente: sanitização da telemetria, pré-processamento, compressão de contexto, busca semântica em incidentes históricos, diagnóstico ReAct, proposta de mitigação, verificação de segurança e geração de postmortem.
 
----
-
-## Como funciona
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          AIOps Agent Pipeline                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  Alerta (Grafana/PagerDuty/Databricks)                                 │
-│    │                                                                    │
-│    ▼                                                                    │
-│  Webhook Server (:8000)                                                │
-│    │  identify_source → validate_auth → normalize → dedup              │
-│    ▼                                                                    │
-│  TelemetrySanitizer ── bloqueia payloads adversariais (reward-hacking) │
-│    ▼                                                                    │
-│  Aggregator ── Drain3 (logs) + 3-sigma (metricas) + p95 (traces)      │
-│    ▼                                                                    │
-│  ContextCompressor ── compressao por prioridade dentro do token budget │
-│    ▼                                                                    │
-│  RAG Retriever ── FAISS + sentence-transformers (384d)                 │
-│    ▼                                                                    │
-│  Orchestrator (State Machine)                                          │
-│    IDLE → DETECTING → DIAGNOSING → MITIGATING → VERIFYING → RESOLVED  │
-│    │                                                                    │
-│    ├─ Diagnoser ── ReAct loop com Claude (tools: logs, metrics, traces)│
-│    ├─ PreValidator ── blast radius + risk scoring                      │
-│    ├─ VersionValidator ── CVE/version checks                           │
-│    └─ TNR ── Transactional No-Regression (rollback se health cair)     │
-│    ▼                                                                    │
-│  Postmortem Generator → output/                                        │
-│    ▼                                                                    │
-│  Slack Notifier ── Block Kit progressivo (checklist → diagnostico)     │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+A implementação é fundamentada em sete artigos acadêmicos de AIOps (2024–2025). Consulte [Referências acadêmicas](#referências-acadêmicas).
 
 ---
 
-## Quick Start
+## Sumário
 
-### Pre-requisitos
+- [Principais recursos](#principais-recursos)
+- [Arquitetura](#arquitetura)
+- [Início rápido](#início-rápido)
+- [Uso da CLI](#uso-da-cli)
+- [Dashboard de demonstração](#dashboard-de-demonstração)
+- [Configuração](#configuração)
+- [Integrações](#integrações)
+- [Extensão Rust (opcional)](#extensão-rust-opcional)
+- [Testes e CI](#testes-e-ci)
+- [Estrutura do repositório](#estrutura-do-repositório)
+- [Referências acadêmicas](#referências-acadêmicas)
+- [Limitações conhecidas](#limitações-conhecidas)
+- [Documentação adicional](#documentação-adicional)
+- [Licença](#licença)
 
-- Python 3.12+
-- Docker e Docker Compose v2 (para testes com infraestrutura local)
-- (Opcional) `ANTHROPIC_API_KEY` para modo LLM
+---
 
-### 1. Clonar e instalar
+## Principais recursos
+
+- **Orquestração por máquina de estados** (`IDLE → DETECTING → DIAGNOSING → MITIGATING → VERIFYING → RESOLVED`), com rollback.
+- **Diagnóstico ReAct com Claude**: o agente consulta logs, métricas, traces e a base de conhecimento de forma iterativa.
+- **Modo heurístico** (`--no-llm`): executa o pipeline completo sem chamadas ao LLM e sem custo.
+- **Pré-processamento de telemetria**: Drain3 para logs, detecção 3-sigma para métricas e filtragem p95 para traces.
+- **Compressão de contexto** por prioridade, dentro de um orçamento de tokens.
+- **RAG** com FAISS e `sentence-transformers` (`all-MiniLM-L6-v2`, 384 dimensões) sobre incidentes históricos.
+- **Camadas de segurança**: sanitização contra payloads adversariais, cálculo de *blast radius*, checagem de versão/CVE e *Transactional No-Regression* (TNR).
+- **Detecção preditiva**: score de risco e ETA de degradação antes do incidente.
+- **Interfaces**: CLI, dashboard web em tempo real (WebSocket), servidor MCP (stdio/SSE), API A2A e normalizadores de webhook (Grafana, PagerDuty, Databricks).
+- **Notificações** progressivas no Slack (Block Kit) e criação opcional de issues no Jira.
+- **Aceleração opcional em Rust** (PyO3) para os estágios críticos, com fallback automático para Python.
+
+---
+
+## Arquitetura
+
+### Fluxo do pipeline
+
+```
+ Alerta / dados de observabilidade (simulados ou Databricks)
+        │
+        ▼
+ TelemetrySanitizer ─── bloqueia payloads adversariais (reward hacking)
+        │
+        ▼
+ Aggregator ─────────── Drain3 (logs) · 3-sigma (métricas) · p95 (traces)
+        │
+        ▼
+ ContextCompressor ──── compressão por prioridade dentro do orçamento de tokens
+        │
+        ▼
+ RAG Retriever ──────── FAISS + sentence-transformers (384d)
+        │
+        ▼
+ Orchestrator (máquina de estados)
+   IDLE → DETECTING → DIAGNOSING → MITIGATING → VERIFYING → RESOLVED
+        ├─ Diagnoser ──────── loop ReAct com Claude (logs, métricas, traces, busca)
+        ├─ PreValidator ───── blast radius e score de risco
+        ├─ VersionValidator ─ checagem de versão e CVE
+        └─ TNR ────────────── rollback se a saúde do serviço piorar
+        │
+        ▼
+ Postmortem (Markdown/JSON) · Slack · Jira
+```
+
+O projeto oferece dois motores de execução:
+
+| Motor | Ativação | Descrição |
+|-------|----------|-----------|
+| V0 (sequencial) | padrão | Pipeline sequencial em `main.py` |
+| V1 (Blueprint Engine) | `--pipeline-v1` ou `--data-source databricks` | Orquestração como grafo tipado (`blueprint/`) |
+
+### Camadas
+
+O código segue uma arquitetura em camadas (portas e adaptadores). As decisões estão registradas em [`docs/adr/`](docs/adr/).
+
+| Camada | Diretório | Responsabilidade |
+|--------|-----------|------------------|
+| Domínio | `domain/` | Entidades imutáveis (`IncidentState`, `NormalizedAlert`, `MitigationAction`) sem dependências externas |
+| Aplicação | `application/ports/` | Portas (`LLMClient`, `IncidentStore`, `CredentialProvider`, `Reporter`) |
+| Adaptadores | `adapters/` | Implementações das portas (Anthropic, armazenamento em memória, credenciais via env, reporters) |
+| Interfaces | `interfaces/` | Pontos de entrada: HTTP, MCP e demo |
+| Composição | `app/builders.py` | Raiz de composição: monta e conecta as dependências |
+
+---
+
+## Início rápido
+
+### Pré-requisitos
+
+- Python 3.12 ou superior
+- (Opcional) `ANTHROPIC_API_KEY` para o modo LLM
+- (Opcional) Toolchain Rust estável para compilar a extensão nativa
+
+### Instalação
 
 ```bash
 git clone https://github.com/allanbrunobr/aiops-agent.git
 cd aiops-agent
 
-python -m venv .venv
+python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Configurar variaveis de ambiente
+### Configuração mínima
 
 ```bash
-cp env.example .env.local
+cp .env.example .env.local
+# Edite .env.local e defina ANTHROPIC_API_KEY (necessária apenas no modo LLM)
 ```
 
-Edite `.env.local` e preencha:
-
-```env
-# Para o pipeline principal (modo LLM)
-ANTHROPIC_API_KEY=sk-ant-...
-
-# Para o webhook server + notificacoes Slack
-GRAFANA_WEBHOOK_TOKEN=test-grafana-token-local
-SLACK_BOT_TOKEN=xoxb-seu-token-aqui
-SLACK_CHANNEL=#aiops-alerts
-```
-
-### 3. Executar o pipeline principal
+### Primeira execução
 
 ```bash
-# Pipeline completo com LLM (requer ANTHROPIC_API_KEY)
-python main.py
-
-# Modo heuristico — sem chamadas ao Claude, sem custos
+# Modo heurístico: sem chamadas ao LLM e sem custo
 python main.py --no-llm
 
-# Sem indexacao FAISS — startup mais rapido
-python main.py --no-rag
-
-# Output compacto
-python main.py --compact
+# Pipeline completo com Claude
+python main.py
 ```
 
-O `main.py` usa dados simulados de `data/sample_incident.py` (cenario: payment-svc
-com connection pool exhaustion apos deploy ruim). Output via `rich` no terminal.
+O cenário padrão (`payment-pool-exhaustion`) simula o esgotamento do pool de conexões do `payment-svc` após um deploy defeituoso. O resultado é exibido no terminal com `rich`, e o postmortem é gravado em `output/`.
 
 ---
 
-## Demo UI — Dashboard Interativo
-
-O projeto inclui um dashboard web interativo com 4 cenários de simulação em tempo real.
-O backend (FastAPI + WebSocket) e o frontend (HTML/CSS/JS) são servidos pelo mesmo processo.
-
-### Iniciar
-
-> **Importante:** use o Python do virtualenv (`.venv`). O alias `python` do shell pode
-> apontar para o Python do sistema, que não tem as dependências instaladas (ex: `structlog`).
-> Se o servidor iniciar com `SlackNotifier init falhou`, o Slack não funcionará e o pipeline
-> pode apresentar comportamento incompleto (risk score não sobe, ticks param).
+## Uso da CLI
 
 ```bash
-# 1. Ativar o virtualenv
+python main.py [opções]
+```
+
+| Opção | Descrição | Padrão |
+|-------|-----------|--------|
+| `--no-llm` | Modo heurístico, sem chamadas ao Claude | desativado |
+| `--no-rag` | Não indexa a base RAG (inicialização mais rápida) | desativado |
+| `--rebuild-rag` | Reconstrói o índice RAG e ignora o cache | desativado |
+| `--compact` | Saída compacta no terminal | desativado |
+| `--scenario NAME` | `payment-pool-exhaustion`, `memory-leak` ou `unknown-fault` | `payment-pool-exhaustion` |
+| `--data-source SOURCE` | `simulated` ou `databricks` | `simulated` |
+| `--pipeline-v1` | Usa o Blueprint Engine (V1) | desativado |
+| `--config FILE` | Arquivo YAML com limiares de análise | `config/defaults.yaml` |
+| `--output-dir DIR` | Diretório dos postmortems | `output/` |
+| `--output-format FORMAT` | `markdown`, `json` ou `both` | `markdown` |
+| `--tracker TRACKER` | Cria issue após o diagnóstico (`jira` ou `none`) | sem tracker |
+
+> `--data-source databricks` não pode ser combinado com `--scenario`.
+
+**Códigos de saída**
+
+| Código | Significado |
+|--------|-------------|
+| `0` | Incidente resolvido e verificado pelo TNR |
+| `1` | Erro irrecuperável em algum estágio |
+| `2` | Regressão detectada pelo TNR (saúde pós-ação pior que a pré-ação) |
+| `3` | Ação bloqueada pela camada de segurança (requer aprovação humana) |
+
+---
+
+## Dashboard de demonstração
+
+Dashboard web com simulação de incidentes em tempo real. Backend (FastAPI + WebSocket) e frontend estático são servidos pelo mesmo processo.
+
+```bash
 source .venv/bin/activate
-
-# 2. Iniciar backend + frontend — comando único
-python interfaces/demo/server.py
-
-# Alternativa sem ativar o venv:
-.venv/bin/python interfaces/demo/server.py
+python interfaces/demo/server.py            # porta padrão: 47891
+python interfaces/demo/server.py --port 8080
 ```
 
-Acesse no navegador:
+Acesse em **http://localhost:47891/demo/**.
 
-```
-http://localhost:47891/demo/
-```
+> Use o interpretador do virtualenv (`.venv/bin/python`). Se o Python do sistema for usado, dependências como `structlog` podem faltar. Nesse caso, o log exibe `SlackNotifier init falhou` e o pipeline da demo pode ficar incompleto.
 
-### Janela nativa (macOS) — opcional
+### Cenários
 
-Para abrir o dashboard numa janela nativa em vez do browser:
+| Cenário | Duração simulada | Comportamento |
+|---------|------------------|---------------|
+| Payment Pool Exhaustion | 32 min | `connection_pool_active` sobe de 5% a 86% em curva logística |
+| Pool Exhaustion + Recovery | 40 min | Esgotamento do pool; no minuto 25 o time de Ops aumenta `max_connections` e o sistema se recupera |
+| JVM Memory Leak | 60 min | `memory_used_mb` cresce linearmente de 2048 MB a 7987 MB |
+| Unknown Fault Mode | 40 min | Templates de log inéditos surgem no minuto 5; a latência dispara no minuto 10 |
 
-```bash
-.venv/bin/pip install pywebview        # primeira vez
-.venv/bin/python interfaces/demo/desktop_app.py
-```
+Cada tick de logs, métricas e traces é transmitido via WebSocket. Quando o score de risco ultrapassa o limiar, o agente executa o diagnóstico e propõe a correção.
 
-O launcher sobe `interfaces/demo/server.py` em subprocesso, espera `/demo/` responder e abre uma janela WebKit nativa. Ao fechar a janela, o servidor é encerrado.
+### Modo narrativo (`/demo/story`)
 
-> Distribuível como `.app` apenas se houver objetivo real de empacotamento — para uso local, o launcher Python já basta.
-
-### Os 4 cenários de teste
-
-| Cenário | Duração simulada | O que simula |
-|---------|-----------------|--------------|
-| **Payment Pool Exhaustion** | 32 min | `connection_pool_active` sobe de 5% a 86% com curva logística |
-| **Pool Exhaustion + Recovery** | 40 min | Esgotamento + Ops aumenta `max_connections` no minuto 25, sistema recupera |
-| **JVM Memory Leak** | 60 min | `memory_used_mb` cresce linearmente de 2048MB a 7987MB |
-| **Unknown Fault Mode** | 40 min | Templates de log nunca vistos aparecem no minuto 5, latência spika no minuto 10 |
-
-### Como funciona
-
-1. A página exibe os 4 cenários como cards
-2. Clique **Start** em um cenário
-3. O `ScenarioEngine` começa a gerar ticks com logs, métricas e traces simulados
-4. Via **WebSocket**, cada tick é enviado ao dashboard em tempo real
-5. O dashboard mostra gráficos de métricas, logs chegando, risk score subindo e a análise do agente
-6. Quando o risk score ultrapassa o limiar, o agente diagnostica e propõe correção
-
-### Camada de storytelling — `/demo/story` (opcional)
-
-Página alternativa que consome o mesmo WebSocket do dashboard mas sobrepõe
-narrativa em PT-BR sobre o pipeline técnico. Útil para apresentações: cada
-fase (`PLAYING → DEGRADING → WARNING → ALERT → INCIDENT → RESOLVED`) recebe
-texto de contexto, mensagem Slack mockada inline, impacto financeiro projetado
-e timeline visual com cursor animado.
+Página voltada a apresentações. Ela consome o mesmo WebSocket e sobrepõe uma narrativa em português a cada fase (`PLAYING → DEGRADING → WARNING → ALERT → INCIDENT → RESOLVED`), com mensagem Slack simulada, impacto financeiro projetado e linha do tempo animada.
 
 ```
 http://localhost:47891/demo/story?scenario=payment-pool-exhaustion
 http://localhost:47891/demo/story?scenario=payment-pool-recovery
 ```
 
-Apenas os cenários acima têm narrativa autorada — os outros caem em modo
-degradado (mantém os 4 painéis técnicos sem o overlay narrativo). O JSON
-da narrativa é exposto em `GET /demo/api/narrative/{scenario}`.
+Apenas esses dois cenários têm narrativa. Os demais exibem somente os painéis técnicos. O conteúdo narrativo está disponível em `GET /demo/api/narrative/{scenario}`.
 
-### Com notificações Slack (opcional)
-
-Se `SLACK_BOT_TOKEN` e `SLACK_CHANNEL` estiverem configurados no `.env.local`,
-a demo envia notificações ao Slack simultaneamente com o dashboard:
-
-- **prediction.warning** — degradação detectada com ETA
-- **prediction.critical** — incidente iminente
-- **diagnosis.completed** — root cause + correção proposta
-- **incident.resolved** — sistema recuperado
+### Janela nativa (macOS, opcional)
 
 ```bash
-# .env.local
-SLACK_BOT_TOKEN=xoxb-seu-token
-SLACK_CHANNEL=#aiops-alerts
-
-python interfaces/demo/server.py
+.venv/bin/pip install pywebview
+.venv/bin/python interfaces/demo/desktop_app.py
 ```
 
-### Com diagnóstico via LLM (opcional)
+O launcher inicia o servidor em um subprocesso, aguarda `/demo/` responder e abre uma janela WebKit. O servidor é encerrado quando a janela é fechada.
 
-Por padrão a demo usa heurística (sem custo). Para usar Claude:
+### Recursos opcionais da demo
+
+- **Diagnóstico via LLM**: defina `ANTHROPIC_API_KEY` em `.env.local`. Sem a chave, a demo usa heurísticas.
+- **Notificações Slack**: defina `SLACK_BOT_TOKEN` e `SLACK_CHANNEL`. A demo publica os eventos `prediction.warning`, `prediction.critical`, `diagnosis.completed` e `incident.resolved`.
+
+---
+
+## Configuração
+
+### Variáveis de ambiente
+
+A CLI e a demo carregam `.env.local` automaticamente. A CLI também lê `.env`. Os modelos estão em [`.env.example`](.env.example) e [`env.example`](env.example).
+
+| Variável | Uso | Obrigatória |
+|----------|-----|-------------|
+| `ANTHROPIC_API_KEY` | Diagnóstico via Claude | Apenas no modo LLM |
+| `AIOPS_LLM_MODEL` | Modelo Claude (padrão: `claude-sonnet-4-20250514`) | Não |
+| `SLACK_BOT_TOKEN` / `SLACK_CHANNEL` | Notificações Slack | Não |
+| `GRAFANA_WEBHOOK_TOKEN` | Autenticação do webhook Grafana | Não |
+| `DATABRICKS_HOST` / `DATABRICKS_TOKEN` / `DATABRICKS_WAREHOUSE_ID` | `--data-source databricks` | Apenas com Databricks |
+| `JIRA_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` / `JIRA_PROJECT_KEY` | `--tracker jira` | Apenas com Jira |
+
+> Nunca versione arquivos `.env*` com credenciais reais. O `.gitignore` já exclui esses arquivos.
+
+### Arquivos de configuração
+
+- [`config/defaults.yaml`](config/defaults.yaml): limiares de análise, Blueprint Engine, webhook, Slack e MCP. Valores podem ser sobrescritos por variáveis com prefixo `AIOPS__` (por exemplo, `AIOPS__MCP__OAUTH__JWT_SECRET`).
+- [`config.yaml`](config.yaml): mapa de criticidade por serviço, usado no cálculo de *blast radius*.
+
+---
+
+## Integrações
+
+| Integração | Local | Observações |
+|------------|-------|-------------|
+| Slack | `interfaces/http/notifications/slack.py` | Block Kit progressivo, retry exponencial e fallback local em `output/`. Guia: [`infra/SLACK-SETUP.md`](infra/SLACK-SETUP.md) |
+| Jira | `tools/jira_tracker.py` | Ativada com `--tracker jira` |
+| Databricks | `tools/databricks_connector.py` | Fonte de dados real via `--data-source databricks` |
+| MCP | `interfaces/mcp/` | Ferramentas `diagnose_incident`, `validate_action` e `search_incidents`. Transportes stdio e SSE, com rate limiting e OAuth 2.1 |
+| A2A | `interfaces/http/routes/a2a.py` | API agent-to-agent montada pela aplicação HTTP |
+| Webhooks | `interfaces/http/webhook/` | Normalizadores para Grafana, PagerDuty e Databricks, com deduplicação |
+
+Servidor MCP via stdio (Claude Desktop e uso local):
 
 ```bash
-# .env.local
-ANTHROPIC_API_KEY=sk-ant-...
-
-python interfaces/demo/server.py
-```
-
-### Porta customizada
-
-```bash
-python interfaces/demo/server.py --port 8080
+python -m interfaces.mcp.server
 ```
 
 ---
 
-## Teste End-to-End com Infraestrutura Local
+## Extensão Rust (opcional)
 
-Alem do `main.py`, o projeto inclui uma infraestrutura Docker completa em `infra/`
-que simula o ciclo real: **metricas → Prometheus → Grafana → webhook → pipeline → Slack**.
-
-### Subir o ambiente
+Os estágios críticos de desempenho (`log_parser`, `metric_filter`, `trace_filter`, `context_compressor`, `telemetry_sanitizer`, `cusum_ewma`, `trace_predictor`) têm implementação em Rust exposta via PyO3 como o módulo `_aiops_rust`. Sem a extensão, o pipeline usa automaticamente as implementações em Python.
 
 ```bash
-# 1. Subir Grafana + Prometheus + Metrics Exporter + Slack Mock
-docker compose -f infra/docker-compose.yaml up -d --build
-
-# 2. Iniciar o webhook server do AIOps Agent
-python infra/run_webhook_server.py
-```
-
-### O que acontece
-
-O **Metrics Exporter** simula um incidente no `payment-svc` em ciclo automatico:
-
-| Tempo       | Fase        | Metricas                                  |
-|-------------|-------------|-------------------------------------------|
-| 0 — 2 min   | Normal      | error_rate ~1%, pool ~30%, latency ~45ms |
-| 2 — 2.5 min | Degradacao  | metricas sobem gradualmente              |
-| 2.5 — 5 min | Incidente   | error_rate 38%, pool 100%, latency 950ms |
-| 5+ min      | Recuperacao | retorno ao normal                         |
-
-O **Grafana** avalia 3 regras de alerta provisionadas automaticamente:
-- High Error Rate > 10% → critical
-- Connection Pool > 80% → critical
-- Latency P95 > 500ms → warning
-
-Quando dispara, envia **webhook POST** para o AIOps Agent, que normaliza,
-deduplica e processa. O **SlackNotifier** envia notificacao Block Kit progressiva
-no canal `#aiops-alerts` com diagnostico, evidencias e proposta de fix.
-
-### Testes manuais
-
-```bash
-# Simular webhook do Grafana (sem esperar ciclo)
-bash infra/test-webhook.sh
-
-# Forcar incidente imediato no exporter
-curl -X POST http://localhost:9101/trigger-incident
-
-# Teste completo do Slack (13 chamadas: post + 11 updates + final)
-python infra/test_slack_notification.py
-```
-
-### Servicos Docker
-
-| Servico          | URL                          | Funcao                         |
-|------------------|------------------------------|--------------------------------|
-| Prometheus       | http://localhost:9090         | Armazena metricas              |
-| Grafana          | http://localhost:3001         | Dashboard + alertas (admin/aiops123) |
-| Metrics Exporter | http://localhost:9101/metrics | Simula payment-svc             |
-| Slack Mock       | http://localhost:8003         | Mock da API Slack (opcional)   |
-
-> **Documentacao completa da infraestrutura:** [`infra/README.md`](infra/README.md)
-
-### Parar tudo
-
-```bash
-docker compose -f infra/docker-compose.yaml down -v
+scripts/build_rust.sh            # build de desenvolvimento no .venv
+scripts/build_rust.sh --release  # build otimizado (necessário para benchmarks)
+cargo test --manifest-path rust/Cargo.toml
 ```
 
 ---
 
-## Configurar Slack (workspace gratuito)
+## Testes e CI
 
-Para receber notificacoes reais no Slack:
+```bash
+python -m pytest tests/                                # suíte completa
+python -m pytest tests/ -m unit                        # unitários (sem ML, sem API)
+python -m pytest tests/ -m "integration or snapshot"   # integração e snapshot
+```
 
-1. Crie um workspace gratuito em https://slack.com/get-started#/createnew
-2. Crie o canal `#aiops-alerts`
-3. Crie um Slack App em https://api.slack.com/apps (**From scratch**)
-4. Em **OAuth & Permissions**, adicione scopes: `chat:write`, `chat:write.public`
-5. **Install to Workspace** e copie o **Bot User OAuth Token** (`xoxb-...`)
-6. Cole o token no `SLACK_BOT_TOKEN` em `.env.local`
+Marcadores disponíveis: `unit`, `integration`, `snapshot` e `slow`, definidos em `pyproject.toml`.
 
-Guia detalhado: [`infra/SLACK-SETUP.md`](infra/SLACK-SETUP.md)
+O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) executa três jobs em paralelo, sem chaves de API nem download de modelos:
+
+1. **Unit Tests**: dependências mínimas.
+2. **Integration & Snapshot Tests**: dependências completas.
+3. **Rust Build & PyO3 Extension**: `cargo test`, build da extensão e suíte completa.
+
+Para reproduzir o CI localmente:
+
+```bash
+scripts/ci-local.sh              # todos os jobs
+scripts/ci-local.sh unit         # apenas um job: unit | integration | rust
+```
 
 ---
 
-## Arquitetura do Projeto
+## Estrutura do repositório
 
 ```
 aiops-agent/
-├── main.py                 # Ponto de entrada do pipeline principal
-├── env.example             # Template de variaveis de ambiente
-│
-├── agents/                 # Agentes IA (orchestrator, diagnoser, detector, mitigator)
-├── blueprint/              # Blueprint Engine — orquestracao como typed graph
-├── pipeline/               # Estagios de processamento (sanitizer, aggregator, compressor)
-├── rag/                    # Knowledge base com FAISS + sentence-transformers
-├── safety/                 # Camadas de seguranca (pre_validator, tnr, version_validator)
-│
-├── server/                 # FastAPI webhook server
-│   ├── webhook/            # Router, normalizers (Grafana/PagerDuty/Databricks), dedup
-│   └── notifications/      # SlackNotifier (Block Kit), fallback local
-│
-├── mcp_server/             # MCP server para agentes IA externos
-├── core/                   # Protocolos e modelos compartilhados
-├── config/                 # Configuracao YAML + loader
-├── data/                   # Dados simulados do incidente
-├── tools/                  # Interfaces abstratas (MetricsSource, LogSource)
-│
-├── infra/                  # Infraestrutura local de teste (Docker)
-│   ├── docker-compose.yaml # Prometheus + Grafana + Exporter + Slack Mock
-│   ├── grafana/            # Provisioning completo (alertas, dashboard, datasource)
-│   ├── metrics-exporter/   # Simulador de metricas do payment-svc
-│   ├── slack-mock/         # Mock server da API Slack
-│   └── README.md           # Guia completo da infraestrutura
-│
-├── tests/                  # Suite de testes (unit + integration)
-├── docs/                   # Documentacao tecnica e apresentacao
-└── output/                 # Postmortems gerados e fallbacks
+├── main.py              # CLI e orquestração do pipeline
+├── agents/              # Orchestrator, Diagnoser, Detector, Mitigator, skill router/evolver, cliente A2A
+├── pipeline/            # Sanitizer, parsers, filtros, aggregator, compressor, preditores e risk scoring
+├── rag/                 # Indexação FAISS, retrievers, reranker, expansão de consulta e memória
+├── safety/              # PreValidator, TNR, VersionValidator e auditoria
+├── blueprint/           # Blueprint Engine (pipeline como grafo tipado)
+├── domain/              # Entidades de domínio imutáveis
+├── application/ports/   # Portas da camada de aplicação
+├── adapters/            # Implementações das portas (LLM, persistência, credenciais, reporters)
+├── app/                 # Raiz de composição
+├── interfaces/
+│   ├── demo/            # Dashboard web (FastAPI + WebSocket) e modo narrativo
+│   ├── http/            # App FastAPI: health, webhooks, notificações, A2A, admin
+│   └── mcp/             # Servidor MCP (stdio/SSE) e rate limiter
+├── auth/                # OAuth 2.1, PKCE, validação JWT/OIDC
+├── core/                # Logging, ciclo de vida e protocolos compartilhados
+├── config/              # Configuração YAML e loader (pydantic-settings)
+├── data/                # Cenários simulados, modelos, base de conhecimento e golden sets
+├── tools/               # Conectores (Databricks, Jira, Slack, FAISS)
+├── validation/          # Runner e cenários de validação (RAG, knowledge)
+├── rust/                # Extensão nativa `_aiops_rust` (PyO3)
+├── infra/               # Ambiente Docker (Prometheus, Grafana) para testes locais
+├── scripts/             # Build Rust, CI local e gerador de cenários
+├── tests/               # Testes unitários, de integração e snapshot
+└── docs/                # Arquitetura, ADRs, guias, artigos e apresentações
 ```
 
----
-
-## Modulos Principais
-
-| Modulo | Descricao | Paper base |
-|--------|-----------|------------|
-| `agents/orchestrator.py` | Maquina de estados STRATUS (IDLE → RESOLVED) com rollback | STRATUS |
-| `agents/diagnoser.py` | Loop ReAct com Claude — tools: logs, metrics, traces, search | OpsAgent |
-| `pipeline/telemetry_sanitizer.py` | Detecta payloads adversariais (reward-hacking) | AIOpsShield |
-| `pipeline/aggregator.py` | Drain3 (logs) + 3-sigma (metricas) + p95 (traces) | RCACopilot |
-| `pipeline/context_compressor.py` | Compressao por prioridade dentro do token budget | Acon² + AOI |
-| `rag/indexer.py` | FAISS IndexFlatIP com all-MiniLM-L6-v2 (384d) | TAMO |
-| `safety/pre_validator.py` | Blast radius scoring + blocked commands | AIOpsShield |
-| `safety/tnr.py` | Transactional No-Regression — rollback se health cair | STRATUS |
-| `safety/version_validator.py` | CVE/version checks nas remediacoes propostas | AIOpsShield |
-| `server/webhook/router.py` | Pipeline de 8 estagios: size → parse → source → auth → norm → dedup → queue → accept | — |
-| `server/notifications/slack.py` | Block Kit progressivo com retry exponencial e fallback | — |
+Para criar um novo cenário de incidente, use `scripts/new_scenario.py` e o modelo em [`docs/contributing/scenario-template.md`](docs/contributing/scenario-template.md).
 
 ---
 
-## Testes
+## Referências acadêmicas
 
-```bash
-# Todos os testes
-python -m pytest tests/ -v
+| Técnica | Artigo | Aplicação no projeto |
+|---------|--------|----------------------|
+| Orquestração por máquina de estados com rollback | STRATUS (NeurIPS 2025) | `agents/orchestrator.py`, `safety/tnr.py` |
+| Diagnóstico iterativo ReAct com ferramentas | OpsAgent (2025) | `agents/diagnoser.py` |
+| Correlação multissinal (logs, métricas, traces) | RCACopilot (Microsoft, 2024) | `pipeline/aggregator.py` |
+| Compressão de contexto por prioridade | Acon (2025) | `pipeline/context_compressor.py` |
+| Alocação de orçamento de tokens para observabilidade | AOI (2025) | `pipeline/context_compressor.py` |
+| RAG assistido por ferramentas para RCA | TAMO (2025) | `rag/` |
+| Defesa contra telemetria adversarial (AIOpsShield) | When AIOps Become "AI Oops" (2025) | `pipeline/telemetry_sanitizer.py`, `safety/` |
 
-# Apenas unitarios
-python -m pytest tests/ -v -m unit
-
-# Integracao (webhook → Slack)
-python -m pytest tests/integration/ -v
-```
-
----
-
-## Papers Academicos
-
-Este projeto implementa tecnicas de 7 papers de AIOps (2024-2025):
-
-1. **STRATUS** — State machine para orquestracao de incidentes com rollback
-2. **OpsAgent** — Loop ReAct para diagnostico iterativo com ferramentas
-3. **RCACopilot** — Correlacao multi-sinal (logs + metricas + traces)
-4. **Acon²** — Compressao de contexto por prioridade
-5. **AOI** — Token budget allocation para observabilidade
-6. **TAMO** — RAG com embeddings para busca em incidentes historicos
-7. **AIOpsShield** — Deteccao de payloads adversariais e reward-hacking
+Os PDFs estão em [`docs/papers/`](docs/papers/).
 
 ---
 
-## Licenca
+## Limitações conhecidas
 
-Projeto academico / proof-of-concept.
+- **Ambiente Docker de ponta a ponta (`infra/`) está desatualizado.** Os scripts `infra/run_webhook_server.py`, `infra/metrics-exporter/exporter.py`, `infra/slack-mock/slack_mock_server.py` e `infra/test_slack_notification.py` foram removidos (commit `1dd8f34`). Por isso, as imagens `metrics-exporter` e `slack-mock` não são construídas. Além disso, o `webhook_router` não está montado em `interfaces/http/app.py`. As instruções em [`infra/README.md`](infra/README.md) refletem o estado anterior a essa remoção. Prometheus e Grafana continuam funcionando de forma isolada.
+- O projeto é uma **prova de conceito**. As ações de mitigação são propostas e validadas, mas não são executadas em infraestrutura real.
+
+---
+
+## Documentação adicional
+
+| Documento | Conteúdo |
+|-----------|----------|
+| [`docs/index.md`](docs/index.md) | Índice geral da documentação |
+| [`docs/architecture.md`](docs/architecture.md) | Decisões de arquitetura, máquina de estados e camadas de segurança |
+| [`docs/development-guide.md`](docs/development-guide.md) | Ambiente de desenvolvimento e convenções |
+| [`docs/adr/`](docs/adr/) | Architecture Decision Records |
+| [`docs/SECURITY-COMPLIANCE-GUIDE.md`](docs/SECURITY-COMPLIANCE-GUIDE.md) | Segurança e conformidade |
+| [`docs/SRE-INTEGRATION-GUIDE.md`](docs/SRE-INTEGRATION-GUIDE.md) | Integração com fluxos de SRE |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Guia de contribuição |
+
+---
+
+## Licença
+
+Distribuído sob a licença MIT. Consulte [`LICENSE`](LICENSE) para mais detalhes.
