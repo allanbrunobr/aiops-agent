@@ -34,7 +34,7 @@ aiohttp>=3.9.0
 mcp>=1.0.0,<2.0.0
 
 # Rust build
-maturin>=1.7,<2.0
+maturin>=1.15.0,<2.0
 
 # Testing
 pytest>=9.1.1
