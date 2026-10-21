@@ -125,7 +125,7 @@ class TestSSETransport:
         app = FastAPI()
         mount_sse(app)
 
-        routes = {route.path for route in app.routes}  # type: ignore
+        routes = {getattr(route, "path", None) for route in app.routes}
         assert "/mcp/sse" in routes
         assert "/mcp/messages" in routes
 
@@ -182,7 +182,7 @@ class TestSSETransport:
         mount_sse(app, config=FakeConfig())
 
         # Verifica que a rota existe com auth_method=none configurado
-        routes = {route.path for route in app.routes}  # type: ignore
+        routes = {getattr(route, "path", None) for route in app.routes}
         assert "/mcp/sse" in routes
         # auth_method=none: sem client-id ainda aceito — verificado via lógica da rota
 
@@ -221,5 +221,5 @@ class TestServerApp:
         assert cfg.mcp.enabled is False
 
         app = create_app(config=cfg)
-        routes = {route.path for route in app.routes}  # type: ignore
+        routes = {getattr(route, "path", None) for route in app.routes}
         assert "/mcp/sse" not in routes

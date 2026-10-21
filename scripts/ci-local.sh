@@ -43,7 +43,7 @@ UNIT_DEPS=(
   "requests>=2.28.0"
   "slack-sdk>=3.27.0"
   "aiohttp>=3.9.0"
-  "mcp>=1.0.0"
+  "mcp>=1.0.0,<2.0.0"
 )
 
 require() {
