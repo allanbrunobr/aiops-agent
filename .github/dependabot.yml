@@ -9,6 +9,12 @@ updates:
       # mcp 2.x removed Server.list_tools; requires a migration first.
       - dependency-name: mcp
         versions: [">=2.0.0"]
+      # The ML stack is pinned together (numpy<2, torch<2.5, transformers<5,
+      # sentence-transformers<4) and must be upgraded as one coordinated change.
+      - dependency-name: torch
+      - dependency-name: transformers
+      - dependency-name: sentence-transformers
+      - dependency-name: numpy
 
   - package-ecosystem: cargo
     directory: /rust
