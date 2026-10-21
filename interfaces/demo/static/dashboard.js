@@ -84,10 +84,13 @@ function initCharts() {
   // uPlot — CPU
   cpuChart = new uPlot(buildLineOpts("cpu-chart", ["CPU %"]), [[], []], document.getElementById("cpu-chart"));
   memChart = new uPlot(buildLineOpts("mem-chart", ["Memory %"]), [[], []], document.getElementById("mem-chart"));
-  latencyChart = new uPlot(
-    buildLineOpts("latency-chart", ["p95 ms", "p99 ms"], ["#ff780a", "#f2495c"]),
-    [[], [], []], document.getElementById("latency-chart")
-  );
+  // O cone de deriva (WM2) é desenhado no hook "draw" do uPlot, depois que o
+  // gráfico termina de renderizar os dados do frame.
+  const latencyOpts = buildLineOpts("latency-chart", ["p95 ms", "p99 ms"], ["#ff780a", "#f2495c"]);
+  latencyOpts.hooks = {
+    draw: [() => { try { drawLatencyCone(); } catch (e) { /* ignora erros de canvas */ } }],
+  };
+  latencyChart = new uPlot(latencyOpts, [[], [], []], document.getElementById("latency-chart"));
 }
 
 function initCompareCharts() {
@@ -312,8 +315,6 @@ function updateLineSeries(frame) {
   if (memChart)     memChart.setData([series.ts, series.mem]);
   if (latencyChart) latencyChart.setData([series.ts, series.lat95, series.lat99]);
 
-  // WM2: cone de deriva de latência (isolado para não quebrar o resto do frame)
-  try { drawLatencyCone(frame); } catch (e) { /* ignora erros de canvas */ }
 }
 
 function updateCompareLineSeries(frame, cpuC, latC, cpuBuf, latBuf) {
@@ -527,11 +528,12 @@ function checkWM2(frame) {
   } else {
     _coneData = null;
   }
-  // Força redraw do uPlot
-  if (latencyChart) latencyChart.redraw();
+  // O cone é desenhado pelo hook "draw" do gráfico no próximo setData().
+  // Não chamar redraw() aqui: ele roda antes do commit do setData() em lote
+  // e deixa a escala X sem valores, o que apaga as linhas do gráfico.
 }
 
-function drawLatencyCone(frame) {
+function drawLatencyCone() {
   // Cone é desenhado via uPlot draw hook — configurado no buildLineOpts
   // para simplicidade, desenhamos sobre o canvas via over element
   if (!latencyChart || !_coneData) return;
