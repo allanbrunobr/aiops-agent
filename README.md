@@ -12,6 +12,8 @@ O pipeline cobre o ciclo completo de um incidente: sanitização da telemetria, 
 
 A implementação é fundamentada em sete artigos acadêmicos de AIOps (2024–2025). Consulte [Referências acadêmicas](#referências-acadêmicas).
 
+![Dashboard de demonstração durante um incidente de esgotamento do pool de conexões](docs/screenshots/demo-dashboard.png)
+
 ---
 
 ## Sumário
@@ -25,6 +27,7 @@ A implementação é fundamentada em sete artigos acadêmicos de AIOps (2024–2
 - [Integrações](#integrações)
 - [Extensão Rust (opcional)](#extensão-rust-opcional)
 - [Testes e CI](#testes-e-ci)
+- [Ambiente local com Docker](#ambiente-local-com-docker)
 - [Estrutura do repositório](#estrutura-do-repositório)
 - [Referências acadêmicas](#referências-acadêmicas)
 - [Limitações conhecidas](#limitações-conhecidas)
@@ -120,6 +123,8 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+O `requirements.txt` inclui PyTorch, FAISS e `sentence-transformers`. Por isso, a primeira instalação baixa algumas centenas de MB.
+
 ### Configuração mínima
 
 ```bash
@@ -138,6 +143,9 @@ python main.py
 ```
 
 O cenário padrão (`payment-pool-exhaustion`) simula o esgotamento do pool de conexões do `payment-svc` após um deploy defeituoso. O resultado é exibido no terminal com `rich`, e o postmortem é gravado em `output/`.
+
+- Na primeira execução, o modelo de embeddings (`all-MiniLM-L6-v2`) é baixado do Hugging Face. Use `--no-rag` para pular essa etapa ou para rodar sem internet.
+- No cenário padrão, a CLI termina com **código de saída `3`**. Isso é esperado: a mitigação proposta tem risco médio e fica aguardando aprovação humana. Consulte [Códigos de saída](#uso-da-cli).
 
 ---
 
@@ -230,13 +238,14 @@ O launcher inicia o servidor em um subprocesso, aguarda `/demo/` responder e abr
 
 ### Variáveis de ambiente
 
-A CLI e a demo carregam `.env.local` automaticamente. A CLI também lê `.env`. Os modelos estão em [`.env.example`](.env.example) e [`env.example`](env.example).
+A CLI e a demo carregam `.env.local` automaticamente. A CLI também lê `.env`. Há dois modelos: [`.env.example`](.env.example), com as variáveis da CLI (Anthropic e Databricks), e [`env.example`](env.example), com as do ambiente local em `infra/` (webhook do Grafana e Slack).
 
 | Variável | Uso | Obrigatória |
 |----------|-----|-------------|
 | `ANTHROPIC_API_KEY` | Diagnóstico via Claude | Apenas no modo LLM |
 | `AIOPS_LLM_MODEL` | Modelo Claude (padrão: `claude-sonnet-4-20250514`) | Não |
 | `SLACK_BOT_TOKEN` / `SLACK_CHANNEL` | Notificações Slack | Não |
+| `SLACK_API_BASE_URL` | URL alternativa da API do Slack (por exemplo, o mock de `infra/`) | Não |
 | `GRAFANA_WEBHOOK_TOKEN` | Autenticação do webhook Grafana | Não |
 | `DATABRICKS_HOST` / `DATABRICKS_TOKEN` / `DATABRICKS_WAREHOUSE_ID` | `--data-source databricks` | Apenas com Databricks |
 | `JIRA_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` / `JIRA_PROJECT_KEY` | `--tracker jira` | Apenas com Jira |
@@ -291,6 +300,8 @@ python -m pytest tests/ -m "integration or snapshot"   # integração e snapshot
 
 Marcadores disponíveis: `unit`, `integration`, `snapshot` e `slow`, definidos em `pyproject.toml`.
 
+Os testes em `tests/rust/` exigem a [extensão Rust](#extensão-rust-opcional) compilada. Sem ela, rode `python -m pytest tests/ --ignore=tests/rust`. O benchmark de desempenho só passa com o build `--release`.
+
 O workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) executa três jobs em paralelo, sem chaves de API nem download de modelos:
 
 1. **Unit Tests**: dependências mínimas.
@@ -303,6 +314,28 @@ Para reproduzir o CI localmente:
 scripts/ci-local.sh              # todos os jobs
 scripts/ci-local.sh unit         # apenas um job: unit | integration | rust
 ```
+
+---
+
+## Ambiente local com Docker
+
+O diretório [`infra/`](infra/) sobe um ambiente de ponta a ponta para testar o recebimento de alertas: um exportador simula as métricas do `payment-svc`, o Prometheus as coleta, o Grafana avalia as regras de alerta e envia um webhook ao AIOps Agent. Um mock da API do Slack está incluído.
+
+```bash
+docker compose -f infra/docker-compose.yaml up -d --build   # Prometheus, Grafana, exporter e Slack mock
+GRAFANA_WEBHOOK_TOKEN=test-grafana-token-local python infra/run_webhook_server.py   # porta 47890
+bash infra/test-webhook.sh                                  # envia um alerta Grafana simulado
+```
+
+| Serviço | Endereço |
+|---------|----------|
+| Grafana | http://localhost:3001 (`admin` / `aiops123`) |
+| Prometheus | http://localhost:9090 |
+| Metrics exporter | http://localhost:9101/metrics |
+| Slack mock | http://localhost:47892/_mock/messages |
+| Webhook server | http://localhost:47890/health |
+
+Para enviar as notificações ao mock em vez do Slack real, defina `SLACK_API_BASE_URL=http://localhost:47892/api/` e `SLACK_BOT_TOKEN=xoxb-mock-token`. O passo a passo completo está em [`infra/README.md`](infra/README.md).
 
 ---
 
@@ -359,7 +392,7 @@ Os PDFs estão em [`docs/papers/`](docs/papers/).
 
 ## Limitações conhecidas
 
-- **Ambiente Docker de ponta a ponta (`infra/`) está desatualizado.** Os scripts `infra/run_webhook_server.py`, `infra/metrics-exporter/exporter.py`, `infra/slack-mock/slack_mock_server.py` e `infra/test_slack_notification.py` foram removidos (commit `1dd8f34`). Por isso, as imagens `metrics-exporter` e `slack-mock` não são construídas. Além disso, o `webhook_router` não está montado em `interfaces/http/app.py`. As instruções em [`infra/README.md`](infra/README.md) refletem o estado anterior a essa remoção. Prometheus e Grafana continuam funcionando de forma isolada.
+- **O pipeline acionado por webhook ainda é um stub.** O servidor `infra/run_webhook_server.py` recebe, normaliza, deduplica e enfileira os alertas, mas o `PipelineRunner` apenas registra `pipeline.stub_executed`. O diagnóstico completo roda pela CLI (`main.py`), pela demo e pelas interfaces MCP e A2A.
 - O projeto é uma **prova de conceito**. As ações de mitigação são propostas e validadas, mas não são executadas em infraestrutura real.
 
 ---
@@ -372,6 +405,8 @@ Os PDFs estão em [`docs/papers/`](docs/papers/).
 | [`docs/architecture.md`](docs/architecture.md) | Decisões de arquitetura, máquina de estados e camadas de segurança |
 | [`docs/development-guide.md`](docs/development-guide.md) | Ambiente de desenvolvimento e convenções |
 | [`docs/adr/`](docs/adr/) | Architecture Decision Records |
+| [`infra/README.md`](infra/README.md) | Ambiente local com Docker (Grafana, Prometheus, Slack mock) |
+| [`infra/SLACK-SETUP.md`](infra/SLACK-SETUP.md) | Configuração de um Slack App real |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Guia de contribuição |
 
 ---
