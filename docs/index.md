@@ -33,21 +33,8 @@
 
 ## Existing Documentation
 
-### Architecture & Design
-
-- [Full Architecture Document](../ARCHITECTURE%20-%20AIOPS-AGENT.md) — 78KB academic design document (14 sections, 7 papers)
-- [Platform Integration Architecture](./PLATFORM-INTEGRATION-ARCHITECTURE.md) — Future platform integration design
-
-### Operations & Security
-
-- [SRE Integration Guide](./SRE-INTEGRATION-GUIDE.md) — SRE workflow integration
-- [Security & Compliance Guide](./SECURITY-COMPLIANCE-GUIDE.md) — Security architecture and compliance
-- [API Contracts (Observability)](./API-CONTRACTS-OBSERVABILITY.md) — Future observability platform API contracts
-
-### AI Agent Context
-
-- [Project Context (AI Rules)](./../_bmad-output/project-context.md) — 81 implementation rules for AI agents
-- [CLAUDE.md](../CLAUDE.md) — Claude Code agent guidance
+- [Architecture Decision Records](./adr/) — ADRs for domain contracts, LLM client boundary and domain purity
+- [Local Testing Setup](./LOCAL_TESTING_SETUP.md) — Local environment for end-to-end testing
 
 ### Reference Papers
 

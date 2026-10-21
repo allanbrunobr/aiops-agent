@@ -158,11 +158,3 @@ pytest tests/ -v -m integration
 - DiagnosisAgent tools must return **plain text strings**, not JSON objects
 - `_heuristic_diagnosis()` must return the same dict shape as LLM diagnosis
 
-## Documentation Tags
-
-The large documentation files in `docs/` use tags to indicate implementation status:
-
-- `[IMPLEMENTED]` — Code exists and is tested
-- `[NEXT SPRINT]` — Planned for the next development phase
-- `[NORTH STAR]` — Aspirational long-term vision
-- `[DEPRECATED]` — No longer relevant

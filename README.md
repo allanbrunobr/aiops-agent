@@ -334,7 +334,7 @@ aiops-agent/
 ├── infra/               # Ambiente Docker (Prometheus, Grafana) para testes locais
 ├── scripts/             # Build Rust, CI local e gerador de cenários
 ├── tests/               # Testes unitários, de integração e snapshot
-└── docs/                # Arquitetura, ADRs, guias, artigos e apresentações
+└── docs/                # Arquitetura, ADRs, guias e artigos de referência
 ```
 
 Para criar um novo cenário de incidente, use `scripts/new_scenario.py` e o modelo em [`docs/contributing/scenario-template.md`](docs/contributing/scenario-template.md).
@@ -372,8 +372,6 @@ Os PDFs estão em [`docs/papers/`](docs/papers/).
 | [`docs/architecture.md`](docs/architecture.md) | Decisões de arquitetura, máquina de estados e camadas de segurança |
 | [`docs/development-guide.md`](docs/development-guide.md) | Ambiente de desenvolvimento e convenções |
 | [`docs/adr/`](docs/adr/) | Architecture Decision Records |
-| [`docs/SECURITY-COMPLIANCE-GUIDE.md`](docs/SECURITY-COMPLIANCE-GUIDE.md) | Segurança e conformidade |
-| [`docs/SRE-INTEGRATION-GUIDE.md`](docs/SRE-INTEGRATION-GUIDE.md) | Integração com fluxos de SRE |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Guia de contribuição |
 
 ---

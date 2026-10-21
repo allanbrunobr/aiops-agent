@@ -71,11 +71,6 @@ aiops-agent/
     ├── data-models.md                 # Dataclass catalog and data flow diagram
     ├── api-contracts-internal.md      # Internal API contracts and ReAct tools
     ├── project-scan-report.json       # Documentation workflow state
-    ├── API-CONTRACTS-OBSERVABILITY.md # Future observability platform contracts
-    ├── PLATFORM-INTEGRATION-ARCHITECTURE.md
-    ├── SECURITY-COMPLIANCE-GUIDE.md
-    ├── SRE-INTEGRATION-GUIDE.md
-    ├── APRESENTACAO-SRE-AIOPS-AGENT.html/pdf
     └── papers/                        # 7 reference papers (STRATUS, Acon, AOI, etc.)
 ```
 
