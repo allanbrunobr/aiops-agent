@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Any, Callable, Awaitable
 
 import structlog
@@ -72,7 +73,9 @@ class SlackNotifier:
                 log.warning("slack.no_token", key=token_key)
                 self._client = None
             else:
-                self._client = AsyncWebClient(token=token)
+                # SLACK_API_BASE_URL permite apontar para o mock local (infra/slack-mock).
+                base_url = os.environ.get("SLACK_API_BASE_URL") or AsyncWebClient.BASE_URL
+                self._client = AsyncWebClient(token=token, base_url=base_url)
 
     async def on_event(self, event: LifecycleEvent) -> None:
         """Recebe eventos do pipeline e atualiza Slack. Nunca lanca excecoes."""

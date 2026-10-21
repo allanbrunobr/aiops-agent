@@ -18,14 +18,14 @@ Metrics Exporter  ──scrape 15s──>  Prometheus  ──query──>  Grafa
                                                         webhook POST (Bearer)
                                                                   │
                                                                   v
-                                                          AIOps Agent (:8000)
+                                                          AIOps Agent (:47890)
                                                           FastAPI webhook server
                                                                   │
                                                         normalize → dedup → pipeline
                                                                   │
                                                                   v
                                                            Slack (:cloud: real)
-                                                           ou Slack Mock (:8003)
+                                                           ou Slack Mock (:47892)
                                                         Block Kit progressivo
 ```
 
@@ -88,7 +88,7 @@ Verifique se tudo subiu:
 | Prometheus       | http://localhost:9090             | Armazena metricas do exporter     |
 | Grafana          | http://localhost:3001             | Dashboard + alertas (admin/aiops123) |
 | Metrics Exporter | http://localhost:9101/metrics     | Simula metricas do payment-svc    |
-| Slack Mock       | http://localhost:8003/_mock/health| Mock da API Slack (opcional)      |
+| Slack Mock       | http://localhost:47892/_mock/health| Mock da API Slack (opcional)      |
 
 ### Passo 3: Iniciar o webhook server do AIOps Agent
 
@@ -105,9 +105,9 @@ Saida esperada:
 ============================================================
 AIOps Agent — Webhook Server
 ============================================================
-  Listening:    http://0.0.0.0:8000
-  Health:       http://localhost:8000/health
-  Webhook:      POST http://localhost:8000/webhook
+  Listening:    http://0.0.0.0:47890
+  Health:       http://localhost:47890/health
+  Webhook:      POST http://localhost:47890/webhook
   .env.local:   loaded
   GRAFANA_TOKEN: set
   SLACK_TOKEN:   set
@@ -124,14 +124,18 @@ AIOps Agent — Webhook Server
 | 5+ min      | Recuperacao | Metricas voltam ao normal                           |
 
 Quando o Grafana detectar as anomalias (apos ~2.5min), ele dispara webhook
-automaticamente para `http://host.docker.internal:8000/webhook`. Voce vera nos
+automaticamente para `http://host.docker.internal:47890/webhook`. Voce vera nos
 logs do webhook server:
 
 ```
 webhook.accepted  alert_severity=critical  alert_title=High Error Rate - payment-svc
 ```
 
-E no Slack, a notificacao Block Kit aparece no canal `#aiops-alerts`.
+> **Limitacao atual:** o `PipelineRunner` do webhook server ainda e um stub. O
+> alerta e normalizado, deduplicado e enfileirado, e o log mostra
+> `pipeline.stub_executed`, mas o diagnostico completo e a notificacao Slack nao
+> sao disparados a partir do webhook. Para validar o fluxo Slack Block Kit, use
+> a Opcao C (`infra/test_slack_notification.py`).
 
 ---
 
@@ -234,20 +238,20 @@ Se voce nao quiser criar um workspace Slack, o stack Docker ja inclui um
 servidor mock que simula a API do Slack:
 
 ```bash
-# O mock ja esta rodando em http://localhost:8003
+# O mock ja esta rodando em http://localhost:47892
 # Configure o SDK para apontar para ele:
-export SLACK_API_BASE_URL=http://localhost:8003/api/
+export SLACK_API_BASE_URL=http://localhost:47892/api/
 export SLACK_BOT_TOKEN=xoxb-mock-token
 ```
 
 Ver mensagens capturadas:
 ```bash
-curl http://localhost:8003/_mock/messages | python -m json.tool
+curl http://localhost:47892/_mock/messages | python -m json.tool
 ```
 
 Limpar mensagens:
 ```bash
-curl -X DELETE http://localhost:8003/_mock/messages
+curl -X DELETE http://localhost:47892/_mock/messages
 ```
 
 ---
@@ -268,7 +272,7 @@ infra/
 │   │   └── prometheus.yaml           ← registra Prometheus como datasource (uid: prometheus)
 │   ├── alerting/
 │   │   ├── alert-rules.yaml          ← 3 regras: error rate, pool exhaustion, latencia p95
-│   │   ├── contact-points.yaml       ← webhook → http://host.docker.internal:8000/webhook
+│   │   ├── contact-points.yaml       ← webhook → http://host.docker.internal:47890/webhook
 │   │   └── notification-policies.yaml← roteia todos os alertas para o webhook
 │   └── dashboards/
 │       ├── dashboard-provider.yaml   ← auto-provisiona dashboards do diretorio json/
@@ -321,7 +325,7 @@ Tudo e provisionado automaticamente no startup (sem configuracao manual):
   - High Error Rate > 10% por 30s → severity: critical
   - Connection Pool > 80% por 15s → severity: critical
   - Latency P95 > 500ms por 30s → severity: warning
-- **Contact Point:** Webhook POST para `http://host.docker.internal:8000/webhook` com `Authorization: Bearer test-grafana-token-local`
+- **Contact Point:** Webhook POST para `http://host.docker.internal:47890/webhook` com `Authorization: Bearer test-grafana-token-local`
 - **Notification Policy:** Roteia todos os alertas para o contact point webhook
 - **Dashboard:** 5 paineis (Error Rate, Connection Pool, Latency, CPU/Memory, Incident Phase)
 
@@ -381,7 +385,7 @@ channel ID da resposta do `chat.postMessage` e reutiliza nos updates.
 
 ### Portas em conflito
 
-Se as portas 9090, 3001, 9101 ou 8003 estiverem ocupadas:
+Se as portas 9090, 3001, 9101 ou 47892 estiverem ocupadas:
 
 ```bash
 # Descobrir o que esta usando a porta
@@ -398,7 +402,7 @@ para Linux. Se ainda nao funcionar:
 
 ```bash
 # Testar conectividade do container Grafana para o host
-docker exec aiops-grafana wget -qO- http://host.docker.internal:8000/health
+docker exec aiops-grafana wget -qO- http://host.docker.internal:47890/health
 ```
 
 ---

@@ -52,7 +52,7 @@ Prometheus (Docker)
     ↓ datasource
 Grafana (Docker) — detecta anomalia
     ↓ webhook POST (Bearer token)
-AIOps Agent (local :8000)
+AIOps Agent (local :47890)
     ↓ normaliza → pipeline → diagnostico
 Slack (cloud) — notificacao com Block Kit
 ```
