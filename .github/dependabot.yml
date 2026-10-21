@@ -3,8 +3,12 @@ updates:
   - package-ecosystem: pip
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 5
+    groups:
+      # One PR per run for routine updates; security updates still open their own PR.
+      pip-dependencies:
+        patterns: ["*"]
     ignore:
       # mcp 2.x removed Server.list_tools; requires a migration first.
       - dependency-name: mcp
@@ -19,10 +23,16 @@ updates:
   - package-ecosystem: cargo
     directory: /rust
     schedule:
-      interval: weekly
+      interval: monthly
     open-pull-requests-limit: 3
+    groups:
+      cargo-dependencies:
+        patterns: ["*"]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      github-actions:
+        patterns: ["*"]
