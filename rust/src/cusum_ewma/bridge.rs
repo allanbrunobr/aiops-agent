@@ -19,11 +19,11 @@ pub fn detect_cusum(
     values: Vec<f64>,
     k: f64,
     h: f64,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     // Libera GIL para computação CPU-bound
-    let result = py.allow_threads(|| cusum_detect(&values, k, h));
+    let result = py.detach(|| cusum_detect(&values, k, h));
 
-    let dict = PyDict::new_bound(py);
+    let dict = PyDict::new(py);
     dict.set_item("change_point_detected", result.change_point_detected)?;
     match result.change_index {
         Some(idx) => dict.set_item("change_index", idx)?,
@@ -42,11 +42,11 @@ pub fn compute_ewma_slope(
     py: Python<'_>,
     values: Vec<f64>,
     span: usize,
-) -> PyResult<PyObject> {
+) -> PyResult<Py<PyAny>> {
     // Libera GIL para computação CPU-bound
-    let result = py.allow_threads(|| ewma_slope(&values, span));
+    let result = py.detach(|| ewma_slope(&values, span));
 
-    let dict = PyDict::new_bound(py);
+    let dict = PyDict::new(py);
     dict.set_item("slope", result.slope)?;
     dict.set_item("eta_minutes", py.None())?;
 

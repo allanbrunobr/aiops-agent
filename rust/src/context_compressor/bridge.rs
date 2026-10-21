@@ -10,18 +10,18 @@ use super::types::{
 /// Função registrada como _aiops_rust.compress_context(report) -> (str, dict)
 ///
 /// Extrai campos do AggregatedReport Python enquanto mantém o GIL,
-/// depois chama py.allow_threads() para executar a compressão sem GIL,
+/// depois chama py.detach() para executar a compressão sem GIL,
 /// permitindo execução paralela de múltiplos incidentes.
 #[pyfunction]
-pub fn compress_context(py: Python<'_>, report: &Bound<'_, PyAny>) -> PyResult<PyObject> {
+pub fn compress_context(py: Python<'_>, report: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
     // Fase 1: extrai todos os campos enquanto o GIL está mantido
     let proxy = extract_report_proxy(report)?;
 
     // Fase 2: libera GIL — todo o trabalho CPU acontece aqui
-    let (text, stats) = py.allow_threads(|| compress_inner(proxy));
+    let (text, stats) = py.detach(|| compress_inner(proxy));
 
     // Fase 3: converte resultado para objetos Python
-    let dict = PyDict::new_bound(py);
+    let dict = PyDict::new(py);
     dict.set_item("original_tokens", stats.original_tokens)?;
     dict.set_item("compressed_tokens", stats.compressed_tokens)?;
     dict.set_item("chunks_kept", stats.chunks_kept)?;
@@ -29,8 +29,8 @@ pub fn compress_context(py: Python<'_>, report: &Bound<'_, PyAny>) -> PyResult<P
     dict.set_item("critical_preserved", stats.critical_preserved)?;
     dict.set_item("compression_ratio", stats.compression_ratio)?;
 
-    let tuple = pyo3::types::PyTuple::new_bound(py, [text.into_py(py), dict.into_py(py)]);
-    Ok(tuple.into())
+    let tuple = (text, dict).into_pyobject(py)?;
+    Ok(tuple.into_any().unbind())
 }
 
 /// Extrai AggregatedReport Python para AggregatedReportProxy Rust (com GIL mantido)
@@ -38,7 +38,7 @@ fn extract_report_proxy(report: &Bound<'_, PyAny>) -> PyResult<AggregatedReportP
     // Log templates
     let log_templates_py = report.getattr("log_templates")?;
     let mut log_templates: Vec<LogTemplateProxy> = Vec::new();
-    for item in log_templates_py.iter()? {
+    for item in log_templates_py.try_iter()? {
         let tpl = item?;
         let template: String = tpl.getattr("template")?.extract()?;
         let count: u64 = tpl.getattr("count")?.extract()?;
@@ -48,7 +48,7 @@ fn extract_report_proxy(report: &Bound<'_, PyAny>) -> PyResult<AggregatedReportP
         // services é um set Python — iteramos para obter Vec<String>
         let services_py = tpl.getattr("services")?;
         let mut services: Vec<String> = Vec::new();
-        for svc in services_py.iter()? {
+        for svc in services_py.try_iter()? {
             services.push(svc?.extract::<String>()?);
         }
 
@@ -64,7 +64,7 @@ fn extract_report_proxy(report: &Bound<'_, PyAny>) -> PyResult<AggregatedReportP
     // Metric anomalies
     let metric_anomalies_py = report.getattr("metric_anomalies")?;
     let mut metric_anomalies: Vec<MetricAnomalyProxy> = Vec::new();
-    for item in metric_anomalies_py.iter()? {
+    for item in metric_anomalies_py.try_iter()? {
         let a = item?;
         metric_anomalies.push(MetricAnomalyProxy {
             service: a.getattr("service")?.extract()?,
@@ -79,7 +79,7 @@ fn extract_report_proxy(report: &Bound<'_, PyAny>) -> PyResult<AggregatedReportP
     // Slow traces
     let slow_traces_py = report.getattr("slow_traces")?;
     let mut slow_traces: Vec<SlowTraceProxy> = Vec::new();
-    for item in slow_traces_py.iter()? {
+    for item in slow_traces_py.try_iter()? {
         let t = item?;
         let path: Vec<String> = t.getattr("path")?.extract()?;
         let total_duration_ms: f64 = t.getattr("total_duration_ms")?.extract()?;
@@ -88,7 +88,7 @@ fn extract_report_proxy(report: &Bound<'_, PyAny>) -> PyResult<AggregatedReportP
 
         // attributes é dict Python — preserva ordem de inserção
         let attrs_py = t.getattr("attributes")?;
-        let attrs_dict = attrs_py.downcast::<PyDict>()?;
+        let attrs_dict = attrs_py.cast::<PyDict>()?;
         let mut attributes: Vec<(String, String)> = Vec::new();
         for (k, v) in attrs_dict.iter() {
             let k_str = k.str()?.to_str()?.to_string();

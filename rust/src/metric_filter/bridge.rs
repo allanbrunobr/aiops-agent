@@ -20,7 +20,7 @@ pub fn filter_metrics(py: Python<'_>, metrics: &Bound<'_, PyList>) -> PyResult<P
     let points = extract_metric_points(py, metrics)?;
 
     // ── Fase 2: processar 3-sigma sem GIL ────────────────────────────────────
-    let anomalies = py.allow_threads(|| detect_anomalies(points, 3.0, 0.5));
+    let anomalies = py.detach(|| detect_anomalies(points, 3.0, 0.5));
 
     // ── Fase 3: construir dicts Python enquanto segura o GIL ─────────────────
     build_python_result(py, anomalies)
@@ -57,10 +57,10 @@ fn build_python_result(
     py: Python<'_>,
     anomalies: Vec<super::types::MetricAnomalyData>,
 ) -> PyResult<Py<PyList>> {
-    let result = PyList::empty_bound(py);
+    let result = PyList::empty(py);
 
     for a in anomalies {
-        let dict = PyDict::new_bound(py);
+        let dict = PyDict::new(py);
         dict.set_item("service", &a.service)?;
         dict.set_item("metric_name", &a.metric_name)?;
         dict.set_item("anomaly_type", &a.anomaly_type)?;

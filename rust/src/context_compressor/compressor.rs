@@ -259,7 +259,7 @@ fn enforce_budget(
     )
 }
 
-/// Ponto de entrada principal — chamado dentro de py.allow_threads().
+/// Ponto de entrada principal — chamado dentro de py.detach().
 /// Espelha ContextCompressor.compress() com parâmetros padrão.
 pub fn compress_inner(proxy: AggregatedReportProxy) -> (String, CompressionStatsProxy) {
     let chunks = classify_chunks(&proxy);

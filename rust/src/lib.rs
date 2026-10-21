@@ -12,8 +12,8 @@ mod trace_predictor;
 /// Detecta ponto de mudança CUSUM em série temporal.
 /// Fallback direto em lib.rs para garantir registro no módulo.
 #[pyfunction]
-fn detect_cusum(py: Python<'_>, values: Vec<f64>, k: f64, h: f64) -> PyResult<PyObject> {
-    let (detected, change_index) = py.allow_threads(|| {
+fn detect_cusum(py: Python<'_>, values: Vec<f64>, k: f64, h: f64) -> PyResult<Py<PyAny>> {
+    let (detected, change_index) = py.detach(|| {
         let mut s: f64 = 0.0;
         for (i, &x) in values.iter().enumerate() {
             s = (s + x - k).max(0.0);
@@ -23,7 +23,7 @@ fn detect_cusum(py: Python<'_>, values: Vec<f64>, k: f64, h: f64) -> PyResult<Py
         }
         (false, None)
     });
-    let dict = PyDict::new_bound(py);
+    let dict = PyDict::new(py);
     dict.set_item("change_point_detected", detected)?;
     dict.set_item("change_index", change_index.map(|i| i as i64))?;
     Ok(dict.into())
@@ -32,8 +32,8 @@ fn detect_cusum(py: Python<'_>, values: Vec<f64>, k: f64, h: f64) -> PyResult<Py
 /// Calcula slope EWMA de uma série temporal.
 /// Fallback direto em lib.rs para garantir registro no módulo.
 #[pyfunction]
-fn compute_ewma_slope(py: Python<'_>, values: Vec<f64>, span: usize) -> PyResult<PyObject> {
-    let slope = py.allow_threads(|| {
+fn compute_ewma_slope(py: Python<'_>, values: Vec<f64>, span: usize) -> PyResult<Py<PyAny>> {
+    let slope = py.detach(|| {
         if values.len() < 2 { return 0.0; }
         let alpha = 2.0 / (span as f64 + 1.0);
         let mut prev = values[0];
@@ -44,7 +44,7 @@ fn compute_ewma_slope(py: Python<'_>, values: Vec<f64>, span: usize) -> PyResult
         }
         last - prev
     });
-    let dict = PyDict::new_bound(py);
+    let dict = PyDict::new(py);
     dict.set_item("slope", slope)?;
     dict.set_item("eta_minutes", py.None())?;
     Ok(dict.into())
