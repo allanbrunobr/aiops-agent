@@ -1,5 +1,7 @@
 # AIOps Agent
 
+[English](README.en.md) · **Português**
+
 [![CI](https://github.com/allanbrunobr/aiops-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/allanbrunobr/aiops-agent/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue)
 ![Rust](https://img.shields.io/badge/rust-PyO3%20(opcional)-orange)
