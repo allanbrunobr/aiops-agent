@@ -14,7 +14,9 @@ O pipeline cobre o ciclo completo de um incidente: sanitização da telemetria, 
 
 A implementação é fundamentada em sete artigos acadêmicos de AIOps (2024–2025). Consulte [Referências acadêmicas](#referências-acadêmicas).
 
-![Dashboard de demonstração durante um incidente de esgotamento do pool de conexões](docs/screenshots/demo-dashboard.png)
+![Dashboard de demonstração: incidente de esgotamento do pool de conexões, da operação normal até o alerta, em velocidade acelerada](docs/screenshots/demo.gif)
+
+<sub>Dashboard de demonstração (`python interfaces/demo/server.py`) em velocidade acelerada: score de risco, previsão de deriva da latência e logs enquanto o incidente evolui.</sub>
 
 ---
 

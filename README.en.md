@@ -14,7 +14,9 @@ The pipeline covers the full incident lifecycle: telemetry sanitization, preproc
 
 The implementation is based on seven academic AIOps papers (2024–2025). See [Academic references](#academic-references).
 
-![Demo dashboard during a connection pool exhaustion incident](docs/screenshots/demo-dashboard.png)
+![Demo dashboard: a connection pool exhaustion incident from normal operation to alert, sped up](docs/screenshots/demo.gif)
+
+<sub>Demo dashboard (`python interfaces/demo/server.py`), sped up. Risk score, latency drift prediction and logs as the incident develops.</sub>
 
 > Most code comments, the narrative demo mode, the ADRs and the `infra/` guides are written in Portuguese. The other documents under `docs/` are in English.
 
