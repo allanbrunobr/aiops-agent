@@ -40,7 +40,7 @@ tests/__snapshots__/
 # Root .md files (except README.md and tracked directories)
 *.md
 !README.md
-!README.en.md
+!README.pt-BR.md
 !docs/**/*.md
 !docs/*.md
 !infra/**/*.md
