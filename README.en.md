@@ -29,6 +29,7 @@ The implementation is based on seven academic AIOps papers (2024–2025). See [A
 - [Quick start](#quick-start)
 - [CLI usage](#cli-usage)
 - [Demo dashboard](#demo-dashboard)
+- [Slack notifications](#slack-notifications)
 - [Configuration](#configuration)
 - [Integrations](#integrations)
 - [Rust extension (optional)](#rust-extension-optional)
@@ -237,6 +238,29 @@ The launcher starts the server in a subprocess, waits for `/demo/` to respond an
 
 - **LLM diagnosis**: set `ANTHROPIC_API_KEY` in `.env.local`. Without the key, the demo uses heuristics.
 - **Slack notifications**: set `SLACK_BOT_TOKEN` and `SLACK_CHANNEL`. The demo publishes the `prediction.warning`, `prediction.critical`, `diagnosis.completed` and `incident.resolved` events.
+
+---
+
+## Slack notifications
+
+`SlackNotifier` posts the incident to the channel as soon as the pipeline starts, tracks the progress of each stage and posts the diagnosis at the end. The diagnosis includes the root cause, evidence, confidence, risk level, *blast radius* and the proposed fix. The screenshots below come from a test workspace.
+
+<img src="docs/screenshots/slack-connection-pool.png" alt="AIOps Agent Bot messages in #aiops-alerts: incident opened and full diagnosis of a connection pool exhaustion" width="760">
+
+<details>
+<summary>More diagnoses (expired TLS certificate, memory leak, RBAC)</summary>
+
+<br>
+
+<img src="docs/screenshots/slack-circuit-breaker.png" alt="Diagnosis: an expired mTLS certificate opens the payment-gateway circuit breaker" width="760">
+
+<img src="docs/screenshots/slack-oom-tls.png" alt="Diagnoses: memory leak with OOMKilled and an expired TLS certificate" width="760">
+
+<img src="docs/screenshots/slack-rbac-403.png" alt="Diagnosis: a wrong RBAC role mapping causes HTTP 403 on write operations" width="760">
+
+</details>
+
+To set up a real Slack App, see [`infra/SLACK-SETUP.md`](infra/SLACK-SETUP.md). To test without a workspace, use the mock described in [Local Docker environment](#local-docker-environment).
 
 ---
 

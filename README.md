@@ -27,6 +27,7 @@ A implementação é fundamentada em sete artigos acadêmicos de AIOps (2024–2
 - [Início rápido](#início-rápido)
 - [Uso da CLI](#uso-da-cli)
 - [Dashboard de demonstração](#dashboard-de-demonstração)
+- [Notificações no Slack](#notificações-no-slack)
 - [Configuração](#configuração)
 - [Integrações](#integrações)
 - [Extensão Rust (opcional)](#extensão-rust-opcional)
@@ -235,6 +236,29 @@ O launcher inicia o servidor em um subprocesso, aguarda `/demo/` responder e abr
 
 - **Diagnóstico via LLM**: defina `ANTHROPIC_API_KEY` em `.env.local`. Sem a chave, a demo usa heurísticas.
 - **Notificações Slack**: defina `SLACK_BOT_TOKEN` e `SLACK_CHANNEL`. A demo publica os eventos `prediction.warning`, `prediction.critical`, `diagnosis.completed` e `incident.resolved`.
+
+---
+
+## Notificações no Slack
+
+O `SlackNotifier` publica o incidente no canal assim que o pipeline começa, acompanha o progresso de cada etapa e, ao final, publica o diagnóstico. O diagnóstico traz causa raiz, evidências, confiança, nível de risco, *blast radius* e a correção proposta. As capturas abaixo vêm de um workspace de teste.
+
+<img src="docs/screenshots/slack-connection-pool.png" alt="Mensagens do AIOps Agent Bot no canal #aiops-alerts: abertura do incidente e diagnóstico completo de esgotamento do pool de conexões" width="760">
+
+<details>
+<summary>Outros diagnósticos (certificado TLS expirado, vazamento de memória, RBAC)</summary>
+
+<br>
+
+<img src="docs/screenshots/slack-circuit-breaker.png" alt="Diagnóstico: certificado mTLS expirado abre o circuit breaker do payment-gateway" width="760">
+
+<img src="docs/screenshots/slack-oom-tls.png" alt="Diagnósticos: vazamento de memória com OOMKilled e certificado TLS expirado" width="760">
+
+<img src="docs/screenshots/slack-rbac-403.png" alt="Diagnóstico: mapeamento RBAC incorreto causa HTTP 403 em operações de escrita" width="760">
+
+</details>
+
+Para configurar um Slack App real, consulte [`infra/SLACK-SETUP.md`](infra/SLACK-SETUP.md). Para testar sem workspace, use o mock descrito em [Ambiente local com Docker](#ambiente-local-com-docker).
 
 ---
 
