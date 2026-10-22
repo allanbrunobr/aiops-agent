@@ -14,6 +14,10 @@ The pipeline covers the full incident lifecycle: telemetry sanitization, preproc
 
 The implementation is based on seven academic AIOps papers (2024–2025). See [Academic references](#academic-references).
 
+![How AIOps Agent works: the agent predicts the incident, warns the channel, runs the diagnosis, proposes a fix and waits for human approval](docs/screenshots/how-it-works.gif)
+
+<sub>Illustrative animated overview, built from real outputs of the project. Below, the actual demo dashboard.</sub>
+
 ![Demo dashboard: a connection pool exhaustion incident from normal operation to alert, sped up](docs/screenshots/demo.gif)
 
 <sub>Demo dashboard (`python interfaces/demo/server.py`), sped up. Risk score, latency drift prediction and logs as the incident develops.</sub>
