@@ -1,5 +1,5 @@
-# AIOps Agent — Infraestrutura Local de Teste
-# Sobe Grafana + Prometheus + Metrics Exporter + Slack Mock
+# AIOps Agent — Local Test Infrastructure
+# Starts Grafana + Prometheus + Metrics Exporter + Slack Mock
 # Usage: docker compose -f infra/docker-compose.yaml up -d
 
 services:

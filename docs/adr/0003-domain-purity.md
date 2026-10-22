@@ -1,258 +1,257 @@
-# ADR 0003 — Saída do Pydantic-backed domain via DTOs de borda e dataclasses puros
+# ADR 0003 — Exit from the Pydantic-backed domain through edge DTOs and pure dataclasses
 
 - **Status:** Accepted
-- **Data:** 2026-04-29
-- **Decisores:** allanbrunobr
+- **Date:** 2026-04-29
+- **Deciders:** allanbrunobr
 - **Supersedes:** ADR 0001
-- **Subfase relacionada:** Fase 3 estrutural — Domain Purity e DTOs de Borda
+- **Related subphase:** Structural Phase 3 — Domain Purity and Edge DTOs
 
-## Contexto
+## Context
 
-ADR 0001 deixou `NormalizedAlert` e `IncidentState` em `domain/` como
-`pydantic.BaseModel` por escolha pragmática, com 4 critérios cumulativos de saída
-e gatilhos explícitos para revisão. A Fase 2 estrutural (PRs #11, #12, #13) entregou
-`adapters/persistence/`, `application/ports/`, `adapters/llm/anthropic_client.py` e
-`server/cli.py`, e removeu os shims `core/models.py` e `core/store.py`.
+ADR 0001 left `NormalizedAlert` and `IncidentState` in `domain/` as
+`pydantic.BaseModel` as a pragmatic choice, with 4 cumulative exit criteria
+and explicit review triggers. Structural Phase 2 (PRs #11, #12, #13) delivered
+`adapters/persistence/`, `application/ports/`, `adapters/llm/anthropic_client.py` and
+`server/cli.py`, and removed the `core/models.py` and `core/store.py` shims.
 
-`core/protocols.py` ficou reduzido a `CredentialProvider`. O domínio está topologicamente
-estável, mas continua dependendo de Pydantic. A condição "puro Python (stdlib)" prometida
-na docstring de `domain/__init__.py` ainda não vale.
+`core/protocols.py` was reduced to `CredentialProvider`. The domain is topologically
+stable, but it still depends on Pydantic. The "pure Python (stdlib)" condition promised
+in the docstring of `domain/__init__.py` is not true yet.
 
-### Estado atual em `main` (referência objetiva)
+### Current state in `main` (objective reference)
 
-| Contrato | Localização | Tipo base | Observações |
+| Contract | Location | Base type | Remarks |
 |---|---|---|---|
-| `LogEntry`, `MetricPoint`, `Span`, `SimulatedIncident`, `PredictionReport`, `MetricSeries` | `domain/incident.py` | `@dataclass` puro | Nada a fazer — já são stdlib |
-| `MitigationAction` | `domain/incident.py` | `dict` subclass com `__getattr__/__setattr__` | Único contrato com contrato dual atributo+chave |
-| `NormalizedAlert` | `domain/alert.py` | `pydantic.BaseModel(frozen=True)` + `field_validator("severity")` | Validador de severity precisa ir para a borda |
-| `IncidentState` | `domain/incident_state.py` | `pydantic.BaseModel(populate_by_name=True)` | Origem dos 11 `state.model_copy(update={...})` |
+| `LogEntry`, `MetricPoint`, `Span`, `SimulatedIncident`, `PredictionReport`, `MetricSeries` | `domain/incident.py` | pure `@dataclass` | Nothing to do — already stdlib |
+| `MitigationAction` | `domain/incident.py` | `dict` subclass with `__getattr__/__setattr__` | Only contract with a dual attribute+key contract |
+| `NormalizedAlert` | `domain/alert.py` | `pydantic.BaseModel(frozen=True)` + `field_validator("severity")` | The severity validator must move to the edge |
+| `IncidentState` | `domain/incident_state.py` | `pydantic.BaseModel(populate_by_name=True)` | Source of the 11 `state.model_copy(update={...})` |
 
-### Sites de produção que referenciam Pydantic
+### Production sites that reference Pydantic
 
-- `state.model_copy(update={...})` — 11 call sites, mapeados:
+- `state.model_copy(update={...})` — 11 call sites, mapped:
   - `main.py:1880`
   - `server/api/accuracy.py:78`
   - `blueprint/adapters/safety_nodes.py:73, 129, 195, 283`
   - `blueprint/adapters/pipeline_nodes.py:48, 90, 125, 147, 158, 200`
-- `model_dump_json()` / `model_validate_json(...)` — exercitados em `tests/test_core.py:72-74`
-  (NormalizedAlert) e `tests/test_core.py:97-100` (IncidentState).
-- `field_validator("severity")` — `domain/alert.py`, aceita `{critical, error, warning, info}`
-  case-insensitive normalizando para lowercase.
-- `MitigationAction` — re-exportado por `safety/tnr.py:21`. Snapshots
+- `model_dump_json()` / `model_validate_json(...)` — exercised in `tests/test_core.py:72-74`
+  (NormalizedAlert) and `tests/test_core.py:97-100` (IncidentState).
+- `field_validator("severity")` — `domain/alert.py`, accepts `{critical, error, warning, info}`
+  case-insensitive and normalizes to lowercase.
+- `MitigationAction` — re-exported by `safety/tnr.py:21`. The snapshots
   `tests/snapshots/{full_pipeline_result, memory_leak_mitigation, metric_anomalies, mitigation, safety_validation, unknown_fault_mitigation}.json`
-  contêm os campos `description`, `command`, `risk_level` (e `rollback_command` quando definido)
-  no formato wire que **não pode mudar** — `tests/snapshots/` é invariante por CLAUDE.md.
+  contain the fields `description`, `command`, `risk_level` (and `rollback_command` when defined)
+  in a wire format that **cannot change** — `tests/snapshots/` is invariant per CLAUDE.md.
 
-### Critérios de saída do ADR 0001 — situação
+### ADR 0001 exit criteria — status
 
-1. **`model_copy(update=...)` substituível.** OK — `dataclasses.replace(state, **kwargs)`
-   é equivalente direto, stdlib, sem custo de tipo. Os 11 sites são reescrita mecânica.
-2. **DTOs de borda separados.** Pendente. `server/webhook/` valida via `NormalizedAlert`
-   diretamente. Precisa migrar para `server/webhook/schemas.py` Pydantic e converter para
-   dataclass do domínio na ingestão.
-3. **Round-trip JSON preservado.** Os testes em `tests/test_core.py` exercitam Pydantic.
-   Precisam migrar para serializador explícito (stdlib `dataclasses.asdict()` +
-   `json.dumps()` com encoder de `datetime`) ou rodar pelo DTO da borda.
-4. **Validação de `severity` preservada.** Precisa migrar para a borda — DTO Pydantic
-   (`server/webhook/schemas.py`) e/ou normalizadores (`server/webhook/normalizers/*`).
+1. **`model_copy(update=...)` is replaceable.** OK — `dataclasses.replace(state, **kwargs)`
+   is a direct equivalent, stdlib, with no type cost. The 11 sites are a mechanical rewrite.
+2. **Separate edge DTOs.** Pending. `server/webhook/` validates through `NormalizedAlert`
+   directly. It must migrate to a Pydantic `server/webhook/schemas.py` and convert to the
+   domain dataclass at ingestion.
+3. **JSON round-trip preserved.** The tests in `tests/test_core.py` exercise Pydantic.
+   They must migrate to an explicit serializer (stdlib `dataclasses.asdict()` +
+   `json.dumps()` with a `datetime` encoder) or run through the edge DTO.
+4. **`severity` validation preserved.** It must migrate to the edge — Pydantic DTO
+   (`server/webhook/schemas.py`) and/or normalizers (`server/webhook/normalizers/*`).
 
-Os 4 critérios são adressáveis em escopo da Fase 3. Nenhum exige mudança fora do
-domínio + borda HTTP + testes.
+The 4 criteria can be addressed within the scope of Phase 3. None requires a change outside the
+domain + HTTP edge + tests.
 
-## Decisão
+## Decision
 
-Sair do Pydantic no domínio com a seguinte decomposição:
+Exit from Pydantic in the domain with the following decomposition:
 
-1. **DTOs Pydantic ficam em `server/webhook/schemas.py`.** Esta é a borda canônica de
-   ingestão de alertas externos (PagerDuty, Grafana, Databricks). FastAPI continua
-   integrando direto com Pydantic.
+1. **Pydantic DTOs live in `server/webhook/schemas.py`.** This is the canonical edge for
+   ingestion of external alerts (PagerDuty, Grafana, Databricks). FastAPI still
+   integrates directly with Pydantic.
 
-   **MCP e A2A não recebem DTOs próprios nesta fase.** Auditoria de evidência (2026-04-29):
+   **MCP and A2A do not get their own DTOs in this phase.** Evidence audit (2026-04-29):
 
-   | Canal | Caminho | Constrói entidades de domínio direto? |
+   | Channel | Path | Builds domain entities directly? |
    |---|---|---|
-   | MCP — primário | `mcp_server/tools.py:759` (`normalizer_registry.normalize(...)`) | Não. Reusa `server/webhook/normalizers/*`. |
-   | MCP — fallback | `mcp_server/tools.py:765-781` | **Sim.** Constrói `NormalizedAlert(...)` com severity map inline (linha 767-768). |
-   | A2A | `server/routes/a2a.py:131-168` | **Sim.** Constrói `NormalizedAlert(...)` (linha 150) e `IncidentState(...)` (linha 162) direto, com `_map_severity` inline (linha 131). |
+   | MCP — primary | `mcp_server/tools.py:759` (`normalizer_registry.normalize(...)`) | No. Reuses `server/webhook/normalizers/*`. |
+   | MCP — fallback | `mcp_server/tools.py:765-781` | **Yes.** Builds `NormalizedAlert(...)` with an inline severity map (line 767-768). |
+   | A2A | `server/routes/a2a.py:131-168` | **Yes.** Builds `NormalizedAlert(...)` (line 150) and `IncidentState(...)` (line 162) directly, with an inline `_map_severity` (line 131). |
 
-   Apesar de A2A e do fallback MCP construírem entidades de domínio na borda, **a Fase 3
-   não introduz DTOs Pydantic dedicados para estes canais**. Razões:
+   Although A2A and the MCP fallback build domain entities at the edge, **Phase 3
+   does not introduce dedicated Pydantic DTOs for these channels**. Reasons:
 
-   - **Mudança mecânica via PR B/PR C.** Quando PR B altera o construtor de
-     `NormalizedAlert` (`BaseModel` → `@dataclass(frozen=True)`) e PR C altera
-     `IncidentState`, os 3 sites acima (`mcp_server/tools.py:770`, `server/routes/a2a.py:150`,
-     `:162`) sofrem ajuste sintático mecânico no mesmo PR. Não há trabalho de DTO
-     adicional para fazer — só atualizar a forma de instanciar.
-   - **Severity já normalizado por mapas inline.** MCP fallback (`_severity_map`) e A2A
-     (`_map_severity`) já convertem para o vocabulário canônico antes de construir.
-     A validação Pydantic do `field_validator("severity")` é redundante com esses mapas
-     — quando o validator sair de `domain/alert.py` (PR B), MCP e A2A continuam
-     normalizando localmente sem perda de garantia.
-   - **DTOs separados seriam prematuros.** Hoje MCP e A2A produzem `NormalizedAlert`
-     1:1; criar `MCPAlertDTO` e `A2AAlertDTO` adicionaria 2 schemas Pydantic sem que
-     nenhum campo divirja do contrato HTTP. Cumpre o critério de saída #1 deste ADR
-     ("múltiplos canais divergem em forma de DTO") — quando isto deixar de valer, ADR
-     sucessor introduz DTOs específicos.
+   - **Mechanical change through PR B/PR C.** When PR B changes the constructor of
+     `NormalizedAlert` (`BaseModel` → `@dataclass(frozen=True)`) and PR C changes
+     `IncidentState`, the 3 sites above (`mcp_server/tools.py:770`, `server/routes/a2a.py:150`,
+     `:162`) get a mechanical syntax adjustment in the same PR. There is no additional DTO
+     work to do — only an update to how they instantiate.
+   - **Severity is already normalized by inline maps.** MCP fallback (`_severity_map`) and A2A
+     (`_map_severity`) already convert to the canonical vocabulary before they build.
+     The Pydantic validation of `field_validator("severity")` is redundant with these maps.
+     When the validator leaves `domain/alert.py` (PR B), MCP and A2A keep
+     normalizing locally with no loss of guarantee.
+   - **Separate DTOs would be premature.** Today MCP and A2A produce `NormalizedAlert`
+     1:1. Creating `MCPAlertDTO` and `A2AAlertDTO` would add 2 Pydantic schemas while
+     no field diverges from the HTTP contract. This meets exit criterion #1 of this ADR
+     ("multiple channels diverge in DTO shape") — when this is no longer true, a
+     successor ADR introduces specific DTOs.
 
-   **Consequência de escopo:** PR B inclui atualização dos 2 sites de `NormalizedAlert`
-   em `mcp_server/tools.py:770` e `server/routes/a2a.py:150`. PR C inclui atualização
-   do site de `IncidentState` em `server/routes/a2a.py:162`. Não há PR adicional.
+   **Scope consequence:** PR B includes the update of the 2 `NormalizedAlert` sites
+   in `mcp_server/tools.py:770` and `server/routes/a2a.py:150`. PR C includes the update
+   of the `IncidentState` site in `server/routes/a2a.py:162`. There is no additional PR.
 
-2. **`MitigationAction` vira `@dataclass(frozen=True)` no domínio.** Campos preservados:
+2. **`MitigationAction` becomes `@dataclass(frozen=True)` in the domain.** Preserved fields:
    `description: str`, `command: str`, `risk_level: str`, `rollback_command: str | None`.
-   `dataclasses.asdict(action)` deve produzir wire format idêntico ao atual
-   `dict(action)` para preservar os 6 snapshots impactados. Acesso por chave
-   (`action["field"]`) deixa de ser suportado — call sites migram para acesso por
-   atributo (`action.field`). `safety/tnr.py:21` mantém o re-export.
+   `dataclasses.asdict(action)` must produce a wire format identical to the current
+   `dict(action)` to preserve the 6 affected snapshots. Key access
+   (`action["field"]`) is no longer supported — call sites migrate to attribute
+   access (`action.field`). `safety/tnr.py:21` keeps the re-export.
 
-3. **`NormalizedAlert` vira `@dataclass(frozen=True)`.** O `field_validator("severity")`
-   é movido para `server/webhook/schemas.py` (DTO Pydantic na borda HTTP) e para os
-   normalizers em `server/webhook/normalizers/*` (PagerDuty, Grafana, Databricks).
-   No domínio, `NormalizedAlert` confia que entrou normalizado — qualquer construção
-   programática (testes, fixtures) que precise de validação usa o DTO da borda.
+3. **`NormalizedAlert` becomes `@dataclass(frozen=True)`.** The `field_validator("severity")`
+   moves to `server/webhook/schemas.py` (Pydantic DTO at the HTTP edge) and to the
+   normalizers in `server/webhook/normalizers/*` (PagerDuty, Grafana, Databricks).
+   In the domain, `NormalizedAlert` trusts that it arrived normalized — any
+   programmatic construction (tests, fixtures) that needs validation uses the edge DTO.
 
-4. **`IncidentState` vira `@dataclass`.** Não-frozen — o pipeline sempre retornou novo
-   estado via `model_copy`, mas o objeto em si não precisa ser imutável e a mutabilidade
-   ajuda com tooling (debugger, REPL). Os 11 call sites de `state.model_copy(update=...)`
-   migram para `dataclasses.replace(state, **kwargs)` direto. **Não** introduzir método
-   `.replace()` no `IncidentState` — `dataclasses.replace` é a forma idiomática stdlib e
-   evita reinventar API que existe.
+4. **`IncidentState` becomes `@dataclass`.** Not frozen — the pipeline always returned a new
+   state through `model_copy`, but the object itself does not need to be immutable, and mutability
+   helps with tooling (debugger, REPL). The 11 call sites of `state.model_copy(update=...)`
+   migrate directly to `dataclasses.replace(state, **kwargs)`. Do **not** introduce a
+   `.replace()` method on `IncidentState` — `dataclasses.replace` is the idiomatic stdlib form and
+   avoids reinventing an API that already exists.
 
-5. **Round-trip JSON via serializador explícito.** Substituir `model_dump_json()` /
-   `model_validate_json(...)` em testes por serializador stdlib (`dataclasses.asdict` +
-   `json.dumps` com encoder ISO-8601 para `datetime`, e `json.loads` + factory function
-   no caminho inverso). Production paths que serializam para HTTP usam o DTO Pydantic
-   da borda — não o domínio.
+5. **JSON round-trip through an explicit serializer.** Replace `model_dump_json()` /
+   `model_validate_json(...)` in tests with a stdlib serializer (`dataclasses.asdict` +
+   `json.dumps` with an ISO-8601 encoder for `datetime`, and `json.loads` + a factory function
+   in the reverse path). Production paths that serialize to HTTP use the edge Pydantic
+   DTO — not the domain.
 
-### Plano de implementação — 3 PRs atômicos
+### Implementation plan — 3 atomic PRs
 
-A ordem segue risco crescente; cada PR é independente e bisectável.
+The order follows increasing risk. Each PR is independent and bisectable.
 
-**PR A — `MitigationAction` → frozen dataclass.** Risco mínimo (poucos call sites, sem
-borda HTTP afetada).
+**PR A — `MitigationAction` → frozen dataclass.** Minimal risk (few call sites, no
+HTTP edge affected).
 
-- `domain/incident.py`: substitui o `dict subclass` por `@dataclass(frozen=True)`.
-- Migra call sites que usam `action["field"]` para `action.field` (auditar via
+- `domain/incident.py`: replaces the `dict subclass` with `@dataclass(frozen=True)`.
+- Migrates call sites that use `action["field"]` to `action.field` (audit with
   `grep -rn 'action\[' --include="*.py"`).
-- Verifica que `dataclasses.asdict(MitigationAction(...))` produz wire format idêntico
-  aos 6 snapshots afetados. Re-roda `pytest tests/ -v` — snapshots **não** podem mudar.
+- Verifies that `dataclasses.asdict(MitigationAction(...))` produces a wire format identical
+  to the 6 affected snapshots. Re-runs `pytest tests/ -v` — snapshots **cannot** change.
 
-**PR B — `NormalizedAlert` → frozen dataclass + DTO de borda.** Risco médio (toca
-borda HTTP, MCP, A2A).
+**PR B — `NormalizedAlert` → frozen dataclass + edge DTO.** Medium risk (touches the
+HTTP edge, MCP, A2A).
 
-- Cria `server/webhook/schemas.py` com `NormalizedAlertDTO(BaseModel, frozen=True)`
-  contendo o `field_validator("severity")` migrado.
-- `domain/alert.py`: substitui `BaseModel` por `@dataclass(frozen=True)`. Remove
+- Creates `server/webhook/schemas.py` with `NormalizedAlertDTO(BaseModel, frozen=True)`
+  that contains the migrated `field_validator("severity")`.
+- `domain/alert.py`: replaces `BaseModel` with `@dataclass(frozen=True)`. Removes
   `field_validator`.
-- Atualiza `server/webhook/normalizers/{pagerduty,grafana,databricks}.py` para construir
-  o DTO primeiro, depois converter para `NormalizedAlert` (dataclass) na saída do
+- Updates `server/webhook/normalizers/{pagerduty,grafana,databricks}.py` to build
+  the DTO first, then convert to `NormalizedAlert` (dataclass) at the output of the
   normalizer.
-- Atualiza sites de construção direta de `NormalizedAlert` fora de `server/webhook/`:
-  `mcp_server/tools.py:770` (fallback MCP) e `server/routes/a2a.py:150` (handler A2A).
-  Ambos continuam construindo a entidade de domínio direto — só muda a sintaxe
-  (`@dataclass(frozen=True)` em vez de `BaseModel`).
-- Migra `tests/test_core.py:72-74` para serializador explícito ou para teste do DTO da
-  borda.
+- Updates the direct construction sites of `NormalizedAlert` outside `server/webhook/`:
+  `mcp_server/tools.py:770` (MCP fallback) and `server/routes/a2a.py:150` (A2A handler).
+  Both keep building the domain entity directly — only the syntax changes
+  (`@dataclass(frozen=True)` instead of `BaseModel`).
+- Migrates `tests/test_core.py:72-74` to an explicit serializer or to a test of the edge
+  DTO.
 
-**PR C — `IncidentState` → dataclass + 11 call sites de `model_copy`.** Maior risco
-(toca pipeline + safety + main + A2A).
+**PR C — `IncidentState` → dataclass + 11 `model_copy` call sites.** Highest risk
+(touches pipeline + safety + main + A2A).
 
-- `domain/incident_state.py`: substitui `BaseModel` por `@dataclass`. Remove
-  `model_config`. `Field(default_factory=...)` vira `field(default_factory=...)` da
-  stdlib.
-- Migra os 11 sites de `state.model_copy(update={...})` para
-  `dataclasses.replace(state, **kwargs)`. Lista exata em "Estado atual" acima — fazer
-  em commit separado dentro do PR para facilitar review.
-- Atualiza site de construção direta de `IncidentState` fora do pipeline:
-  `server/routes/a2a.py:162` (handler A2A). Continua construindo direto — só muda a
-  sintaxe.
-- Migra `tests/test_core.py:97-100` para serializador explícito.
-- Atualiza `domain/incident_state.py` docstring removendo a nota "temporariamente
-  Pydantic-backed".
-- Atualiza `domain/__init__.py` removendo a exceção sobre Pydantic.
+- `domain/incident_state.py`: replaces `BaseModel` with `@dataclass`. Removes
+  `model_config`. `Field(default_factory=...)` becomes the stdlib `field(default_factory=...)`.
+- Migrates the 11 sites of `state.model_copy(update={...})` to
+  `dataclasses.replace(state, **kwargs)`. Exact list in "Current state" above — do it
+  in a separate commit inside the PR to make review easier.
+- Updates the direct construction site of `IncidentState` outside the pipeline:
+  `server/routes/a2a.py:162` (A2A handler). It keeps building directly — only the
+  syntax changes.
+- Migrates `tests/test_core.py:97-100` to an explicit serializer.
+- Updates the `domain/incident_state.py` docstring and removes the "temporarily
+  Pydantic-backed" note.
+- Updates `domain/__init__.py` and removes the exception about Pydantic.
 
-## Consequências
+## Consequences
 
-**Positivas:**
+**Positive:**
 
-- `domain/` deixa de depender de Pydantic. Critério `rg "pydantic|BaseModel|ConfigDict|Field|field_validator" domain` passa a retornar 0.
-- Validação concentrada na borda: severity é validado uma vez na ingestão (DTO ou
-  normalizer), nunca no fluxo interno. Reduz chance de validação dupla com mensagens
-  divergentes.
-- Mutações funcionais via `dataclasses.replace` são idiomáticas stdlib — leitor não
-  precisa conhecer Pydantic para entender o pipeline.
-- Tests de unidade do domínio rodam sem Pydantic instalado (relevante para
+- `domain/` no longer depends on Pydantic. The criterion `rg "pydantic|BaseModel|ConfigDict|Field|field_validator" domain` returns 0.
+- Validation is concentrated at the edge: severity is validated once at ingestion (DTO or
+  normalizer), never in the internal flow. This reduces the chance of double validation with
+  divergent messages.
+- Functional mutations through `dataclasses.replace` are idiomatic stdlib — a reader does not
+  need to know Pydantic to understand the pipeline.
+- Domain unit tests run without Pydantic installed (relevant for
   `requirements-test-unit.txt`).
-- ADR 0001 sai do estado "Accepted mas com critério de saída pendente". Domínio fica
-  arquiteturalmente coerente com a docstring de `domain/__init__.py`.
+- ADR 0001 leaves the "Accepted but with a pending exit criterion" state. The domain becomes
+  architecturally consistent with the docstring of `domain/__init__.py`.
 
-**Negativas:**
+**Negative:**
 
-- Refactor de 11 call sites de `model_copy` é mecânico mas tem alta superfície (toca
-  `pipeline_nodes`, `safety_nodes`, `accuracy.py`, `main.py`). Risco de regressão se
-  algum site usa Pydantic-specific behavior implícito (ex.: validação no `update={...}`).
-  Mitigação: PR C dedicado, com snapshots e CI inteiros como rede.
-- DTO duplicado entre `server/webhook/schemas.py` (Pydantic) e `domain/alert.py`
-  (dataclass) — dois nomes para o mesmo conceito (`NormalizedAlertDTO` vs.
-  `NormalizedAlert`). É o custo da pureza do domínio. Mitigação: docstring no DTO
-  apontando para o domain entity e vice-versa.
-- `MitigationAction` perde acesso por chave (`action["risk_level"]`). Call sites antigos
-  que dependiam de `dict(action)` para serializar precisam usar `dataclasses.asdict`.
-  Auditar via grep antes do PR A.
+- The refactor of 11 `model_copy` call sites is mechanical but has a large surface (it touches
+  `pipeline_nodes`, `safety_nodes`, `accuracy.py`, `main.py`). There is a regression risk if
+  a site uses implicit Pydantic-specific behavior (e.g. validation in `update={...}`).
+  Mitigation: a dedicated PR C, with the full snapshots and CI as a safety net.
+- DTO duplicated between `server/webhook/schemas.py` (Pydantic) and `domain/alert.py`
+  (dataclass) — two names for the same concept (`NormalizedAlertDTO` vs.
+  `NormalizedAlert`). This is the cost of domain purity. Mitigation: a docstring in the DTO
+  that points to the domain entity, and vice versa.
+- `MitigationAction` loses key access (`action["risk_level"]`). Old call sites
+  that depended on `dict(action)` to serialize must use `dataclasses.asdict`.
+  Audit with grep before PR A.
 
-**Mitigações:**
+**Mitigations:**
 
-- Cada PR é atômico, bisectável, com CI verde antes de mergear.
-- Wire format dos snapshots é invariante — qualquer mudança em `dataclasses.asdict`
-  output quebra `pytest tests/test_*snapshot*.py` imediatamente.
-- ADR 0002 não é afetado: `LLMClient` continua passthrough, `agents/diagnoser.py`
-  continua parseando JSON do Anthropic SDK e construindo `MitigationAction` —
-  só muda o construtor (`MitigationAction(description=..., ...)` em vez de
-  `MitigationAction(description=..., ...)` que internamente é `dict.__init__`).
+- Each PR is atomic and bisectable, with green CI before merge.
+- The wire format of the snapshots is invariant — any change in the `dataclasses.asdict`
+  output breaks `pytest tests/test_*snapshot*.py` immediately.
+- ADR 0002 is not affected: `LLMClient` stays a passthrough, `agents/diagnoser.py`
+  still parses JSON from the Anthropic SDK and builds `MitigationAction` —
+  only the constructor changes (`MitigationAction(description=..., ...)` instead of
+  `MitigationAction(description=..., ...)` that internally is `dict.__init__`).
 
-## Critérios de saída
+## Exit criteria
 
-Esta decisão deve ser revisitada quando **qualquer um** dos itens abaixo ocorrer:
+Revisit this decision when **any** of the items below occurs:
 
-1. **Múltiplos canais de ingestão divergem em forma de DTO.** Hoje PagerDuty, Grafana e
-   Databricks compartilham `NormalizedAlert` único. Se A2A ou MCP precisarem de DTOs
-   próprios não-mapeáveis para `NormalizedAlert`, esta decisão precisa ser revisitada
-   para discutir multiple DTOs da mesma entidade de domínio.
-2. **Validação no domínio volta a ser necessária.** Se aparecer caso onde o domínio
-   precisa rejeitar entrada inválida (ex.: invariantes de pipeline state machine),
-   `dataclass` + factory function pode não bastar e talvez `attrs` ou validators
-   manuais precisem entrar.
-3. **Performance de `dataclasses.replace` vira gargalo.** Improvável dada a frequência
-   atual (1 vez por node, ~8 nodes por incidente), mas se o pipeline crescer para
-   centenas de mutações por execução, vale considerar mutação in-place explícita.
-4. **DTOs Pydantic explodem em complexidade.** Se `server/webhook/schemas.py` virar
-   100+ linhas com lógica condicional, é sinal para extrair `interfaces/http/schemas/`
-   ou similar. Endereçado por ADR sucessor sobre layout de interfaces.
+1. **Multiple ingestion channels diverge in DTO shape.** Today PagerDuty, Grafana and
+   Databricks share a single `NormalizedAlert`. If A2A or MCP need their own DTOs
+   that cannot be mapped to `NormalizedAlert`, revisit this decision
+   to discuss multiple DTOs for the same domain entity.
+2. **Validation in the domain becomes necessary again.** If a case appears where the domain
+   must reject invalid input (e.g. pipeline state machine invariants),
+   `dataclass` + factory function may not be enough, and `attrs` or manual
+   validators may need to come in.
+3. **`dataclasses.replace` performance becomes a bottleneck.** Unlikely given the current
+   frequency (1 time per node, ~8 nodes per incident), but if the pipeline grows to
+   hundreds of mutations per run, consider explicit in-place mutation.
+4. **Pydantic DTOs explode in complexity.** If `server/webhook/schemas.py` grows to
+   100+ lines with conditional logic, it is a signal to extract `interfaces/http/schemas/`
+   or similar. To be addressed by a successor ADR about the interfaces layout.
 
-## Gatilho para revisão
+## Review trigger
 
-Reavaliar este ADR quando:
+Re-evaluate this ADR when:
 
-- Nova fonte de alerta exigir DTO próprio que não mapeia 1:1 para `NormalizedAlert`.
-- Refactor da máquina de estados de `IncidentState` (campo `state`) introduzir
-  invariantes que `dataclass` não consegue expressar barato.
-- Adição de `attrs`, `msgspec` ou outra lib de modelagem ao stack — momento natural
-  para revisitar a escolha de stdlib pura.
-- Phase 4 (reorganização de interfaces) reposicionar `server/webhook/` para
-  `interfaces/http/` — schemas seguem o movimento.
+- A new alert source requires its own DTO that does not map 1:1 to `NormalizedAlert`.
+- A refactor of the `IncidentState` state machine (`state` field) introduces
+  invariants that `dataclass` cannot express cheaply.
+- `attrs`, `msgspec` or another modeling library is added to the stack — a natural moment
+  to revisit the pure stdlib choice.
+- Phase 4 (interfaces reorganization) moves `server/webhook/` to
+  `interfaces/http/` — schemas follow the move.
 
-## Notas
+## Notes
 
-- Este ADR **substitui** ADR 0001. A entrada do ADR 0001 deve ser marcada
-  `Status: Superseded by ADR 0003` no momento do merge deste documento.
-- ADR 0002 (`LLMClient`) **não é afetado**. Continua passthrough. A interação com
-  Pydantic ali era nula — a porta sempre devolveu objetos Anthropic-shaped.
-- `tests/snapshots/` é invariante por CLAUDE.md. PR A precisa provar empiricamente
-  (rodando os testes) que o wire format de `MitigationAction` não muda. Se mudar,
-  PR A não merge — a alternativa é manter `MitigationAction` como `dict subclass` e
-  documentar a exceção, mas isso contraria a decisão.
-- Os critérios de aceite de Fase 3 do execution plan são atendidos por este ADR + 3
-  PRs atômicos. CI local (`scripts/ci-local.sh unit` + `integration`) deve rodar verde
-  ao final de cada PR.
-- A docstring de `domain/__init__.py` que afirma "puro Python (stdlib): sem Pydantic"
-  passa a refletir realidade ao final do PR C.
+- This ADR **supersedes** ADR 0001. The ADR 0001 entry must be marked
+  `Status: Superseded by ADR 0003` when this document is merged.
+- ADR 0002 (`LLMClient`) **is not affected**. It stays a passthrough. Its interaction with
+  Pydantic was nil — the port always returned Anthropic-shaped objects.
+- `tests/snapshots/` is invariant per CLAUDE.md. PR A must prove empirically
+  (by running the tests) that the wire format of `MitigationAction` does not change. If it changes,
+  PR A does not merge — the alternative is to keep `MitigationAction` as a `dict subclass` and
+  document the exception, but that contradicts the decision.
+- The Phase 3 acceptance criteria of the execution plan are met by this ADR + 3
+  atomic PRs. Local CI (`scripts/ci-local.sh unit` + `integration`) must run green
+  at the end of each PR.
+- The docstring of `domain/__init__.py` that states "pure Python (stdlib): no Pydantic"
+  reflects reality at the end of PR C.

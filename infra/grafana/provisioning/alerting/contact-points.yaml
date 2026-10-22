@@ -1,4 +1,4 @@
-# Grafana Contact Points — envia webhooks para o aiops-agent local
+# Grafana Contact Points — sends webhooks to the local aiops-agent
 apiVersion: 1
 
 contactPoints:

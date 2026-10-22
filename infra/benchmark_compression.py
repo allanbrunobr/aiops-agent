@@ -1,17 +1,17 @@
-"""Benchmark real de compressao: prova que 100K logs viram ~1200 tokens.
+"""Real compression benchmark: proves that 100K logs become ~1200 tokens.
 
-Gera logs realistas em volumes crescentes (500, 10K, 100K, 1M),
-passa pelo pipeline real (Drain3 + Context Compressor) e mede:
-  - Numero de templates Drain3
-  - Tokens antes/depois da compressao
-  - Custo estimado por incidente (Claude Sonnet pricing)
+Generates realistic logs at growing volumes (500, 10K, 100K, 1M),
+runs them through the real pipeline (Drain3 + Context Compressor) and measures:
+  - Number of Drain3 templates
+  - Tokens before/after compression
+  - Estimated cost per incident (Claude Sonnet pricing)
 
-Tambem salva os logs gerados em arquivo .txt para auditoria.
+It also saves the generated logs to a .txt file for auditing.
 
 Usage:
     python infra/benchmark_compression.py
-    python infra/benchmark_compression.py --save-logs   # salva logs em data/generated_logs/
-    python infra/benchmark_compression.py --max 1000000 # inclui 1M logs (lento)
+    python infra/benchmark_compression.py --save-logs   # saves logs to data/generated_logs/
+    python infra/benchmark_compression.py --max 1000000 # includes 1M logs (slow)
 """
 
 import argparse
@@ -34,7 +34,7 @@ from pipeline.context_compressor import ContextCompressor
 
 
 # ---------------------------------------------------------------------------
-# Gerador de logs realistas
+# Realistic log generator
 # ---------------------------------------------------------------------------
 
 SERVICES = ["payment-svc", "gateway", "auth-svc", "order-svc", "inventory-svc"]
@@ -42,7 +42,7 @@ DB_HOSTS = ["10.0.1.45", "10.0.1.46", "10.0.1.47"]
 INCIDENT_START = datetime.datetime(2026, 3, 4, 14, 23, 0)
 BASE_TIME = INCIDENT_START - datetime.timedelta(minutes=30)
 
-# Templates realistas de logs — cada um gera variantes com parametros diferentes
+# Realistic log templates — each one generates variants with different parameters
 NORMAL_TEMPLATES = [
     lambda: f"Request processed successfully in {random.randint(20, 200)}ms",
     lambda: f"Health check passed for {random.choice(SERVICES)}",
@@ -87,25 +87,25 @@ FATAL_TEMPLATES = [
 
 
 def generate_logs(count: int, seed: int = 42) -> list[LogEntry]:
-    """Gera logs realistas simulando um incidente de connection pool exhaustion."""
+    """Generate realistic logs that simulate a connection pool exhaustion incident."""
     rng = random.Random(seed)
     logs = []
 
-    # Distribuicao temporal:
-    # 60% pre-incidente (normal), 10% degradacao, 25% incidente, 5% recuperacao
+    # Time distribution:
+    # 60% pre-incident (normal), 10% degradation, 25% incident, 5% recovery
     pre_count = int(count * 0.60)
     degrade_count = int(count * 0.10)
     incident_count = int(count * 0.25)
     recovery_count = count - pre_count - degrade_count - incident_count
 
-    # --- PRE-INCIDENTE: 60% logs normais ---
+    # --- PRE-INCIDENT: 60% normal logs ---
     for _ in range(pre_count):
         ts = BASE_TIME + datetime.timedelta(seconds=rng.randint(0, 19 * 60))
         svc = rng.choice(SERVICES)
         msg = rng.choice(NORMAL_TEMPLATES)()
         logs.append(LogEntry(ts, "INFO", svc, msg))
 
-    # --- DEGRADACAO: 10% mix de warns e normais ---
+    # --- DEGRADATION: 10% mix of warns and normal ---
     degrade_start = INCIDENT_START - datetime.timedelta(minutes=4)
     for _ in range(degrade_count):
         ts = degrade_start + datetime.timedelta(seconds=rng.randint(0, 4 * 60))
@@ -118,7 +118,7 @@ def generate_logs(count: int, seed: int = 42) -> list[LogEntry]:
             level = "INFO"
         logs.append(LogEntry(ts, level, svc, msg))
 
-    # --- INCIDENTE: 25% errors + warns + normais ---
+    # --- INCIDENT: 25% errors + warns + normal ---
     for _ in range(incident_count):
         ts = INCIDENT_START + datetime.timedelta(seconds=rng.randint(0, 10 * 60))
         roll = rng.random()
@@ -138,13 +138,13 @@ def generate_logs(count: int, seed: int = 42) -> list[LogEntry]:
             msg = rng.choice(WARN_TEMPLATES)()
             level = "WARN"
         else:
-            # 40% normal (outros servicos continuam normais)
+            # 40% normal (other services stay normal)
             svc = rng.choice(SERVICES)
             msg = rng.choice(NORMAL_TEMPLATES)()
             level = "INFO"
         logs.append(LogEntry(ts, level, svc, msg))
 
-    # --- RECUPERACAO: 5% voltando ao normal ---
+    # --- RECOVERY: 5% returning to normal ---
     recovery_start = INCIDENT_START + datetime.timedelta(minutes=10)
     for _ in range(recovery_count):
         ts = recovery_start + datetime.timedelta(seconds=rng.randint(0, 5 * 60))
@@ -162,8 +162,8 @@ def generate_logs(count: int, seed: int = 42) -> list[LogEntry]:
 
 
 def generate_metrics() -> list[MetricPoint]:
-    """Gera metricas simuladas (fixas — so para completar o AggregatedReport)."""
-    rng = random.Random(42)  # seed fixo — resultados determinísticos
+    """Generate simulated metrics (fixed — only to complete the AggregatedReport)."""
+    rng = random.Random(42)  # fixed seed — deterministic results
     metrics = []
     base = INCIDENT_START - datetime.timedelta(minutes=30)
 
@@ -187,8 +187,8 @@ def generate_metrics() -> list[MetricPoint]:
 
 
 def generate_traces() -> list[Span]:
-    """Gera traces simulados (fixos)."""
-    rng = random.Random(42)  # seed fixo — resultados determinísticos
+    """Generate simulated traces (fixed)."""
+    rng = random.Random(42)  # fixed seed — deterministic results
     traces = []
     for i in range(50):
         ts = INCIDENT_START + datetime.timedelta(seconds=i * 12)
@@ -204,7 +204,7 @@ def generate_traces() -> list[Span]:
             duration_ms=dur,
             status="ERROR" if is_incident else "OK",
         ))
-        # Child span — o bottleneck
+        # Child span — the bottleneck
         traces.append(Span(
             trace_id=f"trace-{i:04d}",
             span_id=f"span-{i:04d}-db",
@@ -224,18 +224,18 @@ def generate_traces() -> list[Span]:
 # ---------------------------------------------------------------------------
 
 def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
-    """Executa o pipeline completo para N logs e retorna metricas."""
+    """Run the full pipeline for N logs and return metrics."""
     print(f"\n{'='*70}")
     print(f"  BENCHMARK: {log_count:,} logs")
     print(f"{'='*70}")
 
-    # 1. Gera logs
+    # 1. Generate logs
     t0 = time.time()
     logs = generate_logs(log_count)
     gen_time = time.time() - t0
-    print(f"  [1/4] Logs gerados: {len(logs):,} em {gen_time:.1f}s")
+    print(f"  [1/4] Logs generated: {len(logs):,} in {gen_time:.1f}s")
 
-    # Salva em arquivo se pedido
+    # Save to a file if requested
     if save_logs:
         log_dir = project_root / "data" / "generated_logs"
         log_dir.mkdir(parents=True, exist_ok=True)
@@ -244,30 +244,30 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
             for log in logs:
                 f.write(str(log) + "\n")
         file_size_mb = log_file.stat().st_size / (1024 * 1024)
-        print(f"         Salvo em {log_file} ({file_size_mb:.1f} MB)")
+        print(f"         Saved to {log_file} ({file_size_mb:.1f} MB)")
 
-    # Conta por nivel
+    # Count by level
     level_counts = {}
     for log in logs:
         level_counts[log.level] = level_counts.get(log.level, 0) + 1
-    print(f"         Distribuicao: {dict(sorted(level_counts.items()))}")
+    print(f"         Distribution: {dict(sorted(level_counts.items()))}")
 
-    # Tamanho bruto em tokens
+    # Raw size in tokens
     raw_text = "\n".join(str(l) for l in logs)
     raw_tokens = len(raw_text) // 4
-    print(f"         Texto bruto: {len(raw_text):,} chars = ~{raw_tokens:,} tokens")
+    print(f"         Raw text: {len(raw_text):,} chars = ~{raw_tokens:,} tokens")
 
-    # 2+3. Drain3 + Aggregator combinados — evita double-parse dos logs.
-    # O Aggregator.process() já executa o LogParser internamente.
-    # Para volumes grandes, Drain3 converge após os primeiros logs (templates
-    # estabilizam); processar todos é redundante. Cap em 5K para benchmark.
-    # generate_logs usa seed=42 fixo — primeiros N logs são idênticos entre volumes.
-    # Cap de 500 garante mesmos templates que 100K (Drain3 converge em <500 logs)
-    # e reduz scale_time de 2.3s para ~0.1s.
+    # 2+3. Drain3 + Aggregator combined — avoids parsing the logs twice.
+    # Aggregator.process() already runs the LogParser internally.
+    # For large volumes, Drain3 converges after the first logs (templates
+    # stabilize); processing all of them is redundant. Cap at 5K for the benchmark.
+    # generate_logs uses a fixed seed=42 — the first N logs are identical across volumes.
+    # A cap of 500 gives the same templates as 100K (Drain3 converges in <500 logs)
+    # and reduces scale_time from 2.3s to ~0.1s.
     DRAIN_SAMPLE_CAP = 500
     logs_for_drain = logs[:DRAIN_SAMPLE_CAP] if len(logs) > DRAIN_SAMPLE_CAP else logs
     if len(logs) > DRAIN_SAMPLE_CAP:
-        print(f"  [cap] Amostragem para Drain3: {DRAIN_SAMPLE_CAP:,} de {len(logs):,} logs")
+        print(f"  [cap] Sampling for Drain3: {DRAIN_SAMPLE_CAP:,} of {len(logs):,} logs")
 
     t0 = time.time()
     metrics = generate_metrics()
@@ -276,25 +276,25 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     from pipeline.aggregator import Aggregator
     aggregator_fresh = Aggregator()
     report = aggregator_fresh.process(logs_for_drain, metrics, traces)
-    drain_time = time.time() - t0  # drain_time agora mede todo o pipeline até report
-    agg_time = 0.0  # incluído em drain_time
+    drain_time = time.time() - t0  # drain_time now measures the whole pipeline up to the report
+    agg_time = 0.0  # included in drain_time
 
-    templates = report.log_templates  # já analisados pelo Aggregator
-    print(f"\n  [2/4] Drain3+Aggregator: {len(logs):,} logs -> {len(templates)} templates em {drain_time:.1f}s")
+    templates = report.log_templates  # already analyzed by the Aggregator
+    print(f"\n  [2/4] Drain3+Aggregator: {len(logs):,} logs -> {len(templates)} templates in {drain_time:.1f}s")
 
-    # Template text para exibição
+    # Template text for display
     template_text = "\n".join(
         f"[{t.level}] {t.template} x{t.count}" for t in templates[:20]
     )
     template_tokens = len(template_text) // 4
     print(f"         Template text: {template_tokens:,} tokens")
 
-    # Mostra top 5 templates
+    # Show the top 5 templates
     for i, tpl in enumerate(templates[:5]):
         svcs = ", ".join(sorted(tpl.services))
         print(f"         #{i+1} [{tpl.level}][{svcs}] \"{tpl.template[:80]}\" x{tpl.count}")
 
-    # 3. Aggregator (reutiliza templates já parseados para evitar re-parse)
+    # 3. Aggregator (reuses already parsed templates to avoid re-parsing)
     t0 = time.time()
     metrics = generate_metrics()
     traces = generate_traces()
@@ -303,7 +303,7 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     aggregator_fresh = Aggregator()
     report = aggregator_fresh.process_with_templates(templates, metrics, traces, len(logs))
     agg_time = time.time() - t0
-    print(f"\n  [3/4] Aggregator: report gerado em {agg_time:.1f}s")
+    print(f"\n  [3/4] Aggregator: report generated in {agg_time:.1f}s")
 
     report_text = report.to_text()
     report_tokens = len(report_text) // 4
@@ -317,22 +317,22 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     print(f"\n  [4/4] Context Compressor:")
     print(f"         {stats}")
     print(f"         Compressed text: {len(compressed_text):,} chars = ~{stats.compressed_tokens:,} tokens")
-    print(f"         Tempo: {comp_time:.3f}s")
+    print(f"         Time: {comp_time:.3f}s")
 
-    # Custo estimado (Claude Sonnet: $3/1M input, $15/1M output)
+    # Estimated cost (Claude Sonnet: $3/1M input, $15/1M output)
     # Input = compressed context (~1200 tokens) + system prompt (~500 tokens)
     # Output = diagnosis (~800 tokens)
-    input_tokens = stats.compressed_tokens + 500  # contexto + system prompt
-    output_tokens = 800  # diagnostico tipico
+    input_tokens = stats.compressed_tokens + 500  # context + system prompt
+    output_tokens = 800  # typical diagnosis
     cost_input = (input_tokens / 1_000_000) * 3.0
     cost_output = (output_tokens / 1_000_000) * 15.0
     total_cost = cost_input + cost_output
 
-    print(f"\n  CUSTO ESTIMADO (Claude Sonnet 4):")
+    print(f"\n  ESTIMATED COST (Claude Sonnet 4):")
     print(f"    Input:  {input_tokens:,} tokens × $3/1M  = ${cost_input:.4f}")
     print(f"    Output: {output_tokens:,} tokens × $15/1M = ${cost_output:.4f}")
-    print(f"    TOTAL:  ${total_cost:.4f} por incidente")
-    print(f"    Reducao: {raw_tokens:,} tokens brutos -> {stats.compressed_tokens:,} tokens finais ({stats.compression_ratio:.0%} reducao)")
+    print(f"    TOTAL:  ${total_cost:.4f} per incident")
+    print(f"    Reduction: {raw_tokens:,} raw tokens -> {stats.compressed_tokens:,} final tokens ({stats.compression_ratio:.0%} reduction)")
 
     return {
         "log_count": log_count,
@@ -349,9 +349,9 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Benchmark de compressao do pipeline AIOps")
-    parser.add_argument("--save-logs", action="store_true", help="Salva logs gerados em data/generated_logs/")
-    parser.add_argument("--max", type=int, default=100000, help="Volume maximo de logs (default: 100000)")
+    parser = argparse.ArgumentParser(description="AIOps pipeline compression benchmark")
+    parser.add_argument("--save-logs", action="store_true", help="Save generated logs to data/generated_logs/")
+    parser.add_argument("--max", type=int, default=100000, help="Maximum log volume (default: 100000)")
     args = parser.parse_args()
 
     volumes = [500, 10_000, 100_000]
@@ -365,12 +365,12 @@ def main():
         result = run_benchmark(vol, save_logs=args.save_logs)
         results.append(result)
 
-    # Tabela resumo
+    # Summary table
     print(f"\n\n{'='*90}")
-    print(f"  TABELA RESUMO — Custo por Incidente (Claude Sonnet 4)")
+    print(f"  SUMMARY TABLE — Cost per Incident (Claude Sonnet 4)")
     print(f"{'='*90}")
-    print(f"  {'Volume':>12} | {'Bruto':>12} | {'Drain3':>8} | {'Comprimido':>12} | {'Reducao':>8} | {'Custo':>8} | {'Tempo':>8}")
-    print(f"  {'':>12} | {'(tokens)':>12} | {'(tpls)':>8} | {'(tokens)':>12} | {'':>8} | {'(USD)':>8} | {'(seg)':>8}")
+    print(f"  {'Volume':>12} | {'Raw':>12} | {'Drain3':>8} | {'Compressed':>12} | {'Reduction':>8} | {'Cost':>8} | {'Time':>8}")
+    print(f"  {'':>12} | {'(tokens)':>12} | {'(tpls)':>8} | {'(tokens)':>12} | {'':>8} | {'(USD)':>8} | {'(sec)':>8}")
     print(f"  {'-'*12}-+-{'-'*12}-+-{'-'*8}-+-{'-'*12}-+-{'-'*8}-+-{'-'*8}-+-{'-'*8}")
 
     for r in results:
@@ -384,9 +384,9 @@ def main():
             f"{r['total_time_s']:>7.1f}s"
         )
 
-    print(f"\n  Conclusao: O custo e CONSTANTE (~$0.004) independente do volume de logs.")
-    print(f"  Drain3 colapsa milhares de logs em ~20-35 templates unicos.")
-    print(f"  O Context Compressor garante que TUDO cabe em 4000 tokens.\n")
+    print(f"\n  Conclusion: The cost is CONSTANT (~$0.004) regardless of log volume.")
+    print(f"  Drain3 collapses thousands of logs into ~20-35 unique templates.")
+    print(f"  The Context Compressor ensures that EVERYTHING fits in 4000 tokens.\n")
 
 
 if __name__ == "__main__":

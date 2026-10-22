@@ -1,115 +1,115 @@
-# ADR 0001 — Contratos do domínio temporariamente Pydantic-backed
+# ADR 0001 — Temporarily Pydantic-backed domain contracts
 
 - **Status:** Superseded by [ADR 0003](./0003-domain-purity.md)
-- **Data:** 2026-04-26
-- **Substituído em:** 2026-04-29
-- **Decisores:** allanbrunobr
-- **Subfase relacionada:** Fase 1 estrutural — 1a (PR #2) e 1b (PRs #4, #5, #6)
+- **Date:** 2026-04-26
+- **Superseded on:** 2026-04-29
+- **Deciders:** allanbrunobr
+- **Related subphase:** Structural Phase 1 — 1a (PR #2) and 1b (PRs #4, #5, #6)
 
-> **Nota (2026-04-29):** Esta decisão foi substituída por ADR 0003. A Fase 2 estrutural
-> removeu `core/models.py` e os shims; a Fase 3 sai do Pydantic-backed domain via DTOs
-> de borda em `server/webhook/schemas.py` e dataclasses puros em `domain/`. O conteúdo
-> abaixo é mantido como histórico — qualquer afirmação que contradiga ADR 0003 está
-> desatualizada.
+> **Note (2026-04-29):** ADR 0003 supersedes this decision. Structural Phase 2
+> removed `core/models.py` and the shims. Phase 3 moves away from the Pydantic-backed domain
+> through edge DTOs in `server/webhook/schemas.py` and pure dataclasses in `domain/`. The
+> content below is kept as history. Any statement that contradicts ADR 0003 is
+> outdated.
 
-## Contexto
+## Context
 
-A Fase 1 do refactor estrutural moveu os contratos compartilhados do pipeline AIOps de
-`core/models.py` para a camada `domain/`, mantendo `core/models.py` como shim explícito
-para preservar os ~50 import sites existentes. Os tipos relevantes hoje são:
+Phase 1 of the structural refactor moved the shared contracts of the AIOps pipeline from
+`core/models.py` to the `domain/` layer. It kept `core/models.py` as an explicit shim
+to preserve the ~50 existing import sites. The relevant types today are:
 
-| Contrato | Localização atual | Tipo base |
+| Contract | Current location | Base type |
 |---|---|---|
-| `LogEntry`, `MetricPoint`, `Span`, `SimulatedIncident`, `PredictionReport`, `MetricSeries` | `domain/incident.py` | `@dataclass` puro |
-| `MitigationAction` | `domain/incident.py` | `dict` subclass com `__getattr__/__setattr__` |
+| `LogEntry`, `MetricPoint`, `Span`, `SimulatedIncident`, `PredictionReport`, `MetricSeries` | `domain/incident.py` | pure `@dataclass` |
+| `MitigationAction` | `domain/incident.py` | `dict` subclass with `__getattr__/__setattr__` |
 | `NormalizedAlert` | `domain/alert.py` | `pydantic.BaseModel` (`frozen=True`) |
 | `IncidentState` | `domain/incident_state.py` | `pydantic.BaseModel` (`populate_by_name=True`) |
 
-A regra de dependência da camada `domain/` (documentada em `domain/__init__.py`) é
-unidirecional: outras camadas podem importar de `domain/`, mas `domain/` não importa
-de mais nada do projeto. Isso já está respeitado.
+The dependency rule of the `domain/` layer (documented in `domain/__init__.py`) is
+one-way: other layers can import from `domain/`, but `domain/` imports nothing else
+from the project. This rule is already respected.
 
-O ponto que **não** está respeitado é a regra "puro Python (stdlib): sem Pydantic".
-`NormalizedAlert` e `IncidentState` foram movidos preservando `BaseModel` por escolha
-pragmática — converter agora exigiria refactor amplo dos call sites.
+The point that is **not** respected is the "pure Python (stdlib): no Pydantic" rule.
+`NormalizedAlert` and `IncidentState` were moved with `BaseModel` kept, as a pragmatic
+choice. Converting them now would require a broad refactor of the call sites.
 
-## Decisão
+## Decision
 
-Manter `NormalizedAlert` e `IncidentState` em `domain/` como `pydantic.BaseModel` por
-enquanto. **Não** converter para dataclass como parte do trabalho atual.
+Keep `NormalizedAlert` and `IncidentState` in `domain/` as `pydantic.BaseModel` for
+now. Do **not** convert them to dataclasses as part of the current work.
 
-## Consequências
+## Consequences
 
-**Positivas:**
+**Positive:**
 
-- Migração estrutural concluída sem regressão funcional. Identidade runtime preservada
-  (`core.models.X is domain.<mod>.X` para os 4 contratos).
-- Os 18+ call sites de `state.model_copy(update={...})` em produção (`pipeline_nodes`
-  ×6, `safety_nodes` ×4, `accuracy.py:78`, `main.py:1872`) continuam funcionando sem
-  mudança.
-- O validator de `severity` em `NormalizedAlert` (Pydantic `field_validator`) e o
-  round-trip JSON exercitado em `tests/test_core.py:95-96` continuam intactos.
-- Borda HTTP/MCP (FastAPI) integra direto com Pydantic — nenhum DTO adicional precisou
-  ser introduzido.
+- The structural migration is complete with no functional regression. Runtime identity is preserved
+  (`core.models.X is domain.<mod>.X` for the 4 contracts).
+- The 18+ call sites of `state.model_copy(update={...})` in production (`pipeline_nodes`
+  ×6, `safety_nodes` ×4, `accuracy.py:78`, `main.py:1872`) keep working without
+  change.
+- The `severity` validator in `NormalizedAlert` (Pydantic `field_validator`) and the
+  JSON round-trip exercised in `tests/test_core.py:95-96` remain intact.
+- The HTTP/MCP edge (FastAPI) integrates directly with Pydantic. No additional DTO had
+  to be introduced.
 
-**Negativas:**
+**Negative:**
 
-- A camada `domain/` **não** é framework-agnostic ainda. Pydantic é uma dependência
-  efetiva do domínio.
-- A docstring de `domain/__init__.py` afirma "puro Python (stdlib)" — fica
-  temporariamente em desacordo com o conteúdo. Precisa ser atualizada quando esta
-  decisão evoluir.
-- O domínio depende de uma decisão de framework HTTP por transitividade. Trocar
-  Pydantic seria um refactor não-local.
+- The `domain/` layer is **not** framework-agnostic yet. Pydantic is an effective
+  dependency of the domain.
+- The docstring of `domain/__init__.py` states "pure Python (stdlib)". It is
+  temporarily out of sync with the content. It must be updated when this
+  decision evolves.
+- The domain depends on an HTTP framework decision transitively. Replacing
+  Pydantic would be a non-local refactor.
 
-**Mitigações:**
+**Mitigations:**
 
-- Os shims em `core/models.py` mantêm o ponto de entrada histórico estável. Qualquer
-  futura decisão de mudar a representação interna pode preservar a interface
-  `from core.models import ...`.
-- Identidade runtime e annotations resolvidos preservam o comportamento de tipo
+- The shims in `core/models.py` keep the historical entry point stable. Any
+  future decision to change the internal representation can preserve the
+  `from core.models import ...` interface.
+- Runtime identity and resolved annotations preserve type behavior
   (Pydantic field types, isinstance, Protocol matching).
 
-## Critérios de saída
+## Exit criteria
 
-Esta decisão deve ser revisitada quando **qualquer um** dos itens abaixo mudar:
+Revisit this decision when **any** of the items below changes:
 
-1. **`model_copy(update=...)` substituível.** Seja via `dataclasses.replace` + helper,
-   seja por mudança de modelo de mutação (state machine explícita, immutable updates
-   funcionais via função pura). Hoje há 18+ chamadas em produção.
-2. **DTOs de borda separados.** Introdução de uma camada `adapters/<x>/schemas.py`
-   (FastAPI/MCP) que valida/serializa entrada/saída, deixando `domain/` puro. Isso
-   habilita conversão `NormalizedAlert` → dataclass sem afetar a borda HTTP.
-3. **Round-trip JSON preservado.** `tests/test_core.py:95-96` exercita
-   `state.model_dump_json()` + `IncidentState.model_validate_json(...)`. Substituição
-   do Pydantic exige equivalente (provavelmente via DTO de borda + serializador
-   explícito).
-4. **Validação de `severity` preservada.** `NormalizedAlert.severity` aceita apenas
-   `{critical, error, warning, info}` (case-insensitive, normaliza para lowercase).
-   Substituição exige validador equivalente, idealmente no ponto de ingestão (DTO de
-   borda) e não no domínio.
+1. **`model_copy(update=...)` is replaceable.** Either through `dataclasses.replace` + a helper,
+   or through a change in the mutation model (explicit state machine, functional immutable
+   updates through a pure function). Today there are 18+ calls in production.
+2. **Separate edge DTOs.** Introduction of an `adapters/<x>/schemas.py` layer
+   (FastAPI/MCP) that validates/serializes input/output and leaves `domain/` pure. This
+   enables the `NormalizedAlert` → dataclass conversion without affecting the HTTP edge.
+3. **JSON round-trip preserved.** `tests/test_core.py:95-96` exercises
+   `state.model_dump_json()` + `IncidentState.model_validate_json(...)`. Replacing
+   Pydantic requires an equivalent (probably through an edge DTO + an explicit
+   serializer).
+4. **`severity` validation preserved.** `NormalizedAlert.severity` accepts only
+   `{critical, error, warning, info}` (case-insensitive, normalizes to lowercase).
+   A replacement requires an equivalent validator, ideally at the ingestion point (edge
+   DTO) and not in the domain.
 
-Os 4 critérios são cumulativos: nenhum dos call sites de produção pode quebrar quando
-a saída acontecer.
+The 4 criteria are cumulative: no production call site can break when
+the exit happens.
 
-## Gatilho para revisão
+## Review trigger
 
-Reavaliar este ADR quando **qualquer um** dos eventos abaixo ocorrer:
+Re-evaluate this ADR when **any** of the events below occurs:
 
-- Próxima mudança funcional relevante em `server/webhook/`, `server/routes/a2a.py` ou
-  `mcp_server/` que precise tocar a forma do contrato (campo novo, validator novo).
-- Refactor planejado da máquina de estados do incidente (`state` field de
-  `IncidentState`) — momento natural para introduzir mutações explícitas e
-  potencialmente sair do `model_copy(update=...)`.
-- Adição de nova fonte de alerta que exija um validator próprio diferente do atual,
-  reforçando o caso para separar domain entity de DTO de borda.
+- The next relevant functional change in `server/webhook/`, `server/routes/a2a.py` or
+  `mcp_server/` that needs to touch the shape of the contract (new field, new validator).
+- A planned refactor of the incident state machine (the `state` field of
+  `IncidentState`). This is a natural moment to introduce explicit mutations and
+  potentially move away from `model_copy(update=...)`.
+- A new alert source that requires its own validator, different from the current one,
+  which strengthens the case for separating the domain entity from the edge DTO.
 
-Até lá, o domínio fica estável neste estado intermediário.
+Until then, the domain stays stable in this intermediate state.
 
-## Notas
+## Notes
 
-- Este ADR cobre **apenas** a representação dos contratos no domínio. Não trata da
-  organização interna de `pipeline/`, `agents/`, `blueprint/`, `safety/`, nem da
-  Fase 2 do refactor estrutural.
-- A decisão é deliberadamente conservadora: prefere estabilidade do pipeline em
-  produção a pureza arquitetural de curto prazo.
+- This ADR covers **only** the representation of the contracts in the domain. It does not cover the
+  internal organization of `pipeline/`, `agents/`, `blueprint/`, `safety/`, or
+  Phase 2 of the structural refactor.
+- The decision is deliberately conservative: it prefers stability of the production pipeline
+  over short-term architectural purity.

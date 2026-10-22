@@ -1,151 +1,151 @@
-# ADR 0002 — `LLMClient` como seam de teste e containment boundary
+# ADR 0002 — `LLMClient` as a test seam and containment boundary
 
 - **Status:** Accepted
-- **Data:** 2026-04-26
-- **Decisores:** allanbrunobr
-- **Relacionado:** ADR 0001, plano original da Fase 2a (spike `refactor/fase-2a-llm-port`, revertido)
+- **Date:** 2026-04-26
+- **Deciders:** allanbrunobr
+- **Related:** ADR 0001, original Phase 2a plan (spike `refactor/fase-2a-llm-port`, reverted)
 
-## Contexto
+## Context
 
-A Fase 1 fechou contratos do domínio em `domain/`. Para a Fase 2 foi proposto extrair
-uma porta `LLMClient` cobrindo o uso atual do SDK Anthropic. Um spike no branch
-`refactor/fase-2a-llm-port` introduziu:
+Phase 1 closed the domain contracts in `domain/`. For Phase 2, the proposal was to extract
+an `LLMClient` port that covers the current use of the Anthropic SDK. A spike on the
+`refactor/fase-2a-llm-port` branch introduced:
 
-- `domain/ports/llm_client.py` — `Protocol` com `create_message(**kwargs: Any) -> Any`
-- `adapters/llm/anthropic_client.py` — `AnthropicLLMClient` envolvendo `anthropic.Anthropic`
-- Modificações em `agents/diagnoser.py` removendo o `import anthropic` direto
+- `domain/ports/llm_client.py` — `Protocol` with `create_message(**kwargs: Any) -> Any`
+- `adapters/llm/anthropic_client.py` — `AnthropicLLMClient` wrapping `anthropic.Anthropic`
+- Changes in `agents/diagnoser.py` that removed the direct `import anthropic`
 
-O spike foi revertido após revisão por equipe de agentes que apontou três problemas
-estruturais:
+The spike was reverted after a review by a team of agents that found three structural
+problems:
 
-1. A porta proposta é passthrough (`**kwargs: Any` → `Any`). Não abstrai nem o payload
-   (kwargs aceita dialeto Anthropic — `max_tokens`, `system`, `tools` com `input_schema`)
-   nem a resposta (callers consomem `response.content[i].type`, `block.text`,
+1. The proposed port is a passthrough (`**kwargs: Any` → `Any`). It abstracts neither the payload
+   (kwargs accepts the Anthropic dialect — `max_tokens`, `system`, `tools` with `input_schema`)
+   nor the response (callers consume `response.content[i].type`, `block.text`,
    `tc.id/name/input`).
-2. A localização em `domain/ports/` é incorreta: `LLMClient` é dependência de serviço
-   de aplicação, não de entidade pura. Lugar apropriado é `application/ports/`
-   (a ser criado).
-3. Sem decisão explícita sobre o que a porta promete, há risco de espalhar uma
-   abstração frágil pelos call sites existentes e ficar com mockabilidade vendida
-   como hexagonal.
+2. The location in `domain/ports/` is wrong: `LLMClient` is a dependency of an application
+   service, not of a pure entity. The correct place is `application/ports/`
+   (to be created).
+3. Without an explicit decision on what the port promises, there is a risk of spreading a
+   fragile abstraction across the existing call sites and ending up with mockability sold
+   as hexagonal.
 
-### Estado atual em `main` (referência objetiva)
+### Current state in `main` (objective reference)
 
-| Arquivo | Importa SDK direto? | Instancia `Anthropic()`? | Usa `client.messages.create(...)`? |
+| File | Imports SDK directly? | Instantiates `Anthropic()`? | Uses `client.messages.create(...)`? |
 |---|---|---|---|
-| `main.py:502, 505` | sim | sim | não |
-| `blueprint/adapters/pipeline_nodes.py:117` | sim | sim | não |
-| `agents/diagnoser.py:19, 101` | sim | sim (com fallback via env) | sim, 2 call sites (`_call_llm`, `reflect`) |
-| `agents/orchestrator.py:247` | não — recebe via DI | não | sim, 5 call sites |
-| `agents/skill_evolver.py:47, 82` | não — recebe via DI | não | sim, 1 call site |
+| `main.py:502, 505` | yes | yes | no |
+| `blueprint/adapters/pipeline_nodes.py:117` | yes | yes | no |
+| `agents/diagnoser.py:19, 101` | yes | yes (with fallback via env) | yes, 2 call sites (`_call_llm`, `reflect`) |
+| `agents/orchestrator.py:247` | no — receives it via DI | no | yes, 5 call sites |
+| `agents/skill_evolver.py:47, 82` | no — receives it via DI | no | yes, 1 call site |
 
-`diagnoser.py`, `orchestrator.py` e `skill_evolver.py` somam **8 call sites** que
-consomem **diretamente o shape Anthropic da resposta** — campos efetivamente
-referenciados hoje: `response.content[*].type`, `block.text`, `tc.id`, `tc.name`,
-`tc.input`. Isso é o acoplamento real — não os imports do SDK.
+`diagnoser.py`, `orchestrator.py` and `skill_evolver.py` add up to **8 call sites** that
+consume **the Anthropic response shape directly**. The fields actually
+referenced today are: `response.content[*].type`, `block.text`, `tc.id`, `tc.name`,
+`tc.input`. This is the real coupling — not the SDK imports.
 
-## Decisão
+## Decision
 
-`LLMClient` será introduzida como **seam de teste e containment boundary**, **não**
-como abstração para provider-swap.
+`LLMClient` will be introduced as a **test seam and containment boundary**, **not**
+as an abstraction for provider swap.
 
-**O que a porta promete:**
+**What the port promises:**
 
-- Substituir `Anthropic()` direto nos instanciadores (`main.py`, `pipeline_nodes.py`,
-  `diagnoser.py` fallback) por uma única factory que devolve um adapter.
-- Permitir testes sem monkey-patch do SDK Anthropic. Fixtures continuam devolvendo
-  objetos Anthropic-shaped (a porta é passthrough), mas deixam de depender do
-  import direto do SDK e do `client.messages.create` real.
-- Centralizar políticas transversais futuras (timeout, retry, métricas, rate limit)
-  em um único lugar — o adapter.
+- Replace direct `Anthropic()` in the instantiators (`main.py`, `pipeline_nodes.py`,
+  `diagnoser.py` fallback) with a single factory that returns an adapter.
+- Allow tests without monkey-patching the Anthropic SDK. Fixtures still return
+  Anthropic-shaped objects (the port is a passthrough), but they no longer depend on the
+  direct SDK import or on the real `client.messages.create`.
+- Centralize future cross-cutting policies (timeout, retry, metrics, rate limit)
+  in a single place — the adapter.
 
-**O que a porta NÃO promete:**
+**What the port does NOT promise:**
 
-- Substituição de provider em runtime ou build time.
-- Tipagem own-domain de `Message`, `ToolDef`, `ToolCall`, `ChatResponse`, `TextBlock`,
-  `ToolUseBlock`. Esses tipos continuam sendo os do SDK Anthropic, vazando pela porta.
-- Kwargs normalizados (`max_tokens` vs. `max_completion_tokens`, schema de tools, etc.).
+- Provider replacement at runtime or build time.
+- Own-domain typing of `Message`, `ToolDef`, `ToolCall`, `ChatResponse`, `TextBlock`,
+  `ToolUseBlock`. These types remain the Anthropic SDK types and leak through the port.
+- Normalized kwargs (`max_tokens` vs. `max_completion_tokens`, tools schema, etc.).
 
-**Containment boundary** significa: nenhum arquivo do projeto fora de
-`adapters/llm/anthropic_client.py` pode importar `anthropic` direto. Imports diretos
-em `main.py`, `pipeline_nodes.py` e `diagnoser.py` devem migrar para o adapter. Mas o
-shape consumido pelos callers (estrutura da resposta) permanece Anthropic-específico
-até gatilho de saída.
+**Containment boundary** means: no project file outside
+`adapters/llm/anthropic_client.py` can import `anthropic` directly. Direct imports
+in `main.py`, `pipeline_nodes.py` and `diagnoser.py` must migrate to the adapter. But the
+shape that the callers consume (the response structure) stays Anthropic-specific
+until an exit trigger.
 
-## Consequências
+## Consequences
 
-**Positivas:**
+**Positive:**
 
-- Refactor incremental viável em PRs pequenos. Cada arquivo migra isoladamente.
-- Custo upfront baixo. Sem desenho de tipos novos. Sem retrofit em testes que mockam
+- An incremental refactor in small PRs is viable. Each file migrates in isolation.
+- Low upfront cost. No design of new types. No retrofit of tests that mock
   `client.messages.create`.
-- Mockabilidade ganhada (testes podem usar `LLMClient` Protocol em vez de monkey-patch
-  do SDK).
-- Lugar único para retry/timeout/métricas quando precisar.
-- Alinhamento com decisão pragmática do ADR 0001 (camadas "domain-ish" hoje).
+- Mockability gained (tests can use the `LLMClient` Protocol instead of monkey-patching
+  the SDK).
+- A single place for retry/timeout/metrics when needed.
+- Alignment with the pragmatic decision of ADR 0001 ("domain-ish" layers today).
 
-**Negativas:**
+**Negative:**
 
-- A porta vaza dialeto Anthropic. Adicionar provider real (OpenAI, Bedrock, vLLM)
-  exigirá ADR sucessor com retipagem completa de payload e resposta.
-- "Porta" é nome forte para o que efetivamente é seam — risco de leitor futuro
-  interpretar como abstração e tomar decisões sobre essa premissa errada. Mitigação:
-  docstring explícita no `LLMClient` Protocol e no adapter.
-- `agents/diagnoser.py`, `orchestrator.py` e `skill_evolver.py` continuam acoplados ao
-  shape da resposta Anthropic. Refactor deles fica fora desta fase.
+- The port leaks the Anthropic dialect. Adding a real provider (OpenAI, Bedrock, vLLM)
+  will require a successor ADR with a complete retyping of payload and response.
+- "Port" is a strong name for what is effectively a seam. A future reader can
+  interpret it as an abstraction and make decisions based on that wrong premise. Mitigation:
+  an explicit docstring in the `LLMClient` Protocol and in the adapter.
+- `agents/diagnoser.py`, `orchestrator.py` and `skill_evolver.py` stay coupled to the
+  Anthropic response shape. Their refactor is out of scope for this phase.
 
-**Mitigações:**
+**Mitigations:**
 
-- Docstring clara em `LLMClient` registrando "containment boundary, não provider-swap".
-- Adapter expõe assinatura passthrough `create_message(**kwargs) -> Any` mas o
-  retorno permanece tipado como `anthropic.types.Message` na mente do caller.
-- Lint/CI rule futura (não obrigatória nesta fase): bloquear `import anthropic` fora
-  de `adapters/llm/`.
+- A clear docstring in `LLMClient` that records "containment boundary, not provider-swap".
+- The adapter exposes the passthrough signature `create_message(**kwargs) -> Any`, but the
+  return value stays typed as `anthropic.types.Message` in the caller's mind.
+- A future lint/CI rule (not mandatory in this phase): block `import anthropic` outside
+  `adapters/llm/`.
 
-## Critérios de saída (para virar provider-swap real)
+## Exit criteria (to become a real provider swap)
 
-Esta decisão deve ser revisitada quando **qualquer um** dos itens abaixo ocorrer:
+Revisit this decision when **any** of the items below occurs:
 
-1. **Aparece um segundo provider concreto.** OpenAI, Anthropic Bedrock, vLLM, ou
-   modelo self-hosted entram em uso real (não experimental).
-2. **Necessidade de testar side-by-side.** Avaliação comparativa entre providers
-   exige a mesma lógica de agente rodando contra implementações diferentes.
-3. **Refactor planejado de tool-calling.** Mudança de schema de tools que toque
-   múltiplos call sites — momento natural para tipar `ToolDef`, `ToolCall`,
-   `ToolUseBlock` no domínio.
-4. **Shape Anthropic precisa se espalhar para novos módulos.** Quando *novos* campos
-   provider-specific (além dos já consumidos hoje: `content[*].type`, `block.text`,
-   `tc.id/name/input`) tiverem que ser referenciados em **mais de um módulo novo**
-   fora de `adapters/llm/` — ou quando um módulo novo precisar tocar o shape pela
-   primeira vez. O critério é incremental sobre o estado atual, não absoluto: hoje
-   3 módulos já tocam o shape e a decisão é deliberadamente conviver com isso.
+1. **A second concrete provider appears.** OpenAI, Anthropic Bedrock, vLLM, or a
+   self-hosted model goes into real use (not experimental).
+2. **Need for side-by-side testing.** A comparative evaluation between providers
+   requires the same agent logic to run against different implementations.
+3. **Planned tool-calling refactor.** A change to the tools schema that touches
+   multiple call sites. This is a natural moment to type `ToolDef`, `ToolCall`,
+   `ToolUseBlock` in the domain.
+4. **The Anthropic shape needs to spread to new modules.** When *new*
+   provider-specific fields (beyond the ones consumed today: `content[*].type`, `block.text`,
+   `tc.id/name/input`) must be referenced in **more than one new module**
+   outside `adapters/llm/` — or when a new module needs to touch the shape for the
+   first time. The criterion is incremental over the current state, not absolute: today
+   3 modules already touch the shape, and the decision is to deliberately live with that.
 
-A saída exige ADR sucessor (0003+) cobrindo:
+The exit requires a successor ADR (0003+) that covers:
 
-- Tipos own-domain: `Message`, `Role`, `ToolDef`, `ToolCall`, `ChatResponse`,
+- Own-domain types: `Message`, `Role`, `ToolDef`, `ToolCall`, `ChatResponse`,
   `TextBlock`, `ToolUseBlock`, `StopReason`, `Usage`.
-- Normalização de kwargs (modelo, max_tokens, system prompt, tools).
-- Plano de migração dos call sites em `diagnoser.py`, `orchestrator.py`,
+- Normalization of kwargs (model, max_tokens, system prompt, tools).
+- A migration plan for the call sites in `diagnoser.py`, `orchestrator.py`,
   `skill_evolver.py`.
-- Estratégia de testes side-by-side, se aplicável.
+- A side-by-side testing strategy, if applicable.
 
-## Gatilho para revisão
+## Review trigger
 
-- Adição de provider real (não experimental).
-- Necessidade concreta de testes ou rollouts side-by-side.
-- Mudança em tool-calling que toque múltiplos call sites.
-- Decisão de produto sobre flexibilidade de modelo/provider.
+- Addition of a real provider (not experimental).
+- A concrete need for side-by-side tests or rollouts.
+- A change in tool-calling that touches multiple call sites.
+- A product decision about model/provider flexibility.
 
-## Notas
+## Notes
 
-- Esta decisão **não** cobre a porta `Reporter` (Rich → eventos estruturados). Será
-  ADR separado quando o trabalho começar.
-- Esta decisão **não** cobre a reorganização de `core/protocols.py` →
-  `application/ports/` ou `core/store.py` → `adapters/persistence/`. Esses movimentos
-  vêm depois das portas estabilizadas, conforme reordenação do plano original.
-- `MitigationAction` permanece como `dict subclass` (ADR 0001 ponto 6 do follow-up).
-  Não é afetado por esta decisão **porque** a porta é passthrough — o adapter LLM
-  devolve `anthropic.types.Message` cru e o `DiagnosisAgent` continua parseando JSON
-  para construir `MitigationAction`.
-- O spike `refactor/fase-2a-llm-port` foi revertido. A branch pode ser deletada após
-  o merge deste ADR.
+- This decision does **not** cover the `Reporter` port (Rich → structured events). It will be a
+  separate ADR when that work starts.
+- This decision does **not** cover the reorganization of `core/protocols.py` →
+  `application/ports/` or `core/store.py` → `adapters/persistence/`. These moves
+  come after the ports are stabilized, according to the reordering of the original plan.
+- `MitigationAction` stays a `dict subclass` (ADR 0001 follow-up item 6).
+  This decision does not affect it **because** the port is a passthrough — the LLM adapter
+  returns the raw `anthropic.types.Message`, and `DiagnosisAgent` still parses JSON
+  to build `MitigationAction`.
+- The `refactor/fase-2a-llm-port` spike was reverted. The branch can be deleted after
+  this ADR is merged.

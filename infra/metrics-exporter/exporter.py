@@ -1,13 +1,13 @@
-"""Metrics exporter simulado — expoe metricas Prometheus do payment-svc.
+"""Simulated metrics exporter — exposes Prometheus metrics for payment-svc.
 
-Simula o cenario de connection pool exhaustion:
-- Periodo normal: metricas estaveis
-- Apos INCIDENT_DELAY_S segundos: degradacao progressiva (spike de erros, latencia, pool esgotado)
-- Apos RECOVERY_DELAY_S segundos: recuperacao gradual
+Simulates the connection pool exhaustion scenario:
+- Normal period: stable metrics
+- After INCIDENT_DELAY_S seconds: progressive degradation (error spike, latency, pool exhausted)
+- After RECOVERY_DELAY_S seconds: gradual recovery
 
-Endpoint: GET /metrics (formato Prometheus text exposition)
-Controle: POST /trigger-incident  — inicia degradacao manual
-           POST /reset            — volta ao estado normal
+Endpoint: GET /metrics (Prometheus text exposition format)
+Control:  POST /trigger-incident  — starts degradation manually
+           POST /reset            — returns to the normal state
 """
 
 import math
@@ -16,17 +16,17 @@ import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 PORT = 9101
-INCIDENT_DELAY_S = 120  # 2 min apos startup para degradar automaticamente
-RECOVERY_DELAY_S = 300  # 5 min apos startup para recuperar
+INCIDENT_DELAY_S = 120  # 2 min after startup to degrade automatically
+RECOVERY_DELAY_S = 300  # 5 min after startup to recover
 
-# Estado global
+# Global state
 start_time = time.time()
 incident_triggered_at: float | None = None
 reset_at: float | None = None
 
 
 def _phase() -> str:
-    """Determina fase atual: normal, degrading, incident, recovering."""
+    """Determine the current phase: normal, degrading, incident, recovering."""
     now = time.time()
     if reset_at and now > reset_at:
         return "normal"
@@ -37,7 +37,7 @@ def _phase() -> str:
         if elapsed < 180:
             return "incident"
         return "recovering"
-    # Auto-trigger baseado no tempo de startup
+    # Auto-trigger based on time since startup
     elapsed = now - start_time
     if elapsed < INCIDENT_DELAY_S:
         return "normal"
@@ -49,7 +49,7 @@ def _phase() -> str:
 
 
 def _metrics() -> str:
-    """Gera metricas no formato Prometheus text exposition."""
+    """Generate metrics in Prometheus text exposition format."""
     phase = _phase()
     now = time.time()
     jitter = random.uniform(-0.05, 0.05)
@@ -76,7 +76,7 @@ def _metrics() -> str:
         latency_p95 = 45.0 + t * 800 + random.uniform(-10, 10)
         latency_p99 = 120.0 + t * 2000 + random.uniform(-20, 20)
         pool_active = int(15 + t * 35)
-        pool_max = 50  # Config ruim: 200 -> 50
+        pool_max = 50  # Bad config: 200 -> 50
         pool_waiting = int(t * 80)
         requests_total = 150 + random.randint(-10, 10)
         errors_total = int(1 + t * 45)
@@ -88,7 +88,7 @@ def _metrics() -> str:
         latency_p95 = 950.0 + random.uniform(-50, 80)
         latency_p99 = 2500.0 + random.uniform(-100, 200)
         pool_active = 50
-        pool_max = 50  # Esgotado!
+        pool_max = 50  # Exhausted!
         pool_waiting = 80 + random.randint(-5, 15)
         requests_total = 150 + random.randint(-10, 10)
         errors_total = 48 + random.randint(-3, 5)
@@ -101,7 +101,7 @@ def _metrics() -> str:
         latency_p95 = 950.0 - t * 900 + random.uniform(-10, 10)
         latency_p99 = 2500.0 - t * 2350 + random.uniform(-20, 20)
         pool_active = int(50 - t * 35)
-        pool_max = 200  # Corrigido: 50 -> 200
+        pool_max = 200  # Fixed: 50 -> 200
         pool_waiting = int(80 - t * 80)
         requests_total = 150 + random.randint(-10, 10)
         errors_total = int(48 - t * 46)

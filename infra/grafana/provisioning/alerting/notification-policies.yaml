@@ -1,4 +1,4 @@
-# Notification Policy — roteia todos os alertas para o contact point aiops-webhook
+# Notification Policy — routes all alerts to the aiops-webhook contact point
 apiVersion: 1
 
 policies:

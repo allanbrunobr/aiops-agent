@@ -1,4 +1,4 @@
-# Alert Rules — detecta anomalias no payment-svc
+# Alert Rules — detect anomalies in payment-svc
 apiVersion: 1
 
 groups:
@@ -7,7 +7,7 @@ groups:
     folder: AIOps
     interval: 10s
     rules:
-      # Alerta 1: Error rate acima de 10%
+      # Alert 1: Error rate above 10%
       - uid: payment-svc-high-error-rate
         title: "High Error Rate - payment-svc"
         condition: C
@@ -44,7 +44,7 @@ groups:
           summary: "Error rate at {{ $values.A }}% (threshold: 10%)"
           description: "payment-svc error rate exceeded 10% for 30s. Current: {{ $values.A }}%. Possible connection pool exhaustion."
 
-      # Alerta 2: Connection pool saturado (> 80% usado)
+      # Alert 2: Connection pool saturated (> 80% used)
       - uid: payment-svc-pool-exhaustion
         title: "Connection Pool Exhaustion - payment-svc"
         condition: C
@@ -81,7 +81,7 @@ groups:
           summary: "Connection pool at {{ $values.A }}% capacity"
           description: "payment-svc connection pool usage exceeds 80%. Active connections near max. Possible pool exhaustion after config change."
 
-      # Alerta 3: Latencia p95 acima de 500ms
+      # Alert 3: p95 latency above 500ms
       - uid: payment-svc-high-latency
         title: "High Latency P95 - payment-svc"
         condition: C

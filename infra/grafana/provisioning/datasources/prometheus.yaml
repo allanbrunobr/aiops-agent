@@ -1,4 +1,4 @@
-# Provisiona Prometheus como datasource automaticamente
+# Provisions Prometheus as a datasource automatically
 apiVersion: 1
 
 datasources:

@@ -1,70 +1,70 @@
-# Slack Workspace de Teste — Setup
+# Test Slack Workspace — Setup
 
-## 1. Criar Workspace Gratuito
+## 1. Create a Free Workspace
 
-1. Acesse https://slack.com/get-started#/createnew
-2. Use seu email pessoal (nao o corporativo)
-3. Nome sugerido: `AIOps Lab` ou `aiops-test`
-4. Crie o canal `#aiops-alerts`
+1. Go to https://slack.com/get-started#/createnew
+2. Use a personal email address
+3. Suggested name: `AIOps Lab` or `aiops-test`
+4. Create the channel `#aiops-alerts`
 
-## 2. Criar Slack App
+## 2. Create a Slack App
 
-1. Acesse https://api.slack.com/apps
-2. Clique **Create New App** → **From scratch**
-3. Nome: `AIOps Agent Bot`
-4. Workspace: selecione o workspace criado acima
+1. Go to https://api.slack.com/apps
+2. Click **Create New App** → **From scratch**
+3. Name: `AIOps Agent Bot`
+4. Workspace: select the workspace you created above
 
-## 3. Configurar Bot Token
+## 3. Configure the Bot Token
 
-1. No painel da app, va em **OAuth & Permissions**
-2. Em **Bot Token Scopes**, adicione:
-   - `chat:write` — postar mensagens
-   - `chat:write.public` — postar em canais publicos sem ser membro
-3. Clique **Install to Workspace** no topo da pagina
-4. Autorize
-5. Copie o **Bot User OAuth Token** (comeca com `xoxb-`)
+1. In the app panel, go to **OAuth & Permissions**
+2. Under **Bot Token Scopes**, add:
+   - `chat:write` — post messages
+   - `chat:write.public` — post to public channels without being a member
+3. Click **Install to Workspace** at the top of the page
+4. Authorize
+5. Copy the **Bot User OAuth Token** (starts with `xoxb-`)
 
-## 4. Configurar no AIOps Agent
+## 4. Configure the AIOps Agent
 
-Edite `.env.local` na raiz do projeto:
+Edit `.env.local` at the project root:
 
 ```
-SLACK_BOT_TOKEN=xoxb-seu-token-aqui
+SLACK_BOT_TOKEN=xoxb-your-token-here
 SLACK_CHANNEL=#aiops-alerts
 ```
 
-## 5. Testar
+## 5. Test
 
 ```bash
-# Teste rapido via curl
+# Quick test with curl
 curl -X POST https://slack.com/api/chat.postMessage \
-  -H "Authorization: Bearer xoxb-seu-token-aqui" \
+  -H "Authorization: Bearer xoxb-your-token-here" \
   -H "Content-Type: application/json" \
-  -d '{"channel": "#aiops-alerts", "text": "AIOps Agent conectado!"}'
+  -d '{"channel": "#aiops-alerts", "text": "AIOps Agent connected!"}'
 ```
 
-## 6. Fluxo Completo de Teste
+## 6. Full Test Flow
 
 ```
 Metrics Exporter (Docker)
-    ↓ scrape cada 15s
+    ↓ scrape every 15s
 Prometheus (Docker)
     ↓ datasource
-Grafana (Docker) — detecta anomalia
+Grafana (Docker) — detects anomaly
     ↓ webhook POST (Bearer token)
 AIOps Agent (local :47890)
-    ↓ normaliza → pipeline → diagnostico
-Slack (cloud) — notificacao com Block Kit
+    ↓ normalize → pipeline → diagnosis
+Slack (cloud) — Block Kit notification
 ```
 
-## Alternativa: Dry-Run (sem Slack real)
+## Alternative: Dry-Run (no real Slack)
 
-Se quiser testar sem Slack:
+If you want to test without Slack:
 
 ```python
-# O SlackNotifier suporta dry_run=True
-# Logs mostram os blocos Block Kit que seriam enviados
+# SlackNotifier supports dry_run=True
+# Logs show the Block Kit blocks that would be sent
 notifier = SlackNotifier(channel="#test", creds=creds, dry_run=True)
 ```
 
-Os blocos sao logados em JSON via structlog — util para validar o formato.
+The blocks are logged as JSON via structlog — useful to validate the format.

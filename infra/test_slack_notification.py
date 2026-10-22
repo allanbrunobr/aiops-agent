@@ -1,7 +1,7 @@
-"""Envia notificacao de teste completa via SlackNotifier com Block Kit.
+"""Send a full test notification through SlackNotifier with Block Kit.
 
-Simula o ciclo completo: pipeline.started → node.completed (x11) → pipeline.completed
-Usa o token real do .env.local.
+Simulates the full cycle: pipeline.started → node.completed (x11) → pipeline.completed
+Uses the real token from .env.local.
 
 Usage: python infra/test_slack_notification.py
 """
@@ -14,7 +14,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# Carrega .env.local
+# Load .env.local
 env_file = project_root / ".env.local"
 if env_file.exists():
     for line in env_file.read_text().splitlines():
@@ -31,7 +31,7 @@ from interfaces.http.notifications.slack import SlackNotifier
 
 
 def evt(event_type: str, cid: str, node_name: str | None = None, **data) -> LifecycleEvent:
-    """Helper para criar LifecycleEvent com timestamp atual."""
+    """Helper to create a LifecycleEvent with the current timestamp."""
     return LifecycleEvent(
         event_type=event_type,
         correlation_id=cid,
@@ -48,13 +48,13 @@ async def main():
     notifier = SlackNotifier(channel=channel, creds=creds)
 
     if notifier._client is None:
-        print("ERRO: SLACK_BOT_TOKEN nao configurado ou invalido")
+        print("ERROR: SLACK_BOT_TOKEN not set or invalid")
         return
 
     correlation_id = "inc-20260312-demo0001"
 
     # 1. Pipeline started
-    print(f"[1/4] Enviando pipeline.started para {channel}...")
+    print(f"[1/4] Sending pipeline.started to {channel}...")
     await notifier.on_event(evt(
         "pipeline.started",
         correlation_id,
@@ -64,7 +64,7 @@ async def main():
     ))
     await asyncio.sleep(1.5)
 
-    # 2. Nodes completing progressivamente
+    # 2. Nodes completing progressively
     nodes = [
         ("telemetry_sanitizer", 45),
         ("log_parser", 320),
@@ -89,8 +89,8 @@ async def main():
         ))
         await asyncio.sleep(0.8)
 
-    # 3. Pipeline completed com diagnostico
-    print("[3/4] Enviando pipeline.completed com diagnostico...")
+    # 3. Pipeline completed with diagnosis
+    print("[3/4] Sending pipeline.completed with diagnosis...")
     await notifier.on_event(LifecycleEvent(
         event_type="pipeline.completed",
         correlation_id=correlation_id,
@@ -117,8 +117,8 @@ async def main():
         },
     ))
 
-    print("[4/4] Notificacao completa enviada!")
-    print(f"     Verifique o canal {channel} no Slack.")
+    print("[4/4] Full notification sent!")
+    print(f"     Check the {channel} channel in Slack.")
 
 
 if __name__ == "__main__":

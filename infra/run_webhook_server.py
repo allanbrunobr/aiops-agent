@@ -1,7 +1,7 @@
-"""Boot script para o webhook server local com todas as dependencias wired.
+"""Boot script for the local webhook server with all dependencies wired.
 
-Carrega .env.local, monta o FastAPI app com webhook router, credentials,
-dedup store, pipeline runner e notificador Slack.
+Loads .env.local and assembles the FastAPI app with the webhook router, credentials,
+dedup store, pipeline runner and Slack notifier.
 
 Usage: python infra/run_webhook_server.py
 """
@@ -12,11 +12,11 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-# Adiciona raiz do projeto ao path
+# Add the project root to the path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# Carrega .env.local antes de qualquer import que use os.environ
+# Load .env.local before any import that uses os.environ
 env_file = project_root / ".env.local"
 if env_file.exists():
     for line in env_file.read_text().splitlines():
@@ -37,7 +37,7 @@ from interfaces.http.webhook.pipeline_runner import PipelineRunner
 from interfaces.http.webhook.router import webhook_router
 from interfaces.http.webhook.errors import webhook_error_handler, WebhookError
 
-# Importa normalizers para auto-registro via @register_normalizer
+# Import normalizers so they self-register via @register_normalizer
 import interfaces.http.webhook.normalizers.grafana  # noqa: F401
 import interfaces.http.webhook.normalizers.pagerduty  # noqa: F401
 import interfaces.http.webhook.normalizers.databricks  # noqa: F401
@@ -47,7 +47,7 @@ log = structlog.get_logger()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle: inicia pipeline runner no startup, para no shutdown."""
+    """Lifecycle: start the pipeline runner on startup, stop it on shutdown."""
     runner: PipelineRunner = app.state.pipeline_runner
     await runner.start()
     log.info("webhook_server.started", port=47890)
@@ -57,24 +57,24 @@ async def lifespan(app: FastAPI):
 
 
 def create_webhook_app() -> FastAPI:
-    """Cria FastAPI app com webhook router e dependencias completas."""
+    """Create the FastAPI app with the webhook router and all dependencies."""
     app = FastAPI(
         title="AIOps Agent — Webhook Server",
-        description="Recebe alertas de Grafana/PagerDuty/Databricks e processa via pipeline",
+        description="Receives alerts from Grafana/PagerDuty/Databricks and processes them through the pipeline",
         version="1.0.0",
         lifespan=lifespan,
     )
 
-    # Wire dependencias no app.state
+    # Wire dependencies into app.state
     app.state.config = AppConfig()
     app.state.credentials = EnvCredentialProvider()
     app.state.dedup_store = DedupStore()
     app.state.pipeline_runner = PipelineRunner(max_concurrent=3, max_queued=10)
 
-    # Monta webhook router
+    # Mount the webhook router
     app.include_router(webhook_router)
 
-    # Error handler para WebhookError -> ProblemDetail JSON
+    # Error handler for WebhookError -> ProblemDetail JSON
     app.add_exception_handler(WebhookError, webhook_error_handler)
 
     # Health check

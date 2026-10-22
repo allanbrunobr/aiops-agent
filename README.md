@@ -22,7 +22,7 @@ The implementation is based on seven academic AIOps papers (2024–2025). See [A
 
 <sub>Demo dashboard (`python interfaces/demo/server.py`), sped up. Risk score, latency drift prediction and logs as the incident develops.</sub>
 
-> Most code comments, the narrative demo mode, the ADRs and the `infra/` guides are written in Portuguese. The other documents under `docs/` are in English.
+> The documentation is in English. Code comments, docstrings and the narrative demo mode (`/demo/story`) are in Portuguese.
 
 ---
 
@@ -369,7 +369,7 @@ bash infra/test-webhook.sh                                  # sends a simulated 
 | Slack mock | http://localhost:47892/_mock/messages |
 | Webhook server | http://localhost:47890/health |
 
-To send notifications to the mock instead of the real Slack, set `SLACK_API_BASE_URL=http://localhost:47892/api/` and `SLACK_BOT_TOKEN=xoxb-mock-token`. The full walkthrough (in Portuguese) is in [`infra/README.md`](infra/README.md).
+To send notifications to the mock instead of the real Slack, set `SLACK_API_BASE_URL=http://localhost:47892/api/` and `SLACK_BOT_TOKEN=xoxb-mock-token`. The full walkthrough is in [`infra/README.md`](infra/README.md).
 
 ---
 
@@ -433,15 +433,15 @@ The PDFs are in [`docs/papers/`](docs/papers/).
 
 ## Further documentation
 
-| Document | Contents | Language |
-|----------|----------|----------|
-| [`docs/index.md`](docs/index.md) | Documentation index | English |
-| [`docs/architecture.md`](docs/architecture.md) | Architecture decisions, state machine and safety layers | English |
-| [`docs/development-guide.md`](docs/development-guide.md) | Development environment and conventions | English |
-| [`docs/adr/`](docs/adr/) | Architecture Decision Records | Portuguese |
-| [`infra/README.md`](infra/README.md) | Local Docker environment (Grafana, Prometheus, Slack mock) | Portuguese |
-| [`infra/SLACK-SETUP.md`](infra/SLACK-SETUP.md) | Setting up a real Slack App | Portuguese |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution guide | English |
+| Document | Contents |
+|----------|----------|
+| [`docs/index.md`](docs/index.md) | Documentation index |
+| [`docs/architecture.md`](docs/architecture.md) | Architecture decisions, state machine and safety layers |
+| [`docs/development-guide.md`](docs/development-guide.md) | Development environment and conventions |
+| [`docs/adr/`](docs/adr/) | Architecture Decision Records |
+| [`infra/README.md`](infra/README.md) | Local Docker environment (Grafana, Prometheus, Slack mock) |
+| [`infra/SLACK-SETUP.md`](infra/SLACK-SETUP.md) | Setting up a real Slack App |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution guide |
 
 ---
 

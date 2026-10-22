@@ -1,39 +1,39 @@
-# Plano de Execução do Refactoring
+# Refactoring Execution Plan
 
-## Objetivo
+## Objective
 
-Finalizar o refactoring arquitetural iniciado nas Fases 0, 1 e 2a sem abrir mudanças
-funcionais desnecessárias. O plano abaixo é a ordem direta de execução para levar o
-repositório a um estado mais limpo, testável e alinhado com os ADRs aceitos.
+Finish the architectural refactoring started in Phases 0, 1 and 2a without opening
+unnecessary functional changes. The plan below is the direct execution order to bring
+the repository to a cleaner, more testable state that aligns with the accepted ADRs.
 
-Baseline atual assumida: `main` em `84e0ec8`, PR #9 mergeado, `LLMClient` introduzido
-como seam de teste e containment boundary conforme ADR 0002.
+Assumed current baseline: `main` at `84e0ec8`, PR #9 merged, `LLMClient` introduced
+as a test seam and containment boundary per ADR 0002.
 
-## Regras de Execução
+## Execution Rules
 
-- Um PR por fase. Não misturar movimentação de arquivos com mudança comportamental.
-- Cada PR deve passar `scripts/ci-local.sh unit` localmente antes do push.
-- Rodar CI completo antes de mergear: unit, integration/snapshot e Rust/PyO3.
-- Usar shims somente como transição. Todo shim novo precisa ter critério de remoção.
-- Não refatorar Pydantic em `domain/` sem cumprir os gatilhos do ADR 0001 ou aprovar
-  um ADR sucessor.
+- One PR per phase. Do not mix file moves with behavioral changes.
+- Each PR must pass `scripts/ci-local.sh unit` locally before the push.
+- Run the full CI before merging: unit, integration/snapshot and Rust/PyO3.
+- Use shims only as a transition. Every new shim needs a removal criterion.
+- Do not refactor Pydantic in `domain/` unless the ADR 0001 triggers are met or a
+  successor ADR is approved.
 
-## Fase 2b — Fechar a Seam LLM
+## Phase 2b — Close the LLM Seam
 
 **Branch:** `refactor/llm-seam-callers`
 
-**Escopo:**
+**Scope:**
 
-- Migrar `agents/orchestrator.py` para `client.create_message(...)`.
-- Migrar `agents/skill_evolver.py` para `client.create_message(...)`.
-- Tipar os construtores contra `application.ports.llm_client.LLMClient` onde couber.
-- Remover a property `messages` de `adapters/llm/anthropic_client.py`.
-- Atualizar docstrings do adapter e da porta para refletir que `.messages` não é mais
-  contrato público.
-- Atualizar mocks em `tests/test_orchestrator.py` e testes relacionados ao skill
+- Migrate `agents/orchestrator.py` to `client.create_message(...)`.
+- Migrate `agents/skill_evolver.py` to `client.create_message(...)`.
+- Type the constructors against `application.ports.llm_client.LLMClient` where it fits.
+- Remove the `messages` property from `adapters/llm/anthropic_client.py`.
+- Update the adapter and port docstrings to reflect that `.messages` is no longer a
+  public contract.
+- Update mocks in `tests/test_orchestrator.py` and tests related to the skill
   evolver.
 
-**Critérios de aceite:**
+**Acceptance criteria:**
 
 ```bash
 rg -n "from anthropic|import anthropic|Anthropic\(" . -g "*.py"
@@ -43,27 +43,27 @@ python -m pytest tests/test_orchestrator.py tests/test_llm_model_config.py -q
 scripts/ci-local.sh unit
 ```
 
-Resultado esperado: import direto do Anthropic apenas em
-`adapters/llm/anthropic_client.py`; nenhuma chamada `.messages.create` fora do adapter.
+Expected result: direct Anthropic import only in
+`adapters/llm/anthropic_client.py`; no `.messages.create` call outside the adapter.
 
-## Fase 2c — Reporter Port com Eventos Estruturados
+## Phase 2c — Reporter Port with Structured Events
 
 **Branch:** `refactor/reporter-port`
 
-**Escopo:**
+**Scope:**
 
-- Criar `application/ports/reporter.py`.
-- Criar adapters:
+- Create `application/ports/reporter.py`.
+- Create adapters:
   - `adapters/reporter/rich_console.py`
   - `adapters/reporter/structured_log.py`
-- Definir vocabulário pequeno de eventos, por exemplo: `diagnosis_started`,
+- Define a small event vocabulary, for example: `diagnosis_started`,
   `llm_call_failed`, `thought_observed`, `tool_called`, `tool_observed`,
   `diagnosis_completed`, `mitigation_proposed`, `human_approval_requested`.
-- Migrar primeiro `agents/detector.py`, `agents/diagnoser.py` e
-  `agents/mitigator.py`.
-- Manter `main.py` com Rich por enquanto. CLI é interface, não domínio de agente.
+- Migrate `agents/detector.py`, `agents/diagnoser.py` and
+  `agents/mitigator.py` first.
+- Keep `main.py` with Rich for now. The CLI is an interface, not agent domain.
 
-**Critérios de aceite:**
+**Acceptance criteria:**
 
 ```bash
 rg -n "from rich|Console\(|Panel\(|console\.print" agents -g "*.py"
@@ -72,23 +72,23 @@ python -m pytest tests/test_diagnose_incident.py tests/test_tool_methods.py test
 scripts/ci-local.sh unit
 ```
 
-Resultado esperado: agentes não importam Rich diretamente; saída visual fica em adapter.
+Expected result: agents do not import Rich directly; visual output lives in an adapter.
 
-## Fase 2d — Ports e Persistence
+## Phase 2d — Ports and Persistence
 
 **Branch:** `refactor/incident-store-port`
 
-**Escopo:**
+**Scope:**
 
-- Mover `IncidentStore` de `core/protocols.py` para
+- Move `IncidentStore` from `core/protocols.py` to
   `application/ports/incident_store.py`.
-- Mover `InMemoryStore` de `core/store.py` para
+- Move `InMemoryStore` from `core/store.py` to
   `adapters/persistence/in_memory_store.py`.
-- Criar `adapters/persistence/__init__.py`.
-- Manter `core/protocols.py` e `core/store.py` como shims temporários com `__all__`.
-- Atualizar imports em código de produção tocado pela mudança.
+- Create `adapters/persistence/__init__.py`.
+- Keep `core/protocols.py` and `core/store.py` as temporary shims with `__all__`.
+- Update imports in production code touched by the change.
 
-**Critérios de aceite:**
+**Acceptance criteria:**
 
 ```bash
 rg -n "from core\.protocols|from core\.store|import core\.protocols|import core\.store" .
@@ -97,24 +97,24 @@ python -m pytest tests/test_core.py tests/test_engine.py tests/test_api/test_acc
 scripts/ci-local.sh unit
 ```
 
-Resultado esperado: implementação concreta de store sai de `core/`; contratos de
-aplicação ficam em `application/ports/`.
+Expected result: the concrete store implementation leaves `core/`; application
+contracts live in `application/ports/`.
 
-## Fase 2e — Retirar Shims Legados
+## Phase 2e — Retire Legacy Shims
 
 **Branch:** `refactor/remove-core-shims`
 
-**Escopo:**
+**Scope:**
 
-- Atualizar imports remanescentes:
+- Update the remaining imports:
   - `core.models` -> `domain.incident`, `domain.alert`, `domain.incident_state`
   - `core.protocols` -> `application.ports.incident_store`
   - `core.store` -> `adapters.persistence.in_memory_store`
-- Remover shims se não houver contrato público externo a preservar.
-- Se houver risco de quebra externa, manter shims por uma versão com
-  `DeprecationWarning` e abrir issue de remoção.
+- Remove the shims if there is no external public contract to preserve.
+- If there is a risk of external breakage, keep the shims for one version with
+  `DeprecationWarning` and open a removal issue.
 
-**Critérios de aceite:**
+**Acceptance criteria:**
 
 ```bash
 rg -n "from core\.models|import core\.models|from core\.protocols|from core\.store" .
@@ -123,36 +123,36 @@ scripts/ci-local.sh unit
 scripts/ci-local.sh integration
 ```
 
-Resultado esperado: `core/` deixa de ser ponto de passagem para contratos novos.
+Expected result: `core/` stops being a pass-through point for new contracts.
 
-## Fase 3 — Domain Purity e DTOs de Borda
+## Phase 3 — Domain Purity and Edge DTOs
 
-**Branch inicial:** `docs/adr-0003-domain-purity`
+**Initial branch:** `docs/adr-0003-domain-purity`
 
-Esta fase depende do ADR 0001. Antes de código, escrever ADR 0003 decidindo a saída do
-Pydantic-backed domain.
+This phase depends on ADR 0001. Before any code, write ADR 0003 to decide the exit from
+the Pydantic-backed domain.
 
-**ADR 0003 deve decidir:**
+**ADR 0003 must decide:**
 
-- Onde ficam DTOs Pydantic de webhook, HTTP, MCP e A2A.
-- Como substituir `IncidentState.model_copy(update=...)`.
-- Como preservar round-trip JSON hoje coberto por `model_dump_json()` e
-  `model_validate_json(...)`.
-- Como preservar validação de `NormalizedAlert.severity`.
-- Como transformar `MitigationAction` de `dict subclass` em contrato explícito.
+- Where the Pydantic DTOs for webhook, HTTP, MCP and A2A live.
+- How to replace `IncidentState.model_copy(update=...)`.
+- How to preserve the JSON round-trip that `model_dump_json()` and
+  `model_validate_json(...)` cover today.
+- How to preserve the `NormalizedAlert.severity` validation.
+- How to turn `MitigationAction` from a `dict subclass` into an explicit contract.
 
-**Execução após ADR aceito:**
+**Execution after the ADR is accepted:**
 
-- Criar DTOs Pydantic em `server/webhook/schemas.py` e/ou
+- Create Pydantic DTOs in `server/webhook/schemas.py` and/or
   `interfaces/*/schemas.py`.
-- Converter `NormalizedAlert` para dataclass pura no domínio.
-- Converter `IncidentState` para dataclass pura ou objeto de state machine explícito.
-- Criar serializadores explícitos para JSON.
-- Converter `MitigationAction` para dataclass com `to_dict()`/`from_dict()`.
-- Atualizar call sites de `model_copy`, `model_dump_json`, `model_validate_json`,
-  `dict(action)` e `action["field"]`.
+- Convert `NormalizedAlert` to a pure dataclass in the domain.
+- Convert `IncidentState` to a pure dataclass or an explicit state machine object.
+- Create explicit JSON serializers.
+- Convert `MitigationAction` to a dataclass with `to_dict()`/`from_dict()`.
+- Update the call sites of `model_copy`, `model_dump_json`, `model_validate_json`,
+  `dict(action)` and `action["field"]`.
 
-**Critérios de aceite:**
+**Acceptance criteria:**
 
 ```bash
 rg -n "pydantic|BaseModel|ConfigDict|Field|field_validator" domain -g "*.py"
@@ -162,28 +162,28 @@ scripts/ci-local.sh unit
 scripts/ci-local.sh integration
 ```
 
-Resultado esperado: `domain/` não depende de Pydantic; validação/serialização ficam nas
-bordas.
+Expected result: `domain/` does not depend on Pydantic; validation/serialization live at
+the edges.
 
-## Fase 4 — Reorganização de Interfaces e Use Cases
+## Phase 4 — Interface and Use Case Reorganization
 
 **Branch:** `refactor/interface-layout`
 
-Executar somente depois das fases anteriores estarem verdes. Esta fase é estrutural e
-deve ser feita com `git mv` em commits separados de atualização de imports.
+Run this only after the previous phases are green. This phase is structural and
+must use `git mv` in commits separate from the import updates.
 
-**Escopo recomendado:**
+**Recommended scope:**
 
 - `server/` -> `interfaces/http/`
 - `mcp_server/` -> `interfaces/mcp/`
 - `demo/` -> `interfaces/demo/`
-- `main.py` -> `interfaces/cli/main.py` ou manter `main.py` como thin entrypoint que
-  delega para `interfaces/cli/`.
-- Avaliar `agents/`, `pipeline/`, `safety/`, `rag/` como `application/use_cases/`
-  apenas se houver benefício concreto. Não fazer renomeação cosmética sem reduzir
-  acoplamento.
+- `main.py` -> `interfaces/cli/main.py`, or keep `main.py` as a thin entrypoint that
+  delegates to `interfaces/cli/`.
+- Evaluate `agents/`, `pipeline/`, `safety/`, `rag/` as `application/use_cases/`
+  only if there is a concrete benefit. Do not do cosmetic renaming without reducing
+  coupling.
 
-**Critérios de aceite:**
+**Acceptance criteria:**
 
 ```bash
 python -m compileall interfaces application adapters domain
@@ -192,25 +192,25 @@ scripts/ci-local.sh integration
 python main.py --no-llm --no-rag
 ```
 
-Resultado esperado: entrypoints ficam agrupados como interfaces; regras de aplicação e
-adapters permanecem independentes de framework de entrada.
+Expected result: entrypoints are grouped as interfaces; application rules and
+adapters stay independent of the input framework.
 
-## Fase 5 — Composition Builders
+## Phase 5 — Composition Builders
 
 **Branch:** `refactor/composition-builders`
 
-**Escopo:**
+**Scope:**
 
-- Criar `application/builders.py` ou `app/builders.py` para subgraphs compartilhados.
-- Extrair builders puros:
+- Create `application/builders.py` or `app/builders.py` for shared subgraphs.
+- Extract pure builders:
   - `build_diagnoser_agent(...)`
   - `build_detector_agent(...)`
   - `build_pipeline(...)`
   - `build_rag(...)`
-- Manter cada entrypoint com sua composition root própria: CLI, HTTP, MCP e demo.
-- Não centralizar middleware HTTP, parsing de CLI, handshake MCP ou assets de demo.
+- Keep each entrypoint with its own composition root: CLI, HTTP, MCP and demo.
+- Do not centralize HTTP middleware, CLI parsing, MCP handshake or demo assets.
 
-**Critérios de aceite:**
+**Acceptance criteria:**
 
 ```bash
 rg -n "build_.*agent|build_pipeline|build_rag" application app interfaces main.py server mcp_server demo
@@ -219,12 +219,12 @@ scripts/ci-local.sh unit
 scripts/ci-local.sh integration
 ```
 
-Resultado esperado: wiring duplicado sai dos entrypoints, mas cada interface mantém sua
-responsabilidade top-level.
+Expected result: duplicated wiring leaves the entrypoints, but each interface keeps its
+top-level responsibility.
 
-## Checklist Final
+## Final Checklist
 
-Executar quando todas as fases acima estiverem mergeadas:
+Run this when all the phases above are merged:
 
 ```bash
 git switch main
@@ -240,15 +240,15 @@ rg -n "pydantic|BaseModel|ConfigDict|Field|field_validator" domain -g "*.py"
 python main.py --no-llm --no-rag
 ```
 
-## Definição de Pronto
+## Definition of Done
 
-O refactoring é considerado finalizado quando:
+The refactoring is considered finished when:
 
-- SDK Anthropic está contido em `adapters/llm/`.
-- Call sites LLM usam `LLMClient.create_message()`.
-- Agentes não dependem de Rich.
-- Ports vivem em `application/ports/`.
-- Implementações concretas vivem em `adapters/`.
-- Shims legados foram removidos ou têm data/issue explícita de remoção.
-- `domain/` é puro Python ou há ADR aceito justificando exceção remanescente.
-- CI completo está verde em `main`.
+- The Anthropic SDK is contained in `adapters/llm/`.
+- LLM call sites use `LLMClient.create_message()`.
+- Agents do not depend on Rich.
+- Ports live in `application/ports/`.
+- Concrete implementations live in `adapters/`.
+- Legacy shims were removed or have an explicit removal date/issue.
+- `domain/` is pure Python, or an accepted ADR justifies a remaining exception.
+- The full CI is green on `main`.

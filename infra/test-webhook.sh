@@ -1,11 +1,11 @@
 #!/bin/bash
-# Simula um webhook do Grafana Alerting para o aiops-agent local
-# Usa o mesmo formato que o Grafana Unified Alerting envia
+# Simulates a Grafana Alerting webhook for the local aiops-agent
+# Uses the same format that Grafana Unified Alerting sends
 
 WEBHOOK_URL="${1:-http://localhost:47890/webhook}"
 TOKEN="test-grafana-token-local"
 
-echo "Enviando alerta Grafana simulado para $WEBHOOK_URL ..."
+echo "Sending simulated Grafana alert to $WEBHOOK_URL ..."
 
 curl -s -w "\nHTTP Status: %{http_code}\n" \
   -X POST "$WEBHOOK_URL" \
@@ -45,4 +45,4 @@ curl -s -w "\nHTTP Status: %{http_code}\n" \
   }'
 
 echo ""
-echo "Pronto! Verifique os logs do aiops-agent."
+echo "Done! Check the aiops-agent logs."

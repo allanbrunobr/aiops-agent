@@ -1,19 +1,19 @@
-# Infra — Ambiente Local de Teste do AIOps Agent
+# Infra — Local Test Environment for the AIOps Agent
 
-Este diretorio contem toda a infraestrutura necessaria para testar o projeto
-AIOps Agent **end-to-end** sem depender de ambientes corporativos. Tudo roda
-localmente via Docker + Python.
+This directory contains all the infrastructure you need to test the AIOps Agent
+project **end-to-end** without depending on corporate environments. Everything
+runs locally with Docker + Python.
 
 ---
 
-## O que este projeto faz
+## What this project does
 
-Simula o ciclo completo de um incidente real:
+It simulates the full cycle of a real incident:
 
 ```
 Metrics Exporter  ──scrape 15s──>  Prometheus  ──query──>  Grafana
-   (simula                           (armazena              (avalia regras,
-   payment-svc)                       metricas)              detecta anomalia)
+   (simulates                        (stores                (evaluates rules,
+   payment-svc)                       metrics)               detects anomaly)
                                                                   │
                                                         webhook POST (Bearer)
                                                                   │
@@ -25,82 +25,82 @@ Metrics Exporter  ──scrape 15s──>  Prometheus  ──query──>  Grafa
                                                                   │
                                                                   v
                                                            Slack (:cloud: real)
-                                                           ou Slack Mock (:47892)
-                                                        Block Kit progressivo
+                                                           or Slack Mock (:47892)
+                                                        progressive Block Kit
 ```
 
-**Cenario simulado:** O `payment-svc` sofre connection pool exhaustion apos um
-deploy ruim (`max_connections` caiu de 200 para 50). O metrics exporter gera as
-metricas que reproduzem essa degradacao, o Grafana detecta e dispara webhook, o
-AIOps Agent processa e envia notificacao Block Kit no Slack com diagnostico,
-evidencias, confianca e proposta de fix.
+**Simulated scenario:** `payment-svc` suffers connection pool exhaustion after a
+bad deploy (`max_connections` dropped from 200 to 50). The metrics exporter
+generates metrics that reproduce this degradation. Grafana detects it and fires
+a webhook. The AIOps Agent processes it and sends a Block Kit notification to
+Slack with the diagnosis, evidence, confidence and a proposed fix.
 
 ---
 
-## Pre-requisitos
+## Prerequisites
 
-- **Docker** e **Docker Compose** (v2)
-- **Python 3.12+** com venv
-- (Opcional) Workspace Slack gratuito para notificacoes reais
+- **Docker** and **Docker Compose** (v2)
+- **Python 3.12+** with a venv
+- (Optional) A free Slack workspace for real notifications
 
 ---
 
-## Quick Start — 3 passos
+## Quick Start — 3 steps
 
-### Passo 1: Configurar variaveis de ambiente
+### Step 1: Configure environment variables
 
-Copie o template e edite com seus tokens:
+Copy the template and edit it with your tokens:
 
 ```bash
-# Na raiz do projeto (nao dentro de infra/)
+# At the project root (not inside infra/)
 cp env.example .env.local
 ```
 
-Edite `.env.local`:
+Edit `.env.local`:
 
 ```env
-# Token que o Grafana envia no header Authorization: Bearer <token>
-# Deve bater com o configurado em infra/grafana/provisioning/alerting/contact-points.yaml
+# Token that Grafana sends in the header Authorization: Bearer <token>
+# Must match the value set in infra/grafana/provisioning/alerting/contact-points.yaml
 GRAFANA_WEBHOOK_TOKEN=test-grafana-token-local
 
-# Token do Bot Slack (obtenha seguindo "Configurar Slack" abaixo)
-# Se nao tiver, deixe vazio — o sistema funciona sem Slack (fallback local)
-SLACK_BOT_TOKEN=xoxb-seu-token-aqui
+# Slack Bot token (get it by following "Configure Slack" below)
+# If you do not have one, leave it empty — the system works without Slack (local fallback)
+SLACK_BOT_TOKEN=xoxb-your-token-here
 
-# Canal do Slack onde as notificacoes serao postadas
+# Slack channel where notifications are posted
 SLACK_CHANNEL=#aiops-alerts
 ```
 
-> **Se voce nao tem um token Slack ainda**, pule para a secao
-> [Configurar Slack (workspace gratuito)](#configurar-slack-workspace-gratuito)
-> e depois volte aqui.
+> **If you do not have a Slack token yet**, skip to the section
+> [Configure Slack (free workspace)](#configure-slack-free-workspace)
+> and then come back here.
 
-### Passo 2: Subir a infraestrutura Docker
+### Step 2: Start the Docker infrastructure
 
 ```bash
 docker compose -f infra/docker-compose.yaml up -d --build
 ```
 
-Verifique se tudo subiu:
+Check that everything is up:
 
-| Servico          | URL                              | O que faz                         |
+| Service          | URL                              | What it does                      |
 |------------------|----------------------------------|-----------------------------------|
-| Prometheus       | http://localhost:9090             | Armazena metricas do exporter     |
-| Grafana          | http://localhost:3001             | Dashboard + alertas (admin/aiops123) |
-| Metrics Exporter | http://localhost:9101/metrics     | Simula metricas do payment-svc    |
-| Slack Mock       | http://localhost:47892/_mock/health| Mock da API Slack (opcional)      |
+| Prometheus       | http://localhost:9090             | Stores the exporter metrics       |
+| Grafana          | http://localhost:3001             | Dashboard + alerts (admin/aiops123) |
+| Metrics Exporter | http://localhost:9101/metrics     | Simulates payment-svc metrics     |
+| Slack Mock       | http://localhost:47892/_mock/health| Mock of the Slack API (optional)  |
 
-### Passo 3: Iniciar o webhook server do AIOps Agent
+### Step 3: Start the AIOps Agent webhook server
 
 ```bash
-# Na raiz do projeto
-source .venv/bin/activate        # se ainda nao ativou
-pip install -r requirements.txt  # se ainda nao instalou
+# At the project root
+source .venv/bin/activate        # if not activated yet
+pip install -r requirements.txt  # if not installed yet
 
 python infra/run_webhook_server.py
 ```
 
-Saida esperada:
+Expected output:
 ```
 ============================================================
 AIOps Agent — Webhook Server
@@ -114,244 +114,244 @@ AIOps Agent — Webhook Server
 ============================================================
 ```
 
-**Pronto!** Agora e so esperar. O ciclo automatico e:
+**Done!** Now just wait. The automatic cycle is:
 
-| Tempo       | Fase        | O que acontece                                      |
+| Time        | Phase       | What happens                                        |
 |-------------|-------------|-----------------------------------------------------|
-| 0 — 2 min   | Normal      | Metricas estaveis, sem alertas                     |
-| 2 — 2.5 min | Degradando  | Error rate e latencia sobem gradualmente            |
-| 2.5 — 5 min | Incidente   | Pool 100%, error_rate 38%, latencia 950ms           |
-| 5+ min      | Recuperacao | Metricas voltam ao normal                           |
+| 0 — 2 min   | Normal      | Stable metrics, no alerts                           |
+| 2 — 2.5 min | Degrading   | Error rate and latency rise gradually               |
+| 2.5 — 5 min | Incident    | Pool 100%, error_rate 38%, latency 950ms            |
+| 5+ min      | Recovery    | Metrics return to normal                            |
 
-Quando o Grafana detectar as anomalias (apos ~2.5min), ele dispara webhook
-automaticamente para `http://host.docker.internal:47890/webhook`. Voce vera nos
-logs do webhook server:
+When Grafana detects the anomalies (after ~2.5min), it fires a webhook
+automatically to `http://host.docker.internal:47890/webhook`. You will see this
+in the webhook server logs:
 
 ```
 webhook.accepted  alert_severity=critical  alert_title=High Error Rate - payment-svc
 ```
 
-> **Limitacao atual:** o `PipelineRunner` do webhook server ainda e um stub. O
-> alerta e normalizado, deduplicado e enfileirado, e o log mostra
-> `pipeline.stub_executed`, mas o diagnostico completo e a notificacao Slack nao
-> sao disparados a partir do webhook. Para validar o fluxo Slack Block Kit, use
-> a Opcao C (`infra/test_slack_notification.py`).
+> **Current limitation:** the webhook server `PipelineRunner` is still a stub. The
+> alert is normalized, deduplicated and queued, and the log shows
+> `pipeline.stub_executed`, but the webhook does not trigger the full diagnosis
+> or the Slack notification. To validate the Slack Block Kit flow, use
+> Option C (`infra/test_slack_notification.py`).
 
 ---
 
-## Teste manual (sem esperar o ciclo)
+## Manual test (without waiting for the cycle)
 
-### Opcao A — Simular webhook do Grafana
+### Option A — Simulate a Grafana webhook
 
 ```bash
 bash infra/test-webhook.sh
 ```
 
-Envia um payload identico ao que o Grafana envia. Voce vera `HTTP Status: 202`.
+Sends a payload identical to the one Grafana sends. You will see `HTTP Status: 202`.
 
-### Opcao B — Forcar incidente no exporter
+### Option B — Force an incident in the exporter
 
 ```bash
-# Forcar degradacao imediata (sem esperar 2 min)
+# Force immediate degradation (without waiting 2 min)
 curl -X POST http://localhost:9101/trigger-incident
 
-# Voltar ao normal
+# Return to normal
 curl -X POST http://localhost:9101/reset
 ```
 
-### Opcao C — Teste completo do Slack (Block Kit progressivo)
+### Option C — Full Slack test (progressive Block Kit)
 
 ```bash
 python infra/test_slack_notification.py
 ```
 
-Este script simula o ciclo inteiro que o pipeline faz:
-1. `pipeline.started` → posta mensagem inicial no Slack
-2. `node.completed` x11 → atualiza a mesma mensagem com checklist progressivo
-3. `pipeline.completed` → atualiza com diagnostico completo (root cause, evidencias, fix)
+This script simulates the whole cycle that the pipeline runs:
+1. `pipeline.started` → posts the initial message to Slack
+2. `node.completed` x11 → updates the same message with a progressive checklist
+3. `pipeline.completed` → updates it with the full diagnosis (root cause, evidence, fix)
 
-Saida esperada:
+Expected output:
 ```
-[1/4] Enviando pipeline.started para #aiops-alerts...
+[1/4] Sending pipeline.started to #aiops-alerts...
 slack.message_posted  channel_id=C0AL9T4S8QJ  ts=1773347770.080689
 [2/4] Node 1/11: telemetry_sanitizer (45ms)
 [2/4] Node 2/11: log_parser (320ms)
 ...
 [2/4] Node 11/11: postmortem_generator (380ms)
-[3/4] Enviando pipeline.completed com diagnostico...
+[3/4] Sending pipeline.completed with diagnosis...
 slack.final_message  correlation_id=inc-20260312-demo0001
-[4/4] Notificacao completa enviada!
+[4/4] Full notification sent!
 ```
 
 ---
 
-## Configurar Slack (workspace gratuito)
+## Configure Slack (free workspace)
 
-Para receber notificacoes reais no Slack (e nao apenas no mock local):
+To receive real notifications in Slack (and not only in the local mock):
 
-### 1. Criar workspace
+### 1. Create a workspace
 
-1. Acesse https://slack.com/get-started#/createnew
-2. Use qualquer email (e gratuito)
-3. Nome sugerido: `AIOps Lab`
-4. Crie o canal `#aiops-alerts`
+1. Go to https://slack.com/get-started#/createnew
+2. Use any email address (it is free)
+3. Suggested name: `AIOps Lab`
+4. Create the channel `#aiops-alerts`
 
-### 2. Criar Slack App (Bot)
+### 2. Create a Slack App (Bot)
 
-1. Acesse https://api.slack.com/apps
+1. Go to https://api.slack.com/apps
 2. **Create New App** → **From scratch**
-3. Nome: `AIOps Agent Bot` | Workspace: o que voce criou
-4. No menu lateral, va em **OAuth & Permissions**
-5. Em **Bot Token Scopes**, adicione:
-   - `chat:write` — postar mensagens
-   - `chat:write.public` — postar em canais publicos sem ser membro
-6. Clique **Install to Workspace** (topo da pagina) e autorize
-7. Copie o **Bot User OAuth Token** (comeca com `xoxb-`)
+3. Name: `AIOps Agent Bot` | Workspace: the one you created
+4. In the side menu, go to **OAuth & Permissions**
+5. Under **Bot Token Scopes**, add:
+   - `chat:write` — post messages
+   - `chat:write.public` — post to public channels without being a member
+6. Click **Install to Workspace** (top of the page) and authorize
+7. Copy the **Bot User OAuth Token** (starts with `xoxb-`)
 
-### 3. Configurar no projeto
+### 3. Configure the project
 
-Edite `.env.local` na raiz:
+Edit `.env.local` at the root:
 
 ```env
-SLACK_BOT_TOKEN=xoxb-seu-token-real-aqui
+SLACK_BOT_TOKEN=xoxb-your-real-token-here
 SLACK_CHANNEL=#aiops-alerts
 ```
 
-### 4. Validar
+### 4. Validate
 
 ```bash
-# Teste rapido — deve retornar {"ok": true, ...}
+# Quick test — should return {"ok": true, ...}
 curl -s -X POST https://slack.com/api/auth.test \
-  -H "Authorization: Bearer xoxb-seu-token-real-aqui" | python -m json.tool
+  -H "Authorization: Bearer xoxb-your-real-token-here" | python -m json.tool
 ```
 
-> **Nota tecnica:** O `chat.postMessage` aceita nome do canal (`#aiops-alerts`),
-> mas o `chat.update` exige o **channel ID** (ex: `C0AL9T4S8QJ`). O
-> `SlackNotifier` resolve isso automaticamente — captura o ID da resposta do
-> primeiro `postMessage` e usa nos `update` subsequentes.
+> **Technical note:** `chat.postMessage` accepts the channel name (`#aiops-alerts`),
+> but `chat.update` requires the **channel ID** (e.g. `C0AL9T4S8QJ`). The
+> `SlackNotifier` handles this automatically — it captures the ID from the
+> first `postMessage` response and uses it in the following `update` calls.
 
 ---
 
-## Alternativa: usar Slack Mock (sem workspace real)
+## Alternative: use the Slack Mock (no real workspace)
 
-Se voce nao quiser criar um workspace Slack, o stack Docker ja inclui um
-servidor mock que simula a API do Slack:
+If you do not want to create a Slack workspace, the Docker stack already includes
+a mock server that simulates the Slack API:
 
 ```bash
-# O mock ja esta rodando em http://localhost:47892
-# Configure o SDK para apontar para ele:
+# The mock is already running at http://localhost:47892
+# Configure the SDK to point to it:
 export SLACK_API_BASE_URL=http://localhost:47892/api/
 export SLACK_BOT_TOKEN=xoxb-mock-token
 ```
 
-Ver mensagens capturadas:
+View captured messages:
 ```bash
 curl http://localhost:47892/_mock/messages | python -m json.tool
 ```
 
-Limpar mensagens:
+Clear messages:
 ```bash
 curl -X DELETE http://localhost:47892/_mock/messages
 ```
 
 ---
 
-## Estrutura dos arquivos
+## File structure
 
 ```
 infra/
-├── README.md                         ← voce esta aqui
-├── docker-compose.yaml               ← orquestra os 4 containers
-├── setup.sh                          ← script automatizado (alternativa ao quick start manual)
+├── README.md                         ← you are here
+├── docker-compose.yaml               ← orchestrates the 4 containers
+├── setup.sh                          ← automated script (alternative to the manual quick start)
 │
 ├── prometheus/
-│   └── prometheus.yaml               ← config: scrape metrics-exporter a cada 15s
+│   └── prometheus.yaml               ← config: scrapes metrics-exporter every 15s
 │
 ├── grafana/provisioning/
 │   ├── datasources/
-│   │   └── prometheus.yaml           ← registra Prometheus como datasource (uid: prometheus)
+│   │   └── prometheus.yaml           ← registers Prometheus as a datasource (uid: prometheus)
 │   ├── alerting/
-│   │   ├── alert-rules.yaml          ← 3 regras: error rate, pool exhaustion, latencia p95
+│   │   ├── alert-rules.yaml          ← 3 rules: error rate, pool exhaustion, p95 latency
 │   │   ├── contact-points.yaml       ← webhook → http://host.docker.internal:47890/webhook
-│   │   └── notification-policies.yaml← roteia todos os alertas para o webhook
+│   │   └── notification-policies.yaml← routes all alerts to the webhook
 │   └── dashboards/
-│       ├── dashboard-provider.yaml   ← auto-provisiona dashboards do diretorio json/
-│       └── json/payment-svc.json     ← dashboard com 5 paineis do payment-svc
+│       ├── dashboard-provider.yaml   ← auto-provisions dashboards from the json/ directory
+│       └── json/payment-svc.json     ← dashboard with 5 payment-svc panels
 │
 ├── metrics-exporter/
 │   ├── Dockerfile                    ← python:3.12-slim
-│   └── exporter.py                   ← servidor HTTP :9101, simula ciclo de incidente
+│   └── exporter.py                   ← HTTP server :9101, simulates the incident cycle
 │
 ├── slack-mock/
 │   ├── Dockerfile                    ← python:3.12-slim + fastapi + uvicorn
 │   └── slack_mock_server.py          ← mock: chat.postMessage, chat.update, auth.test
 │
-├── run_webhook_server.py             ← boot do FastAPI app com webhook router + deps
-├── test-webhook.sh                   ← simula POST do Grafana (curl)
-├── test_slack_notification.py        ← teste completo do ciclo Slack Block Kit
-└── SLACK-SETUP.md                    ← guia resumido do setup Slack
+├── run_webhook_server.py             ← boots the FastAPI app with the webhook router + deps
+├── test-webhook.sh                   ← simulates a Grafana POST (curl)
+├── test_slack_notification.py        ← full test of the Slack Block Kit cycle
+└── SLACK-SETUP.md                    ← short Slack setup guide
 ```
 
 ---
 
-## Como funciona por dentro
+## How it works internally
 
 ### Metrics Exporter (`metrics-exporter/exporter.py`)
 
-Servidor HTTP puro (sem frameworks) que expoe metricas no formato Prometheus em
-`GET /metrics`. Simula 4 fases automaticas de um incidente no `payment-svc`:
+A plain HTTP server (no frameworks) that exposes metrics in Prometheus format at
+`GET /metrics`. It simulates 4 automatic phases of an incident in `payment-svc`:
 
-| Metrica                              | Normal    | Incidente  |
+| Metric                               | Normal    | Incident   |
 |--------------------------------------|-----------|------------|
 | `payment_svc_error_rate_percent`     | ~1%       | ~38%       |
 | `payment_svc_connection_pool_active` | ~60/200   | 200/200    |
 | `payment_svc_latency_ms` (p95)       | ~45ms     | ~950ms     |
 | `payment_svc_requests_total`         | ~150 req/s| ~150 req/s |
 
-Controle manual:
-- `POST /trigger-incident` — forca degradacao imediata
-- `POST /reset` — volta ao estado normal
+Manual control:
+- `POST /trigger-incident` — forces immediate degradation
+- `POST /reset` — returns to the normal state
 
 ### Prometheus (`prometheus/prometheus.yaml`)
 
-Scrape simples: coleta metricas do exporter a cada 15s com label `service=payment-svc`.
+Simple scrape: collects metrics from the exporter every 15s with the label `service=payment-svc`.
 
-### Grafana (provisioning completo)
+### Grafana (full provisioning)
 
-Tudo e provisionado automaticamente no startup (sem configuracao manual):
+Everything is provisioned automatically at startup (no manual configuration):
 
-- **Datasource:** Prometheus com `uid: prometheus` (critico — as alert rules referenciam esse UID)
+- **Datasource:** Prometheus with `uid: prometheus` (critical — the alert rules reference this UID)
 - **3 Alert Rules:**
-  - High Error Rate > 10% por 30s → severity: critical
-  - Connection Pool > 80% por 15s → severity: critical
-  - Latency P95 > 500ms por 30s → severity: warning
-- **Contact Point:** Webhook POST para `http://host.docker.internal:47890/webhook` com `Authorization: Bearer test-grafana-token-local`
-- **Notification Policy:** Roteia todos os alertas para o contact point webhook
-- **Dashboard:** 5 paineis (Error Rate, Connection Pool, Latency, CPU/Memory, Incident Phase)
+  - High Error Rate > 10% for 30s → severity: critical
+  - Connection Pool > 80% for 15s → severity: critical
+  - Latency P95 > 500ms for 30s → severity: warning
+- **Contact Point:** Webhook POST to `http://host.docker.internal:47890/webhook` with `Authorization: Bearer test-grafana-token-local`
+- **Notification Policy:** Routes all alerts to the webhook contact point
+- **Dashboard:** 5 panels (Error Rate, Connection Pool, Latency, CPU/Memory, Incident Phase)
 
 ### Webhook Server (`run_webhook_server.py`)
 
-FastAPI app que monta o pipeline completo:
+A FastAPI app that assembles the full pipeline:
 
-1. Recebe POST em `/webhook`
-2. Identifica a fonte (Grafana detectado pelo campo `alerts` no payload)
-3. Valida autenticacao (Bearer token vs `GRAFANA_WEBHOOK_TOKEN`)
-4. Normaliza payload (Grafana → `NormalizedAlert`)
-5. Deduplicacao por fingerprint (janela de 5min)
-6. Submete ao pipeline runner (max 3 concorrentes, fila de 10)
+1. Receives a POST at `/webhook`
+2. Identifies the source (Grafana is detected by the `alerts` field in the payload)
+3. Validates authentication (Bearer token vs `GRAFANA_WEBHOOK_TOKEN`)
+4. Normalizes the payload (Grafana → `NormalizedAlert`)
+5. Deduplicates by fingerprint (5min window)
+6. Submits to the pipeline runner (max 3 concurrent, queue of 10)
 
 ### SlackNotifier (`interfaces/http/notifications/slack.py`)
 
-Notificacoes Block Kit progressivas:
+Progressive Block Kit notifications:
 
-1. `pipeline.started` → `chat.postMessage` com titulo, severidade, servico
-2. `node.completed` x11 → `chat.update` com checklist progressivo (checkmarks verdes)
-3. `pipeline.completed` → `chat.update` final com:
+1. `pipeline.started` → `chat.postMessage` with title, severity, service
+2. `node.completed` x11 → `chat.update` with a progressive checklist (green checkmarks)
+3. `pipeline.completed` → final `chat.update` with:
    - Root cause
-   - Evidencias
-   - Confianca (com emoji de cor)
-   - Risk level e blast radius
-   - Proposed fix (em bloco de codigo)
+   - Evidence
+   - Confidence (with a color emoji)
+   - Risk level and blast radius
+   - Proposed fix (in a code block)
 
 ---
 
@@ -359,49 +359,49 @@ Notificacoes Block Kit progressivas:
 
 ### "Grafana alerts not firing"
 
-1. Verifique se o Prometheus esta coletando: http://localhost:9090/targets
-   (deve mostrar `metrics-exporter:9101` como UP)
-2. Verifique as regras: http://localhost:3001/alerting/list (admin/aiops123)
-3. Force incidente: `curl -X POST http://localhost:9101/trigger-incident`
-4. Logs do Grafana: `docker logs aiops-grafana 2>&1 | grep -i alert`
+1. Check that Prometheus is scraping: http://localhost:9090/targets
+   (it should show `metrics-exporter:9101` as UP)
+2. Check the rules: http://localhost:3001/alerting/list (admin/aiops123)
+3. Force an incident: `curl -X POST http://localhost:9101/trigger-incident`
+4. Grafana logs: `docker logs aiops-grafana 2>&1 | grep -i alert`
 
 ### "webhook.rejected — unknown_source"
 
-O webhook server nao conseguiu identificar a fonte. O Grafana e detectado
-automaticamente pelo campo `alerts` (array) no payload. Se estiver testando
-manualmente, inclua o header `Alert-Source: grafana`.
+The webhook server could not identify the source. Grafana is detected
+automatically by the `alerts` field (array) in the payload. If you are testing
+manually, include the header `Alert-Source: grafana`.
 
 ### "webhook.rejected — auth_failed"
 
-O token no header `Authorization: Bearer <token>` nao bate com o
-`GRAFANA_WEBHOOK_TOKEN` no `.env.local`. Ambos devem ser iguais (default:
+The token in the header `Authorization: Bearer <token>` does not match
+`GRAFANA_WEBHOOK_TOKEN` in `.env.local`. Both must be equal (default:
 `test-grafana-token-local`).
 
-### "chat.update channel_not_found" no Slack
+### "chat.update channel_not_found" in Slack
 
-Isso acontecia porque `chat.update` exige **channel ID** (ex: `C0AL9T4S8QJ`),
-nao o nome do canal. Ja foi corrigido — o `SlackNotifier` agora captura o
-channel ID da resposta do `chat.postMessage` e reutiliza nos updates.
+This happened because `chat.update` requires the **channel ID** (e.g. `C0AL9T4S8QJ`),
+not the channel name. It is already fixed — `SlackNotifier` now captures the
+channel ID from the `chat.postMessage` response and reuses it in the updates.
 
-### Portas em conflito
+### Port conflicts
 
-Se as portas 9090, 3001, 9101 ou 47892 estiverem ocupadas:
+If ports 9090, 3001, 9101 or 47892 are in use:
 
 ```bash
-# Descobrir o que esta usando a porta
+# Find out what is using the port
 lsof -i :3001
 
-# Alterar no docker-compose.yaml (formato host:container)
-# Ex: mudar Grafana de 3001:3000 para 3002:3000
+# Change it in docker-compose.yaml (format host:container)
+# E.g.: change Grafana from 3001:3000 to 3002:3000
 ```
 
-### host.docker.internal nao resolve (Linux)
+### host.docker.internal does not resolve (Linux)
 
-O `docker-compose.yaml` ja inclui `extra_hosts: host.docker.internal:host-gateway`
-para Linux. Se ainda nao funcionar:
+`docker-compose.yaml` already includes `extra_hosts: host.docker.internal:host-gateway`
+for Linux. If it still does not work:
 
 ```bash
-# Testar conectividade do container Grafana para o host
+# Test connectivity from the Grafana container to the host
 docker exec aiops-grafana wget -qO- http://host.docker.internal:47890/health
 ```
 
@@ -410,40 +410,40 @@ docker exec aiops-grafana wget -qO- http://host.docker.internal:47890/health
 ## Teardown
 
 ```bash
-# Parar e remover containers + volumes
+# Stop and remove containers + volumes
 docker compose -f infra/docker-compose.yaml down -v
 
-# Parar o webhook server
-# Ctrl+C no terminal onde esta rodando
+# Stop the webhook server
+# Ctrl+C in the terminal where it is running
 ```
 
 ---
 
-## Relacao com o projeto principal
+## Relation to the main project
 
-Esta infraestrutura **nao e o AIOps Agent em si** — e um ambiente de teste que
-simula o mundo externo (Grafana, Prometheus, metricas) para validar que o
-pipeline do agent funciona end-to-end.
+This infrastructure **is not the AIOps Agent itself** — it is a test environment
+that simulates the outside world (Grafana, Prometheus, metrics) to validate that
+the agent pipeline works end-to-end.
 
-O projeto principal (`main.py`) roda o pipeline completo com LLM:
+The main project (`main.py`) runs the full pipeline with an LLM:
 
 ```bash
-# Pipeline completo com Claude (requer ANTHROPIC_API_KEY no .env)
+# Full pipeline with Claude (requires ANTHROPIC_API_KEY in .env)
 python main.py
 
-# Modo heuristico (sem LLM, sem custos de API)
+# Heuristic mode (no LLM, no API costs)
 python main.py --no-llm
 
-# Modo sem RAG (startup mais rapido)
+# Mode without RAG (faster startup)
 python main.py --no-rag
 ```
 
-A diferenca:
+The difference:
 
-| Componente           | `main.py` (projeto principal)        | `infra/` (teste local)              |
+| Component            | `main.py` (main project)             | `infra/` (local test)               |
 |----------------------|--------------------------------------|--------------------------------------|
-| Dados de entrada     | Simulados em `data/sample_incident.py`| Gerados pelo metrics exporter Docker |
-| Fonte de alertas     | Interno (detector heuristico)        | Grafana via webhook HTTP             |
-| Pipeline             | Completo (LLM + RAG + safety)        | Webhook → normalizer → dedup         |
-| Notificacao          | Output em `rich` (terminal)          | Slack Block Kit (real ou mock)       |
-| Requer LLM           | Sim (ou `--no-llm`)                  | Nao                                  |
+| Input data           | Simulated in `data/sample_incident.py`| Generated by the Docker metrics exporter |
+| Alert source         | Internal (heuristic detector)        | Grafana via HTTP webhook             |
+| Pipeline             | Full (LLM + RAG + safety)            | Webhook → normalizer → dedup         |
+| Notification         | `rich` output (terminal)             | Slack Block Kit (real or mock)       |
+| Requires LLM         | Yes (or `--no-llm`)                  | No                                   |
