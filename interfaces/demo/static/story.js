@@ -246,6 +246,13 @@ function buildGaugeOption(value, eventLevel) {
   };
 }
 
+function formatElapsed(seconds) {
+  const total = Math.max(0, Math.round(seconds));
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  return `T+${m}:${String(sec).padStart(2, "0")}`;
+}
+
 function buildLineOpts(containerId, names, colors, opts) {
   opts = opts || {};
   const el = document.getElementById(containerId);
@@ -266,10 +273,18 @@ function buildLineOpts(containerId, names, colors, opts) {
     legend: { show: false },
     cursor: { drag: { x: false, y: false } },
     scales: {
+      // X = elapsed_sim_seconds (tempo simulado), não epoch: sem isso o uPlot
+      // formata como data e o eixo mostra "12/31/69".
+      x: { time: false },
       y: opts.yMax ? { range: [0, opts.yMax] } : {},
     },
     axes: [
-      { stroke: "#555", ticks: { stroke: "#333" }, grid: { stroke: "#1e2130" } },
+      {
+        stroke: "#555",
+        ticks: { stroke: "#333" },
+        grid: { stroke: "#1e2130" },
+        values: (u, splits) => splits.map((v) => formatElapsed(v)),
+      },
       { stroke: "#555", ticks: { stroke: "#333" }, grid: { stroke: "#1e2130" } },
     ],
     series: seriesDef,
