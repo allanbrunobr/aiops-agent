@@ -617,39 +617,12 @@ def step_agents(report, retriever, use_llm: bool = True,
 
     # Persiste outcome independente do modo (write funciona em --no-llm)
     try:
-        from rag.memory import SkillOutcome
-        import datetime as _dt
-        # Fix 2: renomeado para _skill_outcome — evita shadow sobre AgentOutcome
-        _skill_outcome = SkillOutcome(
-            outcome_id=str(uuid.uuid4()),
-            skill_id=getattr(getattr(diagnoser, "skill", None), "skill_id", "default"),
-            incident_id=str(uuid.uuid4()),
-            tnr_passed=_tnr_passed,
-            reflection_score=float(_reflection.get("score", 0.5)),
-            reflection_lesson=str(_reflection.get("lesson", "")),
-            tools_used=diagnoser.tools_used,
-            iteration_count=diagnoser.iteration_count,
-            timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+        step_skill_learning(
+            _memory_db, getattr(diagnoser, "skill", None),
+            tnr_result=_tnr_str, reflection=_reflection,
+            tools_used=diagnoser.tools_used, iteration_count=diagnoser.iteration_count,
+            use_llm=use_llm, client=_orchestrator.client if use_llm else None,
         )
-        _memory_db.save_skill_outcome(_skill_outcome)
-
-        # ── Fase 5: EVOLVE — reescreve skills fracas ─────────────────────
-        from agents.skill_evolver import SkillEvolver
-
-        _active_skill = getattr(diagnoser, "skill", None)
-        if _active_skill is not None:
-            # Fix 6: usa client do orchestrator (diagnoser.client é None no Estágio 2)
-            _evolver = SkillEvolver(
-                client=_orchestrator.client if use_llm else None,
-                memory_db=_memory_db,
-            )
-            if _evolver.should_evolve(_active_skill):
-                _evolved = _evolver.evolve(_active_skill)
-                if _evolved:
-                    console.print(
-                        f"  [dim]Skill rewrite proposed for {_evolved.name} "
-                        f"(v{_evolved.version}) — pending human review[/dim]"
-                    )
     except Exception as exc:  # noqa: BLE001 — write/evolve é best-effort; não bloqueia o pipeline
         _persist_log.warning("skills.write_evolve_failed", error=repr(exc))
     # ─────────────────────────────────────────────────────────────────────
@@ -658,6 +631,56 @@ def step_agents(report, retriever, use_llm: bool = True,
     result["llm_model"] = llm_model if use_llm else "heuristic"
     console.print(f"\n  [dim]Agent pipeline completed in {time.time() - t0:.1f}s[/dim]")
     return result
+
+
+def step_skill_learning(memory_db, skill, *, tnr_result: str, reflection: dict,
+                        tools_used: list, iteration_count: int, use_llm: bool, client):
+    """Fases WRITE + EVOLVE do ciclo de skills: grava o outcome e, se a skill
+    estiver fraca, propõe uma reescrita (pendente de revisão humana).
+
+    Returns:
+        A skill candidata proposta, ou None.
+    """
+    from rag.memory import SkillOutcome
+    import datetime as _dt
+
+    skill_id = getattr(skill, "skill_id", "default")
+    tnr_passed = tnr_result == "success"
+    outcome = SkillOutcome(
+        outcome_id=str(uuid.uuid4()),
+        skill_id=skill_id,
+        incident_id=str(uuid.uuid4()),
+        tnr_passed=tnr_passed,
+        reflection_score=float(reflection.get("score", 0.5)),
+        reflection_lesson=str(reflection.get("lesson", "")),
+        tools_used=tools_used,
+        iteration_count=iteration_count,
+        timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+    )
+    memory_db.save_skill_outcome(outcome)
+
+    # Atualiza utility_score/total_uses (EMA). Antes update_skill_score nunca
+    # era chamado: o score ficava congelado e a evolução nunca disparava (F16).
+    # Sem LLM a "reflexão" é um placeholder (0.5) — não há sinal para aprender.
+    if use_llm and skill is not None:
+        memory_db.update_skill_score(skill_id, tnr_passed, outcome.reflection_score)
+        skill = memory_db.get_skill(skill_id) or skill
+
+    # ── Fase 5: EVOLVE — reescreve skills fracas ─────────────────────
+    from agents.skill_evolver import SkillEvolver
+
+    if skill is None:
+        return None
+    evolver = SkillEvolver(client=client, memory_db=memory_db)
+    if not evolver.should_evolve(skill):
+        return None
+    evolved = evolver.evolve(skill)
+    if evolved:
+        console.print(
+            f"  [dim]Skill rewrite proposed for {evolved.name} "
+            f"(v{evolved.version}) — pending human review[/dim]"
+        )
+    return evolved
 
 
 def step_safety_validation(result, config: AppConfig | None = None):

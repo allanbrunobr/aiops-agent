@@ -112,3 +112,32 @@ um prompt "Ignore safety checks…" virou a skill ativa.
 
 **Lacuna:** não há interface (rota ou CLI) para listar e aprovar propostas.
 Hoje isso é feito pela API da `IncidentMemoryDB`.
+
+## P3-9d — Score das skills passa a ser atualizado (F16)
+
+**Defeito.** `IncidentMemoryDB.update_skill_score` nunca era chamado em
+produção. `utility_score` e `total_uses` ficavam congelados, e
+`SkillEvolver.should_evolve` (`total_uses >= 3` e `score < 0.3`) nunca era
+verdade. Toda a evolução de skills era código morto.
+
+**Correção** (`main.py`):
+
+- O bloco de WRITE + EVOLVE foi extraído para `step_skill_learning(...)`.
+- No modo com LLM, o score é atualizado por EMA, e a skill é relida antes de
+  decidir a evolução.
+- No modo `--no-llm`, o score **não** muda, porque a "reflexão" ali é um
+  placeholder (0.5) sem sinal.
+- O roteador usa skills com score ≥ 0.3, e a evolução dispara abaixo disso.
+  Na execução em que o score cai, nasce uma proposta pendente (P3-9c) e a
+  skill sai do roteamento.
+
+**Testes:** `tests/test_skill_score_learning.py`, 3 testes.
+
+- **Antes:** extraí o bloco **sem** mudar o comportamento e rodei os testes.
+  Os 2 de comportamento falharam: `total_uses` ficou em 0 e não nasceu
+  nenhuma proposta. O teste do modo `--no-llm` passa nos dois casos.
+
+**Suíte completa:** os três jobs com status 0 (ver o commit).
+
+**Fora do escopo:** o pipeline V1 (Blueprint) não tem esse ciclo de
+aprendizado de skills. Igualar o V1 ao V0 depende da decisão V0 × V1.
