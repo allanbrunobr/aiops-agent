@@ -7,6 +7,7 @@ Baseado no STRATUS: "human-in-the-loop for safety-critical actions".
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
 from application.ports.reporter import (
@@ -68,6 +69,22 @@ REMEDIATION_PATTERNS = {
 }
 
 
+# Nome de recurso Kubernetes (DNS-1123 subdomain): o nome do serviço vem da
+# telemetria ou do JSON do LLM e é interpolado no comando; fora deste formato
+# ele nunca entra no template.
+_K8S_NAME = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$")
+_K8S_NAME_MAX_LEN = 253
+
+
+def is_valid_service_name(name: object) -> bool:
+    """True se `name` pode ser interpolado num comando kubectl com segurança."""
+    return (
+        isinstance(name, str)
+        and 0 < len(name) <= _K8S_NAME_MAX_LEN
+        and _K8S_NAME.match(name) is not None
+    )
+
+
 class MitigationAgent:
     """Agente que propõe ações de mitigação."""
 
@@ -109,14 +126,29 @@ class MitigationAgent:
             elif rollback_version not in description:
                 description += f" (rollback to {rollback_version})"
 
-        action = MitigationAction(
-            description=description,
-            command=pattern["command"].format(service=primary_service, current=3, prev=1),
-            risk_level=pattern["risk"],
-            rollback_command=pattern["rollback"].format(
-                service=primary_service, current=3, prev=1
-            ) if pattern.get("rollback") else None,
-        )
+        if not is_valid_service_name(primary_service):
+            # Nome fora do formato Kubernetes: não gera comando. Sem comando,
+            # o PreExecutionValidator não aprova e a ação vai para humano.
+            action = MitigationAction(
+                description=(
+                    f"Service name {str(primary_service)[:60]!r} is not a valid "
+                    "Kubernetes resource name — manual investigation required, "
+                    "no command generated"
+                ),
+                command="",
+                risk_level="HIGH",
+                rollback_command=None,
+            )
+            matched_pattern = "invalid_service"
+        else:
+            action = MitigationAction(
+                description=description,
+                command=pattern["command"].format(service=primary_service, current=3, prev=1),
+                risk_level=pattern["risk"],
+                rollback_command=pattern["rollback"].format(
+                    service=primary_service, current=3, prev=1
+                ) if pattern.get("rollback") else None,
+            )
 
         self.reporter.emit(
             MITIGATION_PROPOSED,

