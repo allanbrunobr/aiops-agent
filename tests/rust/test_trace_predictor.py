@@ -38,7 +38,18 @@ def _make_values(n: int, seed: int = 42) -> list[float]:
 
 
 class TestDetectLatencyDriftEquivalence:
-    """Verifica que a implementação Rust produz resultados idênticos ao Python."""
+    """Verifica que a implementação Rust produz resultados idênticos ao Python.
+
+    `detect_latency_drift` delega ao Rust quando a extensão existe; sem o
+    fixture abaixo, `py_result` também era Rust e a "paridade" comparava Rust
+    com Rust (T-f). Ver também tests/rust/test_rust_python_parity.py.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _force_python_fallback(self, monkeypatch):
+        import pipeline.trace_predictor as tp
+
+        monkeypatch.setattr(tp, "_RUST_AVAILABLE", False)
 
     def test_drift_detectado_resultado_identico(self):
         """Rust e Python devem concordar quando drift é detectado."""

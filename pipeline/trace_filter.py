@@ -52,6 +52,9 @@ class TraceFilter:
     def _filter_rust(self, spans: list) -> list[SlowCallPath]:
         """Delegação para implementação Rust (p95 + max_hops=3)."""
         raw = _rust.filter_traces(spans)
+        by_trace: dict[str, list] = defaultdict(list)
+        for span in spans:
+            by_trace[span.trace_id].append(span)
         return [
             SlowCallPath(
                 trace_id=r["trace_id"],
@@ -62,10 +65,24 @@ class TraceFilter:
                 bottleneck_duration_ms=r["bottleneck_duration_ms"],
                 normal_duration_ms=r["normal_duration_ms"],
                 timestamp=r["timestamp"],
-                attributes=dict(r["attributes"]),
+                attributes=self._bottleneck_attributes(by_trace[r["trace_id"]], r),
             )
             for r in raw
         ]
+
+    @staticmethod
+    def _bottleneck_attributes(trace_spans: list, r: dict) -> dict:
+        """Atributos originais do span gargalo.
+
+        O Rust devolve os valores como str ('23', 'true'); o fallback Python
+        devolve os tipos do span (23, True). O teste de paridade pegou a
+        diferença. Usa o span que o próprio Rust apontou como gargalo.
+        """
+        for span in trace_spans:
+            if (span.service == r["bottleneck_service"]
+                    and span.duration_ms == r["bottleneck_duration_ms"]):
+                return span.attributes
+        return dict(r["attributes"])
 
     def _filter_python(self, spans: list) -> list[SlowCallPath]:
         """Implementação Python pura (fallback)."""

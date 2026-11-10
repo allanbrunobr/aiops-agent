@@ -504,3 +504,53 @@ Ficou de fora. É uma escolha para o Allan, não algo que eu deva decidir.
 
 **Suíte completa:** ruff limpo. unit 1499 passaram, integration 138
 passaram, suíte completa 1677 passaram e 10 foram pulados. Status 0 nos três.
+
+## P3-8a — Snapshot ausente falha; paridade Rust ↔ Python de verdade (T-g, T-f)
+
+**Snapshot (T-g):** quando o arquivo de snapshot não existia,
+`SnapshotManager.assert_match` e `assert_text_match` o criavam e passavam.
+Um snapshot apagado ou esquecido no commit passava no CI, comparando a saída
+com ela mesma.
+
+- **Agora:** sem `--snapshot-update`, snapshot ausente falha, com a instrução
+  de como gerá-lo, e nada é criado. Com a flag, o arquivo é criado ou
+  sobrescrito.
+- Nenhum snapshot versionado estava faltando: a suíte segue verde e o
+  `git status` ficou limpo.
+- Nenhum outro golden da suíte se autogera (busca por `if not …exists()` em
+  `tests/`).
+- **Teste:** `tests/test_snapshot_manager_missing.py`, 4 testes. Antes da
+  mudança, 2 falharam: os casos de arquivo ausente, nos formatos JSON e texto.
+
+**Paridade (T-f):** `TestDetectLatencyDriftEquivalence` chamava
+`detect_latency_drift`, que delega ao Rust quando a extensão existe. Comparava
+Rust com Rust.
+
+- `tests/rust/test_rust_python_parity.py` (marcador `rust`, 54 testes) chama a
+  mesma API pública duas vezes: uma pelo caminho Rust e outra com
+  `_RUST_AVAILABLE = False`. Cobre:
+  - `detect_latency_drift`: casos-limite e entradas aleatórias, com 3
+    limiares;
+  - `MetricFilter` e `TraceFilter`: os 3 cenários;
+  - a classificação de taint do sanitizer, unitária e em lote, e
+    `sanitize_logs`: os 3 cenários e 14 textos hostis.
+  - `custom_patterns` ficou de fora, porque o Rust não os recebe (B15, P3-4).
+- **Divergência real encontrada:** o `TraceFilter` pelo caminho Rust devolvia
+  os atributos do span gargalo como `str` (`'23'`, e `true` em vez de `True`).
+  O fallback Python mantém os tipos. Falhavam os cenários memory-leak e
+  unknown-fault. `agents/diagnoser.py:755` usa `str(attributes)`.
+  - Correção em `pipeline/trace_filter.py::_filter_rust`: devolve os atributos
+    originais do span que o próprio Rust apontou como gargalo (mesmo
+    trace_id, serviço e duração).
+- A classe antiga de equivalência ganhou um fixture que força o fallback
+  Python. Assim, `py_result` passa a vir de fato do Python.
+
+**Benchmarks (T-h):** ficaram de fora. Os benchmarks já têm
+`@pytest.mark.slow`, mas o job `rust-build` roda `pytest tests/` sem excluir
+`slow`. Tirá-los do caminho do CI exige mudar `.github/` ou o `addopts`
+padrão que esse job usa, ou seja, mudar um portão de CI. Isso é decisão do
+Allan.
+
+**Suíte completa:** ruff limpo. unit 1503 passaram, integration 138
+passaram, suíte completa 1735 passaram e 10 foram pulados. A suíte completa
+inclui `tests/rust` com a extensão compilada. Status 0 nos três.
