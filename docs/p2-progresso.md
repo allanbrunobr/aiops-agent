@@ -566,3 +566,45 @@ exemplo, `openssl 1.1.1t+` corrige o CVE-2023-0286 e ainda assim será
 bloqueado. Para uma ferramenta de segurança, o falso positivo vai para revisão
 humana, o que é preferível ao falso negativo. Uma base com faixas de versão
 corrigidas (OSV ou NVD) resolveria isso, mas exige rede.
+
+## Item P2-14 — OIDC: rotação de chave e claims malformados (4B-13)
+
+**Defeito.**
+
+- **Rotação de chave:** um `kid` desconhecido caía em `keys[0]` do JWKS em
+  cache, sem nova busca. Depois de uma rotação no IdP, todo token novo era
+  recusado (`InvalidSignatureError`) até o cache expirar, ou seja, por até 1 h.
+- **Claims:** sem `sub` dava `KeyError`, e o SSE respondia 503 "IdP
+  indisponível". Scope em lista dava `AttributeError`.
+
+**Correção** (`auth/oidc_validator.py`):
+
+- **`kid` desconhecido:**
+  - o JWKS é buscado de novo, no máximo uma vez por issuer a cada
+    `FORCED_REFRESH_INTERVAL_SECONDS = 60`, para que tokens com `kid`
+    aleatório não virem DoS contra o IdP;
+  - se ainda não achar, o token é recusado com `InvalidTokenError`, nunca
+    verificado com outra chave.
+- **Token sem `kid`:** aceito só se o JWKS tiver uma única chave.
+- **Claims:**
+  - `sub` ausente ou inválido vira `InvalidTokenError` (401);
+  - scope em lista é aceito;
+  - scope em outro formato é recusado.
+
+**Testes:** `tests/test_oidc_key_rotation.py`, 5 testes marcados `unit`,
+reaproveitando o IdP falso de `test_oidc_validator.py`.
+
+- **Antes da correção:** os 5 falharam:
+  - assinatura verificada com a chave antiga;
+  - nenhuma nova busca;
+  - `KeyError: 'sub'`;
+  - `'list' object has no attribute 'split'`.
+- **Cenários cobertos:**
+  - token com chave nova aceito depois da nova busca;
+  - `kid` desconhecido recusado;
+  - limite de buscas: 3 tokens com `kid` aleatório geram uma única nova
+    busca;
+  - `sub` ausente;
+  - scope em lista.
+
+**CI local:** os três jobs com status 0 (ver o commit).
