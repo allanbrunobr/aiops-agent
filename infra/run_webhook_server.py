@@ -101,4 +101,4 @@ if __name__ == "__main__":
     print(f"  GRAFANA_TOKEN: {'set' if os.environ.get('GRAFANA_WEBHOOK_TOKEN') else 'MISSING'}")
     print(f"  SLACK_TOKEN:   {'set' if os.environ.get('SLACK_BOT_TOKEN') else 'MISSING'}")
     print("=" * 60)
-    uvicorn.run(app, host="127.0.0.1", port=47890, log_level="info")
+    uvicorn.run(app, host="127.0.0.1", port=47890, log_level="info", log_config=None)

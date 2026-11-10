@@ -78,6 +78,7 @@ def _main_guard(tree: ast.Module) -> ast.AST:
     ("main.py", "main"),
     ("main.py", "main_v1"),
     ("interfaces/demo/server.py", "main"),
+    ("interfaces/http/__main__.py", "main"),
     ("interfaces/mcp/server.py", "__main__"),
     ("infra/run_webhook_server.py", "__main__"),
 ])

@@ -490,7 +490,7 @@ def main() -> None:
 
     configure_logging()
     logger.info("Demo server ready on http://%s:%d/demo/", args.host, args.port)
-    uvicorn.run(app, host=args.host, port=args.port)
+    uvicorn.run(app, host=args.host, port=args.port, log_config=None)
 
 
 if __name__ == "__main__":

@@ -11,15 +11,10 @@ História 5.6: Montagem condicional com base em config.mcp.enabled.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
-
 import structlog
 from fastapi import FastAPI
 
 from config.loader import AppConfig
-
-if TYPE_CHECKING:
-    from rag.knowledge_store import KnowledgeStore
 
 log = structlog.get_logger()
 
@@ -316,26 +311,3 @@ async def handle_prediction_event(
             event_type=event_type,
             exc_info=True,
         )
-
-
-# ------------------------------------------------------------------ #
-# Estado global para injeção de dependência (server/dependencies.py)  #
-# ------------------------------------------------------------------ #
-
-from dataclasses import dataclass as _dataclass
-
-
-@_dataclass
-class AppState:
-    """Estado global da aplicação para injeção de dependência FastAPI."""
-
-    config: AppConfig | None = None
-    store: object = None  # IncidentStore
-    engine: object = None  # BlueprintEngine
-    knowledge_store: KnowledgeStore | None = None
-
-
-app_state = AppState()
-
-# Compatibilidade retroativa — referenciado por server/handlers/false_positive.py
-knowledge_store: KnowledgeStore | None = None

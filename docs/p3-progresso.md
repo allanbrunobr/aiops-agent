@@ -670,3 +670,74 @@ A iteração de `HashMap` é aleatória por processo.
 **Suíte completa:** ruff limpo. unit 1513 passaram, integration 138
 passaram, suíte completa 1798 passaram e 10 foram pulados. A suíte completa
 roda com a extensão nova. Status 0 nos três.
+
+## P3-2 — Entrypoint real para `create_app`; DI global morto removido (A5, ARQ-09, F5-04)
+
+**Feito:**
+
+- `interfaces/http/__main__.py`: `python -m interfaces.http [--host] [--port]
+  [--config]` serve o `create_app` em `127.0.0.1:47893`, ao lado do webhook
+  (47890), da demo (47891) e do mock de Slack (47892).
+  - Antes de montar o app, carrega `.env.local`/`.env` e chama
+    `configure_logging()`.
+  - Os três servidores (HTTP, demo e webhook) passam `log_config=None` ao
+    uvicorn, então os logs dele também saem em JSON com redação.
+- **Medido com o processo real** (script no scratchpad): `/health` respondeu
+  200. As 10 linhas de log saíram em JSON. Antes do `log_config=None`, só 2
+  de 11 saíam em JSON.
+- **O que sobe:**
+  - health;
+  - A2A, que exige JWT e rejeita tudo sem segredo;
+  - o servidor OAuth, só com chave configurada;
+  - o MCP via SSE, só com opt-in `mcp.enabled: true`. Ligado, o
+    `auth_method` padrão é `header`, que é uma das decisões do Allan. O
+    README diz isso.
+- **DI concorrente que nunca funcionava, removido:**
+  - `AppState`, `app_state` e o `knowledge_store` global de
+    `interfaces/http/app.py`;
+  - `interfaces/http/dependencies.py`, cujos asserts sempre falhariam, porque
+    nada populava o `app_state`;
+  - o teste que só verificava que essas funções existiam.
+  - O padrão que fica é o `request.app.state`, já usado por A2A, webhook e
+    accuracy.
+- **Testes:** `tests/test_http_entrypoint.py`, 4 testes. Antes da mudança,
+  os 4 falharam. Cenários:
+  - porta e host padrão, `log_config` e `/health` via TestClient;
+  - `--host`, `--port` e `--config` chegam ao app;
+  - logging e env;
+  - o DI global sumiu.
+  - O portão de logging da P3-6b agora inclui este entrypoint.
+
+**Não feito (decisão do Allan):** montar ou apagar os routers accuracy,
+metrics, knowledge e admin.
+
+- Nenhum deles tem autenticação.
+- Três escrevem: o PATCH de acurácia, o POST de padrões de conhecimento
+  (influencia o diagnóstico) e o POST admin de validação.
+- O `PipelineMetricsCollector` não é alimentado por ninguém, e o
+  `IncidentStore` do processo HTTP só conteria os incidentes desse processo.
+- Montar exige escolher auth/escopo e as fontes de dados. Apagar remove
+  funcionalidade testada.
+- Também não removi os helpers sem chamador fora dos testes (`LazyRAG`,
+  `create_engine`/`NotificationEngine`, `handle_prediction_event`), pelo
+  mesmo motivo.
+
+**Suíte completa:** ruff limpo. unit 1517 passaram, integration 138
+passaram, suíte completa 1802 passaram e 10 foram pulados. Status 0 nos três.
+
+---
+
+## O que ficou de fora da P3, e por quê
+
+| Item | Motivo |
+|---|---|
+| **P3-1**: decompor `main.py` | Depende da escolha V0×V1, que é do Allan. O relatório pede para fazer depois do P2-1, para não decompor o pipeline que vai morrer. |
+| **P3-3**: import-linter no CI | Exige mudar `.github/`. No lugar, a regra de camadas virou teste AST nos jobs existentes (`tests/test_layer_dependencies.py`). |
+| **P3-6c**: cenário com fonte única (F5-11) | Os geradores da CLI e da demo diferem na forma: 1 h com falha abrupta e pool de 200 para 50, contra uma rampa logística de 32 min calibrada para a narrativa. As duas saídas (unificar a forma ou renomear os ids da demo) são escolha de produto. |
+| **P3-7**: o CI instalar a partir do `pyproject` | Exige mudar `.github/` (o job unit tem lista própria, com pisos divergentes). O `requirements.txt` ficou como espelho, travado por teste. Não conferi o `.env.example`, cuja leitura foi negada pelas permissões. |
+| **P3-8**: benchmarks fora do caminho padrão (T-h) | Já têm `@pytest.mark.slow`. Excluí-los do job `rust-build` muda um portão de CI (`.github/` ou o `addopts` que o job usa). |
+| **P3-8**: os 2 skips do observer do `BlueprintEngine` | Testam uma API que não existe (`add_observer`, `run` assíncrono). Implementar ou apagar é decisão de desenho. O motivo do skip agora diz isso. |
+| **P3-9c**: rota/CLI para aprovar propostas de skill | A gravação pendente foi feita; o caminho de aprovação para uma pessoa não foi. |
+| **P3-9d**: ciclo de skills no V1 | Depende da escolha V0×V1. |
+| **P3-2**: routers accuracy, metrics, knowledge e admin e os helpers sem chamador | Montar exige decidir autenticação e fonte de dados; apagar remove funcionalidade testada. |
+| **MCP SSE com `auth_method: header`** | Remover `header` como padrão é decisão listada do Allan. O entrypoint novo não liga o MCP: ele continua opt-in. |

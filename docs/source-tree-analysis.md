@@ -119,5 +119,6 @@ rule (which layer may not import which) is the `FORBIDDEN` table in `tests/test_
 | `telemetry_sanitizer.py` | `python -m pipeline.telemetry_sanitizer` | Standalone adversarial demo |
 | `version_validator.py` | `python -m safety.version_validator` | Standalone version validation demo |
 | `infra/run_webhook_server.py` | `python infra/run_webhook_server.py` | Webhook server on `127.0.0.1:47890` (see [LOCAL_TESTING_SETUP](LOCAL_TESTING_SETUP.md)) |
-| `interfaces/mcp/server.py` | `python -m interfaces.mcp.server` | MCP server |
+| `interfaces/mcp/server.py` | `python -m interfaces.mcp.server` | MCP server (stdio) |
+| `interfaces/http/__main__.py` | `python -m interfaces.http` | HTTP app (`create_app`): health, A2A, OAuth, optional MCP SSE on `127.0.0.1:47893` |
 | `interfaces/demo/server.py` | `python interfaces/demo/server.py` | Demo dashboard (default port 47891) |

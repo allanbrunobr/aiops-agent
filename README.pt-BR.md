@@ -307,6 +307,14 @@ Servidor MCP via stdio (Claude Desktop e uso local):
 python -m interfaces.mcp.server
 ```
 
+App HTTP (health, A2A, servidor OAuth e, com `mcp.enabled: true` e `transport: sse`, o MCP via SSE), em `127.0.0.1:47893` por padrão:
+
+```bash
+python -m interfaces.http                      # --host, --port, --config
+```
+
+O A2A exige Bearer JWT, e o servidor OAuth só é montado com chave de assinatura configurada (veja o [`SECURITY.md`](SECURITY.md)). O MCP via SSE vem desligado; quando ligado, o `auth_method` padrão é `header`. Os routers de accuracy, metrics, knowledge e admin em `interfaces/http/` **não** são montados.
+
 ---
 
 ## Extensão Rust (opcional)
