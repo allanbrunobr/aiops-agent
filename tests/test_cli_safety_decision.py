@@ -133,6 +133,7 @@ def _rem(is_safe: bool) -> MagicMock:
 
 
 @pytest.mark.unit
+@pytest.mark.usefixtures("isolated_cli")
 class TestMainExitCodeUsesAllLayers:
     def test_version_validator_block_yields_approval_needed(self):
         from main import EXIT_APPROVAL_NEEDED

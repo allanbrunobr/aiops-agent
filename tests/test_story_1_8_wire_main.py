@@ -37,7 +37,7 @@ def test_create_incident_state_with_scenario():
     assert state.no_llm is False
 
 
-def test_main_v1_no_llm_no_rag(tmp_path):
+def test_main_v1_no_llm_no_rag(tmp_path, isolated_cli):
     """main_v1() com --no-llm --no-rag no cenário padrão pede aprovação humana.
 
     Mesmo resultado do V0 (main() devolve 3 no mesmo cenário): o diagnóstico

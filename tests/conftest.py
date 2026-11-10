@@ -40,6 +40,67 @@ def pytest_collection_modifyitems(config, items):
             )
 
 
+_REPO_MEMORY_DB = "data/incident_memory.db"
+_MEMORY_DB_MODULES = ("rag.memory", "rag.indexer", "rag.retriever_history")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_incident_memory_db(tmp_path, monkeypatch):
+    """Nenhum teste grava na memória institucional do repositório.
+
+    Desde que save_incident voltou a funcionar (F07), harnesses que rodam
+    main() gravavam incidentes falsos em data/incident_memory.db — o arquivo
+    que a CLI real lê como precedentes e chunks [HISTORICAL]. Os construtores
+    têm o caminho como default de argumento, então o default é trocado por um
+    arquivo em tmp_path, por teste.
+    """
+    import importlib
+
+    target = str(tmp_path / "incident_memory.db")
+    for mod_name in _MEMORY_DB_MODULES:
+        mod = importlib.import_module(mod_name)
+        for obj in vars(mod).values():
+            if not (isinstance(obj, type) and obj.__module__ == mod_name):
+                continue
+            init = vars(obj).get("__init__")
+            if init is None:
+                continue
+            if init.__defaults__ and _REPO_MEMORY_DB in init.__defaults__:
+                monkeypatch.setattr(init, "__defaults__", tuple(
+                    target if d == _REPO_MEMORY_DB else d for d in init.__defaults__))
+            if init.__kwdefaults__ and _REPO_MEMORY_DB in init.__kwdefaults__.values():
+                monkeypatch.setattr(init, "__kwdefaults__", {
+                    k: (target if v == _REPO_MEMORY_DB else v)
+                    for k, v in init.__kwdefaults__.items()})
+    yield
+
+
+@pytest.fixture
+def isolated_cli(monkeypatch):
+    """Roda main()/main_v1() sem efeitos externos nem vazamento de ambiente.
+
+    Os dois entrypoints leem `.env.local` do diretório atual para dentro de
+    os.environ (setdefault) e montam um SlackNotifier real quando há
+    SLACK_BOT_TOKEN. Num checkout com `.env.local` de verdade, um teste que
+    chama main() postaria no canal. Aqui:
+      - o notifier é desligado (setup_slack_notifier → None);
+      - variáveis de credencial já presentes são removidas;
+      - os.environ inteiro é restaurado ao fim do teste.
+    Não muda o diretório atual: a config é lida de config/defaults.yaml
+    relativo ao cwd.
+    """
+    import os
+    from unittest.mock import patch
+
+    with patch.dict(os.environ, clear=False):
+        for key in [k for k in os.environ
+                    if k.startswith(("SLACK_", "ANTHROPIC_", "JIRA_", "DATABRICKS_"))]:
+            del os.environ[key]
+        monkeypatch.setattr("tools.slack_setup.setup_slack_notifier",
+                            lambda *args, **kwargs: None)
+        yield
+
+
 @pytest.fixture(scope="class")
 def simulated_incident():
     """Gera incidente simulado com seed-42 para output determinístico.

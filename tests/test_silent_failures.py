@@ -25,18 +25,46 @@ import pytest
 from domain.confidence import confidence_to_score
 
 ROOT = Path(__file__).resolve().parent.parent
-SKIP_DIRS = {"tests", "docs", "rust", ".git", ".venv", "venv", "node_modules"}
+# Fallback quando não há git (ex.: tarball): pacotes de produção do projeto.
+PRODUCTION_PACKAGES = (
+    "adapters", "agents", "app", "application", "auth", "blueprint", "config",
+    "core", "data", "domain", "infra", "interfaces", "pipeline", "rag", "safety",
+    "scripts", "tools", "validation",
+)
+NON_PRODUCTION_TOP = {"tests", "docs"}
 # Exceções estreitas em que ignorar é o comportamento correto.
 ALLOWED_SILENT = {"ImportError", "ModuleNotFoundError", "asyncio.CancelledError",
                   "CancelledError", "WebSocketDisconnect"}
 
 
+def _production_files() -> list[Path]:
+    """Só arquivos do projeto: versionados no git, ou os pacotes conhecidos.
+
+    Não usa rglob na raiz: arquivos locais fora do controle de versão
+    (evaluate*.py, _bmad/, venvs com outro nome) não são código do projeto.
+    """
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "*.py"], cwd=ROOT, capture_output=True,
+            text=True, timeout=10, check=True,
+        ).stdout.split()
+        files = [ROOT / f for f in out]
+    except (OSError, subprocess.SubprocessError):
+        files = [ROOT / "main.py"] + [
+            p for pkg in PRODUCTION_PACKAGES for p in (ROOT / pkg).rglob("*.py")
+        ]
+    return sorted(
+        p for p in files
+        if p.is_file() and p.relative_to(ROOT).parts[0] not in NON_PRODUCTION_TOP
+    )
+
+
 def _silent_handlers() -> list[str]:
     found = []
-    for path in sorted(ROOT.rglob("*.py")):
+    for path in _production_files():
         rel = path.relative_to(ROOT)
-        if rel.parts[0] in SKIP_DIRS:
-            continue
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(rel))
         for node in ast.walk(tree):
             if not isinstance(node, ast.ExceptHandler):
@@ -110,6 +138,24 @@ class TestIncidentPersistence:
 
 
 @pytest.mark.unit
+class TestSuiteDoesNotTouchRepoMemoryDb:
+    """A fixture autouse do conftest isola o default de todos os construtores."""
+
+    def test_default_db_paths_point_outside_the_repo(self):
+        from rag.memory import IncidentMemoryDB
+
+        db = IncidentMemoryDB()
+        assert "data/incident_memory.db" not in str(db.db_path).replace("\\", "/")
+        for mod_name in ("rag.indexer", "rag.retriever_history"):
+            mod = __import__(mod_name, fromlist=["_"])
+            for obj in vars(mod).values():
+                init = vars(obj).get("__init__") if isinstance(obj, type) else None
+                defaults = getattr(init, "__defaults__", None) or ()
+                assert "data/incident_memory.db" not in defaults, (mod_name, obj)
+
+
+@pytest.mark.unit
+@pytest.mark.usefixtures("isolated_cli")
 class TestNoDeadPredictCall:
     def test_step_predict_is_only_called_with_its_real_signature(self):
         import main

@@ -133,6 +133,7 @@ class TestPipelineV1ReachesSafetyLayers:
 
 
 @pytest.mark.unit
+@pytest.mark.usefixtures("isolated_cli")
 class TestMainV1ExitCode:
     def test_needs_review_returns_approval_needed(self, tmp_path):
         from main import EXIT_APPROVAL_NEEDED, main_v1

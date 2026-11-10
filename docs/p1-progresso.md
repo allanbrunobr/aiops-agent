@@ -19,13 +19,13 @@ O CI não tem lint nem formatação, então não há outro comando a rodar.
 
 | # | Item | IDs | Estado | Commit |
 |---|---|---|---|---|
-| 1 | Laço do orchestrator com saída e chamadas ao LLM limitadas; timeout no cliente | F01 | feito | ver `git log` |
-| 2 | Gate de comando: metacaracteres de shell, âncora, nome de serviço | F02, T04, SEC-05, SEC-06 | feito | ver `git log` |
-| 3 | CLI usa o veredito agregado de todas as camadas | F03 | feito | ver `git log` |
-| 4 | Template de CPU no mitigator | NOVO-01 | feito | ver `git log` |
-| 5 | Safety ligada no pipeline V1 (`proposed_action`) | ARQ-01, F04, SEC-04 | feito | ver `git log` |
-| 6 | OAuth: autenticação do cliente em `/auth/token/register` | SEC-01, SEC-11, 4B-07 | feito (aud/iss → P2) | ver `git log` |
-| 7 | Falhas silenciosas: log em vez de `except: pass`; `confidence` tipada; chamada morta a `step_predict` | F07, F5-02, ARQ-05, F5-01 | feito (ruff no CI → Allan) | ver `git log` |
+| 1 | Laço do orchestrator com saída e chamadas ao LLM limitadas; timeout no cliente | F01 | feito | `74a26d5` |
+| 2 | Gate de comando: metacaracteres de shell, âncora, nome de serviço | F02, T04, SEC-05, SEC-06 | feito | `27f9d39` |
+| 3 | CLI usa o veredito agregado de todas as camadas | F03 | feito | `f4d2069` |
+| 4 | Template de CPU no mitigator | NOVO-01 | feito | `46ac43e` |
+| 5 | Safety ligada no pipeline V1 (`proposed_action`) | ARQ-01, F04, SEC-04 | feito | `5ddec40` |
+| 6 | OAuth: autenticação do cliente em `/auth/token/register` | SEC-01, SEC-11, 4B-07 | feito (aud/iss → P2) | `41b3b50` |
+| 7 | Falhas silenciosas: log em vez de `except: pass`; `confidence` tipada; chamada morta a `step_predict` | F07, F5-02, ARQ-05, F5-01 | feito (ruff no CI → Allan) | `1bd50ca` |
 
 ## Item 1 — F01: laço do AgentOrchestrator
 
@@ -291,9 +291,13 @@ passaram e 10 foram pulados. Status 0 nos três.
 **Fica para o Allan (precisa de credencial ou decisão de implantação):**
 
 - **Gerar e distribuir os segredos** dos clientes `assistant-agent`,
-  `databricks-mcp` e `sre-orchestrator` e configurar os `secret_sha256`
-  (YAML ou variável de ambiente). Até isso acontecer, nenhum cliente recebe
-  token por este endpoint. Isso é intencional.
+  `databricks-mcp` e `sre-orchestrator` e configurar os `secret_sha256`.
+  Até isso acontecer, nenhum cliente recebe token por este endpoint. Isso
+  é intencional. Cuidados (ver item 8):
+  - o segredo deve ser aleatório, com pelo menos 32 bytes;
+  - o hash não deve ir para o `defaults.yaml` versionado;
+  - só a configuração via YAML/`AppConfig` foi testada. Sobrescrever
+    essa lista por variável de ambiente não foi verificado.
 - **`aud`/`iss` nos tokens (SEC-11):** depende de uma URL de emissor
   definida (hoje `create_app` passa `base_url=""`) e de mudar em conjunto os
   validadores do A2A, do SSE e do introspect. Fica para o P2.
@@ -404,3 +408,69 @@ os três jobs de pytest do CI rodados com status 0. Nada foi enviado ao remoto.
 - Busca MCP: campos de texto redigidos até o 4B-03 ser corrigido (item 7).
 - Slack: o percentual exibido para confiança em texto segue a escala única
   (item 7).
+
+---
+
+## Item 8 — Correções após a revisão final
+
+Uma revisão independente apontou três problemas de isolamento que a minha
+verificação escondia. Eu rodava a suíte com `env -i` e um runner que apagava
+os artefatos depois de cada execução.
+
+**1. A suíte passou a gravar incidentes falsos na memória real.** Isso é efeito
+do item 7: o `save_incident` voltou a funcionar, e os testes que rodam `main()`
+usam o caminho padrão `data/incident_memory.db`. É o arquivo que a CLI real lê
+como precedentes e chunks `[HISTORICAL]`.
+
+- **Medido sem limpeza:** o job unit deixou **6 linhas** falsas
+  (`test-scenario` / `test`).
+- **Correção:** fixture `autouse` em `tests/conftest.py` que aponta o default
+  de caminho dos construtores de `rag.memory`, `rag.indexer` e
+  `rag.retriever_history` para `tmp_path`, por teste.
+- **Medido depois:** os três jobs, rodados sem limpeza, não criam mais
+  `data/incident_memory.db`.
+- O `output/postmortem_*.md` continua sendo gravado por testes antigos. É o
+  item 12 do P2, e a CLI não lê esses arquivos de volta.
+
+**2. O portão AST varria arquivos que não são do projeto.** O `rglob` na raiz
+incluiria `evaluate*.py`, `_bmad/` e venvs com outro nome, que estão no
+`.gitignore` e podem existir no checkout do Allan.
+
+- **Correção:** o portão passa a usar `git ls-files`, com uma lista explícita
+  de pacotes como fallback.
+- **Provado num repositório git descartável no scratchpad:** só o arquivo
+  versionado é examinado, e a violação nele continua sendo acusada.
+
+**3. Testes de `main()`/`main_v1()` podiam postar no Slack de verdade.** Os
+dois entrypoints leem `.env.local` do diretório atual para `os.environ` e
+montam um `SlackNotifier` real se houver `SLACK_BOT_TOKEN`.
+
+- **Correção:** fixture `isolated_cli`, que:
+  - desliga o notifier;
+  - remove as variáveis de credencial do ambiente;
+  - restaura `os.environ` ao fim do teste.
+- **Onde foi aplicada:** nos testes que escrevi e nos dois existentes com o
+  mesmo risco, `test_exit_codes.py::TestMainExitCodes` e
+  `test_story_1_8_wire_main.py::test_main_v1_no_llm_no_rag`.
+- **Prova:** `tests/test_cli_isolation.py`.
+
+**Documentação atualizada**, para o P1 não aumentar a defasagem que o relatório
+criticou:
+
+- `SECURITY.md`: o registro OAuth com `client_secret` e o gate com bloqueio de
+  metacaracteres e allow-list ancorada.
+- `config/defaults.yaml`: o segredo deve ser aleatório, com pelo menos 32
+  bytes, e o hash não deve ir para arquivo versionado.
+
+Os READMEs já diziam que o cenário padrão termina com exit 3, o que agora vale
+também para o V1.
+
+### O que o P1 pedia e não foi feito
+
+| Item | Pendência | Dado medido |
+|---|---|---|
+| 1 | `blueprint.max_llm_calls: 15` continua sem efeito em produção | Pior caso medido com o laço corrigido: **29 chamadas** ao LLM por execução (replan no 8º step de cada plano). Caso comum, com o LLM sempre respondendo "continue": 11. Antes: sem limite |
+| 4 | `mitigator.propose` no orchestrator continua sem `try` | O template quebrado foi corrigido e há teste de tabela para todos os padrões; a chamada em si continua desprotegida |
+| 5 | Quando uma camada bloqueia, o `main_v1` chama `display_results` com o estado de antes da execução | Sem diagnóstico nem postmortem na saída, ao contrário do V0. Vale tratar junto com a nota da A2A (P2, ARQ-10) |
+| 6 | `aud`/`iss` nos tokens | Ver item 6 |
+| 7 | `ruff` no CI | Ver item 7 |
