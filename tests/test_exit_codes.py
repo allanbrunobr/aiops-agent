@@ -371,7 +371,7 @@ class TestMainExitCodes:
 class TestExitCodeIntegration:
     """Testes de integração: exit codes em pipeline real."""
 
-    def test_no_llm_no_rag_returns_valid_exit_code(self) -> None:
+    def test_no_llm_no_rag_returns_valid_exit_code(self, tmp_path) -> None:
         """Pipeline real com --no-llm --no-rag deve retornar exit code válido (0-3).
 
         O cenário default (payment-pool-exhaustion) retorna exit code 3
@@ -380,7 +380,7 @@ class TestExitCodeIntegration:
         """
         from main import main, EXIT_APPROVAL_NEEDED
 
-        test_args = ["main.py", "--no-llm", "--no-rag"]
+        test_args = ["main.py", "--no-llm", "--no-rag", "--output-dir", str(tmp_path)]
 
         with (
             patch("sys.argv", test_args),
@@ -392,11 +392,11 @@ class TestExitCodeIntegration:
         # O cenário default sempre requer aprovação humana (safety MEDIUM risk).
         assert exit_code == EXIT_APPROVAL_NEEDED
 
-    def test_exit_code_is_integer(self) -> None:
+    def test_exit_code_is_integer(self, tmp_path) -> None:
         """main() deve retornar um inteiro válido (0-3)."""
         from main import main
 
-        test_args = ["main.py", "--no-llm", "--no-rag"]
+        test_args = ["main.py", "--no-llm", "--no-rag", "--output-dir", str(tmp_path)]
 
         with (
             patch("sys.argv", test_args),

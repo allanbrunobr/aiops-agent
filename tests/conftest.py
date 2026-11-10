@@ -137,6 +137,31 @@ def _isolate_external_side_effects(isolated_cli):
     yield
 
 
+_REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
+
+
+def _repo_output_files() -> set[str]:
+    out = _REPO_ROOT / "output"
+    return {str(p) for p in out.rglob("*") if p.is_file()} if out.is_dir() else set()
+
+
+@pytest.fixture(autouse=True)
+def _forbid_writes_to_repo_output():
+    """Nenhum teste grava em output/ do repositório (relatório §2.4).
+
+    Postmortems de teste iam para output/ do checkout. Teste que precisa
+    gravar passa output_dir=tmp_path.
+    """
+    before = _repo_output_files()
+    yield
+    created = sorted(_repo_output_files() - before)
+    if created:
+        pytest.fail(
+            "Teste gravou em output/ do repositório (use tmp_path): " + ", ".join(created[:5]),
+            pytrace=False,
+        )
+
+
 @pytest.fixture(scope="class")
 def simulated_incident():
     """Gera incidente simulado com seed-42 para output determinístico.

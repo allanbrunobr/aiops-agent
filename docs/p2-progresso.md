@@ -497,3 +497,38 @@ completa 1592 passaram e 10 foram pulados. Status 0 nos três.
 **Comportamento:** o exit code da CLI não muda, porque "não verificado" não é
 regressão. O que muda é o que a saída e o postmortem afirmam: deixam de
 mostrar uma melhora de saúde que nunca foi medida.
+
+## Item P2-12 — Testes não gravam em `output/` do repositório (relatório §2.4)
+
+**Defeito.** Testes que rodam o `main()` real, ou que chamam `step_postmortem`
+com o padrão, gravavam `output/postmortem_*.md` no checkout. O banco de
+memória já tinha sido isolado no item 8 do P1.
+
+**Correção:**
+
+- **Portão:** fixture `autouse` `_forbid_writes_to_repo_output` em
+  `tests/conftest.py`. Ela compara os arquivos de `output/` antes e depois de
+  cada teste e reprova o teste que criar arquivo ali.
+- **Testes corrigidos:** os que o portão acusou passaram a usar `tmp_path`
+  (`--output-dir` ou `output_dir=`):
+  - `test_api_key_safety.py`: 3 testes;
+  - `test_exit_codes.py::TestExitCodeIntegration`: 2 testes.
+
+**Vermelho e instrumento:**
+
+- **Primeira rodada:** com o portão ligado, falharam 3 testes.
+- **Mais dois escondidos:** `test_postmortem_contains_no_api_keys` e
+  `test_exit_code_is_integer` gravavam no mesmo lugar, mas o nome do arquivo
+  (resolução de segundos) colidia com o de outro teste e não criava arquivo
+  "novo". O primeiro foi achado por leitura. O segundo só apareceu quando o
+  vizinho deixou de gravar e o portão o acusou.
+
+**Medido:** a suíte completa, rodada **sem limpeza**, deixa o repositório sem
+nenhum artefato ignorado: nada em `output/`, nenhum
+`data/incident_memory.db` e nenhum `__pycache__`.
+
+- Removi `__pycache__` que **eu** tinha criado numa medição avulsa, fora do
+  runner, sem `PYTHONDONTWRITEBYTECODE`. O repositório começou sem nenhum.
+
+**CI local:** ruff limpo. unit 1414 passaram, integration 138 passaram, suíte
+completa 1592 passaram e 10 foram pulados. Status 0 nos três.
