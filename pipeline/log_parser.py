@@ -83,6 +83,9 @@ class LogParser:
         import datetime as _dt
 
         raw = _rust.parse_logs(logs)
+        # Fuso da entrada: o Rust devolve epoch, e a conversão preserva o
+        # tzinfo original (aware continua aware; naive continua hora local).
+        tz = logs[0].timestamp.tzinfo if logs else None
         result = []
         for d in raw:
             tpl = LogTemplate(
@@ -95,10 +98,10 @@ class LogParser:
             fs = d.get("first_seen")
             ls = d.get("last_seen")
             tpl.first_seen = fs if isinstance(fs, _dt.datetime) else (
-                _dt.datetime.fromtimestamp(fs) if fs is not None else None
+                _dt.datetime.fromtimestamp(fs, tz) if fs is not None else None
             )
             tpl.last_seen = ls if isinstance(ls, _dt.datetime) else (
-                _dt.datetime.fromtimestamp(ls) if ls is not None else None
+                _dt.datetime.fromtimestamp(ls, tz) if ls is not None else None
             )
             tpl.sample_messages = list(d.get("sample_messages", []))
             result.append(tpl)
@@ -113,37 +116,56 @@ class LogParser:
         # Amostragem sistemática para limitar custo O(N) do Drain3 em volumes grandes.
         # Templates convergem com ~10K amostras; além disso é redundante.
         _MAX = 500
-        if len(logs) > _MAX:
-            step = len(logs) // _MAX
-            logs = logs[::step]
-        for log in logs:
-            msg = log.message
-            result = self.miner.add_log_message(msg)
+        step = len(logs) // _MAX if len(logs) > _MAX else 1
+
+        # 1) Mineração (add_log_message) só na amostra — o custo controlado.
+        for log in logs[::step]:
+            result = self.miner.add_log_message(log.message)
             # Drain3 >= 0.9.11 retorna dict ao inves de objeto
-            cluster_id = result["cluster_id"]
+            self._record(log, result["cluster_id"], result["template_mined"])
 
-            if cluster_id not in self.templates:
-                self.templates[cluster_id] = LogTemplate(
-                    template=result["template_mined"],
-                    count=0,
-                    level=log.level,
-                )
-
-            tpl = self.templates[cluster_id]
-            tpl.count += 1
-            tpl.services.add(log.service)
-            tpl.template = result["template_mined"]
-
-            if tpl.first_seen is None or log.timestamp < tpl.first_seen:
-                tpl.first_seen = log.timestamp
-            if tpl.last_seen is None or log.timestamp > tpl.last_seen:
-                tpl.last_seen = log.timestamp
-
-            if len(tpl.sample_messages) < 3:
-                tpl.sample_messages.append(log.message)
+        # 2) Contagem sobre TODOS os logs (F12): os fora da amostra são só
+        # atribuídos a um cluster (match, sem alterar os clusters). Antes eles
+        # não eram contados, e as contagens — e o total_errors do
+        # DetectionAgent — encolhiam pelo fator de amostragem, divergindo do
+        # caminho Rust. Peso total/amostra não serve: a amostragem sistemática
+        # faz aliasing com logs periódicos. Sem cluster compatível, o log é
+        # minerado (um template raro fora da amostra deixa de sumir).
+        if step > 1:
+            for i, log in enumerate(logs):
+                if i % step == 0:
+                    continue
+                cluster = self.miner.match(log.message, full_search_strategy="fallback")
+                if cluster is None:
+                    result = self.miner.add_log_message(log.message)
+                    self._record(log, result["cluster_id"], result["template_mined"])
+                else:
+                    self._record(log, cluster.cluster_id, cluster.get_template())
 
         self._compute_relevance()
         return sorted(self.templates.values(), key=lambda t: t.relevance_score, reverse=True)
+
+    def _record(self, log, cluster_id: int, template: str) -> None:
+        """Conta um log no template do seu cluster."""
+        if cluster_id not in self.templates:
+            self.templates[cluster_id] = LogTemplate(
+                template=template,
+                count=0,
+                level=log.level,
+            )
+
+        tpl = self.templates[cluster_id]
+        tpl.count += 1
+        tpl.services.add(log.service)
+        tpl.template = template
+
+        if tpl.first_seen is None or log.timestamp < tpl.first_seen:
+            tpl.first_seen = log.timestamp
+        if tpl.last_seen is None or log.timestamp > tpl.last_seen:
+            tpl.last_seen = log.timestamp
+
+        if len(tpl.sample_messages) < 3:
+            tpl.sample_messages.append(log.message)
 
     def _validate_rust_output(self, logs: list) -> dict:
         """Helper de validação para desenvolvimento: compara saídas Rust vs Python.

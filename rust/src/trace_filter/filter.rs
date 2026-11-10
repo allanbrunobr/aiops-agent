@@ -15,18 +15,24 @@ pub fn filter_slow_traces(
     percentile_threshold: f64,
     max_hops: usize,
 ) -> Vec<SlowCallPathData> {
-    // Agrupar spans por trace_id
+    // Agrupar spans por trace_id, na ordem de primeira aparição (como o dict
+    // do Python). Iterar o HashMap dava ordem aleatória por processo: empates
+    // de duração escolhiam trace diferente na deduplicação a cada execução.
     let mut traces: HashMap<String, Vec<usize>> = HashMap::new();
+    let mut trace_order: Vec<String> = Vec::new();
     for (i, span) in spans.iter().enumerate() {
+        if !traces.contains_key(&span.trace_id) {
+            trace_order.push(span.trace_id.clone());
+        }
         traces.entry(span.trace_id.clone()).or_default().push(i);
     }
 
     // Duração por trace = duração do root span (parent_span_id == None)
-    let mut trace_durations: HashMap<String, f64> = HashMap::new();
-    for (trace_id, indices) in &traces {
-        for &i in indices {
+    let mut trace_durations: Vec<(String, f64)> = Vec::new();
+    for trace_id in &trace_order {
+        for &i in &traces[trace_id] {
             if spans[i].parent_span_id.is_none() {
-                trace_durations.insert(trace_id.clone(), spans[i].duration_ms);
+                trace_durations.push((trace_id.clone(), spans[i].duration_ms));
                 break;
             }
         }
@@ -37,7 +43,7 @@ pub fn filter_slow_traces(
     }
 
     // Calcular p95 threshold
-    let all_durations: Vec<f64> = trace_durations.values().copied().collect();
+    let all_durations: Vec<f64> = trace_durations.iter().map(|(_, d)| *d).collect();
     let threshold = percentile(&all_durations, percentile_threshold);
 
     // Baseline mean = média das durações abaixo do threshold
@@ -155,9 +161,13 @@ fn extract_call_path(spans: &[SpanData], sorted_indices: &[usize], max_hops: usi
 /// Deduplicação: mantém o trace mais lento de cada padrão de path.
 fn deduplicate_paths(paths: Vec<SlowCallPathData>) -> Vec<SlowCallPathData> {
     let mut best: HashMap<String, SlowCallPathData> = HashMap::new();
+    let mut order: Vec<String> = Vec::new();
 
     for p in paths {
         let key = p.path.join(" → ");
+        if !best.contains_key(&key) {
+            order.push(key.clone());
+        }
         match best.get(&key) {
             Some(existing) if existing.total_duration_ms >= p.total_duration_ms => {}
             _ => {
@@ -166,7 +176,8 @@ fn deduplicate_paths(paths: Vec<SlowCallPathData>) -> Vec<SlowCallPathData> {
         }
     }
 
-    let mut result: Vec<SlowCallPathData> = best.into_values().collect();
+    let mut result: Vec<SlowCallPathData> =
+        order.iter().filter_map(|k| best.remove(k)).collect();
     result.sort_by(|a, b| {
         b.total_duration_ms
             .partial_cmp(&a.total_duration_ms)

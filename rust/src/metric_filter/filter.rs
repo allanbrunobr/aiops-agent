@@ -15,16 +15,25 @@ pub fn detect_anomalies(
     sigma_threshold: f64,
     baseline_ratio: f64,
 ) -> Vec<MetricAnomalyData> {
-    // Agrupar por (service, metric_name)
+    // Agrupar por (service, metric_name), na ordem de primeira aparição — como
+    // o dict do Python. Iterar o HashMap direto dava ordem aleatória por
+    // processo, e empates de deviation_sigma saíam em ordem diferente a cada
+    // execução (achado pelo teste de paridade com sigma=1.5).
     let mut grouped: HashMap<(String, String), Vec<MetricPointData>> = HashMap::new();
+    let mut order: Vec<(String, String)> = Vec::new();
     for m in metrics {
         let key = (m.service.clone(), m.metric_name.clone());
+        if !grouped.contains_key(&key) {
+            order.push(key.clone());
+        }
         grouped.entry(key).or_default().push(m);
     }
 
     let mut anomalies: Vec<MetricAnomalyData> = Vec::new();
 
-    for ((service, metric_name), mut points) in grouped {
+    for key in order {
+        let mut points = grouped.remove(&key).unwrap_or_default();
+        let (service, metric_name) = key;
         // Ordenar por timestamp
         points.sort_by(|a, b| {
             a.timestamp
@@ -109,9 +118,13 @@ fn classify_shape(values: &[f64], idx: usize, baseline_end: usize) -> String {
 /// Deduplicação: mantém o ponto de maior desvio por (service, metric_name).
 fn deduplicate(anomalies: Vec<MetricAnomalyData>) -> Vec<MetricAnomalyData> {
     let mut best: HashMap<(String, String), MetricAnomalyData> = HashMap::new();
+    let mut order: Vec<(String, String)> = Vec::new();
 
     for a in anomalies {
         let key = (a.service.clone(), a.metric_name.clone());
+        if !best.contains_key(&key) {
+            order.push(key.clone());
+        }
         match best.get(&key) {
             Some(existing) if existing.deviation_sigma >= a.deviation_sigma => {}
             _ => {
@@ -120,8 +133,10 @@ fn deduplicate(anomalies: Vec<MetricAnomalyData>) -> Vec<MetricAnomalyData> {
         }
     }
 
-    // Ordenar por deviation_sigma decrescente (igual ao Python)
-    let mut result: Vec<MetricAnomalyData> = best.into_values().collect();
+    // Ordenar por deviation_sigma decrescente (igual ao Python): sort estável
+    // sobre a ordem de primeira aparição, para empates saírem como no Python.
+    let mut result: Vec<MetricAnomalyData> =
+        order.iter().filter_map(|k| best.remove(k)).collect();
     result.sort_by(|a, b| {
         b.deviation_sigma
             .partial_cmp(&a.deviation_sigma)

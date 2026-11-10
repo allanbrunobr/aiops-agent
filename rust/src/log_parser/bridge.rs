@@ -137,8 +137,6 @@ fn run_drain3_pipeline(entries: Vec<LogEntryData>) -> Vec<LogTemplateData> {
 /// Constrói lista Python de dicts com campos equivalentes ao LogTemplate.
 fn build_python_result(py: Python<'_>, templates: Vec<LogTemplateData>) -> PyResult<Py<PyList>> {
     let result = PyList::empty(py);
-    let datetime_mod = py.import("datetime")?;
-    let datetime_cls = datetime_mod.getattr("datetime")?;
 
     for tpl in templates {
         let dict = PyDict::new(py);
@@ -152,25 +150,11 @@ fn build_python_result(py: Python<'_>, templates: Vec<LogTemplateData>) -> PyRes
         services.sort();
         dict.set_item("services", services)?;
 
-        // Converter timestamps f64 → datetime Python
-        match tpl.first_seen {
-            Some(ts) => {
-                let dt = datetime_cls.call_method1("fromtimestamp", (ts,))?;
-                dict.set_item("first_seen", dt)?;
-            }
-            None => {
-                dict.set_item("first_seen", py.None())?;
-            }
-        }
-        match tpl.last_seen {
-            Some(ts) => {
-                let dt = datetime_cls.call_method1("fromtimestamp", (ts,))?;
-                dict.set_item("last_seen", dt)?;
-            }
-            None => {
-                dict.set_item("last_seen", py.None())?;
-            }
-        }
+        // Timestamps saem como epoch (f64). O wrapper Python converte no fuso
+        // da entrada; fromtimestamp aqui dava datetime naive em hora local e
+        // deslocava entradas aware (F15).
+        dict.set_item("first_seen", tpl.first_seen)?;
+        dict.set_item("last_seen", tpl.last_seen)?;
 
         dict.set_item("sample_messages", &tpl.sample_messages)?;
 

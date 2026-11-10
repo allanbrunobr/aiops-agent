@@ -580,3 +580,93 @@ pulados. Eles entram na lista do que ficou de fora.
 **Suíte completa:** ruff limpo. As contagens são idênticas às da P3-8a, ou
 seja, nenhum teste se perdeu no renome. unit 1503 passaram, integration 138
 passaram, suíte completa 1735 passaram e 10 foram pulados. Status 0 nos três.
+
+## P3-4 — Fronteira Python↔Rust (A8, B15: F5-08, ARQ-12, ARQ-13, F12, F15)
+
+**Limiares numa fonte só (F5-08/ARQ-13):**
+
+- `filter_metrics(metrics, sigma_threshold, baseline_ratio)` e
+  `filter_traces(spans, percentile_threshold, max_hops)` recebem os limiares
+  como argumentos obrigatórios. Os literais 3.0/0.5 e 95.0/3 do Rust saíram.
+- `MetricFilter`/`TraceFilter` delegam ao Rust sempre que ele existe,
+  passando os limiares da instância. Saiu a guarda por igualdade de float,
+  que desligava o Rust sem aviso quando o YAML mudava.
+- Os defaults de `MetricFilter`, `TraceFilter` e `Aggregator` vêm de
+  `ThresholdsConfig`. O YAML sobrescreve na composição.
+
+**EWMA/CUSUM único:** `rust/src/lib.rs` perdeu as cópias inline de
+`detect_cusum`/`compute_ewma_slope` e registra as de `cusum_ewma/`, que eram
+as testadas pelo `cargo test` mas não eram exportadas. A cópia Python
+(`_python_ewma_slope`) continua como fallback e ganhou teste de paridade.
+
+**`custom_patterns` (ARQ-12):** com padrões customizados, o sanitizador usa o
+caminho Python, que os conhece. É a opção que o relatório aceita. Antes,
+eles eram ignorados quando o Rust estava instalado. A decisão é dinâmica
+(`_use_rust()`), para o teste de paridade poder alternar o caminho.
+
+**Encontrado pela paridade com limiares fora do padrão:** a saída Rust de
+`MetricFilter` e `TraceFilter` não era determinística quando havia empate.
+A iteração de `HashMap` é aleatória por processo.
+
+- Medido: com sigma=1.5 no unknown-fault, a ordem diferia do Python em 5 de 6
+  processos.
+- No `TraceFilter`, a iteração também decidia qual trace sobrevivia na
+  deduplicação.
+- Correção no Rust: os dois filtros agrupam e deduplicam na ordem de primeira
+  aparição, como o dict do Python.
+- Testes de empate: 10 séries ou traces empatados. Uma ordem aleatória
+  coincidir com a do Python tem chance de 1 em 10!.
+
+**F12 (contagem do fallback do LogParser):**
+
+- Antes, acima de 500 logs, só a amostra era contada.
+- Primeiro tentei contar com peso (total/amostra). O teste novo mostrou que
+  isso não serve: com erros periódicos, a amostragem sistemática faz aliasing
+  e 60 erros viravam 120.
+- Ficou a outra correção do relatório: minerar (`add_log_message`) só a
+  amostra e atribuir todos os logs com `miner.match(…, "fallback")`. O log
+  sem cluster compatível é minerado.
+- Até 500 logs nada muda: os cenários têm cerca de 503 logs, e 503 // 500 = 1.
+
+**F15 (timestamps):**
+
+- O bridge Rust do log parser passa a devolver epoch, como o de métricas.
+- Os wrappers convertem no fuso da entrada: aware continua aware, naive
+  continua em hora local.
+- No `TraceFilter` via Rust, o timestamp é o `start_time` do primeiro span do
+  trace, como no fallback.
+
+**Rust:**
+
+- `cargo test --locked` passou (15 testes), com `CARGO_TARGET_DIR` no
+  scratchpad.
+- A wheel release foi construída no scratchpad e reinstalada no venv
+  completo.
+- `tests/rust` rodou 3 vezes em processos separados, com 147 testes passando
+  em cada rodada.
+
+**Testes:**
+
+- `tests/test_rust_boundary_thresholds.py` (unit, 6 testes, com um `_rust`
+  falso). Antes da mudança, 4 falharam. Cenários:
+  - os limiares atravessam a fronteira;
+  - `custom_patterns` não se perde;
+  - o caminho Rust é usado quando não há padrões customizados;
+  - os defaults vêm de `ThresholdsConfig`;
+  - `lib.rs` sem funções inline e bridges sem literais.
+- `tests/test_log_parser_fallback_counts.py` (unit, 4 testes). Antes da
+  mudança, os 2 casos amostrados falharam (contavam 500 e 2000 em vez de
+  1000 e 2500). Agora a contagem é exata: soma igual ao total e 60 erros.
+- `tests/rust/test_rust_python_parity.py` ganhou casos para:
+  - limiares fora do padrão (métricas e traces, 3 combinações × 3 cenários);
+  - o limiar chegando de fato ao Rust;
+  - `custom_patterns` com Rust instalado;
+  - `compute_ewma_slope`;
+  - empates;
+  - timestamps aware com o fuso local forçado para America/Sao_Paulo.
+- Contra a extensão antiga, falharam os testes de empate e o de timestamps
+  do log parser.
+
+**Suíte completa:** ruff limpo. unit 1513 passaram, integration 138
+passaram, suíte completa 1798 passaram e 10 foram pulados. A suíte completa
+roda com a extensão nova. Status 0 nos três.

@@ -14,6 +14,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from collections import defaultdict
 
+from config.loader import ThresholdsConfig
+
+# Defaults vêm de ThresholdsConfig (o YAML sobrescreve na composição).
+_DEFAULTS = ThresholdsConfig()
+
 try:
     import _aiops_rust as _rust
     _RUST_AVAILABLE = True
@@ -39,19 +44,20 @@ class SlowCallPath:
 class TraceFilter:
     """Filtra traces por latência e extrai call paths problemáticos."""
 
-    def __init__(self, percentile_threshold: float = 95.0, max_hops: int = 3):
+    def __init__(self, percentile_threshold: float = _DEFAULTS.percentile_threshold,
+                 max_hops: int = _DEFAULTS.max_hops):
         self.percentile_threshold = percentile_threshold
         self.max_hops = max_hops
 
     def filter_slow_traces(self, spans: list) -> list[SlowCallPath]:
         """Identifica traces lentos e extrai call paths."""
-        if _RUST_AVAILABLE and self.percentile_threshold == 95.0 and self.max_hops == 3:
+        if _RUST_AVAILABLE:
             return self._filter_rust(spans)
         return self._filter_python(spans)
 
     def _filter_rust(self, spans: list) -> list[SlowCallPath]:
-        """Delegação para implementação Rust (p95 + max_hops=3)."""
-        raw = _rust.filter_traces(spans)
+        """Delegação para implementação Rust, com os limiares desta instância."""
+        raw = _rust.filter_traces(spans, self.percentile_threshold, self.max_hops)
         by_trace: dict[str, list] = defaultdict(list)
         for span in spans:
             by_trace[span.trace_id].append(span)
@@ -64,7 +70,9 @@ class TraceFilter:
                 bottleneck_service=r["bottleneck_service"],
                 bottleneck_duration_ms=r["bottleneck_duration_ms"],
                 normal_duration_ms=r["normal_duration_ms"],
-                timestamp=r["timestamp"],
+                # Como o fallback: start_time do 1º span do trace, com o tzinfo
+                # original (o Rust devolvia naive em hora local, F15).
+                timestamp=min(s.start_time for s in by_trace[r["trace_id"]]),
                 attributes=self._bottleneck_attributes(by_trace[r["trace_id"]], r),
             )
             for r in raw

@@ -7,16 +7,22 @@ em um relatório textual unificado, pronto para ingestão pelo agente.
 
 from __future__ import annotations
 
+from config.loader import ThresholdsConfig
 from pipeline.log_parser import LogParser, LogTemplate
 from pipeline.metric_filter import MetricFilter, MetricAnomaly
 from pipeline.trace_filter import TraceFilter, SlowCallPath
 
 
+_DEFAULTS = ThresholdsConfig()
+
+
 class Aggregator:
     """Combina dados de observabilidade em texto para o LLM."""
 
-    def __init__(self, sigma_threshold: float = 3.0, baseline_ratio: float = 0.5,
-                 percentile_threshold: float = 95.0, max_hops: int = 3):
+    def __init__(self, sigma_threshold: float = _DEFAULTS.sigma_threshold,
+                 baseline_ratio: float = _DEFAULTS.baseline_ratio,
+                 percentile_threshold: float = _DEFAULTS.percentile_threshold,
+                 max_hops: int = _DEFAULTS.max_hops):
         self.log_parser = LogParser()
         self.metric_filter = MetricFilter(
             sigma_threshold=sigma_threshold,
