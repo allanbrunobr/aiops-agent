@@ -64,3 +64,38 @@ O estado nasce só com o alerta, sem logs, métricas ou traces, e o diagnóstico
 sai da heurística sobre nada. Ligar uma fonte de telemetria a essas entradas é
 trabalho de arquitetura (relatório: ARQ-10 e o stub do webhook), não deste
 item.
+
+## Item P2-2 — Cache do índice RAG devolvia o chunk errado (B4/F06)
+
+**Defeito.** O FAISS guarda só textos únicos, e os chunks têm duplicatas: o
+texto de métrica omite o serviço. O `build_index` criava `_faiss_to_chunks`,
+mas o `load_index` não o recriava, e o retriever caía em `chunks[idx]`.
+
+- **Reproduzido:** buscando o texto exato de um trace no índice carregado do
+  cache, voltava um chunk de **métrica**. O LLM recebia evidência de outra
+  fonte e de outro serviço.
+
+**Correção** (`rag/indexer.py`):
+
+- `_build_faiss_to_chunks()` recalcula o mapeamento a partir dos chunks, na
+  mesma ordem do `build_index` (`dict.fromkeys`). O `build_index` e o
+  `load_index` usam a mesma função.
+- O `load_index` confere `len(mapeamento) == index.ntotal`. Se divergir, o
+  cache é tratado como inválido e o índice é reconstruído.
+
+**Testes:** `tests/test_rag_cache_mapping.py`, 3 testes marcados `unit`.
+
+- **Ambiente:** modelo de embedding determinístico e um FAISS mínimo em numpy.
+  O projeto proíbe carregar ML nos testes; a primeira versão, com FAISS real,
+  quebrou o `test_smoke::TestMLIsolation` no job completo e foi trocada.
+- **Antes da correção:** os 3 falharam, inclusive com o FAISS falso, conferido
+  pondo o `indexer.py` antigo de volta.
+- **Cenários cobertos:**
+  - índice novo e índice do cache devolvem o mesmo chunk;
+  - toda consulta concorda entre os dois;
+  - divergência de tamanho invalida o cache.
+- **Ajuste em `tests/test_rag_persistence.py`:** o `read_index` falso passou a
+  ter `ntotal` coerente com os chunks gravados, como um índice real.
+
+**CI local:** ruff limpo. unit 842 passaram, integration 138 passaram, suíte
+completa 1533 passaram e 10 foram pulados. Status 0 nos três.

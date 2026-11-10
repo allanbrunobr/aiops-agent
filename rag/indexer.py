@@ -129,10 +129,7 @@ class ObservabilityIndexer:
         unique_embs = np.array([_embedding_cache[t] for t in unique_texts], dtype=np.float32)
 
         # Mapeia posição no índice FAISS → índices de chunks (para retrieval correto)
-        unique_to_idx = {t: i for i, t in enumerate(unique_texts)}
-        self._faiss_to_chunks: list[list[int]] = [[] for _ in range(len(unique_texts))]
-        for ci, chunk in enumerate(self.chunks):
-            self._faiss_to_chunks[unique_to_idx[chunk.text]].append(ci)
+        self._faiss_to_chunks = self._build_faiss_to_chunks()
 
         dim = unique_embs.shape[1]
         nu = len(unique_embs)
@@ -152,6 +149,19 @@ class ObservabilityIndexer:
         self.index.add(unique_embs)
 
         return len(self.chunks)
+
+    def _build_faiss_to_chunks(self) -> list[list[int]]:
+        """Posição no FAISS → índices dos chunks com aquele texto.
+
+        Mesma ordem do build_index: textos únicos na ordem da primeira
+        ocorrência (dict.fromkeys), que é a ordem em que entram no FAISS.
+        """
+        unique_texts = list(dict.fromkeys(chunk.text for chunk in self.chunks))
+        position = {text: i for i, text in enumerate(unique_texts)}
+        mapping: list[list[int]] = [[] for _ in unique_texts]
+        for ci, chunk in enumerate(self.chunks):
+            mapping[position[chunk.text]].append(ci)
+        return mapping
 
     def save_index(self, cache_dir: str, content_hash: str) -> None:
         """Salva índice FAISS + chunks + metadados em disco.
@@ -259,6 +269,21 @@ class ObservabilityIndexer:
             # Carrega índice FAISS (binário) — import lazy para evitar carga em testes
             import faiss
             self.index = faiss.read_index(faiss_path)
+
+            # O FAISS guarda só textos únicos; o mapeamento posição → chunks é
+            # recalculado na mesma ordem do build_index. Sem ele, o retriever
+            # caía em chunks[idx] e devolvia o chunk errado (F06).
+            self._faiss_to_chunks = self._build_faiss_to_chunks()
+            if len(self._faiss_to_chunks) != self.index.ntotal:
+                print(
+                    f"[RAG Cache] Chunks e índice divergem "
+                    f"({len(self._faiss_to_chunks)} textos únicos vs {self.index.ntotal} vetores)",
+                    file=sys.stderr,
+                )
+                self.chunks = []
+                self.index = None
+                self._faiss_to_chunks = []
+                return False
 
             return True
 
