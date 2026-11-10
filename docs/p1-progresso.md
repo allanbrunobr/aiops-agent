@@ -638,3 +638,48 @@ passaram e 10 foram pulados. Status 0 nos três.
 **Continua no P2 (ARQ-10):** no caminho de sucesso, o artifact `mitigation`
 da A2A ainda lê um atributo que não existe (`mitigation_proposal`) e sai
 vazio.
+
+---
+
+## Segredos OAuth configurados (ordem do Allan)
+
+**Código (commitado):**
+
+- `auth/client_secrets.py`: lê `{client_id: sha256 hex}` de um JSON fora do
+  repositório.
+- `config/loader.py`: novo campo `mcp.oauth.client_secrets_file`.
+- `interfaces/http/app.py`: o `create_app` completa o `secret_sha256` de cada
+  cliente a partir desse arquivo.
+- **Falha fechada:** arquivo ausente, malformado ou legível por grupo/outros
+  resulta em nenhum hash, e nenhum cliente recebe token.
+- **Testes:** `tests/test_oauth_client_secrets_file.py`, 13 testes.
+  - Antes da correção, falhavam todos (o módulo não existia).
+  - Cobrem: arquivo válido, sem caminho, arquivo ausente, 4 conteúdos
+    inválidos, entradas inválidas descartadas, permissão 644 recusada.
+  - Verificam também a variável `AIOPS_MCP__OAUTH__CLIENT_SECRETS_FILE`, que
+    antes eu tinha deixado como não verificada, e o `create_app` com e sem o
+    arquivo.
+
+**Arquivos gerados localmente (fora do git, nunca impressos):**
+
+| Arquivo | Conteúdo | Permissão |
+|---|---|---|
+| `~/.config/aiops-agent/` | pasta | `0700` |
+| `~/.config/aiops-agent/oauth-clients.secret` | JSON `{client_id: client_secret}` — entregar a cada cliente o seu | `0600` |
+| `~/.config/aiops-agent/oauth-clients.sha256.json` | JSON `{client_id: sha256}` — lido pelo servidor | `0600` |
+
+- **Clientes:** `assistant-agent`, `databricks-mcp` e `sre-orchestrator`.
+- **Geração:** os segredos são `secrets.token_urlsafe(32)` (32 bytes
+  aleatórios). Os arquivos foram criados com `O_EXCL`, então nada existente
+  foi sobrescrito.
+- **Como ativar no servidor:**
+
+  ```
+  export AIOPS_MCP__OAUTH__CLIENT_SECRETS_FILE="$HOME/.config/aiops-agent/oauth-clients.sha256.json"
+  ```
+
+- **Verificado:** com o `create_app` em memória e os arquivos reais, os três
+  clientes receberam token (HTTP 200) e um registro sem segredo recebeu 401.
+  Só os códigos de status foram impressos.
+- **Rotação:** apague os dois arquivos, rode a geração de novo e redistribua.
+  Os segredos de hoje existem só nesta máquina.

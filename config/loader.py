@@ -170,6 +170,9 @@ class OAuthConfig(BaseModel):
     jwt_secret: str = ""
     token_ttl: int = 3600
     allowed_clients: list[OAuthClientConfig] = []
+    # JSON {client_id: sha256 hex} fora do repositório; completa secret_sha256
+    # dos clientes acima. Env: AIOPS_MCP__OAUTH__CLIENT_SECRETS_FILE.
+    client_secrets_file: str = ""
 
     # Phase 2 — RS256 assimétrico
     private_key_path: str = ""   # caminho para chave privada RSA PEM

@@ -171,13 +171,18 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     _rsa_ok = bool(_rsa_private_pem and _rsa_public_pem)
     if _hmac_ok or _rsa_ok:
         import auth.server as auth_server
+        from auth.client_secrets import load_client_secret_hashes
         from auth.token_store import InMemoryTokenStore
+
+        # Hashes fora do repositório (fail-closed se ausente/inválido).
+        _secret_hashes = load_client_secret_hashes(_oauth.client_secrets_file)
 
         auth_server.configure(
             jwt_secret=_jwt_secret if _hmac_ok else "",
             token_ttl=_oauth.token_ttl,
             allowed_clients=[
-                {"id": c.id, "scopes": c.scopes, "secret_sha256": c.secret_sha256}
+                {"id": c.id, "scopes": c.scopes,
+                 "secret_sha256": c.secret_sha256 or _secret_hashes.get(c.id, "")}
                 for c in _oauth.allowed_clients
             ],
             base_url="",
