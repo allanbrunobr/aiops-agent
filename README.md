@@ -296,8 +296,8 @@ maturin build --release --interpreter .venv/bin/python --manifest-path rust/Carg
 
 ### Configuration files
 
-- [`config/defaults.yaml`](config/defaults.yaml): analysis thresholds, Blueprint Engine, webhook, Slack and MCP settings. Values can be overridden by variables with the `AIOPS__` prefix (for example, `AIOPS__MCP__OAUTH__JWT_SECRET`).
-- [`config.yaml`](config.yaml): per-service criticality map, used for the *blast radius* calculation.
+- [`config/defaults.yaml`](config/defaults.yaml): analysis thresholds, Blueprint Engine, webhook, Slack and MCP settings. Values can be overridden by environment variables named `AIOPS_<SECTION>__<FIELD>` (prefix `AIOPS_`, nesting with `__`; for example, `AIOPS_MCP__OAUTH__JWT_SECRET`).
+- [`config.yaml`](config.yaml): per-service criticality map. **Not loaded by the runtime today**: `DomainReranker` accepts the map as a parameter, but no entrypoint reads this file.
 
 ---
 

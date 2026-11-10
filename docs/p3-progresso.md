@@ -209,3 +209,74 @@ de AST cumpre o mesmo papel dentro dos jobs que já existem.
 
 **Suíte completa:** ruff limpo. unit 1477 passaram, integration 138
 passaram, suíte completa 1655 passaram e 10 foram pulados. Status 0 nos três.
+
+## P3-5 — Documentação que descreve o projeto atual (M1/M2, F5-05/07/13/14, ARQ-17)
+
+**Problema:** guias com comandos que não sobem nada, cenário inexistente,
+prefixo de variável errado, links para arquivos inexistentes, números de março
+e um plano de refatoração sem status.
+
+**Portão:** `tests/test_docs_consistency.py` (unit, 4 testes), sobre todo `.md`
+versionado, exceto os relatórios datados (`analise-*`, `p*-progresso`):
+
+- todo link relativo resolve para um arquivo;
+- todo `uvicorn pacote.modulo:objeto` aponta para um objeto definido no módulo
+  (por AST);
+- todo cenário citado em linha com `--scenario` está registrado (o teste importa
+  os módulos de cenário, como `main.py`);
+- nenhum `AIOPS__` (o loader usa `AIOPS_` + `__` entre seções).
+
+**Antes da correção:** os 4 falharam.
+- 4 links quebrados (`_bmad-output/project-context.md` 3x e
+  `ARCHITECTURE - AIOPS-AGENT.md`);
+- 3x `uvicorn interfaces.http.webhook:app`, que não existe;
+- `connection-pool-exhaustion` no CONTRIBUTING;
+- `AIOPS__` nos dois READMEs.
+
+Na primeira versão, o teste de cenários passava sem verificar nada: o registro
+estava vazio porque nenhum módulo de cenário tinha sido importado. Corrigido.
+
+**O que o teste não cobre:** portas, números e afirmações em prosa. Essas
+correções foram feitas à mão e conferidas contra o código:
+
+- `docs/LOCAL_TESTING_SETUP.md`:
+  - servidor real `python infra/run_webhook_server.py` em 47890 (igual ao
+    contact point do Grafana);
+  - mock de Slack em 47892 (padrão do script e do Compose), no lugar de
+    8000/8001/8003;
+  - exporter em 9101 e job `payment-svc`, no lugar de `metrics-simulator`
+    em 9091;
+  - removido o caminho pessoal `/Users/bruno/...`.
+- `CONTRIBUTING.md`:
+  - `.env.local`;
+  - cenário `payment-pool-exhaustion`;
+  - `--config` é YAML;
+  - a regra "@dataclass para todos os modelos" virou "`domain/` é dataclass
+    pura; Pydantic só na borda", conforme o ADR 0003.
+- `README.md` e `README.pt-BR.md`:
+  - `AIOPS_<SECAO>__<CAMPO>`;
+  - `config.yaml` está marcado como **não lido** em tempo de execução. Nenhum
+    `.py` o carrega. Remover ou ligar o arquivo fica para a P3-7.
+- `docs/source-tree-analysis.md`:
+  - aviso de que é um retrato;
+  - main.py tem ~2400 linhas;
+  - removidos `CLAUDE.md` e `ARCHITECTURE…`, que não existem;
+  - aponta para a regra de camadas em teste;
+  - entrypoints de webhook, MCP e demo.
+- `docs/index.md`: monólito com vários entrypoints.
+- `docs/project-overview.md`: números medidos com `create_incident()`:
+  - 503 logs de 4 serviços + deployment-controller (antes: "6 serviços");
+  - 240 amostras por série, 2160 pontos;
+  - 100 traces, 278 spans.
+- `docs/refactoring-execution-plan.md` (ARQ-17):
+  - baseline `7b1a87f`;
+  - tabela de status por fase, com o PR e o commit de merge de cada uma;
+  - fases 4 e 5 marcadas como parciais, com o que falta;
+  - registrado que o shim `data/models.py` não tem critério de remoção.
+  - O status vem do histórico de merges, e os comandos de aceite de cada fase
+    não foram rodados de novo.
+- `SECURITY.md`: os hashes vêm de `mcp.oauth.client_secrets_file`, fora do
+  repositório, com comportamento fail-closed.
+
+**Suíte completa:** ruff limpo. unit 1481 passaram, integration 138
+passaram, suíte completa 1659 passaram e 10 foram pulados. Status 0 nos três.

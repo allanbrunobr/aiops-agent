@@ -6,8 +6,26 @@ Finish the architectural refactoring started in Phases 0, 1 and 2a without openi
 unnecessary functional changes. The plan below is the direct execution order to bring
 the repository to a cleaner, more testable state that aligns with the accepted ADRs.
 
-Assumed current baseline: `main` at `84e0ec8`, PR #9 merged, `LLMClient` introduced
-as a test seam and containment boundary per ADR 0002.
+Baseline when this plan was written: `main` at `7b1a87f` (merge of PR #9), `LLMClient`
+introduced as a test seam and containment boundary per ADR 0002. (An earlier version
+cited `84e0ec8`, which does not exist in the history.)
+
+## Status (2026-11-10)
+
+Status comes from the merge history of `main`. The acceptance commands of each phase
+were not re-run for this table.
+
+| Phase | Status | Closed by |
+|---|---|---|
+| 0, 1a, 1b | done | PRs #1–#6 (`5fcbc1d` … `40be72e`) |
+| 2a — LLMClient seam | done | PR #9 (`7b1a87f`) |
+| 2b — Close the LLM seam | done | PR #10 (`0703e2f`) |
+| 2c — Reporter port | done | PR #11 (`ea0789b`) |
+| 2d — Ports and persistence | done | PR #12 (`161f150`) |
+| 2e — Retire legacy shims | done for `core/` | PR #13 (`cf2cab2`). `data/models.py` is still a re-export shim of `domain.incident` with no removal criterion (15 non-test modules and 14 test modules import it). |
+| 3 — Domain purity and edge DTOs | done | ADR in PR #14 (`41e5476`); code in PRs #15–#17 (`3b2e657`, `1e0d841`, `5387a7b`). `domain/` has no Pydantic import. |
+| 4 — Interface reorganization | partial | PR #18 (`cca59fe`) moved `server/`, `mcp_server/` and `demo/` under `interfaces/`. `main.py` is still the ~2400-line CLI; splitting it depends on the pending V0×V1 pipeline decision. |
+| 5 — Composition builders | partial | PR #19 (`2ef6980`) created `app/builders.py` with `build_engine`, `build_pipeline` and `build_rag`. `build_diagnoser_agent` and `build_detector_agent` do not exist: `DiagnosisAgent` is still built directly in `main.py`, `agents/orchestrator.py` and `blueprint/adapters/pipeline_nodes.py`, and the demo does not use the builders. |
 
 ## Execution Rules
 

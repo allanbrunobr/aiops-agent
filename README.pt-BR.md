@@ -286,8 +286,8 @@ A CLI e a demo carregam `.env.local` automaticamente. A CLI também lê `.env`. 
 
 ### Arquivos de configuração
 
-- [`config/defaults.yaml`](config/defaults.yaml): limiares de análise, Blueprint Engine, webhook, Slack e MCP. Valores podem ser sobrescritos por variáveis com prefixo `AIOPS__` (por exemplo, `AIOPS__MCP__OAUTH__JWT_SECRET`).
-- [`config.yaml`](config.yaml): mapa de criticidade por serviço, usado no cálculo de *blast radius*.
+- [`config/defaults.yaml`](config/defaults.yaml): limiares de análise, Blueprint Engine, webhook, Slack e MCP. Valores podem ser sobrescritos por variáveis de ambiente no formato `AIOPS_<SECAO>__<CAMPO>` (prefixo `AIOPS_`, aninhamento com `__`; por exemplo, `AIOPS_MCP__OAUTH__JWT_SECRET`).
+- [`config.yaml`](config.yaml): mapa de criticidade por serviço. **Hoje não é lido em tempo de execução**: o `DomainReranker` aceita o mapa como parâmetro, mas nenhum ponto de entrada lê este arquivo.
 
 ---
 

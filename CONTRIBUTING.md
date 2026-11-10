@@ -10,7 +10,7 @@
   python3.12 -m venv .venv
   .venv/bin/pip install -r requirements.txt
   ```
-- Copy `.env.example` to `.env` and add your `ANTHROPIC_API_KEY` (required for full LLM mode only)
+- Copy `.env.example` to `.env.local` and add your `ANTHROPIC_API_KEY` (required for full LLM mode only). The CLI and the demo load `.env.local` automatically.
 
 ### Project Structure
 
@@ -85,10 +85,10 @@ Stdlib-only execution. No API calls, no ML model loading. Fastest mode for devel
 
 ### Additional CLI Flags
 
-- `--scenario <name>` — Select incident scenario (`connection-pool-exhaustion`, `memory-leak`, `unknown-fault`)
+- `--scenario <name>` — Select incident scenario (`payment-pool-exhaustion`, `memory-leak`, `unknown-fault`)
 - `--output-dir <path>` — Custom postmortem output directory (default: `output/`)
 - `--output-format <format>` — Postmortem output format: `markdown` (default), `json`, or `both`
-- `--config <file>` — Path to TOML config file for analysis thresholds
+- `--config <file>` — Path to YAML config file for analysis thresholds (default: `config/defaults.yaml`)
 - `--rebuild-rag` — Force RAG index reconstruction, ignoring any cached index
 - `--compact` — Compact terminal output
 
@@ -144,7 +144,7 @@ pytest tests/ -v -m integration
 ### Python
 
 - Every module starts with `from __future__ import annotations`
-- Use `@dataclass` for all data models (not Pydantic, not plain dicts)
+- Domain models in `domain/` are pure `@dataclass` (no Pydantic, no plain dicts) — see [ADR 0003](docs/adr/0003-domain-purity.md). Pydantic is used only at the edges (HTTP DTOs in `interfaces/`, settings in `config/loader.py`)
 - Docstrings and comments in **PT-BR** (Portuguese)
 - Variable names, CLI output, LLM prompts in **English**
 - 7 modules are stdlib-only — do NOT add heavy imports to: `orchestrator`, `detector`, `metric_filter`, `trace_filter`, `context_compressor`, `pre_validator`, `version_validator`

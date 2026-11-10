@@ -6,21 +6,21 @@ Complete guide for setting up Grafana + Prometheus + Slack mock for aiops-agent 
 
 ```
 +-------------------+       +-------------------+       +-------------------+
-| metrics-simulator |------>|    Prometheus      |------>|     Grafana       |
-| (Python, :9091)   | scrape| (:9090)            | query| (:3000)           |
+| metrics-exporter  |------>|    Prometheus      |------>|     Grafana       |
+| (Python, :9101)   | scrape| (:9090)            | query| (:3001)           |
 +-------------------+       +-------------------+       +--------+----------+
                                                                   |
                                                          webhook POST
                                                                   |
                                                          +--------v----------+
                                                          |   aiops-agent     |
-                                                         |   FastAPI (:8000) |
+                                                         |  FastAPI (:47890)|
                                                          +--------+----------+
                                                                   |
                                                          Slack API POST
                                                                   |
                                                          +--------v----------+
-                                                         | Slack Mock (:8001)|
+                                                         |Slack Mock(:47892)|
                                                          | or Real Slack     |
                                                          +-------------------+
 ```
@@ -34,19 +34,19 @@ docker compose -f infra/docker-compose.yaml up -d --build
 ```
 
 Verify services:
-- Prometheus: http://localhost:9090 (check Targets page for metrics-simulator)
+- Prometheus: http://localhost:9090 (check Targets page for the payment-svc job)
 - Grafana: http://localhost:3001 (admin / aiops123)
 - Metrics Exporter: http://localhost:9101/metrics
 
 ### 2. Start the Slack mock server
 
 ```bash
-cd /Users/bruno/0\ -\ AI\ projects/aiops-agent
+# From the repository root
 source .venv/bin/activate
 python infra/slack-mock/slack_mock_server.py
 ```
 
-Verify: http://localhost:8003/_mock/health
+Verify: http://localhost:47892/_mock/health
 
 ### 3. Start the aiops-agent webhook server
 
@@ -55,11 +55,11 @@ Verify: http://localhost:8003/_mock/health
 source .venv/bin/activate
 
 # Set Slack to use mock server
-export SLACK_API_BASE_URL=http://localhost:8001/api/
+export SLACK_API_BASE_URL=http://localhost:47892/api/
 export SLACK_BOT_TOKEN=xoxb-mock-token-for-testing
 export SLACK_CHANNEL=C_TEST_CHANNEL
 
-python -m uvicorn interfaces.http.webhook:app --host 127.0.0.1 --port 8000 --reload
+python infra/run_webhook_server.py   # listens on 127.0.0.1:47890 (loads .env.local)
 ```
 
 ### 4. Watch it work
@@ -70,7 +70,7 @@ The metrics simulator cycles every 120 seconds:
 
 Monitor:
 - Grafana alerting: http://localhost:3001/alerting/list
-- Slack mock messages: http://localhost:8003/_mock/messages
+- Slack mock messages: http://localhost:47892/_mock/messages
 - Prometheus metrics: http://localhost:9090/graph?g0.expr=payment_svc_error_rate
 
 ### 5. Manual trigger for immediate testing
@@ -91,7 +91,7 @@ bash infra/test-webhook.sh
 | prometheus         | 9090 | Scrapes and stores metrics                 |
 | grafana            | 3001 | Visualizes metrics, fires alerts           |
 | metrics-exporter   | 9101 | Generates metrics with spike patterns      |
-| slack-mock         | 8003 | Mock Slack API (optional)                  |
+| slack-mock         | 47892 | Mock Slack API (optional)                  |
 
 ### Grafana Provisioning Files
 
@@ -161,7 +161,7 @@ from slack_sdk import WebClient
 
 client = WebClient(
     token="xoxb-mock-token",
-    base_url="http://localhost:8001/api/"
+    base_url="http://localhost:47892/api/"
 )
 
 # Works exactly like real Slack SDK calls
@@ -203,7 +203,7 @@ print(response["ts"])  # Returns a mock timestamp
 
 ```bash
 # .env.test (used by CI/pytest)
-SLACK_API_BASE_URL=http://localhost:8001/api/
+SLACK_API_BASE_URL=http://localhost:47892/api/
 SLACK_BOT_TOKEN=xoxb-mock-token
 SLACK_CHANNEL=C_TEST
 
@@ -223,7 +223,7 @@ SLACK_CHANNEL=C07XXXXXXXX
 python infra/slack-mock/slack_mock_server.py
 
 # Terminal 2: Start aiops-agent webhook server
-python -m uvicorn interfaces.http.webhook:app --port 8000
+python infra/run_webhook_server.py
 
 # Terminal 3: Run tests
 pytest tests/integration/test_webhook_to_slack_flow.py -v
@@ -239,10 +239,10 @@ docker compose -f infra/docker-compose.yaml up -d --build
 python infra/slack-mock/slack_mock_server.py
 
 # Terminal 3: aiops-agent
-python -m uvicorn interfaces.http.webhook:app --port 8000
+python infra/run_webhook_server.py
 
 # Wait ~90 seconds for the first spike cycle, then check:
-curl http://localhost:8003/_mock/messages | python -m json.tool
+curl http://localhost:47892/_mock/messages | python -m json.tool
 ```
 
 ---
@@ -261,7 +261,7 @@ grafana:
 
 ### Grafana alerts not firing
 
-1. Check Prometheus targets: http://localhost:9090/targets (should show metrics-simulator as UP)
+1. Check Prometheus targets: http://localhost:9090/targets (should show the payment-svc job as UP)
 2. Check Grafana alert rules: http://localhost:3001/alerting/list (should show rules in "AIOps" folder)
 3. Query directly: http://localhost:9090/graph?g0.expr=payment_svc_error_rate (should show data)
 4. Check Grafana logs: `docker logs aiops-grafana`
@@ -275,7 +275,7 @@ grafana:
 
 ```bash
 # Test connectivity from Grafana container to host
-docker exec aiops-grafana wget -qO- http://host.docker.internal:8000/health
+docker exec aiops-grafana wget -qO- http://host.docker.internal:47890/health
 ```
 
 ---
