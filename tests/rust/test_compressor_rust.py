@@ -9,7 +9,6 @@ Verifica:
 from __future__ import annotations
 
 import threading
-from dataclasses import dataclass, field
 from datetime import datetime
 from unittest.mock import patch
 

@@ -5,7 +5,6 @@ estao na ordem correta, e que SafetyBlockedError funciona.
 """
 from __future__ import annotations
 
-import pytest
 from datetime import datetime, timezone
 
 from config.loader import AppConfig

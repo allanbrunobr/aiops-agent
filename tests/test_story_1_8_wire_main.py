@@ -4,7 +4,6 @@ Valida que main.py usa o Blueprint Engine, preserva CLI flags e exit codes.
 """
 from __future__ import annotations
 
-import pytest
 from datetime import datetime, timezone
 
 

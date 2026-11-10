@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)

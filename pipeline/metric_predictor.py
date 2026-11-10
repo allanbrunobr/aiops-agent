@@ -6,7 +6,7 @@ Usa extensão Rust (_aiops_rust) se disponível; caso contrário,
 executa implementação Python pura.
 """
 
-from data.models import MetricPoint, MetricSeries
+from data.models import MetricPoint
 
 try:
     import _aiops_rust as _rust

@@ -607,7 +607,6 @@ def build_unknown_fault_corpus() -> list[CorpusItem]:
 
     for minute in range(duration_minutes):
         ts = _BASE_TIME + timedelta(minutes=minute)
-        progress = minute / (duration_minutes - 1)
 
         # CPU normal até falha
         cpu = 0.20 + random.gauss(0, 0.015)

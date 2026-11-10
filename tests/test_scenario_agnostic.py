@@ -19,7 +19,6 @@ import pytest
 # Garante registro de todos os cenários no registry antes dos testes.
 import data.sample_incident  # noqa: F401
 
-from data.registry import list_scenarios
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -211,17 +210,17 @@ class TestPostmortemAcrossScenarios:
         # Se padrão é "unknown", action items devem conter "Investigate".
         if pattern == "unknown":
             assert "Investigate" in text, (
-                f"Cenário unknown-fault: action items devem conter 'Investigate'"
+                "Cenário unknown-fault: action items devem conter 'Investigate'"
             )
         # Se padrão é "connection pool", action items devem conter "connection pool".
         elif pattern == "connection pool":
             assert "connection pool" in text.lower(), (
-                f"Cenário payment-pool: action items devem conter 'connection pool'"
+                "Cenário payment-pool: action items devem conter 'connection pool'"
             )
         # Se padrão é "memory", action items devem conter "memory".
         elif pattern == "memory":
             assert "memory" in text.lower(), (
-                f"Cenário memory-leak: action items devem conter 'memory'"
+                "Cenário memory-leak: action items devem conter 'memory'"
             )
         else:
             # Garante que novos patterns não passam silenciosamente sem validação.
@@ -319,7 +318,7 @@ class TestNoPipelineHardcodedServiceNames:
                         )
 
         assert not violations, (
-            f"Módulos de pipeline contêm nomes de serviço hardcoded:\n"
+            "Módulos de pipeline contêm nomes de serviço hardcoded:\n"
             + "\n".join(f"  - {v}" for v in violations)
         )
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from collections import defaultdict
 
 try:

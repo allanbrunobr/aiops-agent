@@ -10,7 +10,6 @@ Control:  POST /trigger-incident  — starts degradation manually
            POST /reset            — returns to the normal state
 """
 
-import math
 import random
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -52,7 +51,6 @@ def _metrics() -> str:
     """Generate metrics in Prometheus text exposition format."""
     phase = _phase()
     now = time.time()
-    jitter = random.uniform(-0.05, 0.05)
 
     if phase == "normal":
         cpu = 25.0 + random.uniform(-3, 3)
@@ -193,9 +191,9 @@ class MetricsHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print(f"Metrics exporter starting on :{PORT}")
-    print(f"  GET  /metrics          — Prometheus metrics")
-    print(f"  POST /trigger-incident — Trigger degradation manually")
-    print(f"  POST /reset            — Reset to normal")
+    print("  GET  /metrics          — Prometheus metrics")
+    print("  POST /trigger-incident — Trigger degradation manually")
+    print("  POST /reset            — Reset to normal")
     print(f"  Auto-incident in {INCIDENT_DELAY_S}s, recovery at {RECOVERY_DELAY_S}s")
     server = HTTPServer(("0.0.0.0", PORT), MetricsHandler)
     server.serve_forever()

@@ -9,7 +9,6 @@ Cobre:
 
 from __future__ import annotations
 
-import pytest
 
 from rag.cot_retriever import CoTObservabilityRetriever, SearchContext
 from rag.query_expansion import QueryExpander
@@ -369,7 +368,7 @@ class TestExecuteToolSearchSimilarWithCoT:
         import io
         from contextlib import redirect_stdout
         with redirect_stdout(io.StringIO()):
-            result = agent._execute_tool("search_similar", {"query": "payment-svc timeout"}, report, retriever)
+            agent._execute_tool("search_similar", {"query": "payment-svc timeout"}, report, retriever)
 
         # search_with_cot foi chamado
         assert retriever.current_iteration == 1

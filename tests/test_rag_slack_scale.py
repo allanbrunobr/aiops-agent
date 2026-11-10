@@ -21,7 +21,6 @@ from slack_sdk.errors import SlackApiError
 
 from core.lifecycle import LifecycleEvent
 from interfaces.http.notifications.slack import SlackNotifier
-from interfaces.http.notifications.fallback import LocalFallbackWriter
 from rag.models import KnowledgePattern, KnowledgeSearchResult
 from rag.knowledge_store import KnowledgeStore
 from rag.enrichment_node import RAGEnrichmentNode
@@ -276,7 +275,6 @@ class TestScaleConsistencyTokens:
 
     def test_compressed_tokens_stable_across_scales(self, generated_logs):
         """Tokens comprimidos devem ser similares independente da escala de input."""
-        from pipeline.log_parser import LogParser
         from pipeline.aggregator import Aggregator
         from pipeline.context_compressor import ContextCompressor
         from infra.benchmark_compression import generate_metrics, generate_traces
@@ -351,7 +349,7 @@ class TestRAGToSlackIntegration:
         """KnowledgeSearchResult com is_negative_example=True nao aparece nos blocks."""
         # Simula o retriever filtrando negative examples
         mock_retriever = MagicMock()
-        negative_pattern = _sample_pattern(is_negative=True, pattern_id="neg-001")
+        _sample_pattern(is_negative=True, pattern_id="neg-001")
         positive_pattern = _sample_pattern(is_negative=False, pattern_id="pos-001")
 
         # KnowledgeRetriever filtra negativos internamente
@@ -622,9 +620,6 @@ class TestDryRunAtScale:
         notifier = _make_notifier(AsyncMock(), dry_run=True)
 
         # Captura logs do structlog para verificar blocks
-        import structlog
-        captured_events = []
-        original_log = structlog.get_logger
 
         # Usamos o mecanismo de dry_run que loga com structlog
         # Verificamos que pipeline.started registra o ts e que progress funciona
@@ -667,7 +662,6 @@ class TestCoTEnrichmentToSlack:
     def test_cot_search_summary_format(self):
         """get_search_summary retorna formato correto apos buscas."""
         from rag.cot_retriever import CoTObservabilityRetriever, SearchContext
-        from rag.retriever import SearchResult
 
         mock_indexer = MagicMock()
         mock_indexer.index = None

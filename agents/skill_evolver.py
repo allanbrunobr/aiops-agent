@@ -74,7 +74,7 @@ class SkillEvolver:
         prompt = EVOLVE_PROMPT.format(
             skill_name=skill.name,
             system_prompt=skill.system_prompt,
-            lessons="\n".join(f"- {l}" for l in lessons) or "(nenhuma lição registrada)",
+            lessons="\n".join(f"- {lesson}" for lesson in lessons) or "(nenhuma lição registrada)",
             utility_score=skill.utility_score,
             total_uses=skill.total_uses,
         )

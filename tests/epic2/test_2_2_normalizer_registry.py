@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import pytest
 
-from application.ports.credential_provider import CredentialProvider
-from domain.alert import NormalizedAlert
 from interfaces.http.webhook.normalizers.base import AlertNormalizer
 from interfaces.http.webhook.normalizers.registry import NormalizerRegistry, register_normalizer
 

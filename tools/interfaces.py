@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from dataclasses import dataclass
 
 
 # --- Interfaces Abstratas (para MCP futuro) ---
@@ -136,9 +135,9 @@ class SimulatedLogSource(LogSource):
         return results
 
     def tail(self, service: str, lines: int = 50) -> list[dict]:
-        svc_logs = [l for l in self.logs if l.service == service]
-        return [{"timestamp": l.timestamp.isoformat(), "level": l.level,
-                 "message": l.message} for l in svc_logs[-lines:]]
+        svc_logs = [entry for entry in self.logs if entry.service == service]
+        return [{"timestamp": entry.timestamp.isoformat(), "level": entry.level,
+                 "message": entry.message} for entry in svc_logs[-lines:]]
 
 
 class SimulatedTraceSource(TraceSource):

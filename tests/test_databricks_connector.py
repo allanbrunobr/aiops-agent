@@ -16,7 +16,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tools.databricks_connector import (
-    DEFAULT_ALERTS_COLUMN_MAPPING,
     DEFAULT_COLUMN_MAPPING,
     DEFAULT_METRICS_COLUMN_MAPPING,
     DEFAULT_TRACES_COLUMN_MAPPING,
@@ -539,7 +538,7 @@ class TestLazyImport:
         # Recarregar para garantir estado limpo
         # Verificar que nenhum modulo databricks.sdk.* esta carregado
         # APOS importar nosso modulo
-        sdk_modules = [
+        [
             m for m in sys.modules
             if m.startswith("databricks.sdk")
         ]

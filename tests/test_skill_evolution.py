@@ -12,7 +12,6 @@ Cobre as 5 fases:
 from __future__ import annotations
 
 import pytest
-from unittest.mock import MagicMock
 
 from agents.diagnoser import DiagnosisAgent
 from rag.memory import IncidentRecord
@@ -472,7 +471,7 @@ class TestPhase5SkillEvolver:
 
     def test_evolver_importable(self):
         """SkillEvolver e EVOLVE_PROMPT devem ser importáveis sem erro."""
-        from agents.skill_evolver import SkillEvolver, EVOLVE_PROMPT
+        from agents.skill_evolver import EVOLVE_PROMPT
 
         assert EVOLVE_PROMPT  # não vazio
         assert "{skill_name}" in EVOLVE_PROMPT

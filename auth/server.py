@@ -15,7 +15,7 @@ import hashlib
 import hmac
 import re
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from auth.jwt_validator import MIN_HMAC_KEY_BYTES, TokenClaims, issue_token, validate_token

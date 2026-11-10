@@ -441,7 +441,6 @@ class DatabricksMetricsSource(DatabricksConnection, MetricsSource):
             ts_col = self.column_mapping["timestamp"]
             svc_col = self.column_mapping["service"]
             metric_col = self.column_mapping["metric_name"]
-            val_col = self.column_mapping["value"]
 
             safe_promql = promql.replace("'", "''")
 

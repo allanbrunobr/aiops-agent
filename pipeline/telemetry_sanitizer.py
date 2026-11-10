@@ -716,11 +716,11 @@ def demo_adversarial_attack():
     print(f"\n📊 {report}")
 
     if report.adversarial_payloads_blocked:
-        print(f"\n🛡️ Payloads bloqueados:")
+        print("\n🛡️ Payloads bloqueados:")
         for i, payload in enumerate(report.adversarial_payloads_blocked, 1):
             print(f"  {i}. {payload[:100]}...")
 
-    print(f"\n📝 Logs após sanitização:")
+    print("\n📝 Logs após sanitização:")
     for log in sanitized:
         status = "✅" if "[" not in log.message or log.message.startswith("Connection") else "🛡️"
         print(f"  {status} [{log.level}] {log.message[:100]}")

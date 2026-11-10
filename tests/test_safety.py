@@ -140,7 +140,7 @@ class TestTelemetrySanitizer:
 
     def test_adversarial_reward_hacking_neutralized(self):
         """Payloads lead+body adversariais são neutralizados mesmo em modo não-strict."""
-        from pipeline.telemetry_sanitizer import TelemetrySanitizer, TaintLevel
+        from pipeline.telemetry_sanitizer import TelemetrySanitizer
 
         sanitizer = TelemetrySanitizer(strict_mode=False)
         logs = [_make_log_entry(
@@ -293,7 +293,7 @@ class TestTelemetrySanitizer:
 
     def test_tainted_field_detection(self):
         """Campos TAINTED_LOG_FIELDS (ex: user_agent=...) são detectados como TaintLevel.TAINTED."""
-        from pipeline.telemetry_sanitizer import TelemetrySanitizer, TaintLevel
+        from pipeline.telemetry_sanitizer import TelemetrySanitizer
 
         sanitizer = TelemetrySanitizer(strict_mode=True)
         logs = [_make_log_entry("Request failed: user_agent=SomeBot/1.0 path=/api/v2")]
@@ -313,7 +313,7 @@ class TestPreExecutionValidator:
 
     def test_blocked_commands_rejected(self):
         """Cada padrão em BLOCKED_COMMANDS retorna (False, 'BLOCKED: ...') de _check_command_safety()."""
-        from safety.pre_validator import PreExecutionValidator, BLOCKED_COMMANDS
+        from safety.pre_validator import PreExecutionValidator
 
         validator = PreExecutionValidator()
         dangerous_examples = [
@@ -600,7 +600,7 @@ class TestVersionValidator:
 
     def test_unknown_package_passes(self):
         """Pacotes desconhecidos com versões desconhecidas retornam SAFE (sem falsos positivos)."""
-        from safety.version_validator import VersionValidator, RemediationRisk
+        from safety.version_validator import VersionValidator
 
         validator = VersionValidator()
         result = validator.validate_remediation(

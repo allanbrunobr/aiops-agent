@@ -9,7 +9,7 @@ O inverso NUNCA e verdadeiro.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Callable
+from typing import Callable
 
 from config.loader import AppConfig
 from domain.incident_state import IncidentState

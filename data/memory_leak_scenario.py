@@ -99,7 +99,7 @@ def generate_logs(count: int = 500) -> list[LogEntry]:
             f"OOM killer terminated process api-server (pid={random.randint(1000, 9999)}), used {heap_mb}MB",
             f"Java heap space exceeded: allocated {heap_mb}MB of {HEAP_LIMIT_MB}MB limit",
             f"Memory allocation failed: cannot allocate {random.randint(64, 256)}MB, heap at {heap_mb}MB/{HEAP_LIMIT_MB}MB",
-            f"OutOfMemoryError: heap space exhausted, triggering emergency GC",
+            "OutOfMemoryError: heap space exhausted, triggering emergency GC",
             f"Process restarted after OOM kill, uptime was {random.randint(30, 900)}s",
             f"Memory leak detected: {random.randint(500, 2000)} unclosed HTTP connections consuming {random.randint(200, 800)}MB",
         ]
@@ -110,9 +110,9 @@ def generate_logs(count: int = 500) -> list[LogEntry]:
         ts = SPIKE_START + datetime.timedelta(seconds=random.randint(60, 15 * 60))
         cascade_msgs = [
             ("worker-svc", f"Upstream api-server returned 503 after {random.randint(5000, 30000)}ms"),
-            ("worker-svc", f"Task dispatch failed: api-server unavailable (OOM restart in progress)"),
-            ("cache-svc", f"Connection to api-server refused: service restarting"),
-            ("db-proxy", f"Connection pool idle: api-server not sending queries (process down)"),
+            ("worker-svc", "Task dispatch failed: api-server unavailable (OOM restart in progress)"),
+            ("cache-svc", "Connection to api-server refused: service restarting"),
+            ("db-proxy", "Connection pool idle: api-server not sending queries (process down)"),
         ]
         svc, msg = random.choice(cascade_msgs)
         logs.append(LogEntry(ts, "ERROR", svc, msg))
@@ -301,7 +301,7 @@ if __name__ == "__main__":
     print(f"Logs gerados: {len(incident.logs)}")
     print(f"Metric points: {len(incident.metrics)}")
     print(f"Trace spans: {len(incident.traces)}")
-    print(f"\nPrimeiros 5 logs:")
+    print("\nPrimeiros 5 logs:")
     for log in incident.logs[:5]:
         print(f"  {log}")
     print(f"\nRoot cause real: {incident.actual_root_cause}")

@@ -173,7 +173,6 @@ def mount_sse(
                 )
             raw_token = auth_header[7:]
             try:
-                import asyncio
                 claims = await _oidc_validator.validate(raw_token)  # type: ignore[union-attr]
             except pyjwt.ExpiredSignatureError:
                 return Response(

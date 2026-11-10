@@ -5,7 +5,6 @@ e execucao dos adapters com dados simulados.
 """
 from __future__ import annotations
 
-import pytest
 from datetime import datetime, timezone
 
 from config.loader import AppConfig

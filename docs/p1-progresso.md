@@ -714,3 +714,47 @@ vazio.
 Hoje o `create_app` usa `base_url=""` no discovery, então o `issuer` não sai
 automaticamente do discovery. Ao ativar, todos os clientes precisam de token
 novo, porque tokens antigos sem `aud` passam a ser recusados.
+
+---
+
+## Ruff no CI (ordem do Allan)
+
+**Regras escolhidas.** No ruff 0.17.4, o conjunto padrão de regras é bem mais
+amplo que o clássico. No modo `--isolated` ele apontou 731 problemas, 258 deles
+só de ordenação de imports. Fixei um conjunto explícito em
+`pyproject.toml [tool.ruff]`, para não depender do que a versão considera
+padrão:
+
+- `select = E4, E7, E9, F, S110`: erros de sintaxe e de execução, pyflakes e
+  `try`/`except`/`pass`;
+- `ignore = E402`: são 168 imports depois de ajuste de `sys.path` ou de
+  `pytest_plugins`, padrão intencional do projeto;
+- `F401` liberado nos `__init__.py`, por causa das reexportações.
+
+**Correções (commit próprio).** Foram 178 apontamentos:
+
+- **Automáticas (153):** imports não usados e f-strings sem placeholder. A
+  suíte inteira passou logo depois, então nenhum import removido era usado via
+  `patch()`.
+- **Manuais:**
+  - 4 variáveis mortas em código de produção (exporter, engine e cenários da
+    demo, conector Databricks), lidas uma a uma: nenhuma escondia defeito;
+  - 5 nomes ambíguos (`l`);
+  - 13 variáveis não usadas em testes, onde a chamada foi mantida e só a
+    atribuição saiu;
+  - `IncidentState` sob `TYPE_CHECKING` no `main.py`.
+- **Defeito real encontrado pelo ruff (F823):** em
+  `interfaces/demo/server.py::_maybe_notify_slack`, faltava `global
+  _incident_start_wall_time`. O ramo `incident.resolved` levantava
+  `UnboundLocalError` e o início do incidente nunca era gravado.
+  - **Teste:** `tests/test_demo_slack_resolved.py`, 2 testes. Antes da
+    correção, os dois falharam (`UnboundLocalError` e `0.0 > 0`).
+- **Anotado para o P2:** `tests/test_search_incidents.py:150` decodifica a
+  resposta e não a verifica (teste sem asserção).
+
+**CI (commit separado, só `.github/workflows/ci.yml`):** um job `lint` que
+roda `ruff check .` com `ruff==0.17.4` fixado. Ele fica separado dos jobs de
+teste para que uma falha de lint não pule os testes.
+
+**Não adicionado:** `ruff format --check` reformataria a base inteira; fica
+para uma decisão própria.

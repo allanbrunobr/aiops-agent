@@ -8,7 +8,6 @@ e autenticação de clientes.
 from __future__ import annotations
 
 import pytest
-import pytest_asyncio
 
 
 @pytest.mark.unit
@@ -36,7 +35,6 @@ class TestCreateServer:
     @pytest.mark.asyncio
     async def test_tool_names_present(self):
         """Verifica que as 3 ferramentas estão registradas."""
-        from mcp.types import ListToolsRequest
         from interfaces.mcp.server import _build_tool_definitions
 
         tools = _build_tool_definitions()
@@ -50,8 +48,8 @@ class TestCreateServer:
         from interfaces.mcp.server import create_server, _build_tool_definitions
 
         # Mesmo factory, mesmas definições
-        server1 = create_server()
-        server2 = create_server()
+        create_server()
+        create_server()
 
         tools = _build_tool_definitions()
         assert len(tools) == 3
@@ -64,7 +62,7 @@ class TestCreateServer:
 
         from interfaces.mcp.server import create_server
 
-        server = create_server(config=FakeConfig())
+        create_server(config=FakeConfig())
         # Servidor criado sem erro — filtro aplicado
 
     def test_rate_limiter_injected(self):
@@ -84,9 +82,8 @@ class TestCallToolRateLimit:
     @pytest.mark.asyncio
     async def test_rate_limit_exceeded_returns_error(self):
         """Verifica que call_tool retorna erro quando rate limit excedido."""
-        from unittest.mock import patch
 
-        from interfaces.mcp.rate_limiter import InMemoryRateLimiter, RateLimitResult
+        from interfaces.mcp.rate_limiter import RateLimitResult
         from interfaces.mcp.server import create_server, _current_client_id
 
         # Limiter que sempre nega
@@ -105,7 +102,7 @@ class TestCallToolRateLimit:
         token = _current_client_id.set("test-client")
         try:
             # Acessa handler de call_tool
-            handler = server.request_handlers.get("tools/call")
+            server.request_handlers.get("tools/call")
             # Não temos acesso direto ao handler para chamar, mas verificamos que
             # o servidor foi criado com rate limiter injetado
             assert server is not None
@@ -132,7 +129,6 @@ class TestSSETransport:
     @pytest.mark.asyncio
     async def test_sse_without_client_id_returns_401(self):
         """Verifica que requisição SSE sem X-Client-Id retorna 401."""
-        import httpx
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
         from interfaces.mcp.sse import mount_sse
@@ -214,7 +210,6 @@ class TestServerApp:
     def test_mcp_disabled_sse_not_mounted(self):
         """Verifica que SSE não é montado quando mcp.enabled=False."""
         from config.loader import AppConfig
-        from fastapi.testclient import TestClient
         from interfaces.http.app import create_app
 
         cfg = AppConfig()  # mcp.enabled=False por padrão

@@ -5,7 +5,6 @@ Cobre Stories 3.1 (Slack Bot API), 3.2 (Retry + Fallback) e 3.6 (Config YAML).
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -285,7 +284,7 @@ class TestObserverRegistration:
     @pytest.mark.skip(reason="Aguarda Story 3.x: BlueprintEngine async com add_observer/add_node")
     @pytest.mark.asyncio
     async def test_observer_receives_events(self):
-        from blueprint.engine import BlueprintEngine, BlueprintNode
+        from blueprint.engine import BlueprintEngine
 
         events_received = []
 
@@ -361,7 +360,6 @@ class TestRetryLogic:
         mock_client.chat_update.side_effect = _make_slack_error("channel_not_found")
         notifier = _make_notifier(mock_client, max_retries=3, fallback_dir=str(tmp_path))
 
-        cid = "inc-20260308-test1234"
         await notifier.on_event(_make_event("pipeline.started"))
 
         with patch("asyncio.sleep", new_callable=AsyncMock):

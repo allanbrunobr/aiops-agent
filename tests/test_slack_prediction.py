@@ -7,7 +7,6 @@ prediction.warning (risk < 60) e prediction.alert (risk >= 60).
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

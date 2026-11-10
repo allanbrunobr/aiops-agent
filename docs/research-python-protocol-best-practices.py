@@ -18,7 +18,6 @@ from typing import (
 )
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
-import asyncio
 
 
 # =============================================================================
@@ -456,7 +455,7 @@ class IncidentManager:
         # Use credential to authenticate
         api_key = self.credential_provider.get_credential("PAGERDUTY_API_KEY")
         if not api_key:
-            print(f"[WARN] No API key found, skipping notification")
+            print("[WARN] No API key found, skipping notification")
 
         # Persist incident state
         self.state_store.save(f"incident:{incident_id}", {

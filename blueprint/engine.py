@@ -6,13 +6,12 @@ aplicando regras de on_failure (ABORT, SKIP, FALLBACK).
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field as dc_field
+from dataclasses import dataclass
 from typing import Any
 
 from core.logging import get_logger
 from domain.incident_state import IncidentState
 from blueprint.nodes import (
-    BlueprintNode,
     NodeResult,
     NodeType,
     OnFailure,

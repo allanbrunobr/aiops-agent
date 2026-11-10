@@ -6,7 +6,7 @@ Pondera MetricTrendSignal, LogBurstSignal e LatencyDriftSignal em
 um score único de 0 a 100 e determina o nível de evento de lifecycle.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from pipeline.log_predictor import LogBurstSignal
 from pipeline.trace_predictor import LatencyDriftSignal

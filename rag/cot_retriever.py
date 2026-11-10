@@ -7,7 +7,7 @@ query expansion progressiva durante a investigação de incidentes.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from rag.retriever import ObservabilityRetriever, SearchResult
 

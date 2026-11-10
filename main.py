@@ -37,6 +37,10 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from domain.incident_state import IncidentState
 import enum
 import json
 import os
@@ -63,7 +67,6 @@ from data.sample_incident import create_incident
 from data.registry import get_scenario, list_scenarios
 from pipeline.aggregator import Aggregator, AggregatedReport
 from rag.indexer import ObservabilityIndexer
-from rag.retriever import ObservabilityRetriever
 from rag.retriever_history import ObservabilityRetrieverWithHistory
 from rag.memory import IncidentMemoryDB, IncidentRecord
 from core.logging import get_logger
@@ -209,14 +212,14 @@ def step_sanitize(incident):
     console.print(table)
 
     if san_report.threat_detected:
-        console.print(f"  [bold red]🛡️ ADVERSARIAL PAYLOADS BLOCKED:[/bold red]")
+        console.print("  [bold red]🛡️ ADVERSARIAL PAYLOADS BLOCKED:[/bold red]")
         for i, payload in enumerate(san_report.adversarial_payloads_blocked[:5], 1):
             console.print(f"    {i}. [dim]{payload[:100]}...[/dim]")
     else:
-        console.print(f"  [green]✅ No adversarial payloads detected[/green]")
+        console.print("  [green]✅ No adversarial payloads detected[/green]")
 
     console.print(f"  [dim]Sanitization time: {elapsed:.3f}s[/dim]")
-    console.print(f"  [dim]Defense: AIOpsShield (taint analysis + pattern matching + abstraction)[/dim]\n")
+    console.print("  [dim]Defense: AIOpsShield (taint analysis + pattern matching + abstraction)[/dim]\n")
 
     # Update incident data with sanitized versions
     incident.logs = s_logs
@@ -305,7 +308,7 @@ def step_compression(report):
     console.print(table)
 
     console.print(f"  [dim]Compression time: {elapsed:.3f}s[/dim]")
-    console.print(f"  [dim]Level: balanced (priority-based classification + budget enforcement)[/dim]")
+    console.print("  [dim]Level: balanced (priority-based classification + budget enforcement)[/dim]")
 
     # Show priority breakdown
     by_priority = {}
@@ -359,7 +362,7 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
         console.print(f"  Cache: [dim]{cache_dir}[/dim]")
     else:
         if rebuild:
-            console.print(f"  [dim]--rebuild-rag: forcing index reconstruction[/dim]")
+            console.print("  [dim]--rebuild-rag: forcing index reconstruction[/dim]")
         num_chunks = indexer.build_index(
             report.log_templates,
             report.metric_anomalies,
@@ -374,12 +377,12 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
         elapsed = time.time() - t0
         console.print(f"  Indexed [bold]{num_chunks}[/bold] chunks in {elapsed:.2f}s")
 
-    console.print(f"  Model: [dim]all-MiniLM-L6-v2 (384 dimensions)[/dim]")
+    console.print("  Model: [dim]all-MiniLM-L6-v2 (384 dimensions)[/dim]")
 
     retriever = ObservabilityRetrieverWithHistory(indexer)
 
     # Demo query
-    console.print(f"\n  [dim]Sample query: 'connection pool timeout'[/dim]")
+    console.print("\n  [dim]Sample query: 'connection pool timeout'[/dim]")
     results = retriever.search("connection pool timeout", top_k=3)
     for i, r in enumerate(results, 1):
         console.print(f"    {i}. [{r.chunk.source.upper()}] (score={r.score:.3f}) {r.chunk.text[:100]}...")
@@ -390,7 +393,7 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
         tags = _extract_fault_tags(report)
         precedents = retriever.get_similar_past_incidents(services, tags, limit=3)
         if precedents:
-            console.print(f"\n  [bold cyan]Similar past incidents found:[/bold cyan]")
+            console.print("\n  [bold cyan]Similar past incidents found:[/bold cyan]")
             for p in precedents:
                 console.print(f"    • {p['scenario']}: {p['root_cause']}")
     except Exception as exc:  # noqa: BLE001 — exibição best-effort, mas registrada
@@ -1038,7 +1041,7 @@ def step_predict(result: dict, report, *,
 
     try:
         from pipeline.predictive_stage import run_predictive_stage
-        from core.lifecycle import LifecycleEvent, ALLOWED_EVENT_TYPES
+        from core.lifecycle import LifecycleEvent
         from datetime import datetime, timezone
         import uuid
 
@@ -1142,7 +1145,7 @@ def step_postmortem(result, incident, output_dir: str = "output",
     for t in result.get("timeline", []):
         postmortem += f"- **{t['time']}** {t['from']} -> {t['to']}: {t['reason']}\n"
 
-    postmortem += f"""
+    postmortem += """
 ## Mitigation Applied
 
 """

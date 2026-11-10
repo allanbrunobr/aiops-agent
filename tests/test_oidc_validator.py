@@ -15,14 +15,12 @@ Cobertura:
 """
 from __future__ import annotations
 
-import json
 import time
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt as pyjwt
 import pytest
-from jwt.algorithms import RSAAlgorithm
 
 from auth.keys import generate_rsa_keypair, public_key_to_jwk
 from auth.oidc_validator import OIDCValidator, TrustedIssuerConfig

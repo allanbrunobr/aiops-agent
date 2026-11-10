@@ -128,10 +128,10 @@ class TestPipelineOutputNoApiKeys:
 
         all_output = stdout_buf.getvalue() + stderr_buf.getvalue()
         assert not _contains_api_key_pattern(all_output), (
-            f"Output do pipeline contém padrão de API key!"
+            "Output do pipeline contém padrão de API key!"
         )
         assert FAKE_ANTHROPIC_KEY not in all_output, (
-            f"Output do pipeline contém a fake API key literal!"
+            "Output do pipeline contém a fake API key literal!"
         )
 
 
