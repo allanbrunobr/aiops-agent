@@ -474,3 +474,58 @@ também para o V1.
 | 5 | Quando uma camada bloqueia, o `main_v1` chama `display_results` com o estado de antes da execução | Sem diagnóstico nem postmortem na saída, ao contrário do V0. Vale tratar junto com a nota da A2A (P2, ARQ-10) |
 | 6 | `aud`/`iss` nos tokens | Ver item 6 |
 | 7 | `ruff` no CI | Ver item 7 |
+
+---
+
+## Pendências do P1 resolvidas na segunda rodada
+
+Mesmo método: teste falhando antes, um commit local por item e os três jobs
+de pytest do CI com status 0.
+
+### Item 9 — `max_llm_calls` passa a ter efeito (pendência do item 1)
+
+**Defeito.** `config.blueprint.max_llm_calls` (NFR6, padrão 15) só era lido
+por `BlueprintEngine.increment_llm_calls`, e esse método só era chamado em
+testes. Com o laço já corrigido, o pior caso medido era de **29 chamadas** ao
+LLM por execução.
+
+**Correção** (`agents/orchestrator.py`):
+
+- **Contador por execução:** todas as 5 chamadas ao LLM do orchestrator passam
+  por `_create_message`, que conta as chamadas da execução (o contador zera a
+  cada `run()`) e respeita `config.blueprint.max_llm_calls`. Sem config, vale
+  `DEFAULT_MAX_LLM_CALLS = 15`.
+- **Ao atingir o limite:** levanta `LLMCallBudgetExhausted`. Essa exceção
+  herda de `Exception`, então cada ponto cai no fallback que já tinha (plano
+  padrão, `continue`, heurística) e o laço termina.
+- **Reserva para a síntese:** plano, reflexões e replans param em
+  `limite − 1`. A última chamada fica para a síntese do diagnóstico, que
+  senão cairia na heurística. Medido no caso adversarial: sem a reserva, o
+  diagnóstico saía "Unknown fault…"; com ela, sai o do LLM.
+- **Cliente preservado:** o cliente não é trocado. O `main.py` reusa
+  `_orchestrator.client` no `SkillEvolver`, fora do orçamento da execução.
+- **Novos campos em `AgentOutcome`:** `llm_calls` e `llm_budget_exhausted`.
+
+**Medido:** pior caso adversarial (replan no 8º step de cada plano) com a
+config padrão: **15 chamadas**, antes 29. O diagnóstico final veio do LLM.
+
+**Testes:** `tests/test_orchestrator_llm_budget.py`, 11 testes marcados
+`unit`.
+
+- **Antes da correção:** 10 falharam. Os de limite falharam na contagem; o do
+  caso normal falhou porque o campo `llm_calls` ainda não existia.
+- **Cenários cobertos:**
+  - limite padrão e limites 1, 5 e 10;
+  - sem config;
+  - orçamento por execução (a segunda execução não começa esgotada);
+  - cliente não substituído;
+  - execução normal não marcada como esgotada;
+  - reserva para a síntese com limites 1, 2 e 15.
+
+**CI local:** unit 796 passaram, integration 138 passaram, suíte completa 1487
+passaram e 10 foram pulados. Status 0 nos três.
+
+**Observação:** o contador fica no orchestrator, não na `BlueprintEngine`. O
+`increment_llm_calls` da engine continua sem chamador em produção. Ligá-lo
+exigiria passar o contexto da engine para dentro do node agentic, sem ganho
+sobre o limite aplicado na única porta para o LLM.
