@@ -1924,7 +1924,10 @@ def main_v1(args: argparse.Namespace) -> int:
         _fire("pipeline.failed", cid=_cid, data={"error": str(exc)})
         exit_code = EXIT_ERROR
     else:
-        # Pipeline completou com sucesso
+        # Pipeline completou. Ação que o PreValidator mandou para revisão
+        # exige humano, como no V0 (exit 3).
+        if state.safety_verdict == "NEEDS_REVIEW":
+            exit_code = EXIT_APPROVAL_NEEDED
         diagnosis = state.diagnosis or {}
         _conf_v1 = diagnosis.get("confidence", 0.0)
         _fire("pipeline.completed", cid=_cid, data={

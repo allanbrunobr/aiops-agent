@@ -23,7 +23,7 @@ O CI não tem lint nem formatação, então não há outro comando a rodar.
 | 2 | Gate de comando: metacaracteres de shell, âncora, nome de serviço | F02, T04, SEC-05, SEC-06 | feito | ver `git log` |
 | 3 | CLI usa o veredito agregado de todas as camadas | F03 | feito | ver `git log` |
 | 4 | Template de CPU no mitigator | NOVO-01 | feito | ver `git log` |
-| 5 | Safety ligada no pipeline V1 (`proposed_action`) | ARQ-01, F04, SEC-04 | pendente | — |
+| 5 | Safety ligada no pipeline V1 (`proposed_action`) | ARQ-01, F04, SEC-04 | feito | ver `git log` |
 | 6 | OAuth: autenticação do cliente em `/auth/token/register` | SEC-01, SEC-11 | pendente | — |
 | 7 | Falhas silenciosas: log em vez de `except: pass`; `confidence` tipada; chamada morta a `step_predict` | F07, F5-02, ARQ-05, F5-01 | pendente | — |
 
@@ -185,3 +185,57 @@ dicionário de campos.
 
 **CI local:** unit 740 passaram, integration 138 passaram, suíte completa 1431
 passaram e 10 foram pulados. Status 0 nos três.
+
+## Item 5 — ARQ-01/F04/SEC-04: safety ligada no pipeline V1
+
+**Defeito.** Nenhum node do grafo Blueprint preenchia `state.proposed_action`.
+Por isso `version_validator`, `pre_validator` e `tnr` sempre faziam *skip*, e
+o `main_v1` terminava com exit 0. Os nodes de safety funcionavam quando
+recebiam a ação: os testes deles passaram antes da correção. O que faltava era
+a fiação.
+
+**Correção:**
+
+- `blueprint/adapters/pipeline_nodes.py`:
+  - `proposed_action_from_mitigation` converte a ação do `MitigationAgent` no
+    dicionário que os safety nodes leem.
+  - O node agentic usa `outcome.mitigation`.
+  - O fallback heurístico (`--no-llm`) chama `MitigationAgent.propose`, como o
+    caminho com LLM já fazia dentro do orchestrator.
+- `blueprint/adapters/safety_nodes.py`: sem *snapshots* de saúde pré e pós,
+  o TNR registra `"TNR: not verified — …"` em `safety_reasons` em vez de
+  passar em silêncio. Não inventei *snapshots*: não há medição pós-ação real,
+  e esse é o item S5 do P2.
+- `main.py` (`main_v1`): `safety_verdict == "NEEDS_REVIEW"` passa a devolver
+  exit 3, como no V0. Uma ação bloqueada já abortava o pipeline com
+  `PipelineAborted` e exit 3; agora ela de fato chega a ser bloqueada.
+
+**Mudança de comportamento, medida:** no cenário padrão com `--no-llm`, o V1
+passa a devolver **3**, igual ao V0, que eu rodei no mesmo cenário. O
+diagnóstico afeta 4 serviços, acima do limite de 3, e a ação vai para
+revisão. O teste `test_story_1_8_wire_main.py::test_main_v1_no_llm_no_rag`
+fixava o exit 0 do defeito e foi atualizado. De quebra, ele passou a usar
+`tmp_path` em vez de gravar em `/tmp/aiops-test-output`.
+
+**Testes:** `tests/test_blueprint_safety_wiring.py`, 9 testes marcados
+`unit`.
+
+- **Antes da correção:** 4 falharam:
+  - a ação proposta ficava `None`;
+  - um comando encadeado não abortava o pipeline;
+  - o `main_v1` devolvia 0 tanto para um comando bloqueado quanto para um que
+    exige revisão.
+- **Cenários cobertos:**
+  - a conversão da ação;
+  - os nodes reais bloqueando um comando encadeado e uma versão vulnerável;
+  - o pipeline real em `--no-llm` chegando às 3 camadas;
+  - o bloqueio abortando a engine;
+  - os exit codes do `main_v1`.
+
+**CI local:** unit 750 passaram, integration 138 passaram, suíte completa 1441
+passaram e 10 foram pulados. Status 0 nos três.
+
+**Acompanhamento para o P2:** a rota A2A captura o `PipelineAborted` de um
+bloqueio de safety e devolve um `pipeline_error` genérico ("diagnosis
+failed"). Isso falha fechado, mas não diz que foi bloqueio. Vale tratar junto
+com o ARQ-10 (artefato de mitigação da A2A).

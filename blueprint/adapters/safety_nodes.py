@@ -240,7 +240,15 @@ def make_tnr_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]
                 reason="no_health_snapshots",
                 verdict="N/A",
             )
-            return state
+            # Sem medição pós-ação não há verificação: registra em vez de
+            # passar em silêncio (quem lê safety_reasons vê que não rodou).
+            return dataclasses.replace(
+                state,
+                safety_reasons=[
+                    *state.safety_reasons,
+                    "TNR: not verified — no pre/post-action health snapshots",
+                ],
+            )
 
         # Converte dicts para HealthSnapshot se necessario
         if isinstance(pre_health, dict):
