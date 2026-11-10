@@ -177,7 +177,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             jwt_secret=_jwt_secret if _hmac_ok else "",
             token_ttl=_oauth.token_ttl,
             allowed_clients=[
-                {"id": c.id, "scopes": c.scopes}
+                {"id": c.id, "scopes": c.scopes, "secret_sha256": c.secret_sha256}
                 for c in _oauth.allowed_clients
             ],
             base_url="",

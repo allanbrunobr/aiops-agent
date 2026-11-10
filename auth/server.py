@@ -11,6 +11,10 @@ Phase 2: suporte a RS256 assimétrico + JWKS endpoint para federação.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+import re
+
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
@@ -31,6 +35,10 @@ _token_store: TokenStore = InMemoryTokenStore()
 _jwt_secret: str = ""
 _token_ttl: int = 3600
 _allowed_clients: dict[str, list[str]] = {}  # client_id → scopes permitidos
+# client_id → SHA-256 hex do segredo do cliente. Cliente fora deste mapa não
+# recebe token: o client_id é público (config/defaults.yaml), não é credencial.
+_client_secret_hashes: dict[str, str] = {}
+_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 _base_url: str = "http://localhost:8000"
 
 # Phase 2 — RS256 assimétrico
@@ -65,7 +73,7 @@ def configure(
         kid: Key ID para o JWK (Phase 2).
     """
     global _jwt_secret, _token_ttl, _allowed_clients, _base_url, _token_store
-    global _rsa_private_pem, _rsa_public_pem, _kid, _jwk_set
+    global _rsa_private_pem, _rsa_public_pem, _kid, _jwk_set, _client_secret_hashes
     # HS256 is the signer unless an RSA pair is supplied. A short or empty
     # HMAC key must not be stored: PyJWT warns and still signs keys under 32 bytes.
     if not (rsa_private_pem and rsa_public_pem):
@@ -83,6 +91,12 @@ def configure(
     # configure() must not keep clients when the new list is empty.
     _allowed_clients = {
         c["id"]: list(c.get("scopes", [])) for c in (allowed_clients or [])
+    }
+    # Só hashes bem formados entram; o resto equivale a "sem segredo".
+    _client_secret_hashes = {
+        c["id"]: c["secret_sha256"].lower()
+        for c in (allowed_clients or [])
+        if _SHA256_HEX.match(str(c.get("secret_sha256", "")).lower())
     }
     if rsa_private_pem and rsa_public_pem:
         from auth.keys import public_key_to_jwk
@@ -103,6 +117,7 @@ def configure(
 class RegisterRequest(BaseModel):
     """Body do endpoint POST /auth/token/register."""
     client_id: str
+    client_secret: str = ""
     scopes: list[str]
     code_verifier: str = ""
     code_challenge: str
@@ -132,16 +147,23 @@ async def register(body: RegisterRequest) -> RegisterResponse:
 
     Valida:
     1. client_id está na allow-list (lista vazia não autoriza ninguém)
+    1b. client_secret confere com o SHA-256 configurado para o cliente
+        (client_secret_post). Cliente sem hash configurado não recebe token.
     2. Scopes solicitados são subconjunto dos scopes do cliente
     3. code_challenge_method é S256 (único suportado)
     4. code_verifier corresponde ao code_challenge (PKCE S256)
 
+    O PKCE sozinho não autentica: verifier e challenge chegam no mesmo corpo,
+    então qualquer requisitante gera o par. Quem autentica é o client_secret.
+
     O code_challenge só é armazenado depois que o verifier confere.
     """
-    if len(_jwt_secret.encode("utf-8")) < MIN_HMAC_KEY_BYTES and not _rsa_private_pem:
+    # issue_token assina só HS256. Com apenas o par RSA configurado, a emissão
+    # falharia com 500; recusa explícita até existir emissão RS256.
+    if len(_jwt_secret.encode("utf-8")) < MIN_HMAC_KEY_BYTES:
         raise HTTPException(
             status_code=503,
-            detail="OAuth signing key is not configured",
+            detail="OAuth HS256 signing key is not configured (RS256 issuance is not implemented)",
         )
 
     # 1. Allow-list fechada. Ids publicados no YAML não bastam se não
@@ -150,6 +172,16 @@ async def register(body: RegisterRequest) -> RegisterResponse:
         raise HTTPException(
             status_code=401,
             detail=f"Unknown client_id: '{body.client_id}'",
+        )
+
+    # 1b. Autenticação do cliente. Comparação em tempo constante; a mesma
+    # resposta para segredo ausente, errado ou não configurado.
+    expected = _client_secret_hashes.get(body.client_id)
+    provided = hashlib.sha256(body.client_secret.encode("utf-8")).hexdigest()
+    if not expected or not body.client_secret or not hmac.compare_digest(provided, expected):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid client credentials",
         )
 
     # 2. Valida scopes
@@ -235,7 +267,7 @@ async def discovery() -> dict:
         "introspection_endpoint": f"{_base_url}/auth/token/introspect",
         "scopes_supported": ALL_SCOPES,
         "code_challenge_methods_supported": ["S256"],
-        "token_endpoint_auth_methods_supported": ["none"],
+        "token_endpoint_auth_methods_supported": ["client_secret_post"],
         "grant_types_supported": ["client_credentials"],
     }
     # Phase 2: adiciona jwks_uri e algoritmos assimétricos se RS256 estiver configurado

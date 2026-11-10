@@ -24,7 +24,7 @@ O CI não tem lint nem formatação, então não há outro comando a rodar.
 | 3 | CLI usa o veredito agregado de todas as camadas | F03 | feito | ver `git log` |
 | 4 | Template de CPU no mitigator | NOVO-01 | feito | ver `git log` |
 | 5 | Safety ligada no pipeline V1 (`proposed_action`) | ARQ-01, F04, SEC-04 | feito | ver `git log` |
-| 6 | OAuth: autenticação do cliente em `/auth/token/register` | SEC-01, SEC-11 | pendente | — |
+| 6 | OAuth: autenticação do cliente em `/auth/token/register` | SEC-01, SEC-11, 4B-07 | feito (aud/iss → P2) | ver `git log` |
 | 7 | Falhas silenciosas: log em vez de `except: pass`; `confidence` tipada; chamada morta a `step_predict` | F07, F5-02, ARQ-05, F5-01 | pendente | — |
 
 ## Item 1 — F01: laço do AgentOrchestrator
@@ -239,3 +239,64 @@ passaram e 10 foram pulados. Status 0 nos três.
 bloqueio de safety e devolve um `pipeline_error` genérico ("diagnosis
 failed"). Isso falha fechado, mas não diz que foi bloqueio. Vale tratar junto
 com o ARQ-10 (artefato de mitigação da A2A).
+
+## Item 6 — SEC-01: autenticação do cliente no OAuth
+
+**Defeito.** `/auth/token/register` emitia JWT para quem soubesse um
+`client_id`, e os ids estão publicados em `config/defaults.yaml`. O PKCE não
+autenticava ninguém, porque verifier e challenge chegam no mesmo corpo.
+Antes da correção, o ataque do relatório (só `client_id` público + PKCE
+gerado na hora) recebia **200**, conferido no teste.
+
+**Correção:**
+
+- `config/loader.py`: `OAuthClientConfig.secret_sha256` guarda o SHA-256 hex
+  do segredo do cliente, nunca o segredo.
+- `interfaces/http/app.py`: o `create_app` repassa esse hash ao servidor
+  OAuth.
+- `auth/server.py`:
+  - `RegisterRequest.client_secret` (`client_secret_post`) é conferido contra
+    o hash com `hmac.compare_digest`.
+  - **Falha fechada:** cliente sem hash bem formado não recebe token, e a
+    resposta é a mesma (401 "Invalid client credentials") para segredo
+    ausente, errado ou não configurado.
+  - O discovery passa a anunciar `client_secret_post` em vez de `none`.
+  - No modo só-RSA, o endpoint devolve **503** explícito em vez de **500**
+    (4B-07). A emissão continua só HS256.
+- `config/defaults.yaml`: comentário explicando o campo e como gerar o hash
+  sem gravar o segredo em disco.
+
+**Testes:**
+
+- `tests/test_oauth_client_auth.py`, 8 testes marcados `unit`. Antes da
+  correção, 6 falharam.
+- **Cenários cobertos:**
+  - PKCE sem segredo;
+  - segredo errado;
+  - cliente sem hash configurado;
+  - caminho feliz;
+  - segredo certo com PKCE errado (400);
+  - discovery;
+  - modo só-RSA (503);
+  - fiação via `create_app`.
+- **Testes antigos atualizados:** `tests/test_oauth_mcp.py` e
+  `tests/test_a2a_simulation.py` passaram a configurar o hash e enviar
+  `client_secret`. Eram os 6 testes que chamavam o registro sem
+  autenticação. Os segredos de teste são gerados em tempo de execução com
+  `secrets.token_urlsafe`.
+
+**CI local:** unit 758 passaram, integration 138 passaram, suíte completa 1449
+passaram e 10 foram pulados. Status 0 nos três.
+
+**Fica para o Allan (precisa de credencial ou decisão de implantação):**
+
+- **Gerar e distribuir os segredos** dos clientes `assistant-agent`,
+  `databricks-mcp` e `sre-orchestrator` e configurar os `secret_sha256`
+  (YAML ou variável de ambiente). Até isso acontecer, nenhum cliente recebe
+  token por este endpoint. Isso é intencional.
+- **`aud`/`iss` nos tokens (SEC-11):** depende de uma URL de emissor
+  definida (hoje `create_app` passa `base_url=""`) e de mudar em conjunto os
+  validadores do A2A, do SSE e do introspect. Fica para o P2.
+- **Emissão RS256:** hoje só HS256. O discovery ainda anuncia
+  `id_token_signing_alg_values_supported: RS256` quando há par RSA; vale
+  alinhar junto com a emissão RS256.

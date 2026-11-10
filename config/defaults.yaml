@@ -46,6 +46,11 @@ mcp:
   oauth:
     jwt_secret: ""                  # via env: AIOPS_MCP__OAUTH__JWT_SECRET (mínimo 32 bytes)
     token_ttl: 3600
+    # Cada cliente precisa de `secret_sha256` (SHA-256 hex do client_secret)
+    # para receber token em /auth/token/register (client_secret_post).
+    # Sem ele o cliente é recusado: o client_id abaixo é público, não credencial.
+    # Gerar o hash sem gravar o segredo em disco:
+    #   python -c "import hashlib,getpass; print(hashlib.sha256(getpass.getpass().encode()).hexdigest())"
     allowed_clients:
       - id: assistant-agent
         scopes: [aiops:diagnose, aiops:search]

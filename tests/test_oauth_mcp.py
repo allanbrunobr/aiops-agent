@@ -10,6 +10,8 @@ Cobre:
 """
 from __future__ import annotations
 
+import hashlib
+import secrets
 import time
 
 import jwt as pyjwt
@@ -22,6 +24,10 @@ from auth.pkce import derive_challenge, generate_verifier, verify_challenge
 from auth.scopes import TOOL_SCOPES, require_scope
 from auth.token_store import InMemoryTokenStore
 import auth.server as auth_server
+
+# Segredo de cliente gerado em tempo de execução (client_secret_post, SEC-01).
+CLIENT_SECRET = secrets.token_urlsafe(32)
+CLIENT_SECRET_SHA256 = hashlib.sha256(CLIENT_SECRET.encode()).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -151,8 +157,10 @@ def _make_auth_app() -> FastAPI:
         jwt_secret=SECRET,
         token_ttl=3600,
         allowed_clients=[
-            {"id": "assistant-agent", "scopes": ["aiops:diagnose", "aiops:search"]},
-            {"id": "databricks-mcp", "scopes": ["aiops:search"]},
+            {"id": "assistant-agent", "scopes": ["aiops:diagnose", "aiops:search"],
+             "secret_sha256": CLIENT_SECRET_SHA256},
+            {"id": "databricks-mcp", "scopes": ["aiops:search"],
+             "secret_sha256": CLIENT_SECRET_SHA256},
         ],
         base_url="http://testserver",
         token_store=InMemoryTokenStore(),
@@ -171,6 +179,7 @@ class TestAuthServer:
         challenge = derive_challenge(verifier)
         resp = self._client.post("/auth/token/register", json={
             "client_id": "assistant-agent",
+            "client_secret": CLIENT_SECRET,
             "scopes": ["aiops:diagnose"],
             "code_verifier": verifier,
             "code_challenge": challenge,
@@ -195,6 +204,7 @@ class TestAuthServer:
         # databricks-mcp só tem aiops:search, tenta aiops:diagnose
         resp = self._client.post("/auth/token/register", json={
             "client_id": "databricks-mcp",
+            "client_secret": CLIENT_SECRET,
             "scopes": ["aiops:diagnose"],
             "code_challenge": challenge,
         })
@@ -203,6 +213,7 @@ class TestAuthServer:
     def test_register_unsupported_pkce_method_returns_400(self):
         resp = self._client.post("/auth/token/register", json={
             "client_id": "assistant-agent",
+            "client_secret": CLIENT_SECRET,
             "scopes": ["aiops:search"],
             "code_challenge": "abc",
             "code_challenge_method": "plain",

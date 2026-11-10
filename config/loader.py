@@ -143,6 +143,9 @@ class OAuthClientConfig(BaseModel):
 
     id: str
     scopes: list[str] = []
+    # SHA-256 (hex) do segredo do cliente. Vazio = cliente não recebe token em
+    # /auth/token/register (fail-closed). Guarda o hash, nunca o segredo.
+    secret_sha256: str = ""
 
 
 class TrustedIssuerConfig(BaseModel):
