@@ -710,3 +710,26 @@ criadas sem referência e podiam ser coletadas pelo GC no meio da execução.
 
 **Limite:** o pipeline do webhook continua stub. A drenagem garante que o
 `IncidentState` aceito seja gravado no store, não um diagnóstico.
+
+## Item P2-18 — Testes negativos de autenticação na borda (T-d, item 4 do P2)
+
+**Lacuna.** Faltavam estes caminhos negativos:
+
+- `/a2a/tasks` com token ausente, inválido, assinado com outra chave ou
+  expirado, sem segredo configurado e com corpo acima de 1 MiB;
+- SSE do MCP com `X-Client-Id` ausente ou fora da allow-list, allow-list
+  vazia e `POST /mcp/messages`.
+
+O PKCE incorreto no endpoint de registro já foi coberto no item 6 do P1.
+
+**Testes:** `tests/test_edge_auth_negatives.py`, 10 testes marcados `unit`.
+
+- **Resultado:** os 10 passaram **de primeira**. É cobertura sobre
+  comportamento que já estava correto, não correção de defeito.
+- **Instrumento validado por mutação:** com o `validate_token` da A2A trocado
+  por um que aceita qualquer token, falharam exatamente os 3 testes que
+  dependem da validação (token inválido, assinado com outra chave,
+  expirado). Os outros 3 checam etapas anteriores à validação e continuam
+  passando, como deveriam.
+
+**CI local:** os três jobs com status 0 (ver o commit).
