@@ -21,7 +21,7 @@ O CI não tem lint nem formatação, então não há outro comando a rodar.
 |---|---|---|---|---|
 | 1 | Laço do orchestrator com saída e chamadas ao LLM limitadas; timeout no cliente | F01 | feito | ver `git log` |
 | 2 | Gate de comando: metacaracteres de shell, âncora, nome de serviço | F02, T04, SEC-05, SEC-06 | feito | ver `git log` |
-| 3 | CLI usa o veredito agregado de todas as camadas | F03 | pendente | — |
+| 3 | CLI usa o veredito agregado de todas as camadas | F03 | feito | ver `git log` |
 | 4 | Template de CPU no mitigator | NOVO-01 | pendente | — |
 | 5 | Safety ligada no pipeline V1 (`proposed_action`) | ARQ-01, F04, SEC-04 | pendente | — |
 | 6 | OAuth: autenticação do cliente em `/auth/token/register` | SEC-01, SEC-11 | pendente | — |
@@ -119,3 +119,44 @@ passaram e 10 foram pulados. Status 0 nos três.
 falhar fechado de propósito. Se o MCP precisar validar comandos com
 especificador de versão, isso pede uma regra própria, não uma brecha na
 allow-list.
+
+## Item 3 — F03: a CLI decide com todas as camadas
+
+**Defeito.** O exit code, o `requires_human` do evento Slack e o status
+"AWAITING HUMAN" olhavam só a camada `pre_validator`. O veredito do
+VersionValidator, produzido por `step_remediation_validation`, aparecia no
+resumo e era descartado na decisão.
+
+Caso real, rodado com as classes de verdade:
+`kubectl rollout restart deployment/postgres:9.4` sai `AUTO_APPROVED` no
+pre-validator e `MALICIOUS` no VersionValidator. Antes da correção, a CLI
+devolvia exit 0.
+
+**Correção** (`main.py`):
+
+- `_requires_human(safety_result, remediation_result)` exige humano se
+  qualquer camada bloquear.
+- `_record_safety_decision` grava `stages.safety_decision` com
+  `requires_human` e `blocked_by`.
+- O veredito combinado passa a decidir:
+  - o exit code 3;
+  - o `requires_human` do Slack;
+  - o "AWAITING HUMAN" do resumo;
+  - o "Requires Human" do postmortem.
+
+**Testes:** `tests/test_cli_safety_decision.py`, 9 testes marcados `unit`.
+
+- **Antes da correção:** 8 falharam. O teste de exit code confirmou o
+  defeito: `main()` devolvia 0 com o VersionValidator bloqueando.
+- **Cenários cobertos:**
+  - as 6 combinações de camadas;
+  - as duas etapas reais com o comando acima, sem dublês nas camadas;
+  - o `main()` devolvendo 3 quando só o VersionValidator bloqueia, e 0 quando
+    todas aprovam.
+
+**CI local:** unit 732 passaram, integration 138 passaram, suíte completa 1423
+passaram e 10 foram pulados. Status 0 nos três.
+
+**Observação, fora do P1:** `kubectl set image deployment/api
+api=nginx:1.16.1` passa como `SAFE` no VersionValidator. É o achado F08 do
+relatório (comparação exata de versão), que é P2.

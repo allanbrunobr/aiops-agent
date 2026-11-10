@@ -714,6 +714,35 @@ def step_safety_validation(result):
     return safety_result
 
 
+def _requires_human(safety_result, remediation_result) -> bool:
+    """Aprovação humana considerando TODAS as camadas pré-execução da CLI.
+
+    Uma camada que aprova não anula a que bloqueia: o PreExecutionValidator
+    pode auto-aprovar um comando que o VersionValidator classifica como
+    MALICIOUS (ex.: `kubectl rollout restart deployment/postgres:9.4`).
+    """
+    if safety_result is not None and safety_result.requires_human:
+        return True
+    if remediation_result is not None and not remediation_result.is_safe:
+        return True
+    return False
+
+
+def _record_safety_decision(result, safety_result, remediation_result) -> bool:
+    """Grava em result['stages']['safety_decision'] o veredito combinado."""
+    blocked_by = []
+    if safety_result is not None and safety_result.requires_human:
+        blocked_by.append("pre_validator")
+    if remediation_result is not None and not remediation_result.is_safe:
+        blocked_by.append("version_validator")
+    requires_human = _requires_human(safety_result, remediation_result)
+    result.setdefault("stages", {})["safety_decision"] = {
+        "requires_human": requires_human,
+        "blocked_by": blocked_by,
+    }
+    return requires_human
+
+
 def step_remediation_validation(result):
     """Etapa 4c: Valida versões e CVEs na remediação proposta."""
     console.print(Rule("[bold]Stage 4c: Remediation Version/CVE Validation[/bold]", style="cyan"))
@@ -1085,14 +1114,21 @@ def step_postmortem(result, incident, output_dir: str = "output",
 
     # Safety validation section
     safety_validation = result.get("stages", {}).get("safety_validation", {})
+    safety_decision = result.get("stages", {}).get("safety_decision")
     if safety_validation:
+        # Veredito combinado de todas as camadas quando disponível (F03).
+        needs_human = (
+            safety_decision.get("requires_human")
+            if safety_decision is not None
+            else safety_validation.get("requires_human")
+        )
         postmortem += f"""
 ## Pre-Execution Safety Check
 
 - **Risk Level**: {safety_validation.get('risk_level', 'N/A')}
 - **Risk Score**: {safety_validation.get('risk_score', 'N/A')}/100
 - **Approval Status**: {safety_validation.get('approval_status', 'N/A')}
-- **Requires Human**: {'Yes' if safety_validation.get('requires_human') else 'No'}
+- **Requires Human**: {'Yes' if needs_human else 'No'}
 - **Blast Radius**: {safety_validation.get('blast_radius_scope', 'N/A')}
 - **Recommendation**: {safety_validation.get('recommendation', 'N/A')}
 """
@@ -1193,7 +1229,7 @@ def print_summary(result, compression_stats=None, safety_result=None,
     console.print()
 
     success = result.get("success", False)
-    awaiting_human = bool(safety_result is not None and safety_result.requires_human)
+    awaiting_human = _requires_human(safety_result, remediation_result)
     if awaiting_human:
         status_icon = "[bold yellow]AWAITING HUMAN[/bold yellow]"
     elif success:
@@ -2095,6 +2131,9 @@ def main() -> int:
         # 4c. Remediation Version/CVE Validation
         remediation_result = step_remediation_validation(result)
 
+        # 4d. Veredito combinado: qualquer camada que bloqueia exige humano.
+        requires_human = _record_safety_decision(result, safety_result, remediation_result)
+
         # 4e. Notificação Slack: diagnóstico + correção proposta
         _diag_for_slack = result.get("stages", {}).get("diagnosis", {})
         _mitigation_for_slack = result.get("stages", {}).get("mitigation", {})
@@ -2113,7 +2152,7 @@ def main() -> int:
             "root_cause": _diag_for_slack.get("root_cause", ""),
             "proposed_fix": _proposed_fix_slack,
             "risk_level": safety_result.risk_level.value if safety_result else "unknown",
-            "requires_human": safety_result.requires_human if safety_result else False,
+            "requires_human": requires_human,
             "confidence": float(_conf_for_slack),
             "evidence": list(_diag_for_slack.get("evidence", []))[:5],
         })
@@ -2132,7 +2171,7 @@ def main() -> int:
             exit_code = EXIT_REGRESSION
 
         # Check safety requires human (exit code 3) — only if no regression
-        if exit_code == EXIT_SUCCESS and safety_result is not None and safety_result.requires_human:
+        if exit_code == EXIT_SUCCESS and requires_human:
             exit_code = EXIT_APPROVAL_NEEDED
 
         # 5b. Incident Tracking (Story 6.3)
