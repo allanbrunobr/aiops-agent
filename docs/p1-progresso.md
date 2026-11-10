@@ -2,8 +2,9 @@
 
 Origem: §5 "P1 — antes de qualquer uso fora do laboratório" de
 [`analise-20261109.md`](analise-20261109.md). Os itens seguem a ordem de
-gravidade. Cada item tem testes próprios e um commit local; nada foi enviado
-para o remoto (sem push e sem PR).
+gravidade. Cada item tem testes próprios e um commit próprio. Os commits da
+`analise-aiops` até `10370ce` foram enviados pelo coordenador e estão no PR
+[#20](https://github.com/allanbrunobr/aiops-agent/pull/20).
 
 **Como "verde" é medido:** os comandos `pytest` dos três jobs do CI
 (`.github/workflows/ci.yml`), cada um no ambiente equivalente e com o status de
@@ -15,7 +16,9 @@ saída real:
   `requirements.txt` completo;
 - **rust-build:** `pytest tests/`, com a extensão Rust compilada e instalada.
 
-O CI não tem lint nem formatação, então não há outro comando a rodar.
+- **lint:** `ruff check .` (ruff 0.17.4, regras em `pyproject.toml`). Esse
+  job foi acrescentado no commit `10370ce`; os itens anteriores a ele foram
+  verificados só com os três jobs de pytest. O CI não verifica formatação.
 
 | # | Item | IDs | Estado | Commit |
 |---|---|---|---|---|
@@ -388,17 +391,18 @@ suíte de testes.
 ## Fechamento do P1
 
 Os sete itens estão feitos, cada um num commit local próprio, com testes e com
-os três jobs de pytest do CI rodados com status 0. Nada foi enviado ao remoto.
+os três jobs de pytest do CI rodados com status 0. (Estado no fechamento do
+P1; o envio ao remoto e o PR vieram depois, ver o topo do documento.)
 
 **Pendências que dependem do Allan:**
 
 | Pendência | Por quê | Origem |
 |---|---|---|
-| Gerar e distribuir os segredos dos clientes OAuth e configurar os `secret_sha256` | Envolve credencial; até lá, nenhum cliente recebe token por `/auth/token/register`, de propósito | Item 6 |
-| Definir a URL de emissor e adotar `aud`/`iss` nos tokens | Decisão de implantação, com mudança coordenada nos validadores do A2A, do SSE e do introspect | Item 6 (P2) |
-| Adicionar `ruff` como step do CI | Exige editar `.github/` | Item 7 |
+| ~~Gerar~~ e distribuir os segredos dos clientes OAuth | Gerados localmente, fora do git (seção "Segredos OAuth configurados"); falta entregar cada segredo ao seu cliente | Item 6 |
+| Definir a URL de `issuer` e o `audience` | `aud`/`iss` já são configuráveis e validados em todos os pontos (seção "aud/iss configuráveis"); falta escolher os valores | Item 6 |
+| ~~Adicionar `ruff` como step do CI~~ | Feito depois, com autorização do Allan: job `Lint (ruff)` em `10370ce` | Item 7 |
 | Ajustar o timeout de 60 s do cliente LLM com a latência real | Valor escolhido, não medido | Item 1 |
-| Push e PR destes commits | Fora do que foi autorizado nesta sessão | — |
+| ~~Push e PR destes commits~~ | Feito depois: push pelo coordenador e PR #20 | — |
 
 **Efeitos colaterais conscientes, para revisão:**
 

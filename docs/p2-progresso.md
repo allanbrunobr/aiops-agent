@@ -253,3 +253,27 @@ postar no canal.
 
 **CI local:** ruff limpo. unit 860 passaram, integration 138 passaram, suíte
 completa 1551 passaram e 10 foram pulados. Status 0 nos três.
+
+## Correção de documentação — `docs/p1-progresso.md` desatualizado (achado da revisão pré-PR)
+
+O documento ainda dizia três coisas falsas no `10370ce`:
+
+- que o CI não tem lint;
+- que nada tinha sido enviado ao remoto;
+- que o ruff no CI, o push e o PR eram pendências.
+
+Também listava como pendentes os segredos (já gerados) e o `aud`/`iss` (já
+configurável).
+
+**O que mudou:**
+
+- **Topo do documento:** passa a apontar o PR #20.
+- **"Como verde é medido":** inclui o job de lint, deixando claro que os itens
+  anteriores ao `10370ce` foram verificados só com pytest.
+- **Pendências:** a tabela mostra o que foi feito e o que realmente falta
+  (entregar os segredos aos clientes e escolher os valores de
+  `issuer`/`audience`).
+
+**Teste:** não há, porque é só texto. A conferência foi um `grep` pelas frases
+antigas, que não acha mais nenhuma, e a checagem das referências
+`arquivo:linha` do documento.
