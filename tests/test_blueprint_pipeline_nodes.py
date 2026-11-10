@@ -1,4 +1,4 @@
-"""Testes para Story 1.6 — Register Pipeline Stages as Blueprint Nodes.
+"""Register Pipeline Stages as Blueprint Nodes.
 
 Valida pipeline definition, ordem dos nodes, tipos, on_failure,
 e execucao dos adapters com dados simulados.

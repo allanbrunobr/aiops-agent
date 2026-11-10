@@ -1,4 +1,4 @@
-"""Testes para Story 2.2: Alert Normalizer Plugin Registry."""
+"""Alert Normalizer Plugin Registry."""
 from __future__ import annotations
 
 import pytest

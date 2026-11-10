@@ -1,4 +1,4 @@
-"""Configuracao de testes para Epic 2.
+"""Configuracao dos testes de ingestao de webhook.
 
 ASGITransport nao executa o lifespan do FastAPI automaticamente.
 Os fixtures abaixo inicializam o app.state manualmente para testes

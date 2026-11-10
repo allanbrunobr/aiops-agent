@@ -284,7 +284,7 @@ class TestCredentialProvider:
 class TestObserverRegistration:
     """8.7: Observer registrado no BlueprintEngine."""
 
-    @pytest.mark.skip(reason="Aguarda Story 3.x: BlueprintEngine async com add_observer/add_node")
+    @pytest.mark.skip(reason="BlueprintEngine não tem observers (add_observer) nem run() async; os eventos de ciclo de vida são emitidos fora do engine. Implementar ou apagar.")
     @pytest.mark.asyncio
     async def test_observer_receives_events(self):
         from blueprint.engine import BlueprintEngine
@@ -623,7 +623,7 @@ class TestDisabledNotifications:
 # BlueprintEngine observer tests
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skip(reason="Aguarda Story 3.x: BlueprintEngine async com add_observer/add_node/run(dict)")
+@pytest.mark.skip(reason="BlueprintEngine não tem observers (add_observer/add_node) nem run(dict) async; os eventos de ciclo de vida são emitidos fora do engine. Implementar ou apagar.")
 class TestBlueprintEngineObserver:
     """Testes do mecanismo de observer do BlueprintEngine."""
 

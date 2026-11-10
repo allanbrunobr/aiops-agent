@@ -554,3 +554,29 @@ Allan.
 **Suíte completa:** ruff limpo. unit 1503 passaram, integration 138
 passaram, suíte completa 1735 passaram e 10 foram pulados. A suíte completa
 inclui `tests/rust` com a extensão compilada. Status 0 nos três.
+
+## P3-8b — Testes nomeados por comportamento (M7)
+
+**Renomes** (`git mv`, histórico preservado):
+
+- `tests/epic2/` virou `tests/webhook_ingest/`, com os arquivos
+  `test_health_and_webhook`, `test_normalizer_registry`, `test_normalizers`,
+  `test_dedup` e `test_pipeline_runner`;
+- `test_epic7_incident_memory` virou `test_incident_memory`;
+- `test_epic9_cot_retriever` virou `test_cot_retriever`;
+- `test_story_1_6_pipeline_nodes` virou `test_blueprint_pipeline_nodes`;
+- `test_story_1_7_safety_nodes` virou `test_blueprint_safety_nodes`;
+- `test_story_1_8_wire_main` virou `test_main_blueprint_wiring`.
+
+As docstrings de módulo e os comentários de seção perderam o prefixo
+"Story N.N" / "Epic N". O plano de refatoração cita o diretório novo.
+
+**Os dois skips "Aguarda Story 3.x"** de `tests/test_notifications.py` agora
+descrevem o que falta: o `BlueprintEngine` não tem `add_observer`/`add_node`
+nem `run()` assíncrono, e os eventos de ciclo de vida são emitidos fora do
+engine. Apagar ou implementar é decisão de desenho, por isso continuam
+pulados. Eles entram na lista do que ficou de fora.
+
+**Suíte completa:** ruff limpo. As contagens são idênticas às da P3-8a, ou
+seja, nenhum teste se perdeu no renome. unit 1503 passaram, integration 138
+passaram, suíte completa 1735 passaram e 10 foram pulados. Status 0 nos três.

@@ -1,4 +1,4 @@
-"""Testes para Story 1.8 — Wire main.py to Blueprint Engine.
+"""Wire main.py to Blueprint Engine.
 
 Valida que main.py usa o Blueprint Engine, preserva CLI flags e exit codes.
 """

@@ -175,7 +175,7 @@ the Pydantic-backed domain.
 ```bash
 rg -n "pydantic|BaseModel|ConfigDict|Field|field_validator" domain -g "*.py"
 rg -n "model_copy|model_dump|model_validate|dict\(action\)|action\[" .
-python -m pytest tests/test_core.py tests/epic2 tests/test_validate_action.py -q
+python -m pytest tests/test_core.py tests/webhook_ingest tests/test_validate_action.py -q
 scripts/ci-local.sh unit
 scripts/ci-local.sh integration
 ```

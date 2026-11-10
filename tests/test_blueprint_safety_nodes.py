@@ -1,4 +1,4 @@
-"""Testes para Story 1.7 — Register Safety Layers as Blueprint Nodes.
+"""Register Safety Layers as Blueprint Nodes.
 
 Valida que todos os safety nodes sao DETERMINISTIC com on_failure=ABORT,
 estao na ordem correta, e que SafetyBlockedError funciona.

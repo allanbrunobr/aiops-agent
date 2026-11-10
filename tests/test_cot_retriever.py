@@ -1,5 +1,5 @@
 """
-Testes para Epic 9: Guided Investigation — Chain-of-Thought Diagnosis.
+Guided Investigation — Chain-of-Thought Diagnosis.
 
 Cobre:
   Story 9.1 — Search Context Tracking per Diagnosis Session

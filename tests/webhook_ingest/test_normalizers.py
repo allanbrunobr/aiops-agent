@@ -1,4 +1,4 @@
-"""Testes para Story 2.3: PagerDuty, Grafana e Databricks Normalizers."""
+"""PagerDuty, Grafana e Databricks Normalizers."""
 from __future__ import annotations
 
 import hashlib

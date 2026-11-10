@@ -1,4 +1,4 @@
-"""Testes para Story 2.1: FastAPI Webhook Server com Health Endpoints."""
+"""FastAPI Webhook Server com Health Endpoints."""
 from __future__ import annotations
 
 import pytest

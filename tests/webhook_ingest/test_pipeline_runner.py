@@ -1,4 +1,4 @@
-"""Testes para Story 2.6: Concurrent Alert Processing and Pipeline Trigger.
+"""Concurrent Alert Processing and Pipeline Trigger.
 
 PipelineRunner usa asyncio.Semaphore/Queue — todos os testes
 devem rodar APENAS com asyncio (nao trio).

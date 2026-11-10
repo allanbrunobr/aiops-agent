@@ -1,5 +1,5 @@
 """
-Testes para Epic 7 — Institutional Memory.
+Institutional Memory.
 
 Cobre:
 - Story 7.1: IncidentMemoryDB (rag/memory.py)
@@ -49,7 +49,7 @@ def db(tmp_db):
 
 
 # ---------------------------------------------------------------------------
-# Story 7.1: IncidentMemoryDB
+# IncidentMemoryDB
 # ---------------------------------------------------------------------------
 
 class TestIncidentMemoryDBInit:
@@ -280,7 +280,7 @@ class TestIncidentRecordNew:
 
 
 # ---------------------------------------------------------------------------
-# Story 7.2: ObservabilityIndexerWithHistory
+# ObservabilityIndexerWithHistory
 # ---------------------------------------------------------------------------
 
 class TestObservabilityIndexerWithHistory:
@@ -397,7 +397,7 @@ class TestObservabilityIndexerWithHistory:
 
 
 # ---------------------------------------------------------------------------
-# Story 7.3: ObservabilityRetrieverWithHistory
+# ObservabilityRetrieverWithHistory
 # ---------------------------------------------------------------------------
 
 class TestObservabilityRetrieverWithHistory:
