@@ -486,7 +486,9 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1", help="Host de escuta (padrão: localhost)")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
+    from core.logging import configure_logging
+
+    configure_logging()
     logger.info("Demo server ready on http://%s:%d/demo/", args.host, args.port)
     uvicorn.run(app, host=args.host, port=args.port)
 

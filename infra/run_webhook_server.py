@@ -87,6 +87,9 @@ def create_webhook_app() -> FastAPI:
 
 
 if __name__ == "__main__":
+    from core.logging import configure_logging
+
+    configure_logging()
     app = create_webhook_app()
     print("=" * 60)
     print("AIOps Agent — Webhook Server")

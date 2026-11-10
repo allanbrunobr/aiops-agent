@@ -329,3 +329,53 @@ A cópia da demo não fazia strip antes de testar `#`. Nenhuma tratava aspas nem
 
 **Suíte completa:** ruff limpo. unit 1486 passaram, integration 138
 passaram, suíte completa 1664 passaram e 10 foram pulados. Status 0 nos três.
+
+## P3-6b — Redação de segredos em todos os entrypoints (M4/F5-06)
+
+**Problema:**
+
+- `configure_logging()`, que instala o processador `_redact_secrets`, só era
+  chamado em `main_v1`. Em `main()` (V0), MCP, demo e webhook, o structlog
+  usava o padrão: saída em stdout, sem redação.
+- `main.py` tinha a própria lista de padrões, com 4 regex contra 6 em
+  `core/logging.py`. `_sanitize_secrets("xoxb-…")` devolvia o token intacto, e
+  essa função limpa a mensagem de erro enviada ao Slack em `pipeline.failed`.
+
+**Mudança:**
+
+- `core/logging.py`:
+  - `SECRET_PATTERNS` público e `redact_text()`;
+  - o processador usa `redact_text`;
+  - `_SECRET_PATTERNS` continua como alias.
+- `main.py`:
+  - `API_KEY_PATTERNS = SECRET_PATTERNS`;
+  - `_sanitize_secrets = redact_text`, que agora cobre `xoxb-` e `Bearer`;
+  - `main()` chama `configure_logging(AIOPS_LOG_LEVEL ou WARNING)`. O padrão
+    da CLI é WARNING, para não intercalar JSON com a saída do Rich.
+- `configure_logging()` também é chamado em:
+  - `interfaces/demo/server.py:main()`, no lugar de `logging.basicConfig`;
+  - `__main__` de `interfaces/mcp/server.py`. Lá o stdout é o canal do
+    protocolo stdio, e o log passa a ir para stderr;
+  - `__main__` de `infra/run_webhook_server.py`.
+- `create_app` (`interfaces/http/app.py`) não tem entrypoint real e ficou de
+  fora. É assunto da P3-2.
+- `tests/conftest.py`: novo fixture autouse `_restore_logging_config`. Ele
+  restaura os handlers do root logger e a configuração do structlog após cada
+  teste, porque `main()` agora reconfigura o logging global.
+
+**Mudança visível:** na CLI V0, os eventos INFO do structlog deixam de sair
+em stdout (formato console). Agora saem em JSON no stderr, a partir de
+WARNING, ou do nível definido em `AIOPS_LOG_LEVEL`.
+
+**Testes:** `tests/test_logging_entrypoints.py`, 7 testes.
+
+- **Antes da mudança:** 5 falharam. Os 2 que passavam são o caso de
+  `main_v1`, que já configurava, e o processador, que já redigia quando ativo.
+- **Cenários cobertos:**
+  - a lista de padrões é a mesma;
+  - `_sanitize_secrets` redige `xoxb-` e `Bearer`;
+  - o log configurado sai em JSON com `[REDACTED]`;
+  - um portão AST confere a chamada em cada um dos 5 entrypoints.
+
+**Suíte completa:** ruff limpo. unit 1493 passaram, integration 138
+passaram, suíte completa 1671 passaram e 10 foram pulados. Status 0 nos três.

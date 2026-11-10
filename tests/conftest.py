@@ -139,6 +139,31 @@ def _isolate_external_side_effects(isolated_cli):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _restore_logging_config():
+    """Desfaz `configure_logging()` ao fim de cada teste.
+
+    main(), main_v1() e os servidores chamam configure_logging(), que troca os
+    handlers do root logger e a configuração global do structlog. Sem isto, o
+    primeiro teste que chama main() muda o log de todos os seguintes.
+    """
+    import logging
+
+    import structlog
+
+    root = logging.getLogger()
+    handlers, level = list(root.handlers), root.level
+    was_configured = structlog.is_configured()
+    config = structlog.get_config()
+    yield
+    root.handlers[:] = handlers
+    root.setLevel(level)
+    if was_configured:
+        structlog.configure(**config)
+    else:
+        structlog.reset_defaults()
+
+
 _REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
 
 

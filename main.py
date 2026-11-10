@@ -44,7 +44,6 @@ if TYPE_CHECKING:
 import enum
 import json
 import os
-import re
 import sys
 import time
 import traceback
@@ -69,7 +68,7 @@ from pipeline.aggregator import Aggregator, AggregatedReport
 from rag.indexer import ObservabilityIndexer
 from rag.retriever_history import ObservabilityRetrieverWithHistory
 from rag.memory import IncidentMemoryDB, IncidentRecord
-from core.logging import get_logger
+from core.logging import SECRET_PATTERNS, configure_logging, get_logger, redact_text
 from domain.confidence import confidence_to_score
 
 # Falhas best-effort (persistência, precedentes, evolução de skills) vão para
@@ -101,20 +100,13 @@ EXIT_CODE_LABELS = {
     EXIT_APPROVAL_NEEDED: "approval-needed",
 }
 
-# Padrões de API key para sanitização de secrets (Story 3.3)
-API_KEY_PATTERNS = [
-    re.compile(r"sk-ant-[a-zA-Z0-9_-]{20,}"),      # Anthropic API keys
-    re.compile(r"dapi[a-zA-Z0-9]{20,}"),             # Databricks API keys
-    re.compile(r"sk-[a-zA-Z0-9]{32,}"),              # OpenAI-style keys
-    re.compile(r"key-[a-zA-Z0-9]{32,}"),             # Generic API keys
-]
+# Padrões de segredo: lista única em core/logging.py (a mesma do log).
+API_KEY_PATTERNS = SECRET_PATTERNS
 
 
 def _sanitize_secrets(text: str) -> str:
-    """Remove padrões de API key do texto, substituindo por [REDACTED]."""
-    for pattern in API_KEY_PATTERNS:
-        text = pattern.sub("[REDACTED]", text)
-    return text
+    """Remove padrões de segredo do texto, substituindo por [REDACTED]."""
+    return redact_text(text)
 
 
 def _contains_api_key_pattern(text: str) -> bool:
@@ -1945,7 +1937,6 @@ def main_v1(args: argparse.Namespace) -> int:
     import asyncio
     import os
     from adapters.persistence.in_memory_store import InMemoryStore
-    from core.logging import configure_logging, get_logger
     from adapters.credentials import EnvCredentialProvider
     from config.loader import load_config as load_app_config
     from blueprint.engine import PipelineAborted, LLMCallLimitExceeded
@@ -2142,6 +2133,10 @@ def main() -> int:
 
     # .env.local e .env da raiz do repositório (config/env.py)
     load_local_env()
+
+    # Log estruturado com redação de segredos (core/logging.py). Na CLI o
+    # padrão é WARNING, para não intercalar JSON com a saída do Rich.
+    configure_logging(os.environ.get("AIOPS_LOG_LEVEL", "WARNING"))
 
     # Verifica API key se vai usar LLM
     use_llm = not args.no_llm
