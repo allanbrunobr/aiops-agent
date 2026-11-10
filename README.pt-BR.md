@@ -270,7 +270,7 @@ Para configurar um Slack App real, consulte [`infra/SLACK-SETUP.md`](infra/SLACK
 
 ### Variáveis de ambiente
 
-A CLI, a demo e o servidor de webhook local carregam `.env.local` e depois `.env` da raiz do repositório (`config/env.py`). Variáveis já definidas no processo prevalecem, e `.env.local` prevalece sobre `.env`. Há dois modelos: [`.env.example`](.env.example), com as variáveis da CLI (Anthropic e Databricks), e [`env.example`](env.example), com as do ambiente local em `infra/` (webhook do Grafana e Slack).
+A CLI, a demo e o servidor de webhook local carregam `.env.local` e depois `.env` da raiz do repositório (`config/env.py`). Variáveis já definidas no processo prevalecem, e `.env.local` prevalece sobre `.env`. Copie [`.env.example`](.env.example).
 
 | Variável | Uso | Obrigatória |
 |----------|-----|-------------|
@@ -287,7 +287,6 @@ A CLI, a demo e o servidor de webhook local carregam `.env.local` e depois `.env
 ### Arquivos de configuração
 
 - [`config/defaults.yaml`](config/defaults.yaml): limiares de análise, Blueprint Engine, webhook, Slack e MCP. Valores podem ser sobrescritos por variáveis de ambiente no formato `AIOPS_<SECAO>__<CAMPO>` (prefixo `AIOPS_`, aninhamento com `__`; por exemplo, `AIOPS_MCP__OAUTH__JWT_SECRET`).
-- [`config.yaml`](config.yaml): mapa de criticidade por serviço. **Hoje não é lido em tempo de execução**: o `DomainReranker` aceita o mapa como parâmetro, mas nenhum ponto de entrada lê este arquivo.
 
 ---
 

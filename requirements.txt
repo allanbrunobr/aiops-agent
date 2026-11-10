@@ -1,3 +1,8 @@
+# Instalado pelo CI (pip install -r requirements.txt).
+# Espelho de pyproject.toml: [project].dependencies + [dependency-groups].
+# tests/test_packaging_consistency.py falha se os dois divergirem.
+
+# --- Runtime ---
 anthropic>=1.15.0
 drain3>=0.9.11
 sentence-transformers>=2.2.0,<4.0.0
@@ -33,14 +38,16 @@ aiohttp>=3.14.5
 # MCP
 mcp>=1.30.0,<2.0.0
 
-# Rust build
-maturin>=1.15.0,<2.0
-
-# Testing
-pytest>=9.1.1
-pytest-mock>=3.17.0
-pytest-asyncio>=1.4.0
+# OAuth/OIDC (auth/) e cliente A2A (agents/a2a_client.py) — runtime, não teste
 httpx>=0.28.1
 PyJWT>=2.15.1
 cryptography>=50.0.2
+
+# --- Grupo build ---
+maturin>=1.15.0,<2.0
+
+# --- Grupo test ---
+pytest>=9.1.1
+pytest-mock>=3.17.0
+pytest-asyncio>=1.4.0
 anyio[trio]>=4.15.1

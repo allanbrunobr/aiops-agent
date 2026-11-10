@@ -435,3 +435,72 @@ Ficou de fora. É uma escolha para o Allan, não algo que eu deva decidir.
   calibrada da demo.
 - **Renomear os ids da demo:** muda os parâmetros de URL, os valores do
   `<select>` e as chaves de narrativa, e continua com dois geradores.
+
+## P3-7 — Empacotamento e arquivos estranhos (M5/M6, F5-15)
+
+**Problema:**
+
+- `pyproject.toml` só tinha `[build-system]` (maturin) e `[tool.*]`, sem
+  `[project]` nem `requires-python`.
+- Em `requirements.txt`, PyJWT, cryptography e httpx ficavam sob "# Testing",
+  mas `auth/` e `agents/a2a_client.py` os importam.
+- Não havia lockfile.
+- Havia arquivos estranhos versionados.
+
+**Mudança:**
+
+- `pyproject.toml`:
+  - `[project]` com `requires-python = ">=3.12,<3.13"` e as dependências de
+    runtime, agora com httpx, PyJWT e cryptography;
+  - `[dependency-groups]` `test` e `build`;
+  - `.python-version` = 3.12.
+- **Nome da distribuição: `aiops-rust`.** O backend é o maturin, então o
+  `[project]` vira o metadado da wheel do job Rust do CI. Com o nome
+  `aiops-agent`, medi que a wheel passava a se chamar
+  `aiops_agent-0.1.0-…whl`. Como o CI guarda `rust/target` em cache e instala
+  `rust/target/wheels/*.whl`, a wheel antiga do cache entraria junto no glob.
+  Com `aiops-rust`, o arquivo tem o mesmo nome de antes e é sobrescrito.
+- **Medido:** o `maturin build` com o pyproject novo (no scratchpad) gera
+  `aiops_rust-0.1.0-cp312…whl` com o mesmo conteúdo (`_aiops_rust`). A
+  simulação `uv pip install --dry-run --offline` no venv completo resolve 96
+  pacotes já instalados e só troca a própria wheel.
+- `requirements.txt` continua sendo a entrada do CI, porque mudar `.github/`
+  não é comigo. O conjunto de requisitos é idêntico ao anterior (conferido com
+  `diff` dos conjuntos ordenados). Mudaram só a ordem e os comentários:
+  runtime, grupo build, grupo test.
+- `uv.lock`: 121 pacotes, Python 3.12.*, sem caminho pessoal.
+  `uv lock --check --offline` sai com status 0.
+- Arquivos removidos (`git rm`, só dentro do repositório):
+  - `docs/project-scan-report.json`, com o caminho pessoal `/Users/bruno/…`;
+  - `docs/research-python-protocol-best-practices.py`;
+  - `config.yaml`, que nenhum `.py` lia. Junto saiu o teste que só verificava
+    que ele existia
+    (`test_reranker_integration.py::test_project_config_yaml_has_expected_services`).
+    Os testes que passam o mapa ao `DomainReranker` a partir de YAML continuam;
+  - `env.example`, que era só um ponteiro de 2 linhas para `.env.example`.
+    O README em português dizia que ele trazia as variáveis de `infra/`, o
+    que não era verdade.
+- READMEs, `source-tree-analysis` e CONTRIBUTING foram atualizados. O
+  CONTRIBUTING ganhou o caminho `uv sync --group test --group build`.
+
+**O que não foi feito:**
+
+- **Lista própria do job unit em `.github/workflows/ci.yml`:** os pisos
+  divergem (por exemplo, anthropic>=0.40.0) e a lista é repetida em
+  `scripts/ci-local.sh`. Fazer o CI instalar a partir do pyproject exige
+  mexer em `.github/`, que é decisão do Allan. O `ci-local.sh` espelha esse
+  job e ficou como está, para não divergir dele.
+- **`.env.example`:** a leitura foi negada pelas permissões. Não conferi o
+  conteúdo dele.
+
+**Testes:** `tests/test_packaging_consistency.py`, 5 testes.
+
+- **Antes da mudança:** os 5 falharam.
+- **Cenários cobertos:**
+  - `requires-python` e `.python-version`;
+  - `requirements.txt` é exatamente `dependencies` mais os grupos;
+  - jwt, cryptography e httpx são importados fora de `tests/` e estão em
+    `dependencies`.
+
+**Suíte completa:** ruff limpo. unit 1499 passaram, integration 138
+passaram, suíte completa 1677 passaram e 10 foram pulados. Status 0 nos três.

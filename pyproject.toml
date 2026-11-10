@@ -2,6 +2,55 @@
 requires = ["maturin>=1.15.0,<2.0"]
 build-backend = "maturin"
 
+[project]
+# O nome da distribuição é o da wheel que o CI constrói e instala com
+# `pip install rust/target/wheels/*.whl`, com rust/target em cache. Com outro
+# nome, a wheel antiga restaurada do cache também casaria no glob e seria
+# instalada junto com a nova.
+name = "aiops-rust"
+version = "0.1.0"
+description = "AIOps incident agent: diagnosis, safety-gated mitigation and postmortems"
+requires-python = ">=3.12,<3.13"
+# Runtime. requirements.txt (instalado pelo CI) = dependencies + todos os
+# dependency-groups; tests/test_packaging_consistency.py barra divergência.
+dependencies = [
+    "anthropic>=1.15.0",
+    "drain3>=0.9.11",
+    "sentence-transformers>=2.2.0,<4.0.0",
+    "faiss-cpu>=1.15.1",
+    "numpy<2.0.0",
+    "torch>=2.1.0,<2.5.0",
+    "python-dotenv>=1.2.4",
+    "rich>=15.0.0",
+    "transformers>=4.41.0,<5.0.0",
+    "databricks-sdk>=0.153.0",
+    "requests>=2.34.2",
+    "pydantic>=2.14.1",
+    "pydantic-settings[yaml]>=2.16.0",
+    "PyYAML>=6.0.3",
+    "structlog>=26.1.0",
+    "fastapi>=0.146.0",
+    "uvicorn[standard]>=0.54.0",
+    "slack-sdk>=3.45.0",
+    "aiohttp>=3.14.5",
+    "mcp>=1.30.0,<2.0.0",
+    # OAuth/OIDC (auth/) e cliente A2A (agents/a2a_client.py)
+    "httpx>=0.28.1",
+    "PyJWT>=2.15.1",
+    "cryptography>=50.0.2",
+]
+
+[dependency-groups]
+test = [
+    "pytest>=9.1.1",
+    "pytest-mock>=3.17.0",
+    "pytest-asyncio>=1.4.0",
+    "anyio[trio]>=4.15.1",
+]
+build = [
+    "maturin>=1.15.0,<2.0",
+]
+
 [tool.maturin]
 module-name = "_aiops_rust"
 manifest-path = "rust/Cargo.toml"

@@ -72,7 +72,6 @@ aiops-agent/
 └── docs/                              # Project documentation
     ├── data-models.md                 # Dataclass catalog and data flow diagram
     ├── api-contracts-internal.md      # Internal API contracts and ReAct tools
-    ├── project-scan-report.json       # Documentation workflow state
     └── papers/                        # 7 reference papers (STRATUS, Acon, AOI, etc.)
 ```
 

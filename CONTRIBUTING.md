@@ -10,6 +10,10 @@
   python3.12 -m venv .venv
   .venv/bin/pip install -r requirements.txt
   ```
+  or, with [uv](https://docs.astral.sh/uv/) and the lockfile: `uv sync --group test --group build`.
+  Dependencies are declared in `pyproject.toml` (`[project].dependencies` plus the `test` and
+  `build` groups); `requirements.txt` mirrors them for CI, and `tests/test_packaging_consistency.py`
+  fails if the two diverge. After changing dependencies, run `uv lock`.
 - Copy `.env.example` to `.env.local` and add your `ANTHROPIC_API_KEY` (required for full LLM mode only). The CLI, the demo and the webhook server load `.env.local` (then `.env`) from the repository root.
 
 ### Project Structure
