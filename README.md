@@ -272,7 +272,7 @@ To set up a real Slack App, see [`infra/SLACK-SETUP.md`](infra/SLACK-SETUP.md). 
 
 ### Environment variables
 
-The CLI and the demo load `.env.local` automatically. The CLI also reads `.env`. Copy [`.env.example`](.env.example). The OAuth HMAC secret, when set, is `AIOPS_MCP__OAUTH__JWT_SECRET` and must be at least 32 bytes.
+The CLI, the demo and the local webhook server load `.env.local` and then `.env` from the repository root (`config/env.py`). Variables already set in the process win, and `.env.local` wins over `.env`. Copy [`.env.example`](.env.example). The OAuth HMAC secret, when set, is `AIOPS_MCP__OAUTH__JWT_SECRET` and must be at least 32 bytes.
 
 Build the optional Rust extension with the same interpreter you use to run tests:
 

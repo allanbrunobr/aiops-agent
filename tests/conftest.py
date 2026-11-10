@@ -16,6 +16,15 @@ from contextlib import redirect_stdout, redirect_stderr
 
 import pytest
 
+import config.env as _config_env
+
+# Nenhum teste lê o .env.local/.env do checkout — nem na coleta. Módulos que
+# carregam o env no import (interfaces/demo/server.py) são importados no nível
+# de módulo por arquivos de teste, antes de qualquer fixture rodar. A raiz
+# aponta para um caminho que não existe; o fixture isolated_cli repete isso
+# por teste (tmp_path).
+_config_env.REPO_ROOT = _config_env.REPO_ROOT / "tests" / "_sem_env_local_"
+
 # Módulos ML que NUNCA devem ser importados durante coleta de testes
 _ML_MODULES = ("torch", "sentence_transformers", "faiss")
 

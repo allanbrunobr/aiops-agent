@@ -17,6 +17,13 @@ import pytest
 pytestmark = pytest.mark.unit
 
 ROOT = Path(__file__).resolve().parent.parent
+
+# Capturado na coleta (import deste módulo), fora de qualquer fixture: é o
+# valor que um `from interfaces.demo.server import app` no topo de um arquivo
+# de teste usa.
+import config.env as _config_env  # noqa: E402
+
+REPO_ROOT_AT_COLLECTION = _config_env.REPO_ROOT
 KEYS = ("AIOPS_T_QUOTED", "AIOPS_T_SINGLE", "AIOPS_T_EXPORT", "AIOPS_T_PLAIN",
         "AIOPS_T_PRESET", "AIOPS_T_BOTH", "AIOPS_T_ONLY_ENV")
 
@@ -77,6 +84,13 @@ def test_suite_never_reads_the_checkout_env_files(clean_env):
 
     assert REPO_ROOT != ROOT
     assert load_local_env() is False
+
+
+def test_collection_never_reads_the_checkout_env_files():
+    """Imports no nível de módulo (coleta) também não leem o checkout."""
+    assert REPO_ROOT_AT_COLLECTION != ROOT
+    assert not (REPO_ROOT_AT_COLLECTION / ".env.local").exists()
+    assert not (REPO_ROOT_AT_COLLECTION / ".env").exists()
 
 
 def test_no_hand_written_env_parser_left():

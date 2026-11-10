@@ -270,7 +270,7 @@ Para configurar um Slack App real, consulte [`infra/SLACK-SETUP.md`](infra/SLACK
 
 ### Variáveis de ambiente
 
-A CLI e a demo carregam `.env.local` automaticamente. A CLI também lê `.env`. Há dois modelos: [`.env.example`](.env.example), com as variáveis da CLI (Anthropic e Databricks), e [`env.example`](env.example), com as do ambiente local em `infra/` (webhook do Grafana e Slack).
+A CLI, a demo e o servidor de webhook local carregam `.env.local` e depois `.env` da raiz do repositório (`config/env.py`). Variáveis já definidas no processo prevalecem, e `.env.local` prevalece sobre `.env`. Há dois modelos: [`.env.example`](.env.example), com as variáveis da CLI (Anthropic e Databricks), e [`env.example`](env.example), com as do ambiente local em `infra/` (webhook do Grafana e Slack).
 
 | Variável | Uso | Obrigatória |
 |----------|-----|-------------|

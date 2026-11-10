@@ -19,7 +19,7 @@ sys.path.insert(0, str(project_root))
 from config.env import load_local_env  # noqa: E402
 
 env_file = project_root / ".env.local"
-load_local_env(project_root)
+load_local_env()
 
 
 from fastapi import FastAPI

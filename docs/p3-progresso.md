@@ -379,3 +379,59 @@ WARNING, ou do nível definido em `AIOPS_LOG_LEVEL`.
 
 **Suíte completa:** ruff limpo. unit 1493 passaram, integration 138
 passaram, suíte completa 1671 passaram e 10 foram pulados. Status 0 nos três.
+
+## Correção das entradas P3-6a e P3-6b (revisão)
+
+Uma revisão apontou duas afirmações acima que não tinham sido medidas.
+Medidas agora, as duas estavam erradas:
+
+1. **P3-6b, "redação em todos os entrypoints":** o `ProcessorFormatter` não
+   tinha `foreign_pre_chain`, então o que vinha de `logging.getLogger` saía sem
+   redação. A demo usa esse caminho, e o relatório conta 13 módulos assim.
+   - Medido: `logging.getLogger("x").warning("token xoxb-…")` depois de
+     `configure_logging()` saía com o token.
+   - Correção: `foreign_pre_chain=shared_processors`.
+   - Teste: `test_configured_logging_redacts_stdlib_loggers` falhou antes e
+     passou depois.
+2. **P3-6a, "nenhum teste lê o `.env.local` do checkout":** valia só dentro do
+   fixture. `tests/test_demo_narrative_endpoint.py:13` importa
+   `interfaces.demo.server` no nível de módulo, e esse import carrega o env
+   durante a coleta, com a raiz real. Isso já acontecia antes, com o parser
+   antigo da demo.
+   - Correção: `tests/conftest.py` redireciona `config.env.REPO_ROOT` no próprio
+     import, para um caminho inexistente. Os scripts de infra chamam
+     `load_local_env()` sem argumento e por isso também obedecem.
+   - Teste: `test_collection_never_reads_the_checkout_env_files` captura
+     `REPO_ROOT` no import do módulo de teste, durante a coleta.
+   - Mutação: com a linha do conftest desligada, o teste falha; com a linha
+     restaurada, passa.
+
+Ajustes de texto:
+- README (EN/PT) e CONTRIBUTING agora dizem que todos os entrypoints carregam
+  `.env.local` e depois `.env`, e que `.env.local` prevalece.
+- No plano de refatoração, a coluna de status diz "merged" no lugar de
+  "done", porque os comandos de aceite não foram rodados de novo.
+
+**Suíte completa:** ruff limpo. unit 1495 passaram, integration 138
+passaram, suíte completa 1673 passaram e 10 foram pulados. Status 0 nos três.
+
+## P3-6c — Cenário com fonte única (F5-11): fora
+
+Ficou de fora. É uma escolha para o Allan, não algo que eu deva decidir.
+
+**Os dois geradores diferem na forma, não só nas constantes:**
+
+- **CLI** (`data/sample_incident.py`): 1 hora de dados. A falha é abrupta,
+  depois de um deploy que reduz o pool de 200 para 50. Serviços
+  `payment-svc`, `gateway`, `auth-svc` e `order-svc`.
+- **Demo** (`interfaces/demo/scenarios.py`): replay de 32 minutos em curva
+  logística, com o pool em 200 e sem redução, calibrado para scores de risco
+  por minuto (narrativas e limiares dependem disso). Serviços
+  `payment-service`, `db-pool`, `api-gateway` e `cache`.
+
+**Opções:**
+
+- **Unificar a forma:** muda os goldens e snapshots da CLI ou a linha do tempo
+  calibrada da demo.
+- **Renomear os ids da demo:** muda os parâmetros de URL, os valores do
+  `<select>` e as chaves de narrativa, e continua com dois geradores.

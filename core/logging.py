@@ -94,7 +94,10 @@ def configure_logging(log_level: str | None = None) -> None:
     )
 
     # Configura stdlib logging para rotear pela mesma cadeia
+    # foreign_pre_chain: registros da stdlib (logging.getLogger) também passam
+    # pela redação; sem isto só o que vem do structlog era redigido.
     formatter = structlog.stdlib.ProcessorFormatter(
+        foreign_pre_chain=shared_processors,
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
             structlog.processors.JSONRenderer(),

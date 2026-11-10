@@ -17,7 +17,7 @@ sys.path.insert(0, str(project_root))
 # Load .env.local / .env
 from config.env import load_local_env  # noqa: E402
 
-load_local_env(project_root)
+load_local_env()
 
 from datetime import datetime, timezone
 

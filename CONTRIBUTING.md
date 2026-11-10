@@ -10,7 +10,7 @@
   python3.12 -m venv .venv
   .venv/bin/pip install -r requirements.txt
   ```
-- Copy `.env.example` to `.env.local` and add your `ANTHROPIC_API_KEY` (required for full LLM mode only). The CLI and the demo load `.env.local` automatically.
+- Copy `.env.example` to `.env.local` and add your `ANTHROPIC_API_KEY` (required for full LLM mode only). The CLI, the demo and the webhook server load `.env.local` (then `.env`) from the repository root.
 
 ### Project Structure
 
@@ -69,7 +69,7 @@ Contributors MUST verify their changes work in all three modes before submitting
 ```bash
 python main.py
 ```
-Requires `ANTHROPIC_API_KEY` in `.env`. Uses LLM for diagnosis + RAG for semantic search.
+Requires `ANTHROPIC_API_KEY` in `.env.local` (or `.env`). Uses LLM for diagnosis + RAG for semantic search.
 
 ### 2. No-LLM Mode
 ```bash

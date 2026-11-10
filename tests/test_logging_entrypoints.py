@@ -41,6 +41,20 @@ def test_configured_logging_redacts_values(capsys):
     assert json.loads(line)["detail"] == "token [REDACTED]"
 
 
+def test_configured_logging_redacts_stdlib_loggers(capsys):
+    """13 módulos usam logging.getLogger (a demo inclusive), não structlog."""
+    import logging
+
+    from core.logging import configure_logging
+
+    configure_logging("INFO")
+    logging.getLogger("t.stdlib").warning("auth %s token %s", BEARER, SLACK_TOKEN)
+    line = capsys.readouterr().err.strip().splitlines()[-1]
+    assert SLACK_TOKEN not in line
+    assert BEARER not in line
+    assert "[REDACTED]" in json.loads(line)["event"]
+
+
 def _calls_configure_logging(node: ast.AST) -> bool:
     return any(
         isinstance(n, ast.Call)
