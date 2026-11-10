@@ -328,3 +328,18 @@ def load_config(
             loc = " -> ".join(str(x) for x in error["loc"])
             print(f"  - {loc}: {error['msg']}", file=sys.stderr)
         raise SystemExit(1)
+
+
+def resolve_llm_model(config: AppConfig | None) -> str:
+    """Modelo do LLM: AIOPS_LLM_MODEL (legado, documentado) > llm.model_name > padrão.
+
+    Antes os entrypoints liam só a variável de ambiente, com um literal de
+    fallback; `llm.model_name` da config não tinha leitor.
+    """
+    import os
+
+    from_env = os.environ.get("AIOPS_LLM_MODEL", "").strip()
+    if from_env:
+        return from_env
+    llm = getattr(config, "llm", None)
+    return getattr(llm, "model_name", None) or LLMConfig().model_name

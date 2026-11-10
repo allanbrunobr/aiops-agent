@@ -52,7 +52,7 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from config.loader import AppConfig, SafetyConfig, load_config
+from config.loader import AppConfig, SafetyConfig, load_config, resolve_llm_model
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
@@ -2176,11 +2176,12 @@ def main() -> int:
     # O path V0 e mantido como default para compatibilidade com testes existentes.
     # Para usar o Blueprint Engine diretamente, chame main_v1(args).
 
-    # Leitura do modelo LLM configuravel via env var (Story 5.1)
-    llm_model = os.environ.get("AIOPS_LLM_MODEL", "claude-sonnet-4-20250514")
-
     # Carrega configuracao via YAML (Pydantic Settings)
     threshold_config = load_config(config_path=args.config)
+
+    # Modelo LLM: AIOPS_LLM_MODEL (legado) > llm.model_name da config (Story 5.1).
+    # Antes só a variável de ambiente era lida e o YAML não tinha efeito.
+    llm_model = resolve_llm_model(threshold_config)
     config_source = args.config or "config/defaults.yaml"
 
     # Resolve tracker (Story 6.3) — antes do pipeline para falhar rapido em config invalida

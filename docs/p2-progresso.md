@@ -608,3 +608,37 @@ reaproveitando o IdP falso de `test_oidc_validator.py`.
   - scope em lista.
 
 **CI local:** os três jobs com status 0 (ver o commit).
+
+## Item P2-15 — Modelo do LLM vem da config (A4/ARQ-08/F5-09)
+
+**Defeito.** O `main.py` e o node diagnoser do V1 liam só
+`os.environ["AIOPS_LLM_MODEL"]`, com um literal de fallback. A seção
+`llm.model_name` da config não tinha leitor: mudar o modelo no YAML não tinha
+efeito.
+
+**Correção:**
+
+- `config/loader.py`: `resolve_llm_model(config)`, com a precedência
+  `AIOPS_LLM_MODEL` (legado, documentado e coberto por testes) >
+  `llm.model_name` > padrão de `LLMConfig`.
+- `main.py`: o modelo é resolvido **depois** de carregar a config, inclusive
+  a passada por `--config`.
+- `blueprint/adapters/pipeline_nodes.py`: o node diagnoser usa a mesma
+  função.
+
+**Testes:** `tests/test_llm_model_from_config.py`, 5 testes marcados `unit`.
+
+- **Antes da correção:** com a função já existindo mas sem uso, os 2 testes
+  de ponto de entrada falharam. O `main()` com um YAML próprio via `--config`
+  e o node V1 usavam `claude-sonnet-4-20250514` em vez do modelo do YAML.
+- **Cenários cobertos:**
+  - a precedência (config, variável de ambiente, padrão);
+  - os dois pontos de entrada.
+- Os 12 testes antigos de `tests/test_llm_model_config.py` continuam
+  passando.
+
+**CI local:** os três jobs com status 0 (ver o commit).
+
+**Restante:** o `agents/diagnoser.py` usa `LLMConfig().model_name`, o padrão
+da classe, como modelo padrão quando ninguém informa outro. Os chamadores de
+produção passam o modelo resolvido.

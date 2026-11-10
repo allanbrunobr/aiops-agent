@@ -127,7 +127,8 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
             raise ValueError("AggregatedReport not available — aggregator node must run first")
 
         retriever = state.metadata.get("_retriever")
-        model = os.environ.get("AIOPS_LLM_MODEL", "claude-sonnet-4-20250514")
+        from config.loader import resolve_llm_model
+        model = resolve_llm_model(config)
 
         memory_db = IncidentMemoryDB()
         skill_router = SkillRouter(memory_db)
