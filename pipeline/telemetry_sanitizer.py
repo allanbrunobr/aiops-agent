@@ -451,6 +451,18 @@ class TelemetrySanitizer:
     # Internal methods
     # ========================================================================
 
+    def sanitize_text(self, text: str) -> str:
+        """Sanitiza texto livre com as mesmas regras do campo `message` de log.
+
+        Usado pelas ferramentas MCP (validate_action e search_incidents):
+        neutraliza payload adversarial, redige PII (email, IP, URL) e, em modo
+        estrito, abstrai conteúdo user-generated.
+        """
+        if not isinstance(text, str):
+            text = str(text)
+        entry = _TextEntry(message=text)
+        return self._sanitize_log_entry(entry).sanitized
+
     def _sanitize_log_entry(self, log, precomputed_taint=None) -> SanitizationResult:
         """Sanitiza uma única entrada de log."""
         message = log.message
@@ -644,6 +656,13 @@ class TelemetrySanitizer:
     def get_abstraction_map(self) -> dict[str, str]:
         """Retorna o mapa de abstrações (para debugging)."""
         return dict(self._abstraction_map)
+
+
+@dataclass
+class _TextEntry:
+    """Entrada mínima para sanitizar texto solto pelo mesmo caminho dos logs."""
+
+    message: str
 
 
 def _clone_log_entry(log, new_message: str):
