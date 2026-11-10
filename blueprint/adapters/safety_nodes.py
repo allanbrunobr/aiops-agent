@@ -146,6 +146,8 @@ def make_pre_validator_node(config: AppConfig) -> Callable[[IncidentState], Inci
 
         validator = PreExecutionValidator(
             max_blast_radius=config.safety.blast_radius_limit,
+            # require_human_approval: nenhuma ação sai auto-aprovada (F13).
+            auto_approve_low_risk=not config.safety.require_human_approval,
         )
 
         proposed_action = state.proposed_action

@@ -61,8 +61,13 @@ class TestRealLayersOnRiskyAllowedCommand:
         result = {"stages": {"diagnosis": diagnosis, "mitigation": {"action": action}}}
 
         # Mesma sequência do main(): as duas etapas e depois o veredito combinado.
+        # Config que permite auto-aprovação: o cenário é "o pre-validator aprova
+        # e o VersionValidator bloqueia". Com require_human_approval=true (o
+        # padrão do YAML) o pre-validator nunca auto-aprova.
+        from config.loader import AppConfig
+        allow_auto = AppConfig(safety={"require_human_approval": False})
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            pre = step_safety_validation(result)
+            pre = step_safety_validation(result, config=allow_auto)
             rem = step_remediation_validation(result)
             _record_safety_decision(result, pre, rem)
 

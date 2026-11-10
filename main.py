@@ -52,7 +52,7 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from config.loader import AppConfig, load_config
+from config.loader import AppConfig, SafetyConfig, load_config
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
@@ -653,8 +653,12 @@ def step_agents(report, retriever, use_llm: bool = True,
     return result
 
 
-def step_safety_validation(result):
-    """Etapa 4b: Pre-Execution Safety Validation."""
+def step_safety_validation(result, config: AppConfig | None = None):
+    """Etapa 4b: Pre-Execution Safety Validation.
+
+    Usa `safety.require_human_approval` e `safety.blast_radius_limit` da config
+    (antes fixava auto-aprovação e limite 3, ignorando o YAML — F13).
+    """
     console.print(Rule("[bold]Stage 4b: Pre-Execution Safety Validation[/bold]", style="cyan"))
     console.print()
 
@@ -665,9 +669,10 @@ def step_safety_validation(result):
         console.print("  [dim]No mitigation to validate (skipping)[/dim]\n")
         return None
 
+    safety_cfg = getattr(config, "safety", None) or SafetyConfig()
     pre_validator = PreExecutionValidator(
-        auto_approve_low_risk=True,
-        max_blast_radius=3,
+        auto_approve_low_risk=not safety_cfg.require_human_approval,
+        max_blast_radius=safety_cfg.blast_radius_limit,
         require_rollback_plan=True,
     )
     orchestrator = SafetyOrchestrator(pre_validator=pre_validator)
@@ -2229,7 +2234,7 @@ def main() -> int:
                      slack_fire=_slack_fire, correlation_id=_pipeline_cid)
 
         # 4b. Pre-Execution Safety Validation
-        safety_result = step_safety_validation(result)
+        safety_result = step_safety_validation(result, config=threshold_config)
 
         # 4c. Remediation Version/CVE Validation
         remediation_result = step_remediation_validation(result)

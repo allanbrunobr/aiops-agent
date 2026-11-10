@@ -359,3 +359,39 @@ nos dois endpoints e não era afetado.
   o FastAPI tenta responder de novo. O `TestClient` acusa "multiple
   http.response.start". Vale conferir com o padrão de montagem (`Mount`)
   recomendado pelo SDK do MCP.
+
+## Item P2-9 — A configuração de safety é respeitada (S7/F13)
+
+**Defeito.** O `config/defaults.yaml` declara `safety.require_human_approval:
+true` ("Sempre requer aprovação humana para ações") e `blast_radius_limit: 5`.
+Mesmo assim, a CLI fixava `auto_approve_low_risk=True` e
+`max_blast_radius=3`. O node V1 usava o limite da config, mas também ignorava
+`require_human_approval`.
+
+**Correção:**
+
+- `main.step_safety_validation(result, config=...)` lê `config.safety`. O
+  `main()` passa a config carregada.
+- `blueprint/adapters/safety_nodes.py`: o `pre_validator` usa
+  `auto_approve_low_risk = not require_human_approval`.
+
+**Mudança de comportamento:** com a config padrão, nenhuma ação sai
+auto-aprovada, e a CLI (V0 e V1) termina com **exit 3** sempre que houver
+mitigação proposta. É o que o YAML declara. Para voltar a auto-aprovar ações de
+baixo risco, use `safety.require_human_approval: false`.
+
+**Testes:** `tests/test_safety_config_respected.py`, 5 testes marcados `unit`.
+
+- **Antes da correção:** 4 falharam.
+  - O do V1 falhou pelo motivo real: devolvia `APPROVED` com
+    `require_human_approval=true`.
+  - Os 3 do V0 falharam por `TypeError`, porque a função não recebia a config.
+    Nesses, o defeito (valores fixos no código) foi confirmado por leitura, não
+    pelo vermelho do teste.
+- **Ajuste em `tests/test_cli_safety_decision.py`:** o teste do caso "o
+  pre-validator aprova e o VersionValidator bloqueia" passou a usar uma config
+  com `require_human_approval: false`. Com o padrão, o pre-validator nunca
+  aprova e o cenário deixaria de existir.
+
+**CI local:** ruff limpo. unit 1394 passaram, integration 138 passaram, suíte
+completa 1572 passaram e 10 foram pulados. Status 0 nos três.
