@@ -1828,6 +1828,44 @@ def display_results(state: "IncidentState", compact: bool = False) -> None:
         console.print(state.postmortem_md)
 
 
+def _state_after_abort(exc, config):
+    """Estado a exibir depois de um PipelineAborted no V1.
+
+    A engine anexa ao aborto o estado alcançado antes do node que falhou. Num
+    bloqueio de safety esse estado já tem o diagnóstico: marca o veredito como
+    BLOCKED e gera o postmortem (template, sem LLM) com a seção de safety —
+    o mesmo que o V0 mostra quando uma camada exige humano.
+    """
+    from blueprint.adapters.safety_nodes import SafetyBlockedError
+
+    state = getattr(exc, "state", None)
+    if state is None or not isinstance(exc.__cause__, SafetyBlockedError):
+        return state
+
+    node_id = getattr(exc, "node_id", None) or "safety"
+    reason = f"{node_id}: {exc.__cause__}"
+    state = dataclasses.replace(
+        state,
+        safety_verdict="BLOCKED",
+        safety_reasons=[*state.safety_reasons, reason],
+    )
+    if state.diagnosis and not state.postmortem_md:
+        try:
+            from blueprint.adapters.pipeline_nodes import make_postmortem_node
+            state = make_postmortem_node(config)(state)
+        except Exception as pm_exc:  # noqa: BLE001 — sem postmortem, mas registrado
+            _persist_log.warning("v1.postmortem_after_block_failed", error=repr(pm_exc))
+    if state.postmortem_md:
+        state = dataclasses.replace(state, postmortem_md=(
+            state.postmortem_md
+            + "\n## Safety\n"
+            + f"- **Verdict:** BLOCKED by `{node_id}`\n"
+            + f"- **Reason:** {exc.__cause__}\n"
+            + "- The proposed action was not approved and requires human review.\n"
+        ))
+    return state
+
+
 def _save_postmortem_v1(postmortem_md: str, output_dir: str = "output") -> Path | None:
     """Salva postmortem em arquivo markdown."""
     output_path = Path(output_dir)
@@ -1953,6 +1991,11 @@ def main_v1(args: argparse.Namespace) -> int:
     except PipelineAborted as exc:
         log.error("main.pipeline_aborted", error=str(exc))
         console.print(f"[red]Pipeline aborted: {exc}[/red]")
+        # Mostra o que o pipeline já tinha apurado (diagnóstico, postmortem),
+        # não o estado inicial.
+        _aborted_state = _state_after_abort(exc, app_config)
+        if _aborted_state is not None:
+            state = _aborted_state
         _fire("pipeline.failed", cid=_cid, data={"error": str(exc)})
         if "regression" in str(exc).lower():
             exit_code = EXIT_REGRESSION

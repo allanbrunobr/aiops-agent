@@ -567,3 +567,39 @@ quem testa os templates.
 
 **CI local:** unit 802 passaram, integration 138 passaram, suíte completa 1493
 passaram e 10 foram pulados. Status 0 nos três.
+
+### Item 11 — V1 mostra diagnóstico e postmortem num bloqueio (pendência do item 5)
+
+**Defeito.** Num bloqueio de safety, a engine levantava `PipelineAborted` e o
+`main_v1` exibia o estado de **antes** da execução. Não aparecia diagnóstico
+nem postmortem, embora o diagnóstico já tivesse sido feito. O V0, no mesmo
+caso, mostra os dois.
+
+**Correção:**
+
+- `blueprint/engine.py`: o `PipelineAborted` passa a carregar `.state` (o
+  estado alcançado antes do node que falhou) e `.node_id`. Vale para os três
+  casos de aborto: falha de node, falha do fallback e timeout.
+- `main.py`: `_state_after_abort` usa esse estado. Num bloqueio de safety
+  (causa `SafetyBlockedError`):
+  - marca `safety_verdict="BLOCKED"`, com o motivo em `safety_reasons`;
+  - gera o postmortem pelo node de template, que não usa LLM;
+  - acrescenta ao postmortem uma seção "## Safety" com a camada que bloqueou
+    e o motivo.
+- O exit code continua 3.
+
+**Testes:** `tests/test_v1_blocked_output.py`, 3 testes marcados `unit`, com a
+fixture `isolated_cli`.
+
+- **Antes da correção:** os 3 falharam:
+  - o `PipelineAborted` não tinha `node_id`;
+  - a saída não continha o diagnóstico;
+  - nenhum postmortem era salvo.
+- **Cenários cobertos:**
+  - estado e node anexados ao aborto;
+  - a saída do `main_v1` bloqueado mostra causa raiz e `BLOCKED`;
+  - o postmortem é salvo com a causa raiz, `BLOCKED` e a camada
+    `pre_validator`.
+
+**CI local:** unit 805 passaram, integration 138 passaram, suíte completa 1496
+passaram e 10 foram pulados. Status 0 nos três.
