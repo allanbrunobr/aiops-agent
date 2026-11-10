@@ -52,7 +52,7 @@ class TestEntrypointsUseTheConfig:
         with (
             patch("sys.argv", ["main.py", "--no-rag", "--config", str(cfg),
                                "--output-dir", str(tmp_path)]),
-            patch("main.load_dotenv"), patch("main.print_banner"),
+            patch("main.load_local_env"), patch("main.print_banner"),
             patch("main.step_generate_data", return_value=(incident, "s")),
             patch("main.step_sanitize", return_value=MagicMock(threat_detected=False, total_entries=1)),
             patch("main.step_pipeline", return_value=MagicMock()),

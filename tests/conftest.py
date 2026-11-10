@@ -101,13 +101,14 @@ def _isolate_incident_memory_db(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def isolated_cli(monkeypatch):
+def isolated_cli(monkeypatch, tmp_path):
     """Roda main()/main_v1() sem efeitos externos nem vazamento de ambiente.
 
-    Os dois entrypoints leem `.env.local` do diretório atual para dentro de
-    os.environ (setdefault) e montam um SlackNotifier real quando há
+    Os entrypoints carregam `.env.local`/`.env` da raiz do repositório
+    (config.env.load_local_env) e montam um SlackNotifier real quando há
     SLACK_BOT_TOKEN. Num checkout com `.env.local` de verdade, um teste que
-    chama main() postaria no canal. Aqui:
+    chama main() postaria no canal ou usaria a chave real. Aqui:
+      - load_local_env aponta para um diretório vazio (nenhum arquivo real é lido);
       - o notifier é desligado (setup_slack_notifier → None);
       - variáveis de credencial já presentes são removidas;
       - os.environ inteiro é restaurado ao fim do teste.
@@ -123,6 +124,7 @@ def isolated_cli(monkeypatch):
             del os.environ[key]
         monkeypatch.setattr("app.slack_setup.setup_slack_notifier",
                             lambda *args, **kwargs: None)
+        monkeypatch.setattr("config.env.REPO_ROOT", tmp_path / "no-local-env")
         yield
 
 

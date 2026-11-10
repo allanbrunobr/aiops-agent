@@ -116,7 +116,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch("main.step_generate_data", return_value=(mock_incident, "test-scenario")),
             patch("main.step_sanitize", return_value=MagicMock(threat_detected=False, total_entries=100)),
@@ -142,7 +142,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch("main.step_generate_data", side_effect=RuntimeError("stage failure")),
             redirect_stdout(io.StringIO()),
@@ -206,7 +206,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch("main.step_generate_data", return_value=(mock_incident, "test-scenario")),
             patch("main.step_sanitize", return_value=MagicMock(threat_detected=False, total_entries=100)),
@@ -276,7 +276,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch("main.step_generate_data", return_value=(mock_incident, "test-scenario")),
             patch("main.step_sanitize", return_value=MagicMock(threat_detected=False, total_entries=100)),
@@ -348,7 +348,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch("main.step_generate_data", return_value=(mock_incident, "test-scenario")),
             patch("main.step_sanitize", return_value=MagicMock(threat_detected=False, total_entries=100)),

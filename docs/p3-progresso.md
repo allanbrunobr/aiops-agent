@@ -280,3 +280,52 @@ correções foram feitas à mão e conferidas contra o código:
 
 **Suíte completa:** ruff limpo. unit 1481 passaram, integration 138
 passaram, suíte completa 1659 passaram e 10 foram pulados. Status 0 nos três.
+
+## P3-6a — Um só carregador de `.env.local` (M3/F5-10)
+
+**Problema:** cinco parsers artesanais:
+
+- `main()`;
+- `main_v1()`;
+- `interfaces/demo/server.py`;
+- `infra/run_webhook_server.py`;
+- `infra/test_slack_notification.py`.
+
+A cópia da demo não fazia strip antes de testar `#`. Nenhuma tratava aspas nem
+`export`, então `KEY="v"` chegava com as aspas ao cliente.
+
+**Mudança:**
+
+- `config/env.py`: `load_local_env(root=None)`, sobre o `python-dotenv`, que já
+  era dependência. Carrega `<raiz>/.env.local` e depois `<raiz>/.env`, com
+  `override=False`.
+  - Precedência: processo > `.env.local` > `.env`. Antes, em `main()`, o
+    `.env` vencia o `.env.local`; a nova ordem segue o nome "local".
+  - A raiz padrão é a do repositório, não o diretório corrente. A CLI, que
+    usava o cwd, passa a ler o mesmo arquivo que a demo e os scripts de infra.
+- As 5 cópias foram trocadas por chamadas à função. O `from dotenv import
+  load_dotenv` saiu de `main.py`.
+- `tests/conftest.py`: o fixture autouse `isolated_cli` aponta
+  `config.env.REPO_ROOT` para um diretório vazio. Antes, com o pytest rodando
+  na raiz, os testes de `main()` liam o `.env.local` real (só o Slack era
+  desligado). Agora nenhum teste lê arquivo de credencial do checkout.
+- 4 testes faziam patch de `main.load_dotenv` e passaram a fazer de
+  `main.load_local_env`. `test_cli_isolation` passa `tmp_path` ao fixture.
+
+**Testes:** `tests/test_local_env_loader.py`, 5 testes.
+
+- **Antes da mudança:** os 4 testes iniciais falharam (módulo inexistente; o
+  portão listou 4 arquivos com parser manual).
+- **Cenários cobertos:**
+  - aspas, `export` e comentário indentado;
+  - não sobrescreve o processo;
+  - `.env.local` vence `.env`;
+  - arquivo ausente;
+  - a suíte não lê o `.env.local` do checkout;
+  - portão contra parser manual novo fora de `config/env.py`.
+
+**Smoke:** `import interfaces.demo.server` e execução do script do webhook
+(sem subir servidor) no venv completo.
+
+**Suíte completa:** ruff limpo. unit 1486 passaram, integration 138
+passaram, suíte completa 1664 passaram e 10 foram pulados. Status 0 nos três.

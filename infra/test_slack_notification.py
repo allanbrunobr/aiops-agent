@@ -14,14 +14,10 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# Load .env.local
-env_file = project_root / ".env.local"
-if env_file.exists():
-    for line in env_file.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, _, value = line.partition("=")
-            os.environ.setdefault(key.strip(), value.strip())
+# Load .env.local / .env
+from config.env import load_local_env  # noqa: E402
+
+load_local_env(project_root)
 
 from datetime import datetime, timezone
 

@@ -99,7 +99,7 @@ def _main_with_layers(pre: MagicMock, rem: MagicMock):
         return_value=MagicMock(total_seconds=MagicMock(return_value=600)))
     with (
         patch("sys.argv", ["main.py", "--no-llm", "--no-rag"]),
-        patch("main.load_dotenv"),
+        patch("main.load_local_env"),
         patch("main.print_banner"),
         patch("main.step_generate_data", return_value=(incident, "test-scenario")),
         patch("main.step_sanitize", return_value=MagicMock(threat_detected=False, total_entries=100)),
