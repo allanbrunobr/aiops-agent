@@ -529,3 +529,41 @@ passaram e 10 foram pulados. Status 0 nos três.
 `increment_llm_calls` da engine continua sem chamador em produção. Ligá-lo
 exigiria passar o contexto da engine para dentro do node agentic, sem ganho
 sobre o limite aplicado na única porta para o LLM.
+
+### Item 10 — Chamada ao mitigador protegida (pendência do item 4)
+
+**Defeito.** `mitigator.propose` era chamado sem proteção em 4 pontos:
+
+- duas vezes em `AgentOrchestrator.run`;
+- no caminho heurístico de `main.step_agents`;
+- no fallback heurístico do pipeline V1.
+
+Qualquer exceção ali derrubava a execução. No V1, a engine abortava com
+"fallback also failed".
+
+**Correção:** `MitigationAgent.propose_safe(diagnosis)` envolve o `propose` num
+`try`. Em caso de falha:
+
+- registra o erro em log;
+- devolve uma ação de revisão manual: sem comando, risco `HIGH` e padrão
+  `proposal_failed`, que o gate nunca auto-aprova;
+- emite os mesmos eventos de reporter do caminho normal.
+
+Os 4 pontos passaram a usar `propose_safe`. O `propose` continua igual para
+quem testa os templates.
+
+**Testes:** `tests/test_mitigation_guard.py`, 6 testes marcados `unit`.
+
+- **Antes da correção:** todos falharam. O do V1 falhou com
+  `PipelineAborted: Node 'diagnoser' fallback also failed: boom`.
+- **Cenários cobertos:**
+  - falha na primeira proposta do orchestrator;
+  - falha na proposta depois do replan por TNR;
+  - `propose_safe` sem falha devolve o mesmo que `propose`;
+  - a falha vai para o log;
+  - caminho heurístico do `main`;
+  - pipeline V1 completo, que agora termina em `NEEDS_REVIEW` em vez de
+    abortar.
+
+**CI local:** unit 802 passaram, integration 138 passaram, suíte completa 1493
+passaram e 10 foram pulados. Status 0 nos três.

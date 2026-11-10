@@ -184,7 +184,7 @@ def make_diagnoser_fallback(config: AppConfig) -> Callable[[IncidentState], Inci
         if diagnosis.get("root_cause"):
             from agents.mitigator import MitigationAgent
             proposed_action = proposed_action_from_mitigation(
-                MitigationAgent().propose(diagnosis)
+                MitigationAgent().propose_safe(diagnosis)
             )
 
         return dataclasses.replace(

@@ -549,7 +549,7 @@ def step_agents(report, retriever, use_llm: bool = True,
         # Reutiliza mitigation já computada dentro do orchestrator (evita duplicata)
         mitigation = _outcome.mitigation
     else:
-        mitigation = mitigator.propose(diagnosis)
+        mitigation = mitigator.propose_safe(diagnosis)
     result["stages"]["mitigation"] = mitigation
 
     # 4. VERIFYING (TNR)

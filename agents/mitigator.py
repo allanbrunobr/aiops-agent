@@ -7,6 +7,7 @@ Baseado no STRATUS: "human-in-the-loop for safety-critical actions".
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime
 
@@ -173,6 +174,43 @@ class MitigationAgent:
             "pattern_matched": matched_pattern,
             "diagnosis": diagnosis,
         }
+
+    def propose_safe(self, diagnosis: dict) -> dict:
+        """propose() que nunca derruba quem chama.
+
+        Uma falha ao montar a proposta (ex.: template quebrado, NOVO-01) vira
+        uma ação de revisão manual: sem comando e com risco HIGH, que o
+        PreExecutionValidator nunca auto-aprova. O erro vai para o log.
+        """
+        try:
+            return self.propose(diagnosis)
+        except Exception as exc:  # noqa: BLE001 — degrada para revisão humana, registrado
+            logging.getLogger(__name__).warning(
+                "Mitigation proposal failed (%r); falling back to manual review", exc,
+            )
+            action = MitigationAction(
+                description=(
+                    "Automatic mitigation proposal failed — manual investigation "
+                    "required, no command generated"
+                ),
+                command="",
+                risk_level="HIGH",
+                rollback_command=None,
+            )
+            self.reporter.emit(
+                MITIGATION_PROPOSED,
+                description=action.description,
+                command=action.command,
+                risk_level=action.risk_level,
+                rollback_command=None,
+                pattern_matched="proposal_failed",
+            )
+            self.reporter.emit(HUMAN_APPROVAL_REQUESTED)
+            return {
+                "action": action,
+                "pattern_matched": "proposal_failed",
+                "diagnosis": diagnosis,
+            }
 
     def verify_with_tnr(self, mitigation: dict, tnr_guard: TNRSafetyGuard) -> TNRReport:
         """Verifica a mitigação usando TNR (simulado no protótipo)."""

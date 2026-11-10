@@ -343,7 +343,7 @@ class AgentOrchestrator:
 
         # ── 4. SAFETY (invariante — nunca controlada pelo LLM) ────────
         mitigator = MitigationAgent(reporter=self.reporter)
-        mitigation = mitigator.propose(diagnosis)
+        mitigation = mitigator.propose_safe(diagnosis)
         tnr_guard = TNRSafetyGuard()
         tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
         tnr_passed = getattr(getattr(tnr_result, "result", None), "value", None) == "success"
@@ -364,7 +364,7 @@ class AgentOrchestrator:
                 step.result = self._execute_step(step, report, retriever)
                 tools_used.append(step.tool)
             diagnosis = self._synthesize_diagnosis(plan, report, {}, skill)
-            mitigation = mitigator.propose(diagnosis)
+            mitigation = mitigator.propose_safe(diagnosis)
             tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
             tnr_passed = getattr(getattr(tnr_result, "result", None), "value", None) == "success"
 
