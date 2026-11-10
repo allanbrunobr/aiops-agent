@@ -21,7 +21,9 @@ _DEFAULTS = ThresholdsConfig()
 
 try:
     import _aiops_rust as _rust
-    _RUST_AVAILABLE = True
+    from pipeline.rust_compat import has_params
+
+    _RUST_AVAILABLE = has_params(_rust, "filter_metrics", "sigma_threshold", "baseline_ratio")
 except ImportError:
     _rust = None
     _RUST_AVAILABLE = False

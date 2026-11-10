@@ -741,3 +741,40 @@ passaram, suíte completa 1802 passaram e 10 foram pulados. Status 0 nos três.
 | **P3-9d**: ciclo de skills no V1 | Depende da escolha V0×V1. |
 | **P3-2**: routers accuracy, metrics, knowledge e admin e os helpers sem chamador | Montar exige decidir autenticação e fonte de dados; apagar remove funcionalidade testada. |
 | **MCP SSE com `auth_method: header`** | Remover `header` como padrão é decisão listada do Allan. O entrypoint novo não liga o MCP: ele continua opt-in. |
+| **P3-4**: `custom_patterns` repassado ao Rust | Foi adotada a alternativa que o relatório aceita: com padrões customizados, o sanitizador usa o caminho Python. O Rust continua sem recebê-los. |
+| **P3-5**: `docs/source-tree-analysis.md` | Recebeu aviso de retrato e correção das afirmações falsas, mas não foi reescrito. Contagens por arquivo, complexidade e nomes de modelo podem estar velhos. |
+| **P3-8 (M7)**: menções a story em comentários | Os nomes de arquivo, de teste e de classe não citam mais o backlog: 0 nomes, medido com `git grep`. Restam 61 menções "Story N" em comentários e docstrings, em 40 arquivos de `tests/`. |
+| **P3-9**: faixas de versão vulneráveis e OIDC refazendo o JWKS com `kid` desconhecido | Já feitos na P2: `117c5d3` (F08) e `382f3b7`. |
+| **Dependabot** (`.github/dependabot.yml`, só lido) | Ecossistema pip em `/`, com PRs agrupados mensais. Se ele atualizar só `requirements.txt` ou só `pyproject.toml`, `test_requirements_txt_is_exactly_pyproject` reprova o PR. O `uv.lock` não é atualizado pelo ecossistema pip. Ajustar (por exemplo, o ecossistema `uv`) exige mexer em `.github/`. |
+
+## Revisão final (antes de encerrar)
+
+- **Clone limpo:** os três jobs rodaram num `git clone` da branch no scratchpad
+  (não no worktree): unit 1517, integration 138 e completa 1802 passaram, com
+  10 pulados. Status 0 nos três. Isso descarta snapshot que existisse só no
+  disco local.
+- **Job unit do CI:** o `uvicorn`, que o teste do entrypoint importa, não está
+  na lista do job, mas chega como dependência do `mcp` (`uvicorn>=0.31.1`).
+- **Extensão Rust antiga com o Python novo:** medido. Com a wheel anterior à
+  P3-4 no `PYTHONPATH`, `main.py --no-llm --no-rag` saía com 1 e
+  `TypeError: filter_metrics() takes 1 positional arguments but 3 were given`.
+  - Correção: `pipeline/rust_compat.py::has_params` lê o `__text_signature__`
+    da função PyO3. Sem os parâmetros novos, aquela função conta como
+    indisponível, o pipeline usa o fallback Python e avisa para recompilar
+    com `scripts/build_rust.sh`.
+  - Depois da correção: com a wheel antiga, saída 3 (aprovação humana, o
+    resultado do cenário), aviso registrado e nenhum traceback. Com a wheel
+    nova, saída 3 e nenhum aviso.
+  - Teste: `tests/test_rust_compat.py`, 3 testes.
+- **`uv sync`:** a simulação (`--dry-run`) mostrou que, sem
+  `--no-install-project`, o uv instala `aiops-rust` editável, o que compila
+  a extensão. O CONTRIBUTING agora indica
+  `uv sync --frozen --no-install-project --group test`.
+- **CONTRIBUTING:** a lista "7 módulos stdlib-only" já estava errada antes
+  desta P3, porque os filtros importam numpy. Agora a regra diz o que vale:
+  nenhum import de ML pesado.
+- **SECURITY.md:** registra o novo listener (`python -m interfaces.http`,
+  127.0.0.1:47893).
+
+**Suíte completa:** ruff limpo. unit 1520 passaram, integration 138
+passaram, suíte completa 1805 passaram e 10 foram pulados. Status 0 nos três.

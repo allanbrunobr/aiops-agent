@@ -10,7 +10,9 @@
   python3.12 -m venv .venv
   .venv/bin/pip install -r requirements.txt
   ```
-  or, with [uv](https://docs.astral.sh/uv/) and the lockfile: `uv sync --group test --group build`.
+  or, with [uv](https://docs.astral.sh/uv/) and the lockfile: `uv sync --frozen --no-install-project --group test`
+  (`--no-install-project`: installing the project itself builds the optional Rust extension; use
+  `scripts/build_rust.sh` for that).
   Dependencies are declared in `pyproject.toml` (`[project].dependencies` plus the `test` and
   `build` groups); `requirements.txt` mirrors them for CI, and `tests/test_packaging_consistency.py`
   fails if the two diverge. After changing dependencies, run `uv lock`.
@@ -151,7 +153,7 @@ pytest tests/ -v -m integration
 - Domain models in `domain/` are pure `@dataclass` (no Pydantic, no plain dicts) — see [ADR 0003](docs/adr/0003-domain-purity.md). Pydantic is used only at the edges (HTTP DTOs in `interfaces/`, settings in `config/loader.py`)
 - Docstrings and comments in **PT-BR** (Portuguese)
 - Variable names, CLI output, LLM prompts in **English**
-- 7 modules are stdlib-only — do NOT add heavy imports to: `orchestrator`, `detector`, `metric_filter`, `trace_filter`, `context_compressor`, `pre_validator`, `version_validator`
+- Keep these 7 modules free of heavy ML imports (torch, sentence-transformers, faiss): `orchestrator`, `detector`, `metric_filter`, `trace_filter`, `context_compressor`, `pre_validator`, `version_validator`. `metric_filter` and `trace_filter` use numpy and read their defaults from `config.loader`
 
 ### Safety Rules (Non-Negotiable)
 

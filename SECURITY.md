@@ -10,7 +10,7 @@ Treat both as public. Do not reuse them anywhere else.
 ## What the process does
 
 - The default CLI does not open a network port and does not execute the mitigation command.
-- The demo server and the webhook server bind to `127.0.0.1` unless you override the host.
+- The demo server, the webhook server and the HTTP app (`python -m interfaces.http`, port 47893: health, A2A, OAuth server when a signing key is set, MCP over SSE only when `mcp.enabled`) bind to `127.0.0.1` unless you override the host.
 - The lab Compose file publishes Prometheus, Grafana, the exporter and the Slack mock on `127.0.0.1` only.
 - `POST /a2a/tasks` requires a Bearer JWT signed with `AIOPS_MCP__OAUTH__JWT_SECRET` (at least 32 bytes). Without that key the route rejects every task.
 - OAuth registration (`POST /auth/token/register`) requires client authentication: the client sends `client_secret` (`client_secret_post`), checked in constant time against the SHA-256 in `secret_sha256` for that client. A client without a configured hash gets no token. The hashes come from a JSON file outside the repository (`mcp.oauth.client_secrets_file`, env `AIOPS_MCP__OAUTH__CLIENT_SECRETS_FILE`, `{client_id: sha256 hex}`); a missing, malformed or group/world-readable file yields no hashes. The endpoint also checks the client allow-list and PKCE S256 (`code_verifier` must match `code_challenge`); PKCE alone does not authenticate the client. An empty allow-list allows nobody. There is no built-in HMAC secret.
