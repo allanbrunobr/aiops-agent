@@ -647,7 +647,8 @@ def step_agents(report, retriever, use_llm: bool = True,
                 _evolved = _evolver.evolve(_active_skill)
                 if _evolved:
                     console.print(
-                        f"  [dim]Skill evolved: {_evolved.name} → v{_evolved.version}[/dim]"
+                        f"  [dim]Skill rewrite proposed for {_evolved.name} "
+                        f"(v{_evolved.version}) — pending human review[/dim]"
                     )
     except Exception as exc:  # noqa: BLE001 — write/evolve é best-effort; não bloqueia o pipeline
         _persist_log.warning("skills.write_evolve_failed", error=repr(exc))

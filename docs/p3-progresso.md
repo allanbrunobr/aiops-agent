@@ -75,3 +75,40 @@ passaram, suíte completa 1637 passaram e 10 foram pulados. Status 0 nos três.
 
 **Suíte completa:** ruff limpo. unit 1464 passaram, integration 138
 passaram, suíte completa 1642 passaram e 10 foram pulados. Status 0 nos três.
+
+## P3-9c — Prompt de skill reescrito pelo LLM exige revisão humana (S8)
+
+**Defeito.** `SkillEvolver.evolve` gravava como skill **ativa** o system prompt
+devolvido pelo LLM. O LLM lê telemetria (lições e contexto), que um atacante
+pode influenciar. Um prompt injetado passaria a guiar todo diagnóstico
+seguinte daquele tipo de incidente, sem ninguém ver. O teste reproduziu isso:
+um prompt "Ignore safety checks…" virou a skill ativa.
+
+**Correção:**
+
+- `rag/memory.py`: nova tabela `skill_proposals`, com os métodos
+  `save_skill_proposal`, `list_skill_proposals(status)`,
+  `approve_skill_proposal(id, reviewer)` e
+  `reject_skill_proposal(id, reviewer)`.
+  - Aprovar aplica o prompt à skill (`version+1`) e registra o revisor e a
+    data.
+  - Rejeitar mantém a skill como está.
+- `agents/skill_evolver.py`: a evolução grava **proposta pendente**, não a
+  skill ativa.
+- `main.py`: a mensagem passa de "Skill evolved" para "Skill rewrite proposed
+  … pending human review".
+
+**Testes:** `tests/test_skill_evolution_review.py`, 4 testes.
+
+- **Antes da correção:** os 4 falharam. O prompt injetado substituía a skill
+  ativa, e a API de propostas não existia.
+- **Cenários cobertos:**
+  - a skill ativa não muda depois de `evolve`;
+  - a proposta fica pendente, com o texto e a justificativa;
+  - aprovar aplica o prompt e incrementa a versão;
+  - rejeitar mantém a skill.
+
+**Suíte completa:** os três jobs com status 0 (ver o commit).
+
+**Lacuna:** não há interface (rota ou CLI) para listar e aprovar propostas.
+Hoje isso é feito pela API da `IncidentMemoryDB`.

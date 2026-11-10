@@ -63,8 +63,9 @@ class SkillEvolver:
     def evolve(self, skill: DiagnosticSkill) -> DiagnosticSkill | None:
         """Reescreve o system_prompt da skill via LLM.
 
-        Retorna a skill atualizada (com version+1) ou None se o LLM não estiver
-        disponível ou a chamada falhar.
+        Retorna a skill candidata (com version+1) ou None se o LLM não estiver
+        disponível ou a chamada falhar. A candidata é gravada como PROPOSTA
+        pendente; só IncidentMemoryDB.approve_skill_proposal a torna ativa.
         """
         if self.client is None:
             logger.warning("SkillEvolver: cliente LLM ausente — evolução ignorada.")
@@ -107,8 +108,15 @@ class SkillEvolver:
             version=skill.version + 1,
         )
 
+        # Proposta PENDENTE de revisão humana, não skill ativa (S8): o texto
+        # vem do LLM, que lê telemetria — pode carregar prompt injection.
         if self.memory_db is not None:
-            self.memory_db.save_skill(evolved)
+            self.memory_db.save_skill_proposal(
+                skill_id=skill.skill_id,
+                base_version=skill.version,
+                proposed_prompt=new_prompt,
+                rationale=str(data.get("rationale", "")),
+            )
 
         return evolved
 
