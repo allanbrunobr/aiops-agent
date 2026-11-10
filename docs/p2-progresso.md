@@ -168,3 +168,48 @@ para a rede.
 
 **Para o Allan:** os 60 minutos de janela são um padrão razoável, não uma
 medição do volume real das tabelas. Ajuste conforme o uso.
+
+## Item P2-5 — Router do webhook: testes e três defeitos (T-c, 4B-01, 4B-08, 4B-09/SEC-10)
+
+**Ponto de partida.** A porta de entrada externa não tinha nenhum teste, e o
+arquivo não era importado por nenhum teste. Os testes novos acharam três
+defeitos:
+
+- **4B-01:** o fingerprint de dedup era gravado **antes** do submit. Com a
+  fila cheia (503), o reenvio do emissor era respondido como `deduplicated`, e
+  o alerta se perdia.
+- **4B-08:** um payload autenticado com tipo inesperado (`alerts: [1]`) gerava
+  500, porque só `ValueError` e `KeyError` eram tratados, e o emissor
+  reenviava.
+- **4B-09/SEC-10:** sem `Content-Length` (envio chunked), o corpo era lido
+  **inteiro** antes de checar o limite. Medido: 64 de 64 pedaços de 64 KiB,
+  ou seja, 4 MiB para um limite de 1 MiB.
+
+**Correção** (`interfaces/http/webhook/router.py`):
+
+- `_read_body_limited` lê `request.stream()` em pedaços e para assim que passa
+  do limite (413).
+- `TypeError` e `AttributeError` do normalizador viram 422.
+- O dedup **consulta** antes do submit e **registra** só depois que o pipeline
+  aceita o alerta.
+
+**Testes:** `tests/test_webhook_router.py`, 9 testes marcados `unit`, com o
+router real.
+
+- **Antes da correção:** 3 falharam, exatamente os três defeitos. Os outros 6
+  cobrem comportamento que já estava correto e não tinha teste:
+  - 202 com submit;
+  - 401 sem token e com token errado;
+  - 413 declarado;
+  - 422 e 400 para JSON inválido e não-objeto;
+  - duplicata depois do sucesso.
+- **Instrumento da leitura limitada:** chamada ASGI direta com um `receive` que
+  conta os pedaços consumidos. O `TestClient` bufferiza o corpo inteiro e não
+  distinguiria o defeito.
+
+**CI local:** ruff limpo e os três jobs com status 0 (ver o commit).
+
+**Troca consciente:** como o fingerprint só é gravado depois do aceite, dois
+envios idênticos **simultâneos** podem ambos passar pela consulta e ambos ser
+submetidos. Antes, a janela era menor, mas a perda de alerta no 503 era
+garantida. Fechar essa janela pede uma reserva atômica no `DedupStore`.

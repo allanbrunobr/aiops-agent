@@ -57,6 +57,18 @@ def identify_source(headers: dict[str, str], payload: dict[str, Any] | None = No
     return None
 
 
+async def _read_body_limited(request: Request, max_bytes: int) -> bytes | None:
+    """Lê o corpo em pedaços; devolve None assim que passar de `max_bytes`."""
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > max_bytes:
+            return None
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 @webhook_router.post("/webhook", status_code=202)
 async def receive_webhook(request: Request) -> WebhookResponse:
     """Recebe alerta via webhook com validacao completa.
@@ -118,9 +130,10 @@ async def receive_webhook(request: Request) -> WebhookResponse:
                 correlation_id=correlation_id,
             ))
 
-    # 2. Parse JSON (le body uma vez e reutiliza)
-    body = await request.body()
-    if len(body) > max_payload:
+    # 2. Parse JSON (le body uma vez e reutiliza). Leitura LIMITADA: sem
+    # Content-Length (chunked) o corpo era lido inteiro antes do limite.
+    body = await _read_body_limited(request, max_payload)
+    if body is None:
         bound_log.warning("webhook.rejected", reason="payload_too_large_actual")
         raise WebhookError(ProblemDetail(
             type="urn:aiops:error:payload-too-large",
@@ -209,7 +222,9 @@ async def receive_webhook(request: Request) -> WebhookResponse:
     # 5. Normalizacao
     try:
         alert = normalizer.normalize(payload)
-    except (ValueError, KeyError) as e:
+    except (ValueError, KeyError, TypeError, AttributeError) as e:
+        # TypeError/AttributeError: payload autenticado com tipo inesperado.
+        # Antes viravam 500 e o emissor reenviava.
         bound_log.warning("webhook.rejected", reason="normalization_failed", error=str(e))
         raise WebhookError(ProblemDetail(
             type="urn:aiops:error:validation-failed",
@@ -219,10 +234,13 @@ async def receive_webhook(request: Request) -> WebhookResponse:
             correlation_id=correlation_id,
         ))
 
-    # 6. Deduplicacao
+    # 6. Deduplicacao (consulta). O registro do fingerprint só acontece depois
+    # que o pipeline ACEITA o alerta: gravar antes fazia o retry de um 503
+    # (fila cheia) ser respondido como duplicata e o alerta se perdia (4B-01).
     dedup_store: DedupStore | None = getattr(request.app.state, "dedup_store", None)
+    fingerprint = None
+    dedup_window = 300
     if dedup_store is not None:
-        dedup_window = 300
         if config and hasattr(config, "webhook"):
             dedup_window = getattr(config.webhook, "dedup_window_seconds", 300)
 
@@ -241,9 +259,6 @@ async def receive_webhook(request: Request) -> WebhookResponse:
                 deduplicated=True,
             )
 
-        # Registra fingerprint para futuras deduplicacoes
-        dedup_store.record(fingerprint, alert.correlation_id, dedup_window)
-
     # 7. Submissao ao pipeline
     pipeline_runner: PipelineRunner | None = getattr(request.app.state, "pipeline_runner", None)
     if pipeline_runner is not None:
@@ -257,6 +272,10 @@ async def receive_webhook(request: Request) -> WebhookResponse:
                 detail="Pipeline queue is full. Try again later.",
                 correlation_id=correlation_id,
             ))
+
+    # Aceito: agora sim registra o fingerprint para futuras deduplicacoes.
+    if dedup_store is not None and fingerprint is not None:
+        dedup_store.record(fingerprint, alert.correlation_id, dedup_window)
 
     # 8. Sucesso — log de auditoria
     bound_log.info(
