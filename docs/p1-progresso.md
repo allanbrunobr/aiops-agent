@@ -603,3 +603,38 @@ fixture `isolated_cli`.
 
 **CI local:** unit 805 passaram, integration 138 passaram, suíte completa 1496
 passaram e 10 foram pulados. Status 0 nos três.
+
+### Item 12 — A2A informa bloqueio de segurança (pendência do item 5)
+
+**Defeito.** Com a safety ligada no V1, um bloqueio levanta `PipelineAborted`,
+e a rota `/a2a/tasks` devolvia o mesmo `pipeline_error` ("diagnosis failed")
+de uma falha qualquer. O cliente não tinha como saber que o diagnóstico
+existia e que só a **ação** foi bloqueada.
+
+**Correção** (`interfaces/http/routes/a2a.py`, `_safety_block_artifacts`):
+quando o aborto tem causa `SafetyBlockedError`, há dois casos.
+
+- **Com diagnóstico:** a task fica `completed`, com os artifacts `diagnosis`
+  e `safety`. O `safety` traz `{verdict: "BLOCKED", blocked_by, reason,
+  requires_human: true}`.
+- **Sem diagnóstico:** erro JSON-RPC com o código `safety_blocked`, distinto
+  de `pipeline_error`.
+
+Os outros abortos continuam como `pipeline_error`.
+
+**Testes:** `tests/test_a2a_safety_block.py`, 3 testes marcados `unit`, com
+uma engine que reproduz o aborto real de um safety node.
+
+- **Antes da correção:** os 2 testes de bloqueio falharam (o código vinha
+  `pipeline_error`). O terceiro é a guarda de que um aborto que não é de
+  safety continua genérico, e já passava.
+- **Erro no próprio teste:** na primeira versão, dois testes liam a chave
+  errada do erro JSON-RPC (`error_code` em vez de `error`). Corrigi antes de
+  confirmar o vermelho.
+
+**CI local:** unit 808 passaram, integration 138 passaram, suíte completa 1499
+passaram e 10 foram pulados. Status 0 nos três.
+
+**Continua no P2 (ARQ-10):** no caminho de sucesso, o artifact `mitigation`
+da A2A ainda lê um atributo que não existe (`mitigation_proposal`) e sai
+vazio.
