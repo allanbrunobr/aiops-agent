@@ -10,7 +10,8 @@ Fluxo:
 from __future__ import annotations
 
 
-from rag.memory import DiagnosticSkill, IncidentMemoryDB
+from application.ports.incident_memory import IncidentMemory
+from rag.memory import DiagnosticSkill
 
 # Prompt genérico — mesmo do SYSTEM_PROMPT do DiagnosisAgent.
 # Skills especializadas substituem este prompt conforme evoluem.
@@ -84,7 +85,7 @@ class SkillRouter:
 
     SCORE_THRESHOLD = 0.3  # skills abaixo deste score são ignoradas
 
-    def __init__(self, memory_db: IncidentMemoryDB) -> None:
+    def __init__(self, memory_db: IncidentMemory) -> None:
         self.db = memory_db
 
     def route(self, tags: list[str], services: list[str]) -> DiagnosticSkill:

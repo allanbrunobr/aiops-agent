@@ -10,72 +10,17 @@ Prontas para plugar MCP servers no futuro:
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from datetime import datetime
 
+# Portas reexportadas de application/ports (onde passaram a viver) para
+# manter os imports existentes de tools.interfaces.
+from application.ports.incident_tracker import IncidentTracker
+from application.ports.telemetry_sources import LogSource, MetricsSource, TraceSource
 
-# --- Interfaces Abstratas (para MCP futuro) ---
-
-class MetricsSource(ABC):
-    """Interface para fonte de métricas (ex: Prometheus via MCP)."""
-
-    @abstractmethod
-    def query(self, promql: str, start: datetime, end: datetime,
-              step_seconds: int = 15) -> list[dict]:
-        """Executa query PromQL e retorna time series."""
-        ...
-
-    @abstractmethod
-    def get_alerts(self, active_only: bool = True) -> list[dict]:
-        """Retorna alertas ativos."""
-        ...
-
-
-class LogSource(ABC):
-    """Interface para fonte de logs (ex: Datadog/ELK via MCP)."""
-
-    @abstractmethod
-    def search(self, query: str, service: str | None = None,
-               start: datetime | None = None, end: datetime | None = None,
-               limit: int = 100) -> list[dict]:
-        """Busca logs por query."""
-        ...
-
-    @abstractmethod
-    def tail(self, service: str, lines: int = 50) -> list[dict]:
-        """Retorna últimas N linhas de um serviço."""
-        ...
-
-
-class TraceSource(ABC):
-    """Interface para fonte de traces (ex: Jaeger/Grafana Tempo via MCP)."""
-
-    @abstractmethod
-    def find_traces(self, service: str, min_duration_ms: float | None = None,
-                    start: datetime | None = None, end: datetime | None = None,
-                    limit: int = 20) -> list[dict]:
-        """Busca traces por serviço e duração."""
-        ...
-
-    @abstractmethod
-    def get_trace(self, trace_id: str) -> dict:
-        """Retorna trace completo com todos os spans."""
-        ...
-
-
-class IncidentTracker(ABC):
-    """Interface para tracking de incidentes (ex: Jira/PagerDuty via MCP)."""
-
-    @abstractmethod
-    def create_incident(self, title: str, severity: str, description: str) -> str:
-        """Cria incidente e retorna ID."""
-        ...
-
-    @abstractmethod
-    def create_postmortem(self, incident_id: str, timeline: list[dict],
-                          root_cause: str, action_items: list[str]) -> str:
-        """Cria documento de postmortem."""
-        ...
+__all__ = [
+    "IncidentTracker", "LogSource", "MetricsSource", "TraceSource",
+    "SimulatedLogSource", "SimulatedMetricsSource", "SimulatedTraceSource",
+]
 
 
 # --- Implementações Simuladas (para o protótipo) ---

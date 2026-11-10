@@ -13,7 +13,8 @@ import json
 import logging
 
 from application.ports.llm_client import LLMClient
-from rag.memory import DiagnosticSkill, IncidentMemoryDB
+from application.ports.incident_memory import IncidentMemory
+from rag.memory import DiagnosticSkill
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ _EVOLVE_MIN_USES = 3
 class SkillEvolver:
     """Decide quando e como evoluir uma DiagnosticSkill com baixa performance."""
 
-    def __init__(self, client: LLMClient | None, memory_db: IncidentMemoryDB | None) -> None:
+    def __init__(self, client: LLMClient | None, memory_db: IncidentMemory | None) -> None:
         self.client = client
         self.memory_db = memory_db
 

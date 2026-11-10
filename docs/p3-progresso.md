@@ -174,3 +174,38 @@ passaram, suíte completa 1650 passaram e 10 foram pulados. Status 0 nos três.
 
 **Fora:** o import-linter como step de CI exige mexer em `.github/`. O teste
 de AST cumpre o mesmo papel dentro dos jobs que já existem.
+
+## P3-3b — Portas da memória e das fontes de telemetria (A4/ARQ-16)
+
+**Situação.**
+
+- `IncidentMemoryDB` (SQLite) não tinha porta. O orchestrator, o
+  `SkillRouter` e o `SkillEvolver` dependiam da classe concreta.
+- As portas das fontes externas (`MetricsSource`, `LogSource`, `TraceSource`,
+  `IncidentTracker`) viviam em `tools/interfaces.py`, em paralelo a
+  `application/ports`.
+
+**Mudança** (só estrutura, sem alterar comportamento):
+
+- `application/ports/incident_memory.py`: `IncidentMemory`, um `Protocol`
+  `runtime_checkable` com as operações que agentes e composição usam. Para
+  manter `application/` dependendo só de `domain/`, os tipos de valor ficam
+  como `Any`.
+- `application/ports/telemetry_sources.py` e `incident_tracker.py`: as classes
+  abstratas foram movidas para cá.
+  - `tools/interfaces.py` reexporta as quatro (é a mesma classe), então os
+    imports existentes continuam valendo.
+  - As implementações simuladas, a do Databricks e a do Jira continuam em
+    `tools/`.
+- Os três agentes anotam `IncidentMemory`, e não `IncidentMemoryDB`.
+
+**Testes:** `tests/test_memory_and_source_ports.py`, 5 testes.
+
+- **Antes da mudança:** os 5 falharam, porque as portas não existiam.
+- **Cenários cobertos:**
+  - a implementação SQLite satisfaz a porta;
+  - as portas reexportadas são as mesmas classes;
+  - os agentes não importam `IncidentMemoryDB`.
+
+**Suíte completa:** ruff limpo. unit 1477 passaram, integration 138
+passaram, suíte completa 1655 passaram e 10 foram pulados. Status 0 nos três.

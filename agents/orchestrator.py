@@ -20,7 +20,7 @@ from agents.mitigator import MitigationAgent
 from agents.skill_router import DEFAULT_SKILL, SkillRouter
 from application.ports.llm_client import LLMClient
 from application.ports.reporter import NullReporter, Reporter
-from rag.memory import IncidentMemoryDB
+from application.ports.incident_memory import IncidentMemory
 from safety.tnr import TNRSafetyGuard
 
 logger = logging.getLogger(__name__)
@@ -260,7 +260,7 @@ class AgentOrchestrator:
         self,
         client: LLMClient | None,
         model: str,
-        memory_db: IncidentMemoryDB | None,
+        memory_db: IncidentMemory | None,
         skill_router: SkillRouter | None,
         config=None,
         reporter: Reporter | None = None,
