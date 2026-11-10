@@ -14,22 +14,27 @@ async def handle_false_positive_side_effects(
     correlation_id: str,
     notes: str,
     incident: IncidentState,
+    knowledge_store: object | None = None,
 ) -> None:
     """Processa efeitos colaterais de um falso positivo.
 
     1. Tenta marcar padrão correspondente como negative_example
     2. Emite evento de log estruturado
+
+    A store vem do chamador (app.state.knowledge_store). Antes era lida de um
+    global de interfaces.http.app que nunca era atribuído (sempre None).
     """
     pattern_id = None
 
-    try:
-        from interfaces.http.app import knowledge_store as _ks
-        if _ks is not None:
+    if knowledge_store is not None:
+        try:
             pattern_id = _mark_knowledge_pattern_negative(
-                incident, _ks, correlation_id,
+                incident, knowledge_store, correlation_id,
             )
-    except Exception:
-        log.warning("false_positive_side_effect_error", exc_info=True)
+        except Exception:
+            log.warning("false_positive_side_effect_error", exc_info=True)
+    else:
+        log.warning("false_positive_no_knowledge_store", correlation_id=correlation_id)
 
     logger.info(
         "feedback.false_positive",
@@ -60,7 +65,10 @@ def _mark_knowledge_pattern_negative(
 
     # Fallback: busca por service + root_cause a partir do diagnóstico
     if pattern is None and incident.diagnosis:
-        service = incident.alert.affected_services[0] if incident.alert.affected_services else None
+        # NormalizedAlert tem `service` (não `affected_services`, que levantava
+        # AttributeError). Diagnóstico com serviços afetados tem precedência.
+        affected = (incident.diagnosis or {}).get("affected_services") or []
+        service = affected[0] if affected else getattr(incident.alert, "service", None)
         root_cause = incident.diagnosis.get("root_cause")
         if service and root_cause:
             pattern = knowledge_store.find_by_service_and_cause(service, root_cause)

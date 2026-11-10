@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sys
-import types
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,18 +16,6 @@ def _make_incident() -> IncidentState:
     return incident
 
 
-def _inject_server_app(knowledge_store_value: object) -> None:
-    """Injeta módulo server.app fake em sys.modules para isolar testes."""
-    fake_app = types.ModuleType("interfaces.http.app")
-    fake_app.knowledge_store = knowledge_store_value  # type: ignore[attr-defined]
-    sys.modules["interfaces.http.app"] = fake_app
-
-
-def _cleanup_server_app() -> None:
-    """Remove módulo fake de sys.modules."""
-    sys.modules.pop("interfaces.http.app", None)
-
-
 @pytest.mark.unit
 class TestHandleFalsePositiveSideEffects:
     """Testes unitários para handle_false_positive_side_effects."""
@@ -42,7 +28,6 @@ class TestHandleFalsePositiveSideEffects:
         # knowledge_store que lança exceção ao chamar get_all_patterns()
         bad_ks = MagicMock()
         bad_ks.get_all_patterns.side_effect = RuntimeError("db unavailable")
-        _inject_server_app(bad_ks)
 
         try:
             from interfaces.http.handlers.false_positive import handle_false_positive_side_effects
@@ -52,6 +37,7 @@ class TestHandleFalsePositiveSideEffects:
                     correlation_id="test-123",
                     notes="teste",
                     incident=incident,
+                    knowledge_store=bad_ks,
                 )
 
                 mock_log.warning.assert_called_once_with(
@@ -59,7 +45,7 @@ class TestHandleFalsePositiveSideEffects:
                     exc_info=True,
                 )
         finally:
-            _cleanup_server_app()
+            pass  # a store é passada explicitamente; nada global a restaurar
 
     @pytest.mark.asyncio
     async def test_exception_does_not_propagate(self) -> None:
@@ -68,7 +54,6 @@ class TestHandleFalsePositiveSideEffects:
 
         bad_ks = MagicMock()
         bad_ks.get_all_patterns.side_effect = RuntimeError("crash")
-        _inject_server_app(bad_ks)
 
         try:
             from interfaces.http.handlers.false_positive import handle_false_positive_side_effects
@@ -79,17 +64,17 @@ class TestHandleFalsePositiveSideEffects:
                     correlation_id="test-456",
                     notes="defensive test",
                     incident=incident,
+                    knowledge_store=bad_ks,
                 )
         finally:
-            _cleanup_server_app()
+            pass  # a store é passada explicitamente; nada global a restaurar
 
     @pytest.mark.asyncio
-    async def test_no_warning_when_no_exception(self) -> None:
-        """Garante que log.warning NÃO é emitido quando knowledge_store é None."""
+    async def test_missing_store_is_logged_not_silent(self) -> None:
+        """Sem knowledge_store, o descarte do feedback é registrado (antes era silencioso)."""
         incident = _make_incident()
 
         # knowledge_store=None — bloco if _ks is not None é ignorado, sem exceção
-        _inject_server_app(None)
 
         try:
             from interfaces.http.handlers.false_positive import handle_false_positive_side_effects
@@ -99,8 +84,11 @@ class TestHandleFalsePositiveSideEffects:
                     correlation_id="test-789",
                     notes="no error test",
                     incident=incident,
+                    knowledge_store=None,
                 )
 
-                mock_log.warning.assert_not_called()
+                mock_log.warning.assert_called_once_with(
+                    "false_positive_no_knowledge_store", correlation_id="test-789",
+                )
         finally:
-            _cleanup_server_app()
+            pass  # a store é passada explicitamente; nada global a restaurar

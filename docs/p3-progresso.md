@@ -32,3 +32,46 @@ reordena uma única vez com `rerank(raw, query, top_k=top_k)`, contra a query
 
 **Suíte completa:** ruff limpo. unit 1459 passaram, integration 138
 passaram, suíte completa 1637 passaram e 10 foram pulados. Status 0 nos três.
+
+## P3-9b — Feedback de falso positivo nunca marcava o padrão (4B-14)
+
+**Defeito, em três quebras independentes:**
+
+1. `KnowledgePattern` não tinha `source_incident_id`, e a rota de criação de
+   padrões não o repassava. A busca primária nunca achava nada.
+2. O fallback lia `incident.alert.affected_services`, que não existe em
+   `NormalizedAlert` (o campo é `service`). O `AttributeError` era engolido.
+3. A store vinha do global `interfaces.http.app.knowledge_store`, que nunca é
+   atribuído. O bloco nem executava.
+
+**Correção:**
+
+- `rag/models.py` e `rag/knowledge_store.py`: o campo `source_incident_id`
+  passa a existir e é persistido no JSON.
+- `interfaces/http/routes/knowledge.py`: a rota repassa o campo, que o schema
+  já aceitava.
+- `interfaces/http/handlers/false_positive.py`:
+  - recebe `knowledge_store` do chamador;
+  - o fallback usa o serviço do diagnóstico ou `alert.service`;
+  - sem store, registra `false_positive_no_knowledge_store` em vez de
+    descartar em silêncio.
+- `interfaces/http/api/accuracy.py`: passa `app.state.knowledge_store`. A
+  montagem dos routers e da store no `create_app` é o item P3-2.
+
+**Testes:** `tests/test_false_positive_feedback.py`, 5 testes.
+
+- **Antes da correção:** falharam os 5.
+  - A quebra 1 apareceu primeiro (`TypeError` no campo).
+  - Com o campo adicionado, o teste de ponta a ponta pela rota de accuracy
+    falhou pela quebra 3: padrão não marcado.
+  - A quebra 2 foi reproduzida chamando o fallback diretamente:
+    `AttributeError: 'NormalizedAlert' object has no attribute
+    'affected_services'`.
+- **`tests/test_false_positive.py`:** os testes antigos injetavam um módulo
+  falso `interfaces.http.app` em `sys.modules`, e o *cleanup* removia o
+  módulo **real** de `sys.modules`. Passaram a usar o parâmetro explícito. O
+  teste "sem store não loga warning" virou "sem store, o descarte é
+  registrado".
+
+**Suíte completa:** ruff limpo. unit 1464 passaram, integration 138
+passaram, suíte completa 1642 passaram e 10 foram pulados. Status 0 nos três.
