@@ -37,14 +37,19 @@ docs/superpowers/
 .pytest_cache/
 tests/__snapshots__/
 
-# Root .md files (except README.md and tracked directories)
+# Root markdown that is not part of the published docs.
+# SECURITY.md, CONTRIBUTING.md and AGENTS.md stay tracked.
 *.md
 !README.md
 !README.pt-BR.md
+!SECURITY.md
+!CONTRIBUTING.md
+!AGENTS.md
 !docs/**/*.md
 !docs/*.md
 !infra/**/*.md
 !infra/*.md
+!data/generated_logs/README.md
 
 # Rust build artifacts
 rust/target/

@@ -98,8 +98,8 @@ The project has two execution engines:
 
 | Engine | How to enable | Description |
 |--------|---------------|-------------|
-| V0 (sequential) | default | Sequential pipeline in `main.py` |
-| V1 (Blueprint Engine) | `--pipeline-v1` or `--data-source databricks` | Orchestration as a typed graph (`blueprint/`) |
+| V0 (sequential) | default `python main.py` | Demo script in `main.py`. It does not go through `app/builders.py`. |
+| V1 (Blueprint Engine) | `--pipeline-v1` only | Typed graph in `blueprint/`. `--data-source databricks` does not select this engine. |
 
 ### Layers
 
@@ -187,7 +187,7 @@ python main.py [options]
 | Code | Meaning |
 |------|---------|
 | `0` | Incident resolved and verified by TNR |
-| `1` | Unrecoverable error in a pipeline stage |
+| `1` | Invalid arguments, or an unrecoverable error in a pipeline stage |
 | `2` | Regression detected by TNR (post-action health worse than pre-action) |
 | `3` | Action blocked by the safety layer (requires human approval) |
 
@@ -272,7 +272,15 @@ To set up a real Slack App, see [`infra/SLACK-SETUP.md`](infra/SLACK-SETUP.md). 
 
 ### Environment variables
 
-The CLI and the demo load `.env.local` automatically. The CLI also reads `.env`. There are two templates: [`.env.example`](.env.example), with the CLI variables (Anthropic and Databricks), and [`env.example`](env.example), with the variables for the local environment in `infra/` (Grafana webhook and Slack).
+The CLI and the demo load `.env.local` automatically. The CLI also reads `.env`. Copy [`.env.example`](.env.example). The OAuth HMAC secret, when set, is `AIOPS_MCP__OAUTH__JWT_SECRET` and must be at least 32 bytes.
+
+Build the optional Rust extension with the same interpreter you use to run tests:
+
+```bash
+maturin build --release --interpreter .venv/bin/python --manifest-path rust/Cargo.toml
+```
+
+`tests/rust` is skipped when `_aiops_rust` is not installed. There is no lockfile: a freeze taken on one OS would pin wheels the Linux CI cannot install. Minimum versions stay in `requirements.txt`.
 
 | Variable | Purpose | Required |
 |----------|---------|----------|
@@ -420,7 +428,7 @@ To create a new incident scenario, use `scripts/new_scenario.py` and the templat
 | Tool-assisted RAG for RCA | TAMO (2025) | `rag/` |
 | Defense against adversarial telemetry (AIOpsShield) | When AIOps Become "AI Oops" (2025) | `pipeline/telemetry_sanitizer.py`, `safety/` |
 
-The PDFs are in [`docs/papers/`](docs/papers/).
+The papers are cited by title in [`docs/index.md`](docs/index.md). The PDF files are not in the repository.
 
 ---
 

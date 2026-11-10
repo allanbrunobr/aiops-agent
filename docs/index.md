@@ -38,13 +38,15 @@
 
 ### Reference Papers
 
-- `docs/papers/STRATUS_NeurIPS_2025.pdf` — State machine + TNR safety
-- `docs/papers/OpsAgent_Nankai_2025.pdf` — Multi-modal observability
-- `docs/papers/Microsoft_RCACopilot_2024.pdf` — ReAct root cause analysis
-- `docs/papers/Acon_Context_Compression_2025.pdf` — Context compression
-- `docs/papers/AOI_Context_Compression_2025.pdf` — Priority token budgeting
-- `docs/papers/TAMO_Tool_Assisted_RCA_2025.pdf` — Tool-assisted metrics
-- `docs/papers/WhenAIOpsBecome AI Oops.pdf` — Adversarial defense
+The PDFs are not in this tree. They are third-party papers and were removed from the clone. Titles the code and the README cite:
+
+- STRATUS (NeurIPS 2025) — state machine and TNR
+- OpsAgent (Nankai 2025) — multi-modal observability
+- Microsoft RCACopilot (2024) — ReAct root cause analysis
+- Acon (2025) — context compression
+- AOI (2025) — priority token budgeting
+- TAMO (2025) — tool-assisted metrics
+- When AIOps Become AI Oops — adversarial defense
 
 ---
 

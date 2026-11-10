@@ -59,7 +59,7 @@ export SLACK_API_BASE_URL=http://localhost:8001/api/
 export SLACK_BOT_TOKEN=xoxb-mock-token-for-testing
 export SLACK_CHANNEL=C_TEST_CHANNEL
 
-python -m uvicorn interfaces.http.webhook:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn interfaces.http.webhook:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ### 4. Watch it work

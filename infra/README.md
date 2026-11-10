@@ -53,7 +53,7 @@ Copy the template and edit it with your tokens:
 
 ```bash
 # At the project root (not inside infra/)
-cp env.example .env.local
+cp .env.example .env.local
 ```
 
 Edit `.env.local`:
@@ -105,7 +105,7 @@ Expected output:
 ============================================================
 AIOps Agent — Webhook Server
 ============================================================
-  Listening:    http://0.0.0.0:47890
+  Listening:    http://127.0.0.1:47890
   Health:       http://localhost:47890/health
   Webhook:      POST http://localhost:47890/webhook
   .env.local:   loaded

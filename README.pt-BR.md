@@ -96,8 +96,8 @@ O projeto oferece dois motores de execução:
 
 | Motor | Ativação | Descrição |
 |-------|----------|-----------|
-| V0 (sequencial) | padrão | Pipeline sequencial em `main.py` |
-| V1 (Blueprint Engine) | `--pipeline-v1` ou `--data-source databricks` | Orquestração como grafo tipado (`blueprint/`) |
+| V0 (sequencial) | `python main.py` | Script de demonstração em `main.py`. Não passa por `app/builders.py`. |
+| V1 (Blueprint Engine) | só `--pipeline-v1` | Grafo em `blueprint/`. `--data-source databricks` não seleciona este motor. |
 
 ### Camadas
 
@@ -185,7 +185,7 @@ python main.py [opções]
 | Código | Significado |
 |--------|-------------|
 | `0` | Incidente resolvido e verificado pelo TNR |
-| `1` | Erro irrecuperável em algum estágio |
+| `1` | Argumento inválido, ou erro irrecuperável em algum estágio |
 | `2` | Regressão detectada pelo TNR (saúde pós-ação pior que a pré-ação) |
 | `3` | Ação bloqueada pela camada de segurança (requer aprovação humana) |
 
@@ -418,7 +418,7 @@ Para criar um novo cenário de incidente, use `scripts/new_scenario.py` e o mode
 | RAG assistido por ferramentas para RCA | TAMO (2025) | `rag/` |
 | Defesa contra telemetria adversarial (AIOpsShield) | When AIOps Become "AI Oops" (2025) | `pipeline/telemetry_sanitizer.py`, `safety/` |
 
-Os PDFs estão em [`docs/papers/`](docs/papers/).
+Os papers são citados pelo título em [`docs/index.md`](docs/index.md). Os PDFs não estão no repositório.
 
 ---
 

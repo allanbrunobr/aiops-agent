@@ -2,6 +2,8 @@
 
 - **Status:** Accepted
 - **Date:** 2026-04-29
+
+> Current code, recorded 2026-11-09. The paths below (`server/webhook/`, `mcp_server/tools.py`, `server/routes/a2a.py`) were the layout when this ADR was written. The tree now uses `interfaces/http/webhook/`, `interfaces/mcp/tools.py` and `interfaces/http/routes/a2a.py`. `domain/incident_state.py` is frozen. The "not frozen" target in this ADR was not applied. The decision text is unchanged.
 - **Deciders:** allanbrunobr
 - **Supersedes:** ADR 0001
 - **Related subphase:** Structural Phase 3 — Domain Purity and Edge DTOs

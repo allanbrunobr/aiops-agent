@@ -1,14 +1,18 @@
 # AIOps Agent — Architecture Summary
 
-> Concise architecture reference for AI agents and developers. For the full academic design document (78KB, 14 sections), see [`ARCHITECTURE - AIOPS-AGENT.md`](../ARCHITECTURE%20-%20AIOPS-AGENT.md).
+> Concise architecture reference for what this repository actually runs.
 
 ---
 
 ## Architecture Type
 
-**Sequential pipeline + multi-agent state machine** — a single-process CLI application that runs observability data through a fixed sequence of processing stages, with AI-driven decision-making in the agent layer.
+One process, two ways in.
 
-Not a web service, not a microservice, not event-driven. All execution is synchronous and single-threaded.
+The default `python main.py` path is the sequential demo in `main.py`. It does not use `app/builders.py`. `--data-source databricks` changes the data source only. The Blueprint graph (`blueprint/`) runs when you pass `--pipeline-v1`, and when the HTTP app is created with `create_app`.
+
+`create_app` mounts health, optional MCP, optional OAuth, and A2A. The webhook receiver is a separate process (`infra/run_webhook_server.py`). Its pipeline executor still logs `pipeline.stub_executed`. The demo dashboard is `interfaces/demo/server.py` and binds to `127.0.0.1` unless you pass `--host`.
+
+The agent path does not execute `kubectl`. The TNR check on that path compares fixed before/after health snapshots. `--no-llm` diagnosis is a keyword heuristic.
 
 ---
 
@@ -100,7 +104,7 @@ IDLE → DETECTING → DIAGNOSING → MITIGATING → VERIFYING → RESOLVED
                        (on TNR regression detection)
 ```
 
-Transitions enforced by `VALID_TRANSITIONS` dict in `orchestrator.py`. Invalid transitions raise `InvalidTransitionError`. History is append-only for timeline generation.
+The CLI records these names in a list inside `main.py` (`_transition`). There is no `VALID_TRANSITIONS` map and no `InvalidTransitionError` in this tree. A TNR pass appends `RESOLVED` before the safety gate. If that gate sets `requires_human`, the process exits 3 and the summary says `AWAITING HUMAN`.
 
 ---
 
