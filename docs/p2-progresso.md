@@ -733,3 +733,70 @@ O PKCE incorreto no endpoint de registro já foi coberto no item 6 do P1.
   passando, como deveriam.
 
 **CI local:** os três jobs com status 0 (ver o commit).
+
+---
+
+## Fechamento do P2
+
+São 19 commits locais na `p2-correcoes`, a partir de `10370ce`, sem push nem
+PR. Nada foi alterado em `rust/` nem em `.github/`.
+
+| Item do relatório (§5 P2) | Estado | Commit(s) |
+|---|---|---|
+| 1. Decidir V0 × V1 (ADR) | **pendente: decisão do Allan** | — |
+| 2. MCP funcional (contrato real, engine no SSE, `sanitize_text`) | feito | `214f768` |
+| 3. Marcadores obrigatórios | feito: portão de coleta e 542 testes marcados; o job unit passou de 860 para 1379 testes | `8481f30` |
+| 4. Testes da borda | feito: router do webhook com 3 defeitos corrigidos, negativos de A2A e SSE | `05b46c4`, `3f003b2` |
+| 5. RAG: mapeamento FAISS → chunk no cache | feito | `f0bd6f3` |
+| 6. TNR real ("não verificado" e falha fechada) | feito | `16bc810` |
+| 7. Webhook e A2A: dedup, severidade do Grafana, *resolved*, limite de corpo, `to_thread`, drenagem no `stop()` | feito | `05b46c4`, `6d0fbcf`, `aee501f`, `6bfff1b` |
+| 8. Auth MCP: enum e falha fechada | feito, mas tirar `header` do padrão fica para o Allan | `15bad52` |
+| 9. Databricks live | feito | `a56738c` |
+| 10. Gates de CI (pip-audit, cargo audit, clippy, mypy, `permissions`, SHA) | **pendente: exige mexer em `.github/`** | — |
+| 11. Config de safety e `AppConfig.llm` | feito | `f4a7428`, `e5a15f7` |
+| 12. Testes isolados do repositório | feito: portão de `output/`; a suíte sem limpeza não deixa artefatos | `a8a6d16` |
+| Achados extras: OIDC (4B-13), Slack (4B-11), VersionValidator (F08), isolamento do Slack nos testes, frases do `p1-progresso` | feito | `382f3b7`, `86250a7`, `117c5d3`, `a7faa65`, `6f4e753` |
+
+**Último CI local** (`3f003b2`): ruff limpo. unit 1458 passaram, integration
+138 passaram, suíte completa 1636 passaram e 10 foram pulados. Status 0 nos
+três.
+
+- Como nada mudou em `rust/`, o `cargo test` e o build da extensão do
+  fechamento do P1 continuam válidos. A suíte completa rodou com a extensão
+  instalada.
+
+**Mudanças de comportamento desta branch, para revisão:**
+
+- **`safety.require_human_approval: true`** (o padrão do YAML) passa a valer:
+  nenhuma ação sai auto-aprovada, e a CLI termina com exit 3 sempre que houver
+  mitigação.
+- **TNR** aparece como `not_verified`, não como um `success` inventado.
+  Snapshots regenerados.
+- **Webhook:**
+  - notificação *resolved* do Grafana recebe 202 com `ignored_reason`, sem
+    pipeline;
+  - severidade do Grafana vem do label;
+  - durante o encerramento, `submit` devolve 503.
+- **`mcp.auth_method`** inválido derruba a carga da config.
+- **OIDC:** token sem `kid` diante de um JWKS com várias chaves é recusado.
+- **VersionValidator:** linhas de release inteiras são tratadas como
+  vulneráveis, inclusive patch releases.
+- **MCP `diagnose_incident`:** passa a rodar o pipeline real. Ele continua
+  **sem telemetria** (limite de arquitetura, ARQ-10).
+
+**Pendências do Allan:**
+
+- decidir V0 × V1;
+- gates de CI em `.github/`;
+- tirar `header` do padrão do MCP;
+- URL de `issuer` e `audience`;
+- timeout de 60 s do LLM;
+- janela de 60 min do Databricks.
+
+**Achados anotados e não corrigidos:**
+
+- `POST /mcp/messages` responde duas vezes, porque o transporte e o FastAPI
+  enviam cada um sua resposta;
+- `tests/test_search_incidents.py:150` não tem asserção;
+- dedup sem reserva atômica entre envios simultâneos;
+- `engine.results` compartilhado entre execuções concorrentes.
