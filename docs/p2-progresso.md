@@ -395,3 +395,41 @@ baixo risco, use `safety.require_human_approval: false`.
 
 **CI local:** ruff limpo. unit 1394 passaram, integration 138 passaram, suíte
 completa 1572 passaram e 10 foram pulados. Status 0 nos três.
+
+## Item P2-10 — Grafana: severidade pelo label e `resolved` sem pipeline (B10/4B-06)
+
+**Defeito.**
+
+- **Severidade:** o mapa de severidade do normalizador Grafana só conhecia
+  **status** (`firing`, `pending`...), não valores de label. Medido:
+  `severity: warning` e `severity: info` com status `firing` saíam
+  `critical`.
+- **Resolved:** notificações `resolved` eram submetidas como incidente novo.
+
+**Correção:**
+
+- `interfaces/http/webhook/normalizers/grafana.py`: `_LABEL_SEVERITY_MAP`
+  traduz o label (`critical`, `error`/`high`/`major`, `warning`/`medium`/
+  `minor`, `info`/`low`, sem diferenciar maiúsculas). Sem label reconhecido, o
+  status decide, como antes: `firing` vira `critical`.
+- `interfaces/http/webhook/router.py`: alerta com `alert_type` terminado em
+  `.resolved` recebe 202 com `ignored_reason: "resolved_notification"`, sem
+  submit e sem registro de dedup.
+- `interfaces/http/webhook/schemas.py`: campo opcional `ignored_reason` em
+  `WebhookResponse`.
+
+**Testes:** `tests/test_grafana_severity_resolved.py`, 11 testes marcados
+`unit`.
+
+- **Antes da correção:** 9 falharam. Os 2 que passavam são as guardas: label
+  `critical`, e label ausente com `firing` continuando `critical`.
+- **Cenários cobertos:**
+  - 8 valores de label;
+  - `resolved` aceito sem submit;
+  - um `firing` depois de um `resolved` continua sendo processado.
+
+**CI local:** ruff limpo e os três jobs com status 0 (ver o commit).
+
+**Limite:** a resolução não fecha o incidente aberto. O webhook ainda é stub
+(o `PipelineRunner` não executa o pipeline real). Fechar incidentes pela
+notificação de resolução depende dessa integração.

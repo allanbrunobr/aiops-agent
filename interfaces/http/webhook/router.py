@@ -234,6 +234,16 @@ async def receive_webhook(request: Request) -> WebhookResponse:
             correlation_id=correlation_id,
         ))
 
+    # 5b. Notificação de resolução não é incidente novo: aceita sem pipeline
+    # (antes abria um pipeline para cada "resolved" — 4B-06).
+    if alert.alert_type.endswith(".resolved"):
+        bound_log.info("webhook.resolved_ignored", alert_title=alert.title)
+        return WebhookResponse(
+            status="accepted",
+            correlation_id=alert.correlation_id,
+            ignored_reason="resolved_notification",
+        )
+
     # 6. Deduplicacao (consulta). O registro do fingerprint só acontece depois
     # que o pipeline ACEITA o alerta: gravar antes fazia o retry de um 503
     # (fila cheia) ser respondido como duplicata e o alerta se perdia (4B-01).

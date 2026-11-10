@@ -55,6 +55,8 @@ class WebhookResponse(BaseModel):
     incident_id: str | None = None
     correlation_id: str
     deduplicated: bool = False
+    # Aceito mas sem pipeline (ex.: "resolved_notification").
+    ignored_reason: str | None = None
 
 
 class NormalizedAlertDTO(BaseModel):

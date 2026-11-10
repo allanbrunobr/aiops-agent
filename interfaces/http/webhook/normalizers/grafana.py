@@ -16,6 +16,20 @@ from interfaces.http.webhook.schemas import NormalizedAlertDTO
 log = structlog.get_logger()
 
 # Mapeamento de estado Grafana -> severidade NormalizedAlert
+# Valor do label `severity` → severidade canônica. Antes só havia o mapa de
+# STATUS abaixo, e `severity: warning` com status firing saía "critical".
+_LABEL_SEVERITY_MAP: dict[str, str] = {
+    "critical": "critical",
+    "error": "error",
+    "high": "error",
+    "major": "error",
+    "warning": "warning",
+    "medium": "warning",
+    "minor": "warning",
+    "info": "info",
+    "low": "info",
+}
+
 _SEVERITY_MAP: dict[str, str] = {
     "alerting": "critical",
     "firing": "critical",
@@ -103,7 +117,11 @@ class GrafanaNormalizer(AlertNormalizer):
         description = annotations.get("description") or annotations.get("summary", "")
         status = alert.get("status", "firing")
         severity_label = labels.get("severity", "")
-        severity = _SEVERITY_MAP.get(severity_label.lower(), _SEVERITY_MAP.get(status, "warning"))
+        # Label primeiro; sem label reconhecido, o status decide (firing → critical).
+        severity = _LABEL_SEVERITY_MAP.get(
+            str(severity_label).strip().lower(),
+            _SEVERITY_MAP.get(status, "warning"),
+        )
 
         # Timestamp
         starts_at = alert.get("startsAt")
