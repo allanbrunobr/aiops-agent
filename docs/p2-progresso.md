@@ -213,3 +213,43 @@ router real.
 envios idênticos **simultâneos** podem ambos passar pela consulta e ambos ser
 submetidos. Antes, a janela era menor, mas a perda de alerta no 503 era
 garantida. Fechar essa janela pede uma reserva atômica no `DedupStore`.
+
+## PR #20 aberto e achados da revisão pré-PR
+
+**PR:** https://github.com/allanbrunobr/aiops-agent/pull/20, de
+`analise-aiops` (`10370ce`, 17 commits) para `main`.
+
+- O push foi feito pelo coordenador, fora do Claude, sem force.
+- O PR foi aberto com `gh`, na conta `allanbrunobr`.
+- Nenhum commit da `p2-correcoes` entrou nele.
+
+**A revisão `pre-pr-contradicoes` deixou dois achados de pé.** Como não houve
+novo push, eles foram registrados no corpo do PR como conhecidos e são
+corrigidos aqui:
+
+1. **Testes de `main()` sem isolamento** (`tests/test_api_key_safety.py`).
+   Corrigido abaixo.
+2. **Frases desatualizadas no `docs/p1-progresso.md`.** Corrigido no commit
+   seguinte.
+
+## Item P2-6 — Isolamento automático de efeitos externos nos testes
+
+**Defeito.** A fixture `isolated_cli` era opcional. Os testes de `main()` em
+`tests/test_api_key_safety.py` (`TestPipelineOutputNoApiKeys`,
+`TestMissingApiKeyFallback`) não a pediam. Num checkout com `.env.local`
+contendo `SLACK_BOT_TOKEN`, eles montavam um `SlackNotifier` real e podiam
+postar no canal.
+
+**Correção:** uma fixture `autouse` no `tests/conftest.py` aplica o
+`isolated_cli` a **todo** teste, em vez de depender de cada teste pedir.
+
+**Teste:** `tests/test_cli_isolation.py::test_slack_is_disabled_even_without_requesting_the_fixture`.
+
+- **Antes da correção:** falhou. Com `SLACK_BOT_TOKEN` no ambiente e sem pedir
+  a fixture, o teste recebia um `SlackNotifier` real.
+- **Instrumento:** o teste não cria nenhum `.env.local`, porque segredos e
+  `.env` ficam fora de alcance. Ele usa `monkeypatch.setenv` com um token
+  gerado na hora.
+
+**CI local:** ruff limpo. unit 860 passaram, integration 138 passaram, suíte
+completa 1551 passaram e 10 foram pulados. Status 0 nos três.

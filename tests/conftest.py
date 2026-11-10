@@ -101,6 +101,17 @@ def isolated_cli(monkeypatch):
         yield
 
 
+@pytest.fixture(autouse=True)
+def _isolate_external_side_effects(isolated_cli):
+    """`isolated_cli` em TODO teste, não só nos que lembram de pedir.
+
+    A revisão pré-PR achou testes de main() (test_api_key_safety.py) sem a
+    fixture, que podiam postar no Slack real num checkout com `.env.local`.
+    Depender de cada teste pedir é regra de obediência; isto é o portão.
+    """
+    yield
+
+
 @pytest.fixture(scope="class")
 def simulated_incident():
     """Gera incidente simulado com seed-42 para output determinístico.
