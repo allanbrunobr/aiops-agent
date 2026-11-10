@@ -642,3 +642,38 @@ efeito.
 **Restante:** o `agents/diagnoser.py` usa `LLMConfig().model_name`, o padrão
 da classe, como modelo padrão quando ninguém informa outro. Os chamadores de
 produção passam o modelo resolvido.
+
+## Item P2-16 — Slack: erros permanentes, Retry-After e limites de blocos (4B-11)
+
+**Defeito.**
+
+- **Erros permanentes:** só erros de autenticação paravam o retry.
+  `channel_not_found`, `invalid_blocks`, `msg_too_long` e outros eram
+  retentados com backoff.
+- **429:** `ratelimited` ignorava o `Retry-After` que o Slack devolve.
+- **Blocos:** não eram truncados, então uma mensagem final grande era
+  recusada pela API.
+
+**Correção** (`interfaces/http/notifications/slack.py`):
+
+- **Lista de não retentáveis ampliada:** canal inexistente ou arquivado, sem
+  permissão ou escopo, blocos inválidos, mensagem longa demais, argumentos
+  inválidos.
+- **429:** usa o `Retry-After` do header, com teto `MAX_RETRY_AFTER_S = 30`.
+  A leitura é estrita (mapeamento com valor numérico ou string); sem header
+  válido, o backoff exponencial de antes continua valendo.
+- **Blocos:** `_fit_blocks` trunca o texto de section e de fields em 3000
+  caracteres e limita a 50 blocos. É aplicado nas **9** chamadas ao cliente:
+  7 com `blocks=` e 2 com `attachments`.
+
+**Testes:** `tests/test_slack_delivery_limits.py`, 9 testes marcados `unit`.
+
+- **Antes da correção:** os 9 falharam:
+  - erros permanentes retentados 3 vezes;
+  - 429 esperando 1 s em vez dos 7 s pedidos;
+  - mensagem final fora dos limites.
+- **Ajuste no meio do caminho:** a primeira versão da leitura do
+  `Retry-After` quebrou 3 testes antigos. Eles simulam o erro com uma resposta
+  `MagicMock`, e `float(MagicMock)` dá 1.0; a leitura foi tornada estrita.
+
+**CI local:** os três jobs com status 0 (ver o commit).
