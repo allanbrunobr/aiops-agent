@@ -22,7 +22,7 @@ O CI não tem lint nem formatação, então não há outro comando a rodar.
 | 1 | Laço do orchestrator com saída e chamadas ao LLM limitadas; timeout no cliente | F01 | feito | ver `git log` |
 | 2 | Gate de comando: metacaracteres de shell, âncora, nome de serviço | F02, T04, SEC-05, SEC-06 | feito | ver `git log` |
 | 3 | CLI usa o veredito agregado de todas as camadas | F03 | feito | ver `git log` |
-| 4 | Template de CPU no mitigator | NOVO-01 | pendente | — |
+| 4 | Template de CPU no mitigator | NOVO-01 | feito | ver `git log` |
 | 5 | Safety ligada no pipeline V1 (`proposed_action`) | ARQ-01, F04, SEC-04 | pendente | — |
 | 6 | OAuth: autenticação do cliente em `/auth/token/register` | SEC-01, SEC-11 | pendente | — |
 | 7 | Falhas silenciosas: log em vez de `except: pass`; `confidence` tipada; chamada morta a `step_predict` | F07, F5-02, ARQ-05, F5-01 | pendente | — |
@@ -160,3 +160,28 @@ passaram e 10 foram pulados. Status 0 nos três.
 **Observação, fora do P1:** `kubectl set image deployment/api
 api=nginx:1.16.1` passa como `SAFE` no VersionValidator. É o achado F08 do
 relatório (comparação exata de versão), que é P2.
+
+## Item 4 — NOVO-01: template de CPU no mitigator
+
+**Defeito.** O template de CPU era `--replicas={current+2}`. `str.format` trata
+`current+2` como nome de campo, então qualquer causa raiz com "cpu" levantava
+`KeyError: 'current+2'` em `MitigationAgent.propose`. O `AgentOrchestrator`
+não trata essa exceção.
+
+**Correção** (`agents/mitigator.py`): o template passa a usar `{scale_up}`, e
+`propose` calcula os campos antes do `format`
+(`scale_up = current_replicas + 2`). Todos os templates recebem o mesmo
+dicionário de campos.
+
+**Testes:** `tests/test_mitigator_templates.py`, 8 testes marcados `unit`.
+
+- **Antes da correção:** falharam exatamente os 3 testes de CPU.
+- **Cenários cobertos:**
+  - cada padrão de `REMEDIATION_PATTERNS` passa por `propose()` e precisa
+    gerar um comando sem `{}` sobrando. Isso pega qualquer template quebrado
+    no futuro;
+  - o comando de CPU exato;
+  - o gate trata o comando de CPU como rollout reversível.
+
+**CI local:** unit 740 passaram, integration 138 passaram, suíte completa 1431
+passaram e 10 foram pulados. Status 0 nos três.

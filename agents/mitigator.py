@@ -38,7 +38,9 @@ REMEDIATION_PATTERNS = {
     },
     "cpu": {
         "action": "Scale up replicas or rollback recent deployment",
-        "command": "kubectl scale deployment/{service} --replicas={current+2}",
+        # str.format não avalia expressões: `{current+2}` seria um NOME de
+        # campo (KeyError). O valor é calculado antes, em propose().
+        "command": "kubectl scale deployment/{service} --replicas={scale_up}",
         "risk": "LOW",
         "rollback": "kubectl scale deployment/{service} --replicas={current}",
     },
@@ -141,13 +143,19 @@ class MitigationAgent:
             )
             matched_pattern = "invalid_service"
         else:
+            current_replicas = 3
+            fields = {
+                "service": primary_service,
+                "current": current_replicas,
+                "scale_up": current_replicas + 2,
+                "prev": 1,
+            }
             action = MitigationAction(
                 description=description,
-                command=pattern["command"].format(service=primary_service, current=3, prev=1),
+                command=pattern["command"].format(**fields),
                 risk_level=pattern["risk"],
-                rollback_command=pattern["rollback"].format(
-                    service=primary_service, current=3, prev=1
-                ) if pattern.get("rollback") else None,
+                rollback_command=pattern["rollback"].format(**fields)
+                if pattern.get("rollback") else None,
             )
 
         self.reporter.emit(
