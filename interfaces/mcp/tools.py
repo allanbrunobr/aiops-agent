@@ -9,6 +9,7 @@ Histórias: 5.2 (diagnose_incident), 5.3 (validate_action), 5.4 (search_incident
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
@@ -693,7 +694,8 @@ async def handle_diagnose_incident(
             no_rag=True,
         )
         pipeline = build_pipeline(getattr(engine, "config", None) or AppConfig())
-        result = engine.run(pipeline, state)
+        # engine.run é síncrono (nodes com LLM): fora do event loop (4B-04).
+        result = await asyncio.to_thread(engine.run, pipeline, state)
 
         elapsed_ms = (time.monotonic() - start_time) * 1000
 

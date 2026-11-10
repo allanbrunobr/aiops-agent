@@ -99,3 +99,32 @@ mas o `load_index` não o recriava, e o retriever caía em `chunks[idx]`.
 
 **CI local:** ruff limpo. unit 842 passaram, integration 138 passaram, suíte
 completa 1533 passaram e 10 foram pulados. Status 0 nos três.
+
+## Item P2-3 — Engine síncrona travava o event loop (B6/4B-04)
+
+**Defeito.** A rota A2A (`_handle_diagnose`) chamava `engine.run`, que é
+síncrono e faz chamadas de LLM, direto dentro do handler `async`. Enquanto o
+pipeline rodava, o processo inteiro parava: `/health`, outras tasks e o MCP.
+Depois do P2-1, o `diagnose_incident` do MCP também chamava a engine, com o
+mesmo defeito.
+
+- **Medido:** com a engine "trabalhando" 0,4 s, uma corrotina vizinha
+  avançou **1 tick** de 20 ms. Com o loop livre, seriam cerca de 20.
+
+**Correção:** `await asyncio.to_thread(engine.run, pipeline, state)` em
+`interfaces/http/routes/a2a.py` e em `interfaces/mcp/tools.py`.
+
+**Testes:** `tests/test_engine_off_event_loop.py`, 2 testes marcados `unit`
+(A2A pela rota HTTP real e MCP pelo handler).
+
+- **Antes da correção:** os 2 falharam com 1 tick.
+- **Depois:** passam com folga. O limite do teste é 5 ticks ou mais.
+
+**CI local:** ruff limpo e os três jobs com status 0 (ver o commit).
+
+**Risco que continua (baixo):** a instância da `BlueprintEngine` é
+compartilhada pelo `app.state`, e o `run()` reatribui `self.results`. Com
+execuções concorrentes em threads, o log `pipeline.completed all_success`
+pode refletir outra execução. Nada em produção lê `engine.results` (conferido
+com grep). Isolar exigiria uma engine por requisição ou resultados locais ao
+`run()`.
