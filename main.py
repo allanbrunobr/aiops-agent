@@ -49,7 +49,7 @@ import sys
 import time
 import traceback
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from config.loader import AppConfig, load_config
@@ -1656,6 +1656,9 @@ def _attach_postmortem_to_tracker(tracker, issue_key: str, result) -> str | None
         return None
 
 
+DATABRICKS_LOOKBACK_MINUTES = 60
+
+
 def step_fetch_databricks_data(
     log_source, metrics_source, trace_source,
 ) -> tuple[SimulatedIncident, str]:
@@ -1679,11 +1682,13 @@ def step_fetch_databricks_data(
     console.print()
 
     now = datetime.now()
+    # Janela explícita: sem ela as métricas faziam None.isoformat() e voltavam vazias.
+    window_start = now - timedelta(minutes=DATABRICKS_LOOKBACK_MINUTES)
 
     # --- Logs ---
     logs: list[LogEntry] = []
     try:
-        raw_logs = log_source.search(query="*", service="", start=None, end=None)
+        raw_logs = log_source.search(query="*", service="", start=window_start, end=now)
         for d in raw_logs:
             ts = datetime.fromisoformat(d["timestamp"]) if d.get("timestamp") else now
             logs.append(LogEntry(
@@ -1699,7 +1704,7 @@ def step_fetch_databricks_data(
     # --- Metrics ---
     metrics: list[MetricPoint] = []
     try:
-        raw_metrics = metrics_source.query(promql="", start=None, end=None)
+        raw_metrics = metrics_source.query(promql="", start=window_start, end=now)
         for d in raw_metrics:
             ts = datetime.fromisoformat(d["timestamp"]) if d.get("timestamp") else now
             metrics.append(MetricPoint(
@@ -1715,7 +1720,9 @@ def step_fetch_databricks_data(
     # --- Traces ---
     traces: list[Span] = []
     try:
-        raw_traces = trace_source.find_traces(service="", min_duration_ms=0.0)
+        raw_traces = trace_source.find_traces(
+            service="", min_duration_ms=0.0, start=window_start, end=now,
+        )
         for d in raw_traces:
             traces.append(Span(
                 trace_id=d.get("trace_id", ""),
@@ -1731,6 +1738,18 @@ def step_fetch_databricks_data(
         console.print(f"  [green]Traces:[/green] {len(traces)} spans fetched")
     except Exception as exc:
         console.print(f"  [yellow]Traces:[/yellow] fetch failed ({exc}), using empty list")
+
+    if not (logs or metrics or traces):
+        # Fallback gracioso mantido, mas nunca silencioso: o pipeline vai rodar
+        # sobre nada e o diagnóstico não terá base.
+        console.print(
+            f"[bold red]Databricks returned no telemetry in the last "
+            f"{DATABRICKS_LOOKBACK_MINUTES} minutes (logs, metrics and traces are empty). "
+            f"The diagnosis below has no data behind it.[/bold red]"
+        )
+        _persist_log.warning(
+            "databricks.no_telemetry", lookback_minutes=DATABRICKS_LOOKBACK_MINUTES,
+        )
 
     incident = SimulatedIncident(
         logs=logs,

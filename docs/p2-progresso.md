@@ -128,3 +128,43 @@ execuções concorrentes em threads, o log `pipeline.completed all_success`
 pode refletir outra execução. Nada em produção lê `engine.results` (conferido
 com grep). Isolar exigiria uma engine por requisição ou resultados locais ao
 `run()`.
+
+## Item P2-4 — Modo databricks-live coletava zero dados sem avisar (B8/4B-05)
+
+**Defeito.** A etapa `main.step_fetch_databricks_data` chamava os conectores
+com valores que esvaziavam tudo, sem erro:
+
+- **Métricas:** `query(start=None, end=None)` fazia `None.isoformat()`, e a
+  exceção era engolida como "fetch failed".
+- **Logs:** `search(query="*")` virava `LIKE '%*%'`, um asterisco literal.
+- **Traces:** `find_traces(service="")` virava `WHERE service = ''`.
+
+**Correção:**
+
+- `tools/databricks_connector.py`:
+  - `"*"` ou vazio não vira filtro de texto;
+  - `service` vazio não vira filtro;
+  - `start`, `end` e `promql` são opcionais nas métricas;
+  - o `WHERE` só é montado quando há cláusulas. Sem isso, a consulta ficaria
+    com um `WHERE` vazio.
+- `main.py`:
+  - as três fontes recebem uma janela explícita de
+    `DATABRICKS_LOOKBACK_MINUTES = 60`;
+  - quando as três voltam vazias, aparece um aviso em vermelho no console e
+    um `databricks.no_telemetry` no log.
+
+**Decisão:** o "fallback gracioso", que devolve o incidente mesmo sem dados, é
+contrato deliberado, fixado em `tests/test_cli_data_source.py`. Foi mantido. O
+que mudou é que esse caso deixa de ser silencioso.
+
+**Testes:** `tests/test_databricks_live_queries.py`, 6 testes marcados `unit`.
+Host e token são fictícios e `_execute_query` é substituído, então nada sai
+para a rede.
+
+- **Antes da correção:** 5 falharam. O que passava é a guarda de que a
+  janela, quando informada, continua sendo aplicada.
+
+**CI local:** ruff limpo e os três jobs com status 0 (ver o commit).
+
+**Para o Allan:** os 60 minutos de janela são um padrão razoável, não uma
+medição do volume real das tabelas. Ajuste conforme o uso.
