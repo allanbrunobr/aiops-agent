@@ -35,6 +35,10 @@ class PipelineRunner:
         self._active_lock = asyncio.Lock()
         self._admit_lock = asyncio.Lock()
         self._worker_task: asyncio.Task[None] | None = None
+        # Referência forte às tasks de pipeline: sem ela o GC pode coletar uma
+        # task em execução, e stop() não tem o que aguardar (4B-10).
+        self._tasks: set[asyncio.Task[None]] = set()
+        self._closing = False
 
     async def start(self) -> None:
         """Inicia o worker de processamento da fila."""
@@ -48,8 +52,33 @@ class PipelineRunner:
             max_queued=self._max_queued,
         )
 
-    async def stop(self) -> None:
-        """Para o worker e aguarda pipelines em voo."""
+    async def stop(self, drain_timeout: float = 30.0) -> None:
+        """Fecha a admissão e drena pipelines em voo e enfileirados.
+
+        Alertas já aceitos (202) rodam até o fim, dentro de `drain_timeout`
+        segundos; o que sobrar é cancelado e registrado. Antes, stop()
+        cancelava só o worker ocioso e retornava, perdendo os aceitos.
+        """
+        self._closing = True
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + drain_timeout
+        while self._tasks:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                break
+            await asyncio.wait(set(self._tasks), timeout=remaining)
+        leftover = set(self._tasks)
+        for task in leftover:
+            task.cancel()
+        if leftover:
+            await asyncio.gather(*leftover, return_exceptions=True)
+        dropped_queued = self._queue.qsize()
+        if leftover or dropped_queued:
+            log.warning(
+                "pipeline_runner.drain_incomplete",
+                cancelled=len(leftover),
+                dropped_queued=dropped_queued,
+            )
         if self._worker_task is not None:
             self._worker_task.cancel()
             try:
@@ -57,6 +86,14 @@ class PipelineRunner:
             except asyncio.CancelledError:
                 pass
         log.info("pipeline_runner.stopped")
+
+    def _spawn(self, alert: NormalizedAlert) -> None:
+        task = asyncio.create_task(
+            self._run_pipeline(alert),
+            name=f"pipeline-{alert.correlation_id}",
+        )
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
 
     async def submit(self, alert: NormalizedAlert) -> bool:
         """Submete alerta para processamento.
@@ -73,12 +110,14 @@ class PipelineRunner:
         # O slot é um contador sob o lock. wait_for(acquire(), 0) cedia
         # o event loop e o worker esvaziava a fila antes do próximo submit.
         async with self._admit_lock:
+            if self._closing:
+                # Encerrando: recusa (o router responde 503 e o emissor reenvia).
+                log.warning("pipeline.rejected", correlation_id=alert.correlation_id,
+                            reason="shutting_down")
+                return False
             if self._slots_free > 0:
                 self._slots_free -= 1
-                asyncio.create_task(
-                    self._run_pipeline(alert),
-                    name=f"pipeline-{alert.correlation_id}",
-                )
+                self._spawn(alert)
                 return True
 
             try:
@@ -107,10 +146,7 @@ class PipelineRunner:
                 self._slots_free += 1
                 return
             self._queue.task_done()
-            asyncio.create_task(
-                self._run_pipeline(nxt),
-                name=f"pipeline-{nxt.correlation_id}",
-            )
+            self._spawn(nxt)
 
     async def _run_pipeline(self, alert: NormalizedAlert) -> None:
         """Executa pipeline de diagnostico para um alerta.

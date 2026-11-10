@@ -677,3 +677,36 @@ produção passam o modelo resolvido.
   `MagicMock`, e `float(MagicMock)` dá 1.0; a leitura foi tornada estrita.
 
 **CI local:** os três jobs com status 0 (ver o commit).
+
+## Item P2-17 — PipelineRunner drena os aceitos no shutdown (B14/4B-10)
+
+**Defeito.** O `stop()` cancelava só o worker ocioso e retornava. Pipelines em
+voo e alertas na fila, já respondidos com 202, se perdiam. As tasks eram
+criadas sem referência e podiam ser coletadas pelo GC no meio da execução.
+
+**Correção** (`interfaces/http/webhook/pipeline_runner.py`):
+
+- **Referência forte:** as tasks ficam no conjunto `_tasks` e saem dele ao
+  terminar.
+- **`stop(drain_timeout=30.0)`:**
+  - fecha a admissão: `submit` passa a devolver False, o router responde 503,
+    e o emissor reenvia;
+  - aguarda os pipelines em voo e os da fila até o tempo limite;
+  - cancela o que sobrar e registra `pipeline_runner.drain_incomplete`, com a
+    contagem de cancelados e de enfileirados descartados.
+
+**Testes:** `tests/test_pipeline_runner_shutdown.py`, 4 testes marcados
+`unit`.
+
+- **Antes da correção:** os 4 falharam. O `stop()` retornava com nada
+  processado, e o `submit` era aceito durante o encerramento.
+- **Cenários cobertos:**
+  - o pipeline em voo e o enfileirado terminam antes de `stop()` retornar;
+  - `submit` é recusado durante o encerramento;
+  - a task fica referenciada durante a execução;
+  - o tempo limite cancela o que sobra.
+
+**CI local:** os três jobs com status 0 (ver o commit).
+
+**Limite:** o pipeline do webhook continua stub. A drenagem garante que o
+`IncidentState` aceito seja gravado no store, não um diagnóstico.
