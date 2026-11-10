@@ -532,3 +532,37 @@ nenhum artefato ignorado: nada em `output/`, nenhum
 
 **CI local:** ruff limpo. unit 1414 passaram, integration 138 passaram, suíte
 completa 1592 passaram e 10 foram pulados. Status 0 nos três.
+
+## Item P2-13 — VersionValidator reconhece patch releases de linhas vulneráveis (F08)
+
+**Defeito.** As chaves de `KNOWN_VULNERABLE_VERSIONS` são **linhas** de
+release (`9.4`, `1.16`, `6.2`, `14`), mas a comparação era de igualdade exata.
+Por isso `postgres:9.4.26`, `nginx:1.16.1`, `redis:6.2.14`, `redis:5.0.7` e
+`node:14.21.3` passavam como SAFE.
+
+**Correção** (`safety/version_validator.py`):
+
+- A versão pertence a uma linha quando os componentes da chave são prefixo
+  dos componentes da versão.
+- A comparação é **por componente**, não por prefixo de string. Assim
+  `9.40.1` não é da linha `9.4`, e `1` não herda o CVE de `1.16`. Esse era o
+  defeito que o código antigo evitava ao usar igualdade.
+- Os CVEs de todas as linhas que casam são somados, sem duplicata.
+
+**Testes:** `tests/test_version_validator_lines.py`, 11 testes marcados
+`unit`.
+
+- **Antes da correção:** falharam exatamente os 5 patch releases.
+- **Guardas que já passavam e continuam passando:**
+  - a linha exata (`postgres:9.4`, `nginx:1.16`) segue bloqueada;
+  - outras linhas seguem livres: `postgres:9.40.1`, `nginx:1.24.0`,
+    `redis:7.2.4` e `postgres:16.2`.
+
+**CI local:** ruff limpo e os três jobs com status 0 (ver o commit).
+
+**Limite:** a base é estática e conservadora: trata a linha inteira como
+vulnerável. Correções feitas dentro de uma linha não são modeladas; por
+exemplo, `openssl 1.1.1t+` corrige o CVE-2023-0286 e ainda assim será
+bloqueado. Para uma ferramenta de segurança, o falso positivo vai para revisão
+humana, o que é preferível ao falso negativo. Uma base com faixas de versão
+corrigidas (OSV ou NVD) resolveria isso, mas exige rede.
