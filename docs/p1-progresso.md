@@ -25,7 +25,7 @@ O CI não tem lint nem formatação, então não há outro comando a rodar.
 | 4 | Template de CPU no mitigator | NOVO-01 | feito | ver `git log` |
 | 5 | Safety ligada no pipeline V1 (`proposed_action`) | ARQ-01, F04, SEC-04 | feito | ver `git log` |
 | 6 | OAuth: autenticação do cliente em `/auth/token/register` | SEC-01, SEC-11, 4B-07 | feito (aud/iss → P2) | ver `git log` |
-| 7 | Falhas silenciosas: log em vez de `except: pass`; `confidence` tipada; chamada morta a `step_predict` | F07, F5-02, ARQ-05, F5-01 | pendente | — |
+| 7 | Falhas silenciosas: log em vez de `except: pass`; `confidence` tipada; chamada morta a `step_predict` | F07, F5-02, ARQ-05, F5-01 | feito (ruff no CI → Allan) | ver `git log` |
 
 ## Item 1 — F01: laço do AgentOrchestrator
 
@@ -300,3 +300,107 @@ passaram e 10 foram pulados. Status 0 nos três.
 - **Emissão RS256:** hoje só HS256. O discovery ainda anuncia
   `id_token_signing_alg_values_supported: RS256` quando há par RSA; vale
   alinhar junto com a emissão RS256.
+
+## Item 7 — F07/F5-02, ARQ-05/F5-01: falhas silenciosas
+
+**Defeito.** Três defeitos funcionais ficavam invisíveis porque o erro era
+engolido por `except Exception: pass`:
+
+- a memória institucional nunca gravava, porque `float("medium")` levantava
+  `ValueError`;
+- o bloco "2c. Predictive Stage" chamava `step_predict` com a assinatura
+  errada. Além disso, criava `data/incident_memory.db` a cada execução;
+- a busca MCP devolvia texto sem redação de PII quando o sanitizer falhava
+  (a parte de PII de 4B-03/SEC-08).
+
+**Correção:**
+
+- **`domain/confidence.py`** (puro): `confidence_to_score` é a conversão
+  única de confiança, com a escala `high` 0,85 · `medium` 0,5 · `low` 0,25.
+  Substitui 6 pontos com 2 escalas diferentes: 3 no `main.py` (o do
+  `main_v1` mandava 0.0 ao Slack sempre que a confiança vinha em texto), 1
+  na persistência e 2 em `slack.py`.
+- **Escala no Slack:** `slack.py` usava 0,9/0,6/0,3. As cores do indicador
+  não mudam (limiares 0,8 e 0,5); muda só o percentual exibido quando a
+  confiança chega em texto.
+- **`main.py`:**
+  - `step_persist_incident` extrai o bloco 5d e registra a falha em log.
+  - A chamada morta a `step_predict` saiu. A predição real continua na
+    etapa 4d.
+  - Os blocos best-effort de precedentes e de evolução de skills passaram a
+    registrar a falha em log.
+- **Outros 7 `except Exception: pass` trocados por log:**
+  - fallback de auditoria em `telemetry_sanitizer`, `pre_validator`, `tnr` e
+    `version_validator`;
+  - histórico do `rag/indexer`;
+  - side-effects de falso positivo em `accuracy`;
+  - normalização em `mcp/tools`.
+- **Exceção, PII (`interfaces/mcp/tools.py::_sanitize_result`):** em vez de
+  logar e devolver o texto original, o campo vira
+  `"[redacted: sanitizer unavailable]"` (falha fechada).
+  **Efeito colateral:** como o `TelemetrySanitizer` real não tem
+  `sanitize_text` (4B-03, P2), a busca MCP passa a devolver os campos de
+  texto redigidos até esse item ser corrigido.
+- **Restam 7 handlers que só fazem `pass`, todos estreitos e legítimos:**
+  `ImportError` de dependência opcional (2), `asyncio.CancelledError` (4) e
+  `WebSocketDisconnect` (1).
+
+**Testes:** `tests/test_silent_failures.py`, 26 testes marcados `unit`.
+
+- **Portão determinístico:** um teste varre o código de produção por AST e
+  falha se aparecer um handler amplo com corpo só `pass`. Ele roda no job
+  unit do CI, sem depender de linter.
+- **Antes da correção:** 9 testes falharam.
+- **Ajuste no instrumento:** o teste da chamada morta falhava inicialmente
+  por `AttributeError` (a função `step_persist_incident` ainda não existia),
+  e não pelo defeito. Por isso validei o instrumento em duas etapas: com a
+  persistência já extraída e a chamada morta ainda presente, ele acusou
+  `['bad-signature', 'ok']`. Só depois removi a chamada.
+- **Cenários cobertos:**
+  - o portão AST;
+  - 15 conversões de confiança;
+  - persistência de `"medium"`, `"low"`, `"high"` e `0.7` num SQLite em
+    `tmp_path`;
+  - falha de gravação registrada em log;
+  - `step_predict` chamado só com a assinatura real;
+  - redação na busca MCP, tanto com sanitizer que levanta quanto sem o
+    método.
+
+**Medido na CLI real:** `python main.py --no-llm --no-rag`, rodado 2 vezes com
+o banco limpo, deixou **2 linhas** em `incidents` (confiança 0,5). Não refiz
+essa mesma medição antes da correção; o defeito anterior está demonstrado
+pelos testes.
+
+**CI local:** unit 782 passaram, integration 138 passaram, suíte completa 1473
+passaram e 10 foram pulados. Status 0 nos três.
+
+**Fica para o Allan:** colocar `ruff` (lint e format, com BLE001 e S110) como
+step do CI exige editar `.github/workflows/ci.yml`, que estava fora de alcance
+na análise. Não mexi. O portão AST acima já cobre o caso mais grave dentro da
+suíte de testes.
+
+---
+
+## Fechamento do P1
+
+Os sete itens estão feitos, cada um num commit local próprio, com testes e com
+os três jobs de pytest do CI rodados com status 0. Nada foi enviado ao remoto.
+
+**Pendências que dependem do Allan:**
+
+| Pendência | Por quê | Origem |
+|---|---|---|
+| Gerar e distribuir os segredos dos clientes OAuth e configurar os `secret_sha256` | Envolve credencial; até lá, nenhum cliente recebe token por `/auth/token/register`, de propósito | Item 6 |
+| Definir a URL de emissor e adotar `aud`/`iss` nos tokens | Decisão de implantação, com mudança coordenada nos validadores do A2A, do SSE e do introspect | Item 6 (P2) |
+| Adicionar `ruff` como step do CI | Exige editar `.github/` | Item 7 |
+| Ajustar o timeout de 60 s do cliente LLM com a latência real | Valor escolhido, não medido | Item 1 |
+| Push e PR destes commits | Fora do que foi autorizado nesta sessão | — |
+
+**Efeitos colaterais conscientes, para revisão:**
+
+- `pre_validator`: qualquer comando com `;`, `&`, `|`, `<`, `>` ou quebra de
+  linha passa a ser bloqueado, inclusive via MCP `validate_action` (item 2).
+- `main_v1` no cenário padrão com `--no-llm`: exit 3, igual ao V0 (item 5).
+- Busca MCP: campos de texto redigidos até o 4B-03 ser corrigido (item 7).
+- Slack: o percentual exibido para confiança em texto segue a escala única
+  (item 7).

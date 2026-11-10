@@ -18,6 +18,8 @@ Regra principal: NUNCA executar ações destrutivas sem aprovação humana.
 
 from __future__ import annotations
 
+import logging
+
 import re
 import time
 from dataclasses import dataclass, field
@@ -323,8 +325,10 @@ class PreExecutionValidator:
             try:
                 from safety.audit import SafetyAuditor
                 SafetyAuditor.log_error("pre_validator", correlation_id, exc)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 — auditoria nunca derruba a validação
+                logging.getLogger(__name__).warning(
+                    "audit log_error failed for layer %s", "pre_validator", exc_info=True,
+                )
 
         return result
 

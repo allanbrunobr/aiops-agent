@@ -66,6 +66,12 @@ from rag.indexer import ObservabilityIndexer
 from rag.retriever import ObservabilityRetriever
 from rag.retriever_history import ObservabilityRetrieverWithHistory
 from rag.memory import IncidentMemoryDB, IncidentRecord
+from core.logging import get_logger
+from domain.confidence import confidence_to_score
+
+# Falhas best-effort (persistência, precedentes, evolução de skills) vão para
+# este log em vez de sumirem num `except Exception: pass`.
+_persist_log = get_logger("main.persistence")
 from adapters.reporter import RichConsoleReporter
 from agents.detector import DetectionAgent
 from agents.diagnoser import DiagnosisAgent
@@ -387,8 +393,8 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
             console.print(f"\n  [bold cyan]Similar past incidents found:[/bold cyan]")
             for p in precedents:
                 console.print(f"    • {p['scenario']}: {p['root_cause']}")
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 — exibição best-effort, mas registrada
+        _persist_log.warning("rag.precedents_failed", error=repr(exc))
 
     console.print()
     return retriever
@@ -634,8 +640,8 @@ def step_agents(report, retriever, use_llm: bool = True,
                     console.print(
                         f"  [dim]Skill evolved: {_evolved.name} → v{_evolved.version}[/dim]"
                     )
-    except Exception:
-        pass  # write/evolve é best-effort; não bloqueia o pipeline
+    except Exception as exc:  # noqa: BLE001 — write/evolve é best-effort; não bloqueia o pipeline
+        _persist_log.warning("skills.write_evolve_failed", error=repr(exc))
     # ─────────────────────────────────────────────────────────────────────
 
     result["timeline"] = timeline
@@ -741,6 +747,42 @@ def _record_safety_decision(result, safety_result, remediation_result) -> bool:
         "blocked_by": blocked_by,
     }
     return requires_human
+
+
+def step_persist_incident(result, report, scenario_name: str, elapsed_sec: float,
+                          db: IncidentMemoryDB | None = None) -> bool:
+    """Etapa 5d: persiste o incidente na memória institucional (Story 7.3).
+
+    Best-effort: falha não derruba o pipeline, mas é registrada em log. Antes
+    o erro sumia num `except Exception: pass` — e todo save falhava, porque
+    float("medium") levanta ValueError (F07).
+
+    Returns:
+        True se gravou; False se não havia root_cause ou se a gravação falhou.
+    """
+    diagnosis = result.get("stages", {}).get("diagnosis", {})
+    root_cause = diagnosis.get("root_cause") or ""
+    if not root_cause:
+        return False
+    try:
+        detection = result.get("stages", {}).get("detection", {})
+        record = IncidentRecord.new(
+            scenario=scenario_name,
+            root_cause=root_cause,
+            affected_services=list(detection.get("affected_services", [])),
+            diagnosis_confidence=confidence_to_score(diagnosis.get("confidence")),
+            resolution_time_sec=elapsed_sec,
+            tags=_extract_fault_tags(report),
+            evidence_summary="; ".join(str(e) for e in diagnosis.get("evidence", [])[:5]),
+        )
+        (db if db is not None else IncidentMemoryDB()).save_incident(record)
+        return True
+    except Exception as exc:  # noqa: BLE001 — best-effort, mas registrado
+        _persist_log.warning(
+            "persistence.save_incident_failed",
+            scenario=scenario_name, error=repr(exc),
+        )
+        return False
 
 
 def step_remediation_validation(result):
@@ -1929,10 +1971,10 @@ def main_v1(args: argparse.Namespace) -> int:
         if state.safety_verdict == "NEEDS_REVIEW":
             exit_code = EXIT_APPROVAL_NEEDED
         diagnosis = state.diagnosis or {}
-        _conf_v1 = diagnosis.get("confidence", 0.0)
+        _conf_v1 = confidence_to_score(diagnosis.get("confidence"))
         _fire("pipeline.completed", cid=_cid, data={
             "root_cause": diagnosis.get("root_cause", ""),
-            "confidence": float(_conf_v1) if isinstance(_conf_v1, (int, float)) else 0.0,
+            "confidence": _conf_v1,
             "proposed_fix": diagnosis.get("proposed_fix") or diagnosis.get("fix_command", ""),
             "risk_level": state.safety_verdict or "unknown",
             "evidence": diagnosis.get("evidence", []),
@@ -2103,13 +2145,6 @@ def main() -> int:
         # 2b. Context Compression
         compressor, compressed_text, compression_stats = step_compression(report)
 
-        # 2c. Predictive Stage (no-op se não disponível)
-        try:
-            _mem_db = IncidentMemoryDB()
-            step_predict(report, memory_db=_mem_db)
-        except Exception:
-            pass
-
         # 3. RAG Indexing
         if not args.no_rag:
             retriever = step_rag(report, rebuild=args.rebuild_rag)
@@ -2147,10 +2182,7 @@ def main() -> int:
             or (getattr(_fix_action, "command", None) if _fix_action else None)
             or ""
         )
-        _conf_for_slack = _diag_for_slack.get("confidence") or 0.0
-        _CONF_MAP_SLACK = {"high": 0.85, "medium": 0.5, "low": 0.25}
-        if not isinstance(_conf_for_slack, (int, float)):
-            _conf_for_slack = _CONF_MAP_SLACK.get(str(_conf_for_slack).lower(), 0.0)
+        _conf_for_slack = confidence_to_score(_diag_for_slack.get("confidence"))
         _slack_fire("diagnosis.completed", cid=_pipeline_cid, data={
             "root_cause": _diag_for_slack.get("root_cause", ""),
             "proposed_fix": _proposed_fix_slack,
@@ -2207,29 +2239,7 @@ def main() -> int:
             _attach_postmortem_to_tracker(tracker, tracker_issue_key, result)
 
         # 5d. Persiste incidente na memória institucional (Story 7.3)
-        try:
-            diagnosis = result.get("stages", {}).get("diagnosis", {})
-            root_cause = diagnosis.get("root_cause") or ""
-            if root_cause:
-                detection = result.get("stages", {}).get("detection", {})
-                affected_services = list(detection.get("affected_services", []))
-                confidence = float(diagnosis.get("confidence") or 0.0)
-                elapsed_total_local = time.time() - t_total
-                tags = _extract_fault_tags(report)
-                evidence = "; ".join(str(e) for e in diagnosis.get("evidence", [])[:5])
-                record = IncidentRecord.new(
-                    scenario=scenario_name,
-                    root_cause=root_cause,
-                    affected_services=affected_services,
-                    diagnosis_confidence=confidence,
-                    resolution_time_sec=elapsed_total_local,
-                    tags=tags,
-                    evidence_summary=evidence,
-                )
-                db = IncidentMemoryDB()
-                db.save_incident(record)
-        except Exception:
-            pass
+        step_persist_incident(result, report, scenario_name, time.time() - t_total)
 
         # Summary
         print_summary(result, compression_stats, safety_result,
@@ -2240,12 +2250,7 @@ def main() -> int:
 
         # Envia mensagem final ao Slack
         _diag = result.get("stages", {}).get("diagnosis", {})
-        _conf_raw = _diag.get("confidence") or 0.0
-        _CONF_MAP = {"high": 0.85, "medium": 0.5, "low": 0.25}
-        if isinstance(_conf_raw, (int, float)):
-            _conf = float(_conf_raw)
-        else:
-            _conf = _CONF_MAP.get(str(_conf_raw).lower(), 0.0)
+        _conf = confidence_to_score(_diag.get("confidence"))
         _mitigation_action = result.get("stages", {}).get("mitigation", {}).get("action")
         _fix = (
             _diag.get("proposed_fix")

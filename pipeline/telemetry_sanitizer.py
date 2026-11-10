@@ -27,6 +27,8 @@ Ref: "When AIOps Become AI Oops: Subverting LLM-driven IT Operations
 
 from __future__ import annotations
 
+import logging
+
 import re
 import time
 from dataclasses import dataclass, field
@@ -394,8 +396,10 @@ class TelemetrySanitizer:
             try:
                 from safety.audit import SafetyAuditor
                 SafetyAuditor.log_error("sanitizer", correlation_id, exc)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 — auditoria nunca derruba a validação
+                logging.getLogger(__name__).warning(
+                    "audit log_error failed for layer %s", "sanitizer", exc_info=True,
+                )
 
         # Combina relatórios
         combined = SanitizationReport(

@@ -13,6 +13,8 @@ Garante que o agente NUNCA piore o sistema.
 
 from __future__ import annotations
 
+import logging
+
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -240,7 +242,9 @@ class TNRSafetyGuard:
             try:
                 from safety.audit import SafetyAuditor
                 SafetyAuditor.log_error("tnr", correlation_id, exc)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 — auditoria nunca derruba a validação
+                logging.getLogger(__name__).warning(
+                    "audit log_error failed for layer %s", "tnr", exc_info=True,
+                )
 
         return report

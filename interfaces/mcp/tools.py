@@ -186,6 +186,9 @@ def _format_search_result(result: object) -> dict:
     }
 
 
+REDACTED_UNSANITIZED = "[redacted: sanitizer unavailable]"
+
+
 def _sanitize_result(result: dict, sanitizer: object) -> dict:
     """Remove PII dos campos textuais do resultado."""
     text_fields = ["summary", "diagnosis", "resolution"]
@@ -193,8 +196,11 @@ def _sanitize_result(result: dict, sanitizer: object) -> dict:
         if field_name in result and result[field_name]:
             try:
                 result[field_name] = sanitizer.sanitize_text(result[field_name])
-            except Exception:
-                pass  # Sanitizer não disponível — mantém texto original
+            except Exception as exc:  # noqa: BLE001
+                # Falha fechado: sem redação confirmada, o texto não sai.
+                # Antes o original era devolvido sem remover PII.
+                log.warning("mcp.sanitize_failed", field=field_name, error=repr(exc))
+                result[field_name] = REDACTED_UNSANITIZED
     return result
 
 
@@ -770,8 +776,8 @@ def _normalize_alert(
             normalized = normalizer_registry.normalize(source, payload)
             if normalized is not None:
                 return normalized
-        except Exception:
-            pass  # Fallback para objeto simples
+        except Exception as exc:  # noqa: BLE001 — fallback para objeto simples
+            log.warning("mcp.normalize_failed", source=source, error=repr(exc))
 
     # Fallback: objeto NormalizedAlert com defaults para campos obrigatórios
     # Mapeia severidades MCP (critical/high/medium/low) para pipeline (critical/error/warning/info)

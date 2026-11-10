@@ -10,6 +10,7 @@ from slack_sdk.errors import SlackApiError
 
 from adapters.credentials import EnvCredentialProvider
 from core.lifecycle import LifecycleEvent
+from domain.confidence import confidence_to_score
 
 log = structlog.get_logger()
 
@@ -544,9 +545,7 @@ class SlackNotifier:
         evidence = data.get("evidence", [])
 
         # confidence pode ser float (0.0–1.0) ou string ("high"/"medium"/"low")
-        if isinstance(confidence, str):
-            _conf_map = {"high": 0.9, "medium": 0.6, "low": 0.3}
-            confidence = _conf_map.get(confidence.lower(), 0.5)
+        confidence = confidence_to_score(confidence, default=0.5)
         confidence_pct = int(confidence * 100)
         if confidence >= 0.8:
             conf_emoji = ":large_green_circle:"
@@ -602,9 +601,7 @@ class SlackNotifier:
         evidence_text = "\n".join(f"  - {e}" for e in evidence) if evidence else "  None"
 
         # Cor do indicador de confianca (confidence pode ser float ou string)
-        if isinstance(confidence, str):
-            _conf_map = {"high": 0.9, "medium": 0.6, "low": 0.3}
-            confidence = _conf_map.get(confidence.lower(), 0.5)
+        confidence = confidence_to_score(confidence, default=0.5)
         confidence_pct = int(confidence * 100)
         if confidence >= 0.8:
             conf_emoji = ":large_green_circle:"
