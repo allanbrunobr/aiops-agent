@@ -178,7 +178,7 @@ class TestJwksEndpoint:
         from config.loader import AppConfig
 
         config = AppConfig(
-            mcp={"enabled": False, "oauth": {"jwt_secret": "test-secret-abc123"}},
+            mcp={"enabled": False, "oauth": {"jwt_secret": "test-secret-abc123-padding-32bx!"}},
         )
         app = create_app(config=config)
         with TestClient(app) as client:
@@ -234,7 +234,7 @@ class TestDiscoveryWithJwksUri:
         from config.loader import AppConfig
 
         config = AppConfig(
-            mcp={"enabled": False, "oauth": {"jwt_secret": "no-rsa-secret"}},
+            mcp={"enabled": False, "oauth": {"jwt_secret": "no-rsa-secret-padding-to-32bytes"}},
         )
         app = create_app(config=config)
         with TestClient(app) as client:

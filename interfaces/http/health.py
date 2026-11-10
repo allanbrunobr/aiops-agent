@@ -68,11 +68,16 @@ async def readiness(request: Request) -> ReadinessResponse:
     """Readiness check — verifica componentes criticos."""
     components: list[ComponentStatus] = []
 
-    # Webhook subsystem
+    # Webhook só entra como saudável se o processo montou a rota.
+    # create_app não monta o webhook; dizer "accepting requests" era falso.
+    webhook_mounted = any(
+        "webhook" in (getattr(route, "path", "") or "")
+        for route in request.app.routes
+    )
     components.append(ComponentStatus(
         name="webhook",
-        healthy=True,
-        detail="accepting requests",
+        healthy=webhook_mounted,
+        detail="accepting requests" if webhook_mounted else "not mounted",
     ))
 
     # Verifica disponibilidade de componentes via app.state

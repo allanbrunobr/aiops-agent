@@ -1,6 +1,8 @@
 # AIOps Agent — Configuração padrão
-# Overrides via variáveis de ambiente: AIOPS__SECAO__CAMPO=valor
-# Ex: AIOPS__THRESHOLDS__SIGMA_THRESHOLD=4.0
+# Overrides via variáveis de ambiente: AIOPS_SECAO__CAMPO=valor
+# O prefixo do Pydantic é AIOPS_ (um underscore) e o delimitador aninhado é __.
+# Ex: AIOPS_THRESHOLDS__SIGMA_THRESHOLD=4.0
+# Ex: AIOPS_MCP__OAUTH__JWT_SECRET=... (32 bytes ou mais)
 
 # Thresholds de análise de anomalias
 thresholds:
@@ -23,9 +25,8 @@ blueprint:
 
 # Servidor webhook (stub — habilitado no épico 2)
 webhook:
-  host: "0.0.0.0"
+  host: "127.0.0.1"
   port: 47890
-  secret: ""
 
 # Notificações Slack (stub — habilitado no épico 3)
 slack:
@@ -43,7 +44,7 @@ mcp:
     - search_incidents
   auth_method: header               # "header" (X-Client-Id), "oauth21" (Bearer JWT) ou "none"
   oauth:
-    jwt_secret: ""                  # via env: AIOPS__MCP__OAUTH__JWT_SECRET
+    jwt_secret: ""                  # via env: AIOPS_MCP__OAUTH__JWT_SECRET (mínimo 32 bytes)
     token_ttl: 3600
     allowed_clients:
       - id: assistant-agent

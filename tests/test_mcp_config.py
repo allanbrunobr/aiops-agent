@@ -25,7 +25,7 @@ class TestMcpRateLimitsConfig:
         cfg = McpRateLimitsConfig()
         assert cfg.diagnose == 10
         assert cfg.search == 60
-        assert cfg.validate == 30
+        assert cfg.validate_limit == 30
 
     def test_custom_values(self):
         """Verifica que valores custom são aceitos."""
@@ -34,7 +34,7 @@ class TestMcpRateLimitsConfig:
         cfg = McpRateLimitsConfig(diagnose=20, search=100, validate=50)
         assert cfg.diagnose == 20
         assert cfg.search == 100
-        assert cfg.validate == 50
+        assert cfg.validate_limit == 50
 
     def test_frozen(self):
         """Verifica que modelo é imutável após criação."""
@@ -129,7 +129,7 @@ class TestAppConfigMcpSection:
         cfg = AppConfig()
         assert cfg.mcp.rate_limits.diagnose == 10
         assert cfg.mcp.rate_limits.search == 60
-        assert cfg.mcp.rate_limits.validate == 30
+        assert cfg.mcp.rate_limits.validate_limit == 30
 
     def test_env_var_override_transport(self, monkeypatch):
         """Verifica que AIOPS__MCP__TRANSPORT sobrescreve YAML."""

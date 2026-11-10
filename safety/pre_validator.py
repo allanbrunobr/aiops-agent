@@ -92,6 +92,11 @@ BLOCKED_COMMANDS = [
     r">\s*/etc/",             # sobrescrever config do sistema
     r"chmod\s+777\s+/",       # permissões perigosas
     r"kubectl\s+exec.*--\s*sh\s+-c\s*['\"].*rm", # exec + rm dentro do pod
+    r"\|\s*(sh|bash|zsh|ksh)\b",  # pipe para shell
+    r";\s*(sh|bash|zsh)\b",
+    r"&&\s*(sh|bash|zsh)\b",
+    r"`",                      # substituição de comando
+    r"\$\(",                   # substituição de comando
 ]
 
 # Padrões que indicam risco elevado
@@ -112,7 +117,9 @@ SAFE_PATTERNS = [
     r"kubectl\s+describe\s+", # Read-only: describe
     r"kubectl\s+logs\s+",     # Read-only: logs
     r"kubectl\s+top\s+",      # Read-only: metrics
-    r"curl\s+",               # Read-only: HTTP check
+    # curl só é leitura se não houver metacaractere de shell. O padrão
+    # antigo `curl\s+` aprovava `curl http://x | sh` como read-only.
+    r"curl\s+\S+$",
     r"ping\s+",               # Read-only: ping
     r"nslookup\s+",           # Read-only: DNS
     r"kubectl\s+rollout\s+status",  # Read-only: rollout status
@@ -234,8 +241,15 @@ class PreExecutionValidator:
         # Determine approval status
         is_safe = len(checks_failed) == 0
         requires_human = True  # Default: sempre requer
+        high_risk_command = "HIGH RISK" in cmd_msg
 
-        if is_safe and risk_level == RiskLevel.LOW and self.auto_approve_low_risk:
+        # Comando de risco alto não sai auto-aprovado mesmo com score baixo.
+        if (
+            is_safe
+            and risk_level == RiskLevel.LOW
+            and self.auto_approve_low_risk
+            and not high_risk_command
+        ):
             approval_status = ApprovalStatus.AUTO_APPROVED
             requires_human = False
         elif not is_safe and any("blocked" in f.lower() or "destructive" in f.lower() for f in checks_failed):
@@ -332,7 +346,9 @@ class PreExecutionValidator:
             if re.search(pattern, cmd_lower):
                 return True, "Rollout operation (reversible)"
 
-        return True, "No known dangerous patterns detected"
+        # Default fechado: kubectl apply, comando desconhecido e o resto
+        # não são AUTO_APPROVED. Quem for integrar execução trata is_safe=False.
+        return False, "Command is not on the read-only allow list"
 
     def _estimate_blast_radius(self, action, diagnosis: dict) -> BlastRadius:
         """Estima o raio de impacto da ação."""

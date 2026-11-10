@@ -83,20 +83,40 @@ async def receive_webhook(request: Request) -> WebhookResponse:
 
     # 1. Verificacao de tamanho via Content-Length header
     content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > max_payload:
-        bound_log.warning(
-            "webhook.rejected",
-            reason="payload_too_large",
-            content_length=content_length,
-            max_bytes=max_payload,
-        )
-        raise WebhookError(ProblemDetail(
-            type="urn:aiops:error:payload-too-large",
-            title="Payload Too Large",
-            status=413,
-            detail=f"Payload exceeds maximum size of {max_payload} bytes",
-            correlation_id=correlation_id,
-        ))
+    if content_length:
+        try:
+            declared_length = int(content_length)
+        except ValueError:
+            bound_log.warning("webhook.rejected", reason="invalid_content_length")
+            raise WebhookError(ProblemDetail(
+                type="urn:aiops:error:invalid-content-length",
+                title="Bad Request",
+                status=400,
+                detail="Content-Length must be an integer",
+                correlation_id=correlation_id,
+            ))
+        if declared_length < 0:
+            raise WebhookError(ProblemDetail(
+                type="urn:aiops:error:invalid-content-length",
+                title="Bad Request",
+                status=400,
+                detail="Content-Length must be zero or positive",
+                correlation_id=correlation_id,
+            ))
+        if declared_length > max_payload:
+            bound_log.warning(
+                "webhook.rejected",
+                reason="payload_too_large",
+                content_length=content_length,
+                max_bytes=max_payload,
+            )
+            raise WebhookError(ProblemDetail(
+                type="urn:aiops:error:payload-too-large",
+                title="Payload Too Large",
+                status=413,
+                detail=f"Payload exceeds maximum size of {max_payload} bytes",
+                correlation_id=correlation_id,
+            ))
 
     # 2. Parse JSON (le body uma vez e reutiliza)
     body = await request.body()
@@ -119,6 +139,16 @@ async def receive_webhook(request: Request) -> WebhookResponse:
             title="Unprocessable Entity",
             status=422,
             detail=f"Invalid JSON payload: {e}",
+            correlation_id=correlation_id,
+        ))
+
+    if not isinstance(payload, dict):
+        bound_log.warning("webhook.rejected", reason="json_not_object")
+        raise WebhookError(ProblemDetail(
+            type="urn:aiops:error:invalid-payload",
+            title="Bad Request",
+            status=400,
+            detail="JSON body must be an object",
             correlation_id=correlation_id,
         ))
 

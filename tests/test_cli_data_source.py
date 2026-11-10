@@ -88,7 +88,7 @@ class TestMutualExclusion:
         from main import _validate_args
         with pytest.raises(SystemExit) as exc_info:
             _validate_args(parser, args)
-        assert exc_info.value.code == 2
+        assert exc_info.value.code == 1
 
     @pytest.mark.unit
     def test_simulated_with_scenario_is_valid(self):

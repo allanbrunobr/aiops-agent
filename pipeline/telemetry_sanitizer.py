@@ -120,6 +120,7 @@ class SanitizationReport:
     tainted_entries: int = 0
     adversarial_entries: int = 0
     fields_sanitized: int = 0
+    pii_redactions: int = 0
     adversarial_payloads_blocked: list[str] = field(default_factory=list)
 
     @property
@@ -356,9 +357,9 @@ class TelemetrySanitizer:
                 + trace_report.adversarial_entries
             )
             pii_count = (
-                log_report.tainted_entries
-                + metric_report.tainted_entries
-                + trace_report.tainted_entries
+                log_report.pii_redactions
+                + metric_report.pii_redactions
+                + trace_report.pii_redactions
             )
             duration_ms = int((time.monotonic() - start) * 1000)
 
@@ -428,6 +429,11 @@ class TelemetrySanitizer:
                 metric_report.fields_sanitized +
                 trace_report.fields_sanitized
             ),
+            pii_redactions=(
+                log_report.pii_redactions +
+                metric_report.pii_redactions +
+                trace_report.pii_redactions
+            ),
             adversarial_payloads_blocked=(
                 log_report.adversarial_payloads_blocked +
                 metric_report.adversarial_payloads_blocked +
@@ -463,27 +469,28 @@ class TelemetrySanitizer:
                 fields_sanitized=fields_sanitized,
             )
 
-        # Phase 2: Abstrai campos user-generated (modo strict)
+        # Email, IP e URL saem em qualquer modo. A CLI constrói o sanitizador
+        # com strict_mode=False; sem isto o caminho padrão devolvia o texto cru.
+        sanitized = self._redact_pii(message)
+        if sanitized != message:
+            detections.append("PII redacted")
+            fields_sanitized += 1
+            self.report.pii_redactions += 1
+
+        # Modo estrito ainda abstrai o restante do campo user-generated.
         if self.strict_mode and taint in (TaintLevel.TAINTED, TaintLevel.SUSPICIOUS):
-            sanitized = self._abstract_tainted_fields(message)
-            if sanitized != message:
+            abstracted = self._abstract_tainted_fields(sanitized)
+            if abstracted != sanitized:
                 detections.append("User-generated content abstracted")
                 fields_sanitized += 1
-            return SanitizationResult(
-                original=message,
-                sanitized=sanitized,
-                taint_level=taint,
-                detections=detections,
-                fields_sanitized=fields_sanitized,
-            )
+            sanitized = abstracted
 
-        # Phase 3: Modo normal — mantém conteúdo mas marca como suspicious
         return SanitizationResult(
             original=message,
-            sanitized=message,
+            sanitized=sanitized,
             taint_level=taint,
             detections=detections,
-            fields_sanitized=0,
+            fields_sanitized=fields_sanitized,
         )
 
     def _detect_taint(self, text: str) -> TaintLevel:
@@ -532,18 +539,33 @@ class TelemetrySanitizer:
         for i, pattern in enumerate(self._adversarial_patterns):
             match = pattern.search(message)
             if match:
-                # Substitui a parte adversarial por abstração
+                # Não preserva o prefixo: `rm -rf /tmp #` ficava antes do
+                # trecho que casou com a denylist e saía intacto.
                 payload_label = self._abstract_value(match.group(), "payload")
-                # Preserva prefixo estrutural (timestamp, level, etc.)
-                prefix = message[:match.start()].strip()
-                suffix = message[match.end():].strip()
-
-                if prefix:
-                    return f"{prefix} {payload_label}"
                 return f"[sanitized error event] {payload_label}"
 
         # Fallback: abstrai a mensagem inteira
         return f"[sanitized] {self._abstract_value(message, 'message')}"
+
+    def _redact_pii(self, message: str) -> str:
+        """Substitui email, IP e URL por rótulos estáveis."""
+        result = message
+        result = re.sub(
+            r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b",
+            lambda m: self._abstract_value(m.group(), "ip"),
+            result,
+        )
+        result = re.sub(
+            r"https?://[^\s]+",
+            lambda m: self._abstract_value(m.group(), "url"),
+            result,
+        )
+        result = re.sub(
+            r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
+            lambda m: self._abstract_value(m.group(), "email"),
+            result,
+        )
+        return result
 
     def _abstract_tainted_fields(self, message: str) -> str:
         """

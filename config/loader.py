@@ -77,6 +77,7 @@ class WebhookConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     enabled: bool = False
+    host: str = "127.0.0.1"
     port: int = 47890
 
 
@@ -183,11 +184,13 @@ _KNOWN_TOOLS = {"diagnose_incident", "validate_action", "search_incidents"}
 class McpRateLimitsConfig(BaseModel):
     """Limites de taxa por ferramenta MCP (req/min)."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     diagnose: int = 10
     search: int = 60
-    validate: int = 30
+    # O nome Python não pode ser validate: isso sombreia BaseModel.validate.
+    # O YAML continua usando a chave validate.
+    validate_limit: int = Field(default=30, alias="validate")
 
 
 class McpConfig(BaseModel):

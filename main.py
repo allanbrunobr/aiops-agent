@@ -315,49 +315,6 @@ def step_compression(report):
     return compressor, compressed_text, stats
 
 
-def _extract_fault_tags(report) -> list[str]:
-    """Extrai tags de falha heurísticas a partir do report agregado.
-
-    Analisa templates de log e anomalias de métricas para inferir tags
-    como 'connection-pool', 'config-change', 'error-spike', etc.
-
-    Args:
-        report: AggregatedReport com dados pré-processados.
-
-    Returns:
-        Lista de tags de falha únicas (strings kebab-case).
-    """
-    tags: set[str] = set()
-
-    for tpl in report.log_templates:
-        template_lower = str(tpl.template).lower()
-        if "connection" in template_lower and ("pool" in template_lower or "timeout" in template_lower):
-            tags.add("connection-pool")
-        if "config" in template_lower or "configuration" in template_lower:
-            tags.add("config-change")
-        if tpl.level in ("ERROR", "FATAL") and tpl.count > 100:
-            tags.add("error-spike")
-        if "memory" in template_lower or "oom" in template_lower or "heap" in template_lower:
-            tags.add("memory-leak")
-        if "timeout" in template_lower:
-            tags.add("timeout")
-        if "deploy" in template_lower or "rollout" in template_lower:
-            tags.add("deployment")
-
-    for anomaly in report.metric_anomalies:
-        metric_lower = str(anomaly.metric_name).lower()
-        if "connection" in metric_lower or "pool" in metric_lower:
-            tags.add("connection-pool")
-        if "memory" in metric_lower or "heap" in metric_lower:
-            tags.add("memory-leak")
-        if "error" in metric_lower or "failure" in metric_lower:
-            tags.add("error-spike")
-        if anomaly.deviation_sigma > 10:
-            tags.add("high-sigma-anomaly")
-
-    return sorted(tags)
-
-
 def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False):
     """Etapa 3: Indexacao RAG com FAISS.
 
@@ -614,7 +571,11 @@ def step_agents(report, retriever, use_llm: bool = True,
         _transition("VERIFYING", "ROLLBACK", f"Regressão detectada: {_tnr_msg}")
         result["stages"]["rollback"] = {"message": "Rollback executado, retornando ao diagnostico"}
     else:
-        _transition("VERIFYING", "RESOLVED", f"Incidente resolvido: {_tnr_msg}")
+        _transition(
+            "VERIFYING",
+            "RESOLVED",
+            f"TNR check passed; human approval still pending: {_tnr_msg}",
+        )
         result["success"] = True
 
     # ── Skill Evolution: REFLECT + WRITE ─────────────────────────────────
@@ -1232,7 +1193,13 @@ def print_summary(result, compression_stats=None, safety_result=None,
     console.print()
 
     success = result.get("success", False)
-    status_icon = "[bold green]RESOLVED[/bold green]" if success else "[bold red]UNRESOLVED[/bold red]"
+    awaiting_human = bool(safety_result is not None and safety_result.requires_human)
+    if awaiting_human:
+        status_icon = "[bold yellow]AWAITING HUMAN[/bold yellow]"
+    elif success:
+        status_icon = "[bold green]RESOLVED[/bold green]"
+    else:
+        status_icon = "[bold red]UNRESOLVED[/bold red]"
 
     table = Table(title="Incident Response Summary", border_style="cyan")
     table.add_column("Stage", style="bold")
@@ -1371,16 +1338,24 @@ def print_summary(result, compression_stats=None, safety_result=None,
         console.print(f"    {t['time']} {icon} {t['from']} -> [bold]{t['to']}[/bold]: {t['reason'][:60]}")
 
 
+class _CliParser(argparse.ArgumentParser):
+    """Erros de argumento saem com código 1. O código 2 fica para regressão do TNR."""
+
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        self.exit(EXIT_ERROR, f"{self.prog}: error: {message}\n")
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     """Cria o parser de argumentos CLI.
 
     Separado de main() para permitir testes sem executar o pipeline.
     """
-    parser = argparse.ArgumentParser(
+    parser = _CliParser(
         description="AIOps Agent - Agentic Incident Response Demo",
         epilog="""Exit codes:
-  0  Pipeline resolved successfully (TNR verified)
-  1  Unrecoverable error (exception in any stage)
+  0  Pipeline resolved successfully (TNR verified, no human gate left)
+  1  Invalid arguments, or an unrecoverable error in a stage
   2  TNR regression detected (post-health worse than pre-health)
   3  Safety blocked action (human approval required)""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1948,8 +1923,9 @@ def main_v1(args: argparse.Namespace) -> int:
 def get_pipeline(args: argparse.Namespace):
     """Factory: retorna a implementação de PipelineProtocol selecionada.
 
-    Seleciona V1 (Blueprint Engine) se --pipeline-v1 ou data_source=databricks.
-    Retorna V0 (step_* sequential pipeline) por padrão.
+    Seleciona V1 (Blueprint Engine) somente com --pipeline-v1.
+    --data-source databricks não troca o motor. O padrão é o pipeline
+    sequencial de main(), não esta função.
 
     Args:
         args: Namespace com flags de execução.
@@ -1972,9 +1948,9 @@ def _run_v0(args: argparse.Namespace) -> int:
     --pipeline-v1 não está ativo. Esta função é o wrapper que satisfaz
     PipelineProtocol para composição programática fora de main().
     """
-    # Para uso programático (testes/composição), retorna EXIT_SUCCESS.
-    # Para execução via CLI, main() executa V0 inline após get_pipeline().
-    return EXIT_SUCCESS
+    # main() executa o V0 inline. Este wrapper não roda o pipeline.
+    # Devolver sucesso aqui fazia um chamador achar que o incidente foi tratado.
+    return EXIT_ERROR
 
 
 def main() -> int:

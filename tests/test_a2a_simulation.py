@@ -76,11 +76,22 @@ def _make_a2a_app(*, with_engine: bool = True, with_retriever: bool = True) -> F
     app = FastAPI()
 
     app.include_router(a2a_router)
+    app.state.a2a_jwt_secret = _JWT_SECRET
     if with_engine:
         app.state.engine = _MockEngine()
     if with_retriever:
         app.state.retriever = _MockRetriever()
     return app
+
+
+def _bearer(scopes: list[str] | None = None) -> dict[str, str]:
+    """Bearer HS256 de teste, com os scopes que a rota agora exige."""
+    token = issue_token(
+        "assistant-agent",
+        scopes or ["aiops:diagnose", "aiops:search", "aiops:validate"],
+        _JWT_SECRET,
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _make_auth_a2a_app() -> FastAPI:
@@ -100,6 +111,7 @@ def _make_auth_a2a_app() -> FastAPI:
     )
     app.include_router(auth_server.router)
     app.include_router(a2a_router)
+    app.state.a2a_jwt_secret = _JWT_SECRET
     app.state.engine = _MockEngine()
     app.state.retriever = _MockRetriever()
     return app
@@ -189,7 +201,7 @@ class TestA2ATaskDispatch:
         self._client = TestClient(_make_a2a_app())
 
     def _send_task(self, skill_id: str, data: dict, task_id: str = "task-001") -> dict:
-        return self._client.post("/a2a/tasks", json={
+        return self._client.post("/a2a/tasks", headers=_bearer(), json={
             "jsonrpc": "2.0",
             "method": "tasks/send",
             "id": "rpc-1",
@@ -257,10 +269,12 @@ class TestA2ATaskDispatch:
         assert "nonexistent_skill" in body["error"]["message"]
 
     def test_invalid_json_body_returns_400(self):
+        headers = _bearer()
+        headers["content-type"] = "application/json"
         resp = self._client.post(
             "/a2a/tasks",
             content=b"not-valid-json",
-            headers={"content-type": "application/json"},
+            headers=headers,
         )
         assert resp.status_code == 400
 
@@ -268,7 +282,7 @@ class TestA2ATaskDispatch:
         """Sem engine no app.state, retorna artifact de erro (graceful degradation)."""
         app = _make_a2a_app(with_engine=False)
         client = TestClient(app)
-        resp = client.post("/a2a/tasks", json={
+        resp = client.post("/a2a/tasks", headers=_bearer(), json={
             "jsonrpc": "2.0",
             "method": "tasks/send",
             "id": "1",
@@ -278,15 +292,16 @@ class TestA2ATaskDispatch:
                 "message": {"role": "user", "parts": [{"type": "data", "data": {}}]},
             },
         })
-        artifacts = resp.json()["result"]["artifacts"]
-        assert artifacts[0]["name"] == "error"
-        assert "engine_unavailable" in artifacts[0]["parts"][0]["data"]["error"]
+        body = resp.json()
+        assert body["error"]["code"] == -32603
+        assert body["error"]["data"]["error"] == "engine_unavailable"
+        assert "result" not in body
 
     def test_missing_retriever_returns_error_artifact(self):
         """Sem retriever no app.state, retorna artifact de erro (graceful degradation)."""
         app = _make_a2a_app(with_retriever=False)
         client = TestClient(app)
-        resp = client.post("/a2a/tasks", json={
+        resp = client.post("/a2a/tasks", headers=_bearer(), json={
             "jsonrpc": "2.0",
             "method": "tasks/send",
             "id": "1",
@@ -296,9 +311,10 @@ class TestA2ATaskDispatch:
                 "message": {"role": "user", "parts": [{"type": "data", "data": {"query": "test"}}]},
             },
         })
-        artifacts = resp.json()["result"]["artifacts"]
-        assert artifacts[0]["name"] == "error"
-        assert "retriever_unavailable" in artifacts[0]["parts"][0]["data"]["error"]
+        body = resp.json()
+        assert body["error"]["code"] == -32603
+        assert body["error"]["data"]["error"] == "retriever_unavailable"
+        assert "result" not in body
 
 
 # ---------------------------------------------------------------------------
@@ -324,7 +340,7 @@ class TestA2AClientEndToEnd:
 
     @pytest.mark.asyncio
     async def test_send_task_diagnose_returns_completed(self):
-        client = A2AClient()
+        client = A2AClient(token=issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET))
         result = await client.send_task(
             agent_url=_BASE_URL,
             skill_id="diagnose_incident",
@@ -334,7 +350,7 @@ class TestA2AClientEndToEnd:
 
     @pytest.mark.asyncio
     async def test_send_task_search_returns_results(self):
-        client = A2AClient()
+        client = A2AClient(token=issue_token("assistant-agent", ["aiops:search"], _JWT_SECRET))
         result = await client.send_task(
             agent_url=_BASE_URL,
             skill_id="search_incidents",
@@ -346,7 +362,7 @@ class TestA2AClientEndToEnd:
 
     @pytest.mark.asyncio
     async def test_send_task_unknown_skill_raises(self):
-        client = A2AClient()
+        client = A2AClient(token=issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET))
         with pytest.raises(ValueError, match="A2A error -32601"):
             await client.send_task(
                 agent_url=_BASE_URL,
@@ -356,7 +372,7 @@ class TestA2AClientEndToEnd:
 
     @pytest.mark.asyncio
     async def test_task_id_passed_explicitly(self):
-        client = A2AClient()
+        client = A2AClient(token=issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET))
         result = await client.send_task(
             agent_url=_BASE_URL,
             skill_id="diagnose_incident",
@@ -370,13 +386,13 @@ class TestA2AClientEndToEnd:
         """Verifica que A2AClient injeta Authorization: Bearer no header."""
         token = issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET)
         client = A2AClient(token=token)
-        # Se o token chegar ao servidor, a chamada ainda retorna 200
-        result = await client.send_task(
-            agent_url=_BASE_URL,
-            skill_id="search_incidents",
-            data={"query": "test"},
-        )
-        assert result["status"]["state"] == "completed"
+        # O header chega: search exige aiops:search e este token não tem.
+        with pytest.raises(ValueError, match="A2A error -32003"):
+            await client.send_task(
+                agent_url=_BASE_URL,
+                skill_id="search_incidents",
+                data={"query": "test"},
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -406,6 +422,7 @@ class TestA2AFullSimulation:
         resp = self._http.post("/auth/token/register", json={
             "client_id": client_id,
             "scopes": scopes,
+            "code_verifier": verifier,
             "code_challenge": challenge,
         })
         assert resp.status_code == 200, f"OAuth falhou: {resp.json()}"
@@ -557,7 +574,7 @@ class TestA2AArtifactContent:
         self._client = TestClient(_make_a2a_app())
 
     def _diagnose(self, data: dict) -> list[dict]:
-        resp = self._client.post("/a2a/tasks", json={
+        resp = self._client.post("/a2a/tasks", headers=_bearer(), json={
             "jsonrpc": "2.0", "method": "tasks/send", "id": "1",
             "params": {
                 "id": "art-test",
@@ -580,7 +597,7 @@ class TestA2AArtifactContent:
         assert "action" in content
 
     def test_search_artifact_has_score_field(self):
-        resp = self._client.post("/a2a/tasks", json={
+        resp = self._client.post("/a2a/tasks", headers=_bearer(), json={
             "jsonrpc": "2.0", "method": "tasks/send", "id": "1",
             "params": {
                 "id": "search-art",

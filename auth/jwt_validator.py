@@ -10,6 +10,21 @@ from dataclasses import dataclass, field
 
 import jwt
 
+# RFC 7518 section 3.2: HMAC-SHA-256 key must be at least 256 bits.
+MIN_HMAC_KEY_BYTES = 32
+
+
+def _reject_short_hmac_key(secret: str, algorithm: str) -> None:
+    """Refuse to sign or check an HMAC JWT with a key shorter than 32 bytes."""
+    if not algorithm.upper().startswith("HS"):
+        return
+    key = secret.encode("utf-8")
+    if len(key) < MIN_HMAC_KEY_BYTES:
+        raise jwt.InvalidKeyError(
+            "HMAC key must be at least 32 bytes (RFC 7518). "
+            "An empty key is rejected by PyJWT and is not treated as accept-all."
+        )
+
 
 @dataclass(frozen=True)
 class TokenClaims:
@@ -38,7 +53,11 @@ def issue_token(
 
     Returns:
         JWT string compacto.
+
+    Raises:
+        jwt.InvalidKeyError: HMAC key missing or shorter than 32 bytes.
     """
+    _reject_short_hmac_key(secret, algorithm)
     payload = {
         "sub": agent_id,
         "scope": " ".join(scopes),
@@ -66,7 +85,9 @@ def validate_token(
     Raises:
         jwt.ExpiredSignatureError: Token expirado.
         jwt.InvalidTokenError: Token inválido (assinatura, formato, etc.).
+        jwt.InvalidKeyError: HMAC key missing or shorter than 32 bytes.
     """
+    _reject_short_hmac_key(secret, algorithm)
     payload = jwt.decode(token, secret, algorithms=[algorithm])
     raw_scope = payload.get("scope", "")
     scopes = raw_scope.split() if raw_scope else []

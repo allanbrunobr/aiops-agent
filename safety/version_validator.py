@@ -439,14 +439,10 @@ class VersionValidator:
 
         pkg_versions = self.vulnerable_versions[normalized_pkg]
 
-        # Match exato
+        # Igualdade da versão inteira. Prefixo fazia "1" herdar o CVE de "1.16"
+        # e "openssl 1" herdar CVE-2022-3602 da linha "1.0".
         if version in pkg_versions:
             return pkg_versions[version]
-
-        # Match por major version (ex: "9" matches "9.4", "9.5", etc.)
-        for known_version, cves in pkg_versions.items():
-            if known_version.startswith(version) or version.startswith(known_version):
-                return cves
 
         return []
 

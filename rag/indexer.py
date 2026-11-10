@@ -55,7 +55,16 @@ class ObservabilityIndexer:
                     device = "cuda"
                 else:
                     device = "cpu"
-                self.model = SentenceTransformer(self.model_name, device=device)
+                import os
+                offline = (
+                    os.environ.get("HF_HUB_OFFLINE") == "1"
+                    or os.environ.get("TRANSFORMERS_OFFLINE") == "1"
+                )
+                self.model = SentenceTransformer(
+                    self.model_name,
+                    device=device,
+                    local_files_only=offline,
+                )
                 _model_cache[self.model_name] = self.model
 
     def build_index(self, log_templates: list, metric_anomalies: list, slow_traces: list):

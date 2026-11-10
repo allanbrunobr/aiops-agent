@@ -74,7 +74,18 @@ async def handle_search_incidents(
             }
         )
 
-    top_k = min(int(arguments.get("top_k", 5)), 20)
+    raw_top_k = arguments.get("top_k", 5)
+    try:
+        top_k = int(raw_top_k)
+    except (TypeError, ValueError):
+        return json.dumps(
+            {
+                "type": "validation_error",
+                "title": "Invalid top_k",
+                "detail": "top_k must be an integer.",
+            }
+        )
+    top_k = min(top_k, 20)
     top_k = max(top_k, 1)
     service_filter = arguments.get("service")
     tags_filter = arguments.get("tags", [])

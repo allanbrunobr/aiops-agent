@@ -66,7 +66,7 @@ class TestPKCE:
 # JWT
 # ---------------------------------------------------------------------------
 
-SECRET = "test-secret-aiops"
+SECRET = "test-secret-aiops-32b-minimum-key!"
 
 
 class TestJWT:
@@ -84,8 +84,15 @@ class TestJWT:
 
     def test_wrong_secret_raises(self):
         token = issue_token("agent", ["aiops:search"], SECRET)
+        # 32 bytes: a short key is rejected before the signature check.
+        wrong = "wrong-secret-but-long-enough-32b!"
+        assert len(wrong.encode("utf-8")) >= 32
         with pytest.raises(pyjwt.InvalidTokenError):
-            validate_token(token, "wrong-secret")
+            validate_token(token, wrong)
+
+    def test_short_hmac_key_is_rejected(self):
+        with pytest.raises(pyjwt.InvalidKeyError):
+            issue_token("agent", ["aiops:search"], "short-secret")
 
     def test_empty_scopes(self):
         token = issue_token("agent", [], SECRET)
@@ -165,6 +172,7 @@ class TestAuthServer:
         resp = self._client.post("/auth/token/register", json={
             "client_id": "assistant-agent",
             "scopes": ["aiops:diagnose"],
+            "code_verifier": verifier,
             "code_challenge": challenge,
         })
         assert resp.status_code == 200

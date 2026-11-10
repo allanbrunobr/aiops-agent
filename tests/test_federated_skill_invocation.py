@@ -162,11 +162,15 @@ def _mock_idp_client(discovery: dict, jwks: dict) -> MagicMock:
     return mock_client
 
 
+_A2A_SECRET = "federated-a2a-hmac-key-32bytes!!"
+
+
 def _make_a2a_app() -> FastAPI:
     """App FastAPI com A2A router e infra mockada."""
     app = FastAPI()
 
     app.include_router(a2a_router)
+    app.state.a2a_jwt_secret = _A2A_SECRET
     app.state.engine = _MockEngine()
     app.state.retriever = _MockRetriever()
     return app
@@ -174,7 +178,13 @@ def _make_a2a_app() -> FastAPI:
 
 def _send_task(client: TestClient, skill_id: str, data: dict, task_id: str = "task-001") -> dict:
     """Envia tarefa A2A via POST /a2a/tasks e retorna a resposta JSON."""
-    resp = client.post("/a2a/tasks", json={
+    from auth.jwt_validator import issue_token
+    token = issue_token(
+        "assistant-agent",
+        ["aiops:diagnose", "aiops:search", "aiops:validate"],
+        _A2A_SECRET,
+    )
+    resp = client.post("/a2a/tasks", headers={"Authorization": f"Bearer {token}"}, json={
         "jsonrpc": "2.0",
         "method": "tasks/send",
         "id": "rpc-1",

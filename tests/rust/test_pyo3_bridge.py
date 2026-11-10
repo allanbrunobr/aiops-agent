@@ -13,6 +13,8 @@ import datetime
 
 import pytest
 
+pytest.importorskip("_aiops_rust")
+
 
 # ── Fixture ───────────────────────────────────────────────────────────────────
 

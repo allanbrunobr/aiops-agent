@@ -11,15 +11,27 @@ Baseado em: A2A Protocol v0.3 + IETF draft-klrc-aiagent-auth-00.
 """
 from __future__ import annotations
 
+import json
 import uuid
 from typing import Any
 
+import jwt as pyjwt
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
+
+from auth.jwt_validator import MIN_HMAC_KEY_BYTES, validate_token
 
 log = structlog.get_logger()
 
 router = APIRouter(prefix="/a2a", tags=["a2a"])
+
+# Same ceiling as the webhook receiver.
+_MAX_BODY_BYTES = 1_048_576
+
+_SKILL_SCOPES = {
+    "diagnose_incident": "aiops:diagnose",
+    "search_incidents": "aiops:search",
+}
 
 # Agent Card estático — descrevendo as skills do AIOps Agent
 AGENT_CARD: dict[str, Any] = {
@@ -70,45 +82,115 @@ async def agent_card() -> dict:
     return AGENT_CARD
 
 
+def _configured_hmac_secret(request: Request) -> str:
+    """Secret HS256 usado pelo mesmo validador do MCP OAuth.
+
+    A fonte é app.state.a2a_jwt_secret, que create_app copia de
+    mcp.oauth.jwt_secret. Sem chave de 32 bytes a rota não aceita ninguem.
+    """
+    secret = getattr(request.app.state, "a2a_jwt_secret", "") or ""
+    if len(secret.encode("utf-8")) < MIN_HMAC_KEY_BYTES:
+        return ""
+    return secret
+
+
+def _require_bearer(request: Request) -> Any:
+    """Valida Authorization: Bearer com o mesmo HS256 do MCP."""
+    secret = _configured_hmac_secret(request)
+    if not secret:
+        raise HTTPException(
+            status_code=401,
+            detail="A2A authentication is not configured",
+        )
+    header = request.headers.get("authorization", "")
+    if not header.startswith("Bearer ") or not header[7:].strip():
+        raise HTTPException(status_code=401, detail="Bearer token required")
+    try:
+        return validate_token(header[7:].strip(), secret)
+    except pyjwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="JWT has expired")
+    except pyjwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="JWT is invalid")
+
+
 @router.post("/tasks")
 async def handle_task(request: Request) -> dict:
     """Recebe e processa tasks A2A no formato JSON-RPC 2.0.
 
-    Suporta skills:
-      - diagnose_incident: roda o pipeline BlueprintEngine
-      - search_incidents: busca RAG sobre histórico
-
-    O estado A2A retornado sempre é "completed" (execução síncrona).
-    Para execução assíncrona com streaming, conectar via SSE.
+    Exige Bearer HS256. Falha de skill volta erro JSON-RPC, não
+    status.state=completed.
     """
+    claims = _require_bearer(request)
+
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            declared = int(content_length)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length")
+        if declared < 0:
+            raise HTTPException(status_code=400, detail="Invalid Content-Length")
+        if declared > _MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="Payload too large")
+
+    raw = await request.body()
+    if len(raw) > _MAX_BODY_BYTES:
+        raise HTTPException(status_code=413, detail="Payload too large")
+
     try:
-        body = await request.json()
-    except Exception:
+        body = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError):
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
-    # Extrai campos JSON-RPC 2.0
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=400, detail="JSON body must be an object")
+
     rpc_id = body.get("id", "1")
     params = body.get("params", {})
+    if not isinstance(params, dict):
+        params = {}
     task_id = params.get("id", str(uuid.uuid4()))
     skill = params.get("skill", {})
     skill_id = skill.get("id") if isinstance(skill, dict) else None
     message = params.get("message", {})
     parts = message.get("parts", []) if isinstance(message, dict) else []
     data = parts[0].get("data", {}) if parts and isinstance(parts[0], dict) else {}
+    if not isinstance(data, dict):
+        data = {}
 
     log.info("a2a.task.received", task_id=task_id, skill_id=skill_id)
 
-    # Despacha para o handler da skill
-    if skill_id == "diagnose_incident":
-        artifacts = await _handle_diagnose(task_id=task_id, data=data, request=request)
-    elif skill_id == "search_incidents":
-        artifacts = await _handle_search(task_id=task_id, data=data, request=request)
-    else:
+    required_scope = _SKILL_SCOPES.get(skill_id or "")
+    if required_scope is None:
         return _rpc_error(
             rpc_id=rpc_id,
             task_id=task_id,
             code=-32601,
             message=f"Unknown skill: '{skill_id}'",
+        )
+
+    if required_scope not in claims.scopes:
+        return _rpc_error(
+            rpc_id=rpc_id,
+            task_id=task_id,
+            code=-32003,
+            message=f"Insufficient scope: {required_scope} required",
+        )
+
+    if skill_id == "diagnose_incident":
+        artifacts = await _handle_diagnose(task_id=task_id, data=data, request=request)
+    else:
+        artifacts = await _handle_search(task_id=task_id, data=data, request=request)
+
+    failure = _skill_failure(artifacts)
+    if failure is not None:
+        log.info("a2a.task.failed", task_id=task_id, skill_id=skill_id, error=failure)
+        return _rpc_error(
+            rpc_id=rpc_id,
+            task_id=task_id,
+            code=-32603,
+            message="Skill execution failed",
+            error_code=failure,
         )
 
     response = {
@@ -190,7 +272,7 @@ async def _handle_diagnose(task_id: str, data: dict, request: Request) -> list[d
         ]
     except Exception as exc:
         log.error("a2a.diagnose.error", task_id=task_id, error=str(exc))
-        return [_error_artifact("pipeline_error", str(exc))]
+        return [_error_artifact("pipeline_error", "diagnosis failed")]
 
 
 async def _handle_search(task_id: str, data: dict, request: Request) -> list[dict]:
@@ -201,7 +283,11 @@ async def _handle_search(task_id: str, data: dict, request: Request) -> list[dic
 
     try:
         query = data.get("query", "")
-        top_k = int(data.get("top_k", 5))
+        try:
+            top_k = int(data.get("top_k", 5))
+        except (TypeError, ValueError):
+            return [_error_artifact("invalid_top_k", "top_k must be an integer")]
+        top_k = min(max(top_k, 1), 20)
         results = await retriever.retrieve(query=query, top_k=top_k)
         return [
             {
@@ -211,7 +297,7 @@ async def _handle_search(task_id: str, data: dict, request: Request) -> list[dic
         ]
     except Exception as exc:
         log.error("a2a.search.error", task_id=task_id, error=str(exc))
-        return [_error_artifact("search_error", str(exc))]
+        return [_error_artifact("search_error", "search failed")]
 
 
 # ---------------------------------------------------------------------------
@@ -237,13 +323,31 @@ def _error_artifact(error_type: str, detail: str) -> dict:
     }
 
 
-def _rpc_error(rpc_id: str, task_id: str, code: int, message: str) -> dict:
+def _skill_failure(artifacts: list[dict]) -> str | None:
+    """Código estável se o handler devolveu um artifact de erro."""
+    if len(artifacts) == 1 and artifacts[0].get("name") == "error":
+        parts = artifacts[0].get("parts") or []
+        data = parts[0].get("data", {}) if parts else {}
+        return str(data.get("error") or "skill_failed")
+    return None
+
+
+def _rpc_error(
+    rpc_id: str,
+    task_id: str,
+    code: int,
+    message: str,
+    error_code: str | None = None,
+) -> dict:
+    data: dict[str, str] = {"task_id": str(task_id)}
+    if error_code:
+        data["error"] = error_code
     return {
         "jsonrpc": "2.0",
         "id": rpc_id,
         "error": {
             "code": code,
             "message": message,
-            "data": {"task_id": task_id},
+            "data": data,
         },
     }

@@ -14,7 +14,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
-from auth.jwt_validator import TokenClaims, issue_token, validate_token
+from auth.jwt_validator import MIN_HMAC_KEY_BYTES, TokenClaims, issue_token, validate_token
 from auth.pkce import verify_challenge
 from auth.scopes import ALL_SCOPES
 from auth.token_store import InMemoryTokenStore, TokenStore
@@ -26,8 +26,9 @@ router = APIRouter(prefix="/auth", tags=["oauth"])
 # Store compartilhado — substituível por RedisTokenStore em produção
 _token_store: TokenStore = InMemoryTokenStore()
 
-# Configuração injetável (preenchida por configure)
-_jwt_secret: str = "dev-secret-change-in-production"
+# Configuração injetável (preenchida por configure).
+# Sem segredo de módulo: um literal default público assinaria tokens para qualquer um.
+_jwt_secret: str = ""
 _token_ttl: int = 3600
 _allowed_clients: dict[str, list[str]] = {}  # client_id → scopes permitidos
 _base_url: str = "http://localhost:8000"
@@ -65,14 +66,24 @@ def configure(
     """
     global _jwt_secret, _token_ttl, _allowed_clients, _base_url, _token_store
     global _rsa_private_pem, _rsa_public_pem, _kid, _jwk_set
+    # HS256 is the signer unless an RSA pair is supplied. A short or empty
+    # HMAC key must not be stored: PyJWT warns and still signs keys under 32 bytes.
+    if not (rsa_private_pem and rsa_public_pem):
+        if len(jwt_secret.encode("utf-8")) < MIN_HMAC_KEY_BYTES:
+            raise ValueError(
+                f"jwt_secret must be at least {MIN_HMAC_KEY_BYTES} bytes for HS256"
+            )
     _jwt_secret = jwt_secret
     _token_ttl = token_ttl
     _base_url = base_url
     _kid = kid
     if token_store is not None:
         _token_store = token_store
-    if allowed_clients:
-        _allowed_clients = {c["id"]: c.get("scopes", []) for c in allowed_clients}
+    # Empty or omitted allow-list means nobody is allowed. A previous
+    # configure() must not keep clients when the new list is empty.
+    _allowed_clients = {
+        c["id"]: list(c.get("scopes", [])) for c in (allowed_clients or [])
+    }
     if rsa_private_pem and rsa_public_pem:
         from auth.keys import public_key_to_jwk
         _rsa_private_pem = rsa_private_pem
@@ -93,6 +104,7 @@ class RegisterRequest(BaseModel):
     """Body do endpoint POST /auth/token/register."""
     client_id: str
     scopes: list[str]
+    code_verifier: str = ""
     code_challenge: str
     code_challenge_method: str = "S256"
 
@@ -119,30 +131,36 @@ async def register(body: RegisterRequest) -> RegisterResponse:
     """Registra um agente cliente e emite um access_token JWT.
 
     Valida:
-    1. client_id contra lista de clientes permitidos
+    1. client_id está na allow-list (lista vazia não autoriza ninguém)
     2. Scopes solicitados são subconjunto dos scopes do cliente
     3. code_challenge_method é S256 (único suportado)
+    4. code_verifier corresponde ao code_challenge (PKCE S256)
 
-    O code_challenge é armazenado no TokenStore com TTL=5min para
-    uso futuro em flows que precisem de verificação do verifier.
+    O code_challenge só é armazenado depois que o verifier confere.
     """
-    # 1. Valida client_id
-    if _allowed_clients and body.client_id not in _allowed_clients:
+    if len(_jwt_secret.encode("utf-8")) < MIN_HMAC_KEY_BYTES and not _rsa_private_pem:
+        raise HTTPException(
+            status_code=503,
+            detail="OAuth signing key is not configured",
+        )
+
+    # 1. Allow-list fechada. Ids publicados no YAML não bastam se não
+    # foram carregados nesta instância, e lista vazia não é "qualquer um".
+    if body.client_id not in _allowed_clients:
         raise HTTPException(
             status_code=401,
             detail=f"Unknown client_id: '{body.client_id}'",
         )
 
     # 2. Valida scopes
-    if _allowed_clients:
-        permitted = set(_allowed_clients.get(body.client_id, []))
-        requested = set(body.scopes)
-        disallowed = requested - permitted
-        if disallowed:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Scopes not permitted for client: {sorted(disallowed)}",
-            )
+    permitted = set(_allowed_clients.get(body.client_id, []))
+    requested = set(body.scopes)
+    disallowed = requested - permitted
+    if disallowed:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Scopes not permitted for client: {sorted(disallowed)}",
+        )
 
     # 3. Valida método PKCE
     if body.code_challenge_method != "S256":
@@ -151,13 +169,17 @@ async def register(body: RegisterRequest) -> RegisterResponse:
             detail="Only code_challenge_method=S256 is supported",
         )
 
-    # Armazena challenge para uso futuro
+    # 4. O cliente precisa provar o verifier. Um challenge arbitrário
+    # (deadbeef, texto que não é S256) não emite token.
+    if not body.code_verifier or not verify_challenge(body.code_verifier, body.code_challenge):
+        raise HTTPException(
+            status_code=400,
+            detail="PKCE verification failed",
+        )
+
     _token_store.save_challenge(body.client_id, body.code_challenge)
 
-    # Emite JWT
-    effective_scopes = body.scopes or (
-        _allowed_clients.get(body.client_id, []) if _allowed_clients else []
-    )
+    effective_scopes = body.scopes or _allowed_clients.get(body.client_id, [])
     token = issue_token(
         agent_id=body.client_id,
         scopes=effective_scopes,

@@ -7,7 +7,7 @@ services:
     image: prom/prometheus:v2.53.0
     container_name: aiops-prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus/prometheus.yaml:/etc/prometheus/prometheus.yml:ro
     extra_hosts:
@@ -18,7 +18,7 @@ services:
     image: grafana/grafana:11.4.0
     container_name: aiops-grafana
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: aiops123
@@ -39,7 +39,7 @@ services:
       dockerfile: Dockerfile
     container_name: aiops-metrics-exporter
     ports:
-      - "9101:9101"
+      - "127.0.0.1:9101:9101"
     restart: unless-stopped
 
   slack-mock:
@@ -48,7 +48,7 @@ services:
       dockerfile: Dockerfile
     container_name: aiops-slack-mock
     ports:
-      - "47892:47892"
+      - "127.0.0.1:47892:47892"
     restart: unless-stopped
 
 volumes:

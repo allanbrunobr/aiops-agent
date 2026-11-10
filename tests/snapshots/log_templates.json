@@ -70,9 +70,9 @@
     "level": "ERROR",
     "relevance_score": 6.5,
     "sample_messages": [
-      "Connection to 10.0.1.47:5432 timed out after 30s",
-      "Connection to 10.0.1.46:5432 timed out after 30s",
-      "Connection to 10.0.1.47:5432 timed out after 30s"
+      "Connection to [IP#1]:5432 timed out after 30s",
+      "Connection to [IP#2]:5432 timed out after 30s",
+      "Connection to [IP#1]:5432 timed out after 30s"
     ],
     "services": [
       "payment-svc"

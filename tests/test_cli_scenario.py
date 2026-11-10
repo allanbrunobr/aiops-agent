@@ -52,7 +52,7 @@ class TestArgparseScenarioFlag:
             # Suprime stderr do argparse (mensagem de erro + usage).
             with redirect_stderr(io.StringIO()):
                 parser.parse_args(["--scenario", "nonexistent"])
-        assert exc_info.value.code == 2
+        assert exc_info.value.code == 1
 
     def test_scenario_with_no_llm_flag(self) -> None:
         """--scenario memory-leak --no-llm deve funcionar em conjunto."""

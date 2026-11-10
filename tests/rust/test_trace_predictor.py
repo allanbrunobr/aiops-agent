@@ -11,6 +11,8 @@ import time
 
 import pytest
 
+pytest.importorskip("_aiops_rust")
+
 from pipeline.trace_predictor import _percentile, detect_latency_drift
 
 

@@ -53,7 +53,7 @@ class TestHelpShowsExitCodes:
 
         assert "Exit codes:" in help_text
         assert "0  Pipeline resolved successfully" in help_text
-        assert "1  Unrecoverable error" in help_text
+        assert "1  Invalid arguments, or an unrecoverable error" in help_text
         assert "2  TNR regression detected" in help_text
         assert "3  Safety blocked action" in help_text
 

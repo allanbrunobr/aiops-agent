@@ -113,7 +113,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # --------------------------------------------------------
     # Rotas de infraestrutura — health (liveness + readiness)
     # --------------------------------------------------------
-    from interfaces.http.health import health_router
+    from interfaces.http.health import health_router, set_start_time
+    import time as _time
+    set_start_time(_time.monotonic())
     app.include_router(health_router)
 
     # --------------------------------------------------------
@@ -152,37 +154,49 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # --------------------------------------------------------
     # OAuth 2.1 Authorization Server — sempre montado
     # --------------------------------------------------------
-    if config.mcp.oauth.jwt_secret:
+    _oauth = config.mcp.oauth
+    _jwt_secret = _oauth.jwt_secret or ""
+    _rsa_private_pem = None
+    _rsa_public_pem = None
+    if _oauth.private_key_path and _oauth.public_key_path:
+        from pathlib import Path as _Path
+        _priv_path = _Path(_oauth.private_key_path)
+        _pub_path = _Path(_oauth.public_key_path)
+        if _priv_path.exists() and _pub_path.exists():
+            _rsa_private_pem = _priv_path.read_text()
+            _rsa_public_pem = _pub_path.read_text()
+
+    from auth.jwt_validator import MIN_HMAC_KEY_BYTES
+    _hmac_ok = len(_jwt_secret.encode("utf-8")) >= MIN_HMAC_KEY_BYTES
+    _rsa_ok = bool(_rsa_private_pem and _rsa_public_pem)
+    if _hmac_ok or _rsa_ok:
         import auth.server as auth_server
         from auth.token_store import InMemoryTokenStore
 
-        # Phase 2 — carrega chaves RSA se configuradas
-        _rsa_private_pem = None
-        _rsa_public_pem = None
-        _oauth = config.mcp.oauth
-        if _oauth.private_key_path and _oauth.public_key_path:
-            from pathlib import Path as _Path
-            _priv_path = _Path(_oauth.private_key_path)
-            _pub_path = _Path(_oauth.public_key_path)
-            if _priv_path.exists() and _pub_path.exists():
-                _rsa_private_pem = _priv_path.read_text()
-                _rsa_public_pem = _pub_path.read_text()
-
         auth_server.configure(
-            jwt_secret=config.mcp.oauth.jwt_secret,
-            token_ttl=config.mcp.oauth.token_ttl,
+            jwt_secret=_jwt_secret if _hmac_ok else "",
+            token_ttl=_oauth.token_ttl,
             allowed_clients=[
                 {"id": c.id, "scopes": c.scopes}
-                for c in config.mcp.oauth.allowed_clients
+                for c in _oauth.allowed_clients
             ],
             base_url="",
             token_store=InMemoryTokenStore(),
             rsa_private_pem=_rsa_private_pem,
             rsa_public_pem=_rsa_public_pem,
-            kid=config.mcp.oauth.kid,
+            kid=_oauth.kid,
         )
         app.include_router(auth_server.router)
-        log.info("oauth.server.mounted", clients=len(config.mcp.oauth.allowed_clients))
+        log.info("oauth.server.mounted", clients=len(_oauth.allowed_clients))
+    elif _jwt_secret:
+        log.warning(
+            "oauth.rejected_short_key",
+            detail=(
+                "jwt_secret is shorter than 32 bytes. "
+                "The OAuth server was not mounted. "
+                "PyJWT does not treat a short or empty HMAC key as accept-all."
+            ),
+        )
 
     # --------------------------------------------------------
     # A2A (Agent-to-Agent) — sempre montado
@@ -197,6 +211,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     from app.builders import build_engine, build_rag
 
     app.state.config = config
+    app.state.a2a_jwt_secret = _jwt_secret if _hmac_ok else ""
     app.state.engine = build_engine(config)
     _, app.state.retriever = build_rag()
     log.info("a2a.state.populated", engine=type(app.state.engine).__name__)
@@ -204,10 +219,14 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # --------------------------------------------------------
     # Validação de configuração OAuth
     # --------------------------------------------------------
-    if config.mcp.auth_method == "oauth21" and not config.mcp.oauth.jwt_secret:
+    if config.mcp.auth_method == "oauth21" and not _hmac_ok:
         log.warning(
             "oauth.misconfiguration",
-            detail="auth_method=oauth21 with empty jwt_secret — all tokens accepted!",
+            detail=(
+                "auth_method=oauth21 without a 32-byte jwt_secret. "
+                "The OAuth server was not mounted. "
+                "PyJWT rejects an empty HMAC key; it does not accept every token."
+            ),
         )
 
     # Phase 2 — avisa se federated sem chaves RSA configuradas

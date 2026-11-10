@@ -20,8 +20,13 @@ import jwt as pyjwt
 from fastapi import FastAPI, Request, Response
 from mcp.server.sse import SseServerTransport
 
-from auth.jwt_validator import validate_token
-from interfaces.mcp.server import _current_client_id, _current_scopes, create_server
+from auth.jwt_validator import MIN_HMAC_KEY_BYTES, validate_token
+from interfaces.mcp.server import (
+    _current_client_id,
+    _current_scopes,
+    _enforce_scopes,
+    create_server,
+)
 
 # Estado do módulo — transporte e servidor MCP compartilhados
 _sse_transport: SseServerTransport | None = None
@@ -55,13 +60,23 @@ def mount_sse(
     _mcp_server = create_server(config=config, **server_deps)
 
     auth_method = "header"
-    jwt_secret = "dev-secret-change-in-production"
+    jwt_secret = ""
+    allowed_header_clients: dict[str, list[str]] = {}
     _oidc_validator = None
     if config is not None:
         auth_method = getattr(config, "auth_method", "header")
         oauth_cfg = getattr(config, "oauth", None)
         if oauth_cfg is not None:
-            jwt_secret = getattr(oauth_cfg, "jwt_secret", jwt_secret)
+            jwt_secret = getattr(oauth_cfg, "jwt_secret", "") or ""
+            for client in getattr(oauth_cfg, "allowed_clients", []) or []:
+                if isinstance(client, dict):
+                    client_id = client.get("id")
+                    client_scopes = list(client.get("scopes") or [])
+                else:
+                    client_id = getattr(client, "id", None)
+                    client_scopes = list(getattr(client, "scopes", []) or [])
+                if client_id:
+                    allowed_header_clients[str(client_id)] = client_scopes
 
         # Phase 2 — inicializa OIDCValidator se auth_method="federated"
         if auth_method == "federated":
@@ -86,12 +101,19 @@ def mount_sse(
             ]
             _oidc_validator = OIDCValidator(trusted_issuers=_oidc_issuers)
 
-    @app.get("/mcp/sse")
-    async def sse_endpoint(request: Request) -> Response:
-        """Endpoint SSE — cliente conecta aqui para stream de eventos MCP."""
+    def _authenticate(request: Request) -> tuple[str, list[str], bool] | Response:
+        """Autentica GET /mcp/sse e POST /mcp/messages com a mesma regra.
 
+        Retorna (client_id, scopes, enforce_scopes) ou uma Response 401.
+        Lista vazia de scopes com enforce=True não libera ferramentas.
+        """
         if auth_method == "oauth21":
-            # OAuth 2.1: Bearer JWT HS256 local obrigatório
+            if len(jwt_secret.encode("utf-8")) < MIN_HMAC_KEY_BYTES:
+                return Response(
+                    status_code=401,
+                    content='{"error":"unauthorized","detail":"OAuth signing key is not configured"}',
+                    media_type="application/json",
+                )
             auth_header = request.headers.get("authorization", "")
             if not auth_header.startswith("Bearer "):
                 return Response(
@@ -114,10 +136,26 @@ def mount_sse(
                     content='{"error":"invalid_token","detail":"JWT is invalid"}',
                     media_type="application/json",
                 )
-            effective_client_id = claims.sub
-            granted_scopes = claims.scopes
+            return claims.sub, list(claims.scopes), True
 
-        elif auth_method == "federated":
+        if auth_method == "header":
+            client_id = request.headers.get("x-client-id")
+            if not client_id or client_id not in allowed_header_clients:
+                return Response(
+                    status_code=401,
+                    content="X-Client-Id header required",
+                    media_type="text/plain",
+                )
+            return client_id, list(allowed_header_clients[client_id]), True
+
+        return "anonymous", [], False
+
+    @app.get("/mcp/sse")
+    async def sse_endpoint(request: Request) -> Response:
+        """Endpoint SSE — cliente conecta aqui para stream de eventos MCP."""
+
+        enforce = True
+        if auth_method == "federated":
             # Phase 2 — OIDC Federation: Bearer JWT RS256 de IdP externo
             auth_header = request.headers.get("authorization", "")
             if not auth_header.startswith("Bearer "):
@@ -149,27 +187,19 @@ def mount_sse(
                     media_type="application/json",
                 )
             effective_client_id = claims.sub
-            granted_scopes = claims.scopes
-
-        elif auth_method == "header":
-            # Legado: X-Client-Id header
-            client_id = request.headers.get("x-client-id")
-            if not client_id:
-                return Response(
-                    status_code=401,
-                    content="X-Client-Id header required",
-                )
-            effective_client_id = client_id
-            granted_scopes = []  # sem scope enforcement no modo legado
+            granted_scopes = list(claims.scopes)
+            enforce = True
 
         else:
-            # auth_method="none": dev/test only
-            effective_client_id = "anonymous"
-            granted_scopes = []
+            authenticated = _authenticate(request)
+            if isinstance(authenticated, Response):
+                return authenticated
+            effective_client_id, granted_scopes, enforce = authenticated
 
         # Propaga client_id e scopes via ContextVar
         token_ctx = _current_client_id.set(effective_client_id)
         scopes_ctx = _current_scopes.set(granted_scopes)
+        enforce_ctx = _enforce_scopes.set(enforce)
         try:
             async with _sse_transport.connect_sse(  # type: ignore[union-attr]
                 request.scope, request.receive, request._send
@@ -182,10 +212,34 @@ def mount_sse(
         finally:
             _current_client_id.reset(token_ctx)
             _current_scopes.reset(scopes_ctx)
+            _enforce_scopes.reset(enforce_ctx)
 
     @app.post("/mcp/messages")
     async def message_endpoint(request: Request) -> Response:
-        """Endpoint para mensagens MCP do cliente (POST)."""
+        """Endpoint para mensagens MCP do cliente (POST).
+
+        Repete a autenticação do GET. Sem isso o POST aceitava qualquer corpo.
+        """
+        if auth_method == "federated":
+            auth_header = request.headers.get("authorization", "")
+            if not auth_header.startswith("Bearer "):
+                return Response(
+                    status_code=401,
+                    content='{"error":"unauthorized","detail":"Bearer token required"}',
+                    media_type="application/json",
+                )
+            try:
+                await _oidc_validator.validate(auth_header[7:])  # type: ignore[union-attr]
+            except pyjwt.ExpiredSignatureError:
+                return Response(status_code=401, content='{"error":"token_expired"}', media_type="application/json")
+            except pyjwt.InvalidTokenError:
+                return Response(status_code=401, content='{"error":"invalid_token"}', media_type="application/json")
+            except Exception:
+                return Response(status_code=503, content='{"error":"idp_unavailable"}', media_type="application/json")
+        else:
+            authenticated = _authenticate(request)
+            if isinstance(authenticated, Response):
+                return authenticated
         await _sse_transport.handle_post_message(  # type: ignore[union-attr]
             request.scope, request.receive, request._send
         )

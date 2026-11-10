@@ -26,13 +26,14 @@ class PipelineRunner:
         max_queued: int = 10,
         store: IncidentStore | None = None,
     ) -> None:
-        self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._slots_free = max_concurrent
         self._queue: asyncio.Queue[NormalizedAlert] = asyncio.Queue(maxsize=max_queued)
         self._max_concurrent = max_concurrent
         self._max_queued = max_queued
         self._store = store
         self._active_count: int = 0
         self._active_lock = asyncio.Lock()
+        self._admit_lock = asyncio.Lock()
         self._worker_task: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
@@ -69,39 +70,55 @@ class PipelineRunner:
         Returns:
             True se aceito (imediato ou enfileirado), False se rejeitado.
         """
-        # Tenta executar diretamente se ha slot disponivel
-        if self._semaphore._value > 0:
-            asyncio.create_task(
-                self._run_pipeline(alert),
-                name=f"pipeline-{alert.correlation_id}",
-            )
-            return True
+        # O slot é um contador sob o lock. wait_for(acquire(), 0) cedia
+        # o event loop e o worker esvaziava a fila antes do próximo submit.
+        async with self._admit_lock:
+            if self._slots_free > 0:
+                self._slots_free -= 1
+                asyncio.create_task(
+                    self._run_pipeline(alert),
+                    name=f"pipeline-{alert.correlation_id}",
+                )
+                return True
 
-        # Sem slot — tenta enfileirar
-        try:
-            self._queue.put_nowait(alert)
-            log.info(
-                "pipeline.queued",
-                correlation_id=alert.correlation_id,
-                queue_size=self._queue.qsize(),
+            try:
+                self._queue.put_nowait(alert)
+                log.info(
+                    "pipeline.queued",
+                    correlation_id=alert.correlation_id,
+                    queue_size=self._queue.qsize(),
+                )
+                return True
+            except asyncio.QueueFull:
+                log.warning(
+                    "pipeline.rejected",
+                    correlation_id=alert.correlation_id,
+                    reason="queue_full",
+                    max_queued=self._max_queued,
+                )
+                return False
+
+    async def _release_slot_or_continue(self) -> None:
+        """Devolve o slot, ou entrega o mesmo slot ao próximo alerta da fila."""
+        async with self._admit_lock:
+            try:
+                nxt = self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                self._slots_free += 1
+                return
+            self._queue.task_done()
+            asyncio.create_task(
+                self._run_pipeline(nxt),
+                name=f"pipeline-{nxt.correlation_id}",
             )
-            return True
-        except asyncio.QueueFull:
-            log.warning(
-                "pipeline.rejected",
-                correlation_id=alert.correlation_id,
-                reason="queue_full",
-                max_queued=self._max_queued,
-            )
-            return False
 
     async def _run_pipeline(self, alert: NormalizedAlert) -> None:
         """Executa pipeline de diagnostico para um alerta.
 
-        Adquire semaforo, executa pipeline isolado, libera semaforo.
+        O slot já foi reservado em submit() ou em _release_slot_or_continue().
         Erros sao capturados e logados — nunca propagados.
         """
-        async with self._semaphore:
+        try:
             async with self._active_lock:
                 self._active_count += 1
 
@@ -117,10 +134,11 @@ class PipelineRunner:
                 bound_log.info("pipeline.completed")
             except Exception:
                 bound_log.exception("pipeline.failed")
-                # Erro isolado — nao afeta outros pipelines
             finally:
                 async with self._active_lock:
                     self._active_count -= 1
+        finally:
+            await self._release_slot_or_continue()
 
     async def _execute_pipeline(
         self,
@@ -150,13 +168,17 @@ class PipelineRunner:
         bound_log.info("pipeline.stub_executed")
 
     async def _queue_worker(self) -> None:
-        """Worker que drena a fila e executa pipelines quando ha slots."""
-        while True:
-            alert = await self._queue.get()
-            try:
-                await self._run_pipeline(alert)
-            finally:
-                self._queue.task_done()
+        """Task cancelável de start/stop.
+
+        A fila não é lida aqui. Quem lê é _release_slot_or_continue, no
+        mesmo lock da admissão, para o teto continuar sendo
+        max_concurrent + max_queued.
+        """
+        try:
+            while True:
+                await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            raise
 
     @property
     def active_count(self) -> int:

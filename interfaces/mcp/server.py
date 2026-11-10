@@ -23,6 +23,8 @@ log = structlog.get_logger()
 # ContextVars para propagar client_id e scopes ao longo do ciclo de vida do tool call
 _current_client_id: ContextVar[str] = ContextVar("client_id", default="unknown")
 _current_scopes: ContextVar[list[str]] = ContextVar("scopes", default=[])
+# False só no modo explícito auth_method="none". Header e OAuth ligam isto.
+_enforce_scopes: ContextVar[bool] = ContextVar("enforce_scopes", default=False)
 
 
 def _get_current_client_id() -> str:
@@ -102,9 +104,10 @@ def create_server(
 
         client_id = _get_current_client_id()
 
-        # Scope enforcement — obrigatório quando auth_method=oauth21
+        # Escopo vazio não é acesso livre. O transporte liga _enforce_scopes
+        # em header, oauth21 e federated. auth_method="none" deixa desligado.
         granted_scopes = _current_scopes.get()
-        if granted_scopes:  # lista vazia = modo legado sem enforcement
+        if _enforce_scopes.get():
             from auth.scopes import require_scope
             scope_error = require_scope(name, granted_scopes)
             if scope_error is not None:

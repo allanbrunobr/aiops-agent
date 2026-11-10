@@ -88,10 +88,15 @@ class InMemoryRateLimiter:
         Returns:
             InMemoryRateLimiter configurado com os limites do config.
         """
+        if hasattr(rate_limits_config, "validate_limit"):
+            validate_limit = rate_limits_config.validate_limit
+        else:
+            candidate = getattr(rate_limits_config, "validate", 30)
+            validate_limit = candidate if isinstance(candidate, int) else 30
         limits = {
             "diagnose_incident": getattr(rate_limits_config, "diagnose", 10),
             "search_incidents": getattr(rate_limits_config, "search", 60),
-            "validate_action": getattr(rate_limits_config, "validate", 30),
+            "validate_action": validate_limit,
         }
         return cls(limits=limits)
 

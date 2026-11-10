@@ -484,7 +484,7 @@ def main() -> None:
     """Ponto de entrada para execução direta via CLI."""
     parser = argparse.ArgumentParser(description="AIOps Demo Server")
     parser.add_argument("--port", type=int, default=47891, help="Porta HTTP (padrão: 47891)")
-    parser.add_argument("--host", default="0.0.0.0", help="Host de escuta")
+    parser.add_argument("--host", default="127.0.0.1", help="Host de escuta (padrão: localhost)")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
