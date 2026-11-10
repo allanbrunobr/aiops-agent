@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from pydantic_settings import (
@@ -212,7 +212,9 @@ class McpConfig(BaseModel):
     transport: str = "sse"
     sse_port: int = 3001
     enabled_tools: list[str] = ["diagnose_incident", "validate_action", "search_incidents"]
-    auth_method: str = "header"  # "header" | "oauth21" | "federated" | "none"
+    # Validado na carga: um typo (ex.: "oauth2.1") caía em "anonymous" sem
+    # checagem de scope (S4/SEC-03). Agora o startup falha.
+    auth_method: Literal["header", "oauth21", "federated", "none"] = "header"
     oauth: OAuthConfig = OAuthConfig()
     rate_limits: McpRateLimitsConfig = McpRateLimitsConfig()
 

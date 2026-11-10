@@ -296,7 +296,7 @@ marcador ficava fora dos jobs rápidos sem nenhum aviso.
 - **Novo marcador `rust`** (`pyproject.toml`): testes que exigem a extensão
   `_aiops_rust` e rodam só no job `rust-build`.
 - **Marcação** (com um script de AST):
-  - 37 arquivos inteiramente sem marcador recebem `pytestmark`: 34 `unit`,
+  - 38 arquivos inteiramente sem marcador recebem `pytestmark`: 35 `unit`,
     2 `rust` e 1 `integration` (`tests/integration/test_webhook_to_slack_flow.py`);
   - nos 2 arquivos mistos, os testes que faltavam foram marcados
     individualmente.
@@ -320,3 +320,42 @@ está marcada).
 testes**. Antes de cada commit: ruff limpo e os três jobs com status 0
 (unit 1379, integration 138 com 5 pulados, suíte completa 1557 com 10
 pulados).
+
+## Item P2-8 — `mcp.auth_method` desconhecido falha fechado (S4/SEC-03)
+
+**Defeito.** `auth_method` era string livre. Qualquer valor fora de `oauth21`
+e `header` caía em `anonymous`, sem checagem de scope. Um erro de digitação
+como `oauth2.1` deixava o MCP aberto. O modo `federated` tem caminho próprio
+nos dois endpoints e não era afetado.
+
+**Correção:**
+
+- `config/loader.py`: `auth_method: Literal["header", "oauth21", "federated",
+  "none"]`. Um valor inválido derruba a carga da config, ou seja, o startup
+  falha com mensagem.
+- `interfaces/mcp/sse.py`: `none` passa a ser tratado de forma explícita, e
+  qualquer outro valor devolve 401. É defesa em profundidade para configs que
+  não passam pelo `AppConfig`.
+
+**Testes:** `tests/test_mcp_auth_method.py`, 10 testes marcados `unit`.
+
+- **Antes da correção:** 5 falharam. Os 4 valores inválidos eram aceitos na
+  config, e o método desconhecido passava pela autenticação do SSE.
+- **Instrumento:** um transporte SSE falso, que levanta uma exceção sentinela
+  quando a autenticação deixa o pedido passar.
+
+**CI local:** ruff limpo e os três jobs com status 0 (ver o commit).
+
+**Decisão do Allan, não alterada:**
+
+- O relatório recomenda tirar `header` do padrão, porque o `X-Client-Id`
+  pode ser forjado. Mudar o padrão para `oauth21` exige que todos os clientes
+  passem a usar token, com os segredos que hoje existem só na máquina do
+  Allan.
+
+**Achado de passagem, não corrigido:**
+
+- O `POST /mcp/messages` deixa o transporte do MCP responder e, em seguida,
+  o FastAPI tenta responder de novo. O `TestClient` acusa "multiple
+  http.response.start". Vale conferir com o padrão de montagem (`Mount`)
+  recomendado pelo SDK do MCP.

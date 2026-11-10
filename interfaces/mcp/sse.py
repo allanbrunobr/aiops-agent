@@ -155,7 +155,15 @@ def mount_sse(
                 )
             return client_id, list(allowed_header_clients[client_id]), True
 
-        return "anonymous", [], False
+        if auth_method == "none":
+            return "anonymous", [], False
+
+        # Valor desconhecido: falha fechado (antes caía em "anonymous").
+        return Response(
+            status_code=401,
+            content='{"error":"unauthorized","detail":"MCP auth_method is not configured correctly"}',
+            media_type="application/json",
+        )
 
     @app.get("/mcp/sse")
     async def sse_endpoint(request: Request) -> Response:
