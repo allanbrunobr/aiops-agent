@@ -27,6 +27,9 @@ class TNRResult(Enum):
     REGRESSION = "regression"
     ROLLBACK_COMPLETE = "rollback_complete"
     ERROR = "error"
+    # Sem medição de saúde pós-ação (a ação não foi executada): não é sucesso
+    # nem regressão. Antes o protótipo inventava uma melhora e dava SUCCESS.
+    NOT_VERIFIED = "not_verified"
 
 
 @dataclass
@@ -75,8 +78,8 @@ class HealthSnapshot:
 class TNRReport:
     """Relatório do TNR check."""
     result: TNRResult
-    pre_snapshot: HealthSnapshot
-    post_snapshot: HealthSnapshot
+    pre_snapshot: HealthSnapshot | None
+    post_snapshot: HealthSnapshot | None
     action: MitigationAction
     health_delta: float
     message: str

@@ -559,10 +559,13 @@ def step_agents(report, retriever, use_llm: bool = True,
     _transition("MITIGATING", "VERIFYING", "Verificando impacto (TNR)...")
     if use_llm:
         # Reutiliza resultado TNR já computado dentro do orchestrator (evita duplicata)
-        _tnr_regression = not _outcome.tnr_passed
+        # Valor real do TNR: "not_verified" não é regressão (antes, tudo que não
+        # era success virava "regression" e exit 2).
+        _tnr_value = _outcome.tnr_result or ("success" if _outcome.tnr_passed else "regression")
+        _tnr_regression = _tnr_value == "regression"
         _tnr_msg = _outcome.tnr_message
         result["stages"]["verification"] = {
-            "result": "success" if _outcome.tnr_passed else "regression",
+            "result": _tnr_value,
             "health_delta": _outcome.tnr_health_delta,
             "message": _tnr_msg,
         }
@@ -580,10 +583,13 @@ def step_agents(report, retriever, use_llm: bool = True,
         _transition("VERIFYING", "ROLLBACK", f"Regressão detectada: {_tnr_msg}")
         result["stages"]["rollback"] = {"message": "Rollback executado, retornando ao diagnostico"}
     else:
+        _verification = result["stages"]["verification"]["result"]
         _transition(
             "VERIFYING",
             "RESOLVED",
-            f"TNR check passed; human approval still pending: {_tnr_msg}",
+            (f"TNR check passed; human approval still pending: {_tnr_msg}"
+             if _verification == "success"
+             else f"Mitigation proposed; human approval still pending: {_tnr_msg}"),
         )
         result["success"] = True
 

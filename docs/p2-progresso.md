@@ -433,3 +433,67 @@ completa 1572 passaram e 10 foram pulados. Status 0 nos três.
 **Limite:** a resolução não fecha o incidente aberto. O webhook ainda é stub
 (o `PipelineRunner` não executa o pipeline real). Fechar incidentes pela
 notificação de resolução depende dessa integração.
+
+## Item P2-11 — TNR sem medição responde "não verificado" (S5: F05, SEC-07, F09)
+
+**Defeito.** O TNR nunca media nada:
+
+- `MitigationAgent.verify_with_tnr` comparava snapshots pré e pós **fixos**,
+  que simulavam uma melhora de 19% para 97% de saúde, e sempre devolvia
+  SUCCESS. O replan por regressão e o `EXIT_REGRESSION` eram código morto.
+- `SafetyOrchestrator` comparava o baseline com ele mesmo (sempre SUCCESS) e
+  tratava exceção do TNR e do sanitizer como aprovação. Além disso, chamava
+  `sanitizer.sanitize`, um método que o `TelemetrySanitizer` não tem.
+
+Nada no projeto executa a ação, então não existe medição pós-ação real.
+
+**Correção:**
+
+- `safety/tnr.py`: novo `TNRResult.NOT_VERIFIED`. Os snapshots de
+  `TNRReport` passam a ser opcionais.
+- `MitigationAgent.verify_with_tnr(..., pre_health=None, post_health=None)`:
+  com os dois snapshots, faz a checagem real; sem eles, devolve
+  `NOT_VERIFIED`.
+- `AgentOrchestrator`:
+  - replaneja só diante de `regression` medida;
+  - expõe `AgentOutcome.tnr_result`;
+  - a reflexão final recebe o valor real.
+- `main.py`:
+  - a etapa de verificação usa o valor real;
+  - antes, no caminho com LLM, tudo que não era `success` virava
+    `regression`, com exit 2;
+  - o texto da transição para `RESOLVED` deixa de dizer "TNR check passed"
+    quando nada foi verificado.
+- `SafetyOrchestrator`:
+  - o TNR só compara snapshots recebidos em `system_state`
+    (`pre_health`/`post_health`); sem eles, a camada fica
+    `{"verified": False, ...}` e não bloqueia;
+  - exceção do TNR **bloqueia**;
+  - o sanitizer usa `sanitize_text`: comando alterado bloqueia, e exceção
+    bloqueia.
+- `adapters/reporter/rich_console.py`: `not_verified` aparece em amarelo, não
+  em vermelho.
+- **Snapshots regenerados** com `--snapshot-update`, só nos 3 afetados. O diff
+  conferido muda apenas as linhas da verificação (antes, "health 19% → 97%";
+  agora, "not verified"). A cópia da sequência do `main` no
+  `tests/conftest.py` (achado T11) recebeu a mesma regra de texto.
+- **`tests/test_reporter.py`:** aceitava `{"success", "warning", "failure"}`,
+  valores que o TNR nunca produz (fora `success`). Agora exige
+  `not_verified`.
+
+**Testes:** `tests/test_tnr_not_verified.py`, 9 testes marcados `unit`.
+
+- **Antes da correção:** os 9 falharam.
+- **Cenários cobertos:**
+  - mitigator sem medição, com regressão real e com melhora real;
+  - orchestrator sem replan diante de `not_verified`;
+  - CLI heurística sem rollback;
+  - `SafetyOrchestrator`: sem snapshots, com exceção do TNR, com regressão
+    real e com exceção do sanitizer.
+
+**CI local:** ruff limpo. unit 1414 passaram, integration 138 passaram, suíte
+completa 1592 passaram e 10 foram pulados. Status 0 nos três.
+
+**Comportamento:** o exit code da CLI não muda, porque "não verificado" não é
+regressão. O que muda é o que a saída e o postmortem afirmam: deixam de
+mostrar uma melhora de saúde que nunca foi medida.

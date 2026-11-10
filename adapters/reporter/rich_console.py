@@ -124,7 +124,8 @@ class RichConsoleReporter:
     def _on_tnr_verified(self, p: dict[str, Any]) -> None:
         self._console.print(f"\n  Pre-health:  {p.get('pre_snapshot')}", style="dim")
         self._console.print(f"  Post-health: {p.get('post_snapshot')}", style="dim")
-        result_style = "green" if p.get("result") == "success" else "red"
+        # not_verified não é falha: sem medição pós-ação (amarelo, não vermelho).
+        result_style = {"success": "green", "not_verified": "yellow"}.get(p.get("result"), "red")
         self._console.print(
             f"  Result: [{result_style}]{p.get('message', '')}[/{result_style}]"
         )

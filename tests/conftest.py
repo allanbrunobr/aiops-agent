@@ -232,7 +232,9 @@ def _run_pipeline(incident, scenario_name: str | None = None):
                     "message": tnr_check.message,
                 }
                 if tnr_check.result.value != "regression":
-                    _rec("VERIFYING", "RESOLVED", f"Incidente resolvido: {tnr_check.message}")
+                    _label = ("Incidente resolvido" if tnr_check.result.value == "success"
+                              else "Mitigação proposta, aguardando aprovação")
+                    _rec("VERIFYING", "RESOLVED", f"{_label}: {tnr_check.message}")
                     result["success"] = True
                 else:
                     _rec("VERIFYING", "ROLLBACK", f"Regressão detectada: {tnr_check.message}")

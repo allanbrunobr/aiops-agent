@@ -39,7 +39,7 @@ Connection pool exhaustion in payment-svc due to config change (max_connections 
 - **NORMALIZED_TIMESTAMP** DETECTING -> DIAGNOSING: Investigando incidente em auth-svc, gateway, order-svc, payment-svc
 - **NORMALIZED_TIMESTAMP** DIAGNOSING -> MITIGATING: Propondo remediação...
 - **NORMALIZED_TIMESTAMP** MITIGATING -> VERIFYING: Verificando impacto (TNR)...
-- **NORMALIZED_TIMESTAMP** VERIFYING -> RESOLVED: Incidente resolvido: SUCCESS: health 19% → 97% (delta: +77.9)
+- **NORMALIZED_TIMESTAMP** VERIFYING -> RESOLVED: Mitigação proposta, aguardando aprovação: TNR not verified: no post-action health measurement (the action was not executed)
 
 ## Mitigation Applied
 
@@ -67,9 +67,9 @@ Connection pool exhaustion in payment-svc due to config change (max_connections 
 
 ## TNR Verification
 
-- **Result**: success
-- **Health Delta**: 77.9
-- **Message**: SUCCESS: health 19% → 97% (delta: +77.9)
+- **Result**: not_verified
+- **Health Delta**: 0.0
+- **Message**: TNR not verified: no post-action health measurement (the action was not executed)
 
 ## Action Items
 
