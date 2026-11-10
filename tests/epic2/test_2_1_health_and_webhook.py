@@ -5,6 +5,9 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 
+pytestmark = pytest.mark.unit
+
+
 @pytest.mark.anyio
 async def test_health_returns_200(app):
     async with AsyncClient(

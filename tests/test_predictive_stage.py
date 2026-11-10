@@ -1,4 +1,8 @@
 from __future__ import annotations
+
+import pytest
+
+pytestmark = pytest.mark.unit
 """Testes unitários para pipeline.predictive_stage."""
 
 import datetime

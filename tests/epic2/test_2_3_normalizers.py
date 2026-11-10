@@ -12,6 +12,9 @@ from interfaces.http.webhook.normalizers.grafana import GrafanaNormalizer
 from interfaces.http.webhook.normalizers.databricks import DatabricksNormalizer
 
 
+pytestmark = pytest.mark.unit
+
+
 class MockCredentials:
     """Mock de CredentialProvider para testes."""
 

@@ -90,6 +90,7 @@ def _make_aggregated_report(n_templates: int):
 
 # ── Benchmarks ───────────────────────────────────────────────────────────────
 
+@pytest.mark.rust
 @pytest.mark.slow
 def test_no_sampling_cap_100k():
     """100K logs parseados via Rust em < 5s sem descartar nenhum log."""
@@ -117,6 +118,7 @@ def test_no_sampling_cap_100k():
     )
 
 
+@pytest.mark.rust
 @pytest.mark.slow
 def test_compressor_under_10ms():
     """compress_context Rust: 1000 templates comprimidos em < 10ms."""

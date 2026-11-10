@@ -10,6 +10,9 @@ from domain.alert import NormalizedAlert
 from interfaces.http.webhook.dedup import DedupStore, generate_fingerprint
 
 
+pytestmark = pytest.mark.unit
+
+
 def _make_alert(**overrides) -> NormalizedAlert:
     """Helper para criar NormalizedAlert de teste."""
     defaults = {

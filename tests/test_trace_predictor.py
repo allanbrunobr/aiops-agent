@@ -15,6 +15,9 @@ from pipeline.trace_predictor import (
     detect_latency_drift,
 )
 
+
+pytestmark = pytest.mark.unit
+
 _TS = datetime.datetime(2026, 3, 4, 14, 0, 0)
 _TD = datetime.timedelta(seconds=1)
 

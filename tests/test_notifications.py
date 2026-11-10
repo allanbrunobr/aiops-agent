@@ -18,6 +18,9 @@ from interfaces.http.notifications.slack import SlackNotifier
 from adapters.credentials import EnvCredentialProvider
 
 
+pytestmark = pytest.mark.unit
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

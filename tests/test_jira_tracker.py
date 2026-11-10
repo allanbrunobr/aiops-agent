@@ -18,6 +18,9 @@ from tools.jira_tracker import (
 )
 
 
+pytestmark = pytest.mark.unit
+
+
 # --- Fixtures ---
 
 @pytest.fixture

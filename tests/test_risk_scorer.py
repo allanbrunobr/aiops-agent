@@ -1,7 +1,11 @@
 from __future__ import annotations
+
+
 """Testes unitários para pipeline.risk_scorer."""
 
 import pytest
+
+pytestmark = pytest.mark.unit
 
 from pipeline.log_predictor import LogBurstSignal
 from pipeline.trace_predictor import LatencyDriftSignal

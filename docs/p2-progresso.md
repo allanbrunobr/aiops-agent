@@ -277,3 +277,46 @@ configurável).
 **Teste:** não há, porque é só texto. A conferência foi um `grep` pelas frases
 antigas, que não acha mais nenhuma, e a checagem das referências
 `arquivo:linha` do documento.
+
+## Item P2-7 — Todo teste com marcador de nível (T-a)
+
+**Defeito.** Havia **542 testes** (39% da suíte, em 40 arquivos) sem nenhum
+marcador `unit`, `integration` ou `snapshot`. Eles só rodavam no job
+`rust-build`, depois de `cargo`, `maturin` e torch, e sempre com a extensão
+Rust presente. Entre eles estavam testes de segurança (`test_oauth_mcp`,
+`test_safety_audit`, `test_story_1_7_safety_nodes`). Um teste novo sem
+marcador ficava fora dos jobs rápidos sem nenhum aviso.
+
+**Correção:**
+
+- **Portão na coleta** (`tests/conftest.py`): `pytest_collection_modifyitems`
+  com `tryfirst`, para ver a suíte inteira antes da desseleção por `-m`.
+  Falha com `UsageError` listando os testes sem um dos níveis
+  `unit | integration | snapshot | rust`.
+- **Novo marcador `rust`** (`pyproject.toml`): testes que exigem a extensão
+  `_aiops_rust` e rodam só no job `rust-build`.
+- **Marcação** (com um script de AST):
+  - 37 arquivos inteiramente sem marcador recebem `pytestmark`: 34 `unit`,
+    2 `rust` e 1 `integration` (`tests/integration/test_webhook_to_slack_flow.py`);
+  - nos 2 arquivos mistos, os testes que faltavam foram marcados
+    individualmente.
+- **Critério de nível, medido e não suposto:** marquei como `unit` e rodei o
+  job unit, que só tem as dependências mínimas. Todos passaram, então nenhum
+  precisou virar `integration`.
+
+**Testes:** `tests/test_tier_marker_gate.py`, 6 testes marcados `unit`
+(itens sem nível são acusados, cada nível satisfaz o portão, a sessão inteira
+está marcada).
+
+- **Antes da marcação:** com o portão ligado, a coleta da suíte inteira
+  **reprovou listando 543 testes**.
+- **Erros no caminho, corrigidos antes do commit:**
+  - em 8 arquivos o `import pytest` vinha depois de outro código e o
+    `pytestmark` ficou antes dele (`NameError`), então foi reposicionado;
+  - a função auxiliar do portão se chamava `tests_without_tier` e foi
+    coletada como teste, então foi renomeada para `untiered_items`.
+
+**Efeito medido:** o job unit, o gate rápido, passou de **860 para 1379
+testes**. Antes de cada commit: ruff limpo e os três jobs com status 0
+(unit 1379, integration 138 com 5 pulados, suíte completa 1557 com 10
+pulados).

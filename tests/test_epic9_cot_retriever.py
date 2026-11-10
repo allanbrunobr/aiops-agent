@@ -13,6 +13,10 @@ from __future__ import annotations
 from rag.cot_retriever import CoTObservabilityRetriever, SearchContext
 from rag.query_expansion import QueryExpander
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 # ── Fake helpers (sem FAISS / ML) ─────────────────────────────────────────────
 

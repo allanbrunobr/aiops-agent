@@ -14,6 +14,10 @@ from core.logging import (
     get_logger,
 )
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 class TestConfigureLogging:
     """Testes de configuracao do logging."""

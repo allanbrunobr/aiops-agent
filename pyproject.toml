@@ -14,6 +14,7 @@ markers = [
     "integration: Testes de integração (pipeline completo, modo --no-llm)",
     "snapshot: Testes de snapshot (validação de output determinístico)",
     "slow: Testes lentos de performance (podem demorar >10s)",
+    "rust: Testes que exigem a extensão _aiops_rust (rodam só no job rust-build)",
 ]
 addopts = "-v --tb=short"
 filterwarnings = [

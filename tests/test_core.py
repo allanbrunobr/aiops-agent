@@ -17,6 +17,9 @@ from domain.incident_state import IncidentState
 from interfaces.http.webhook.schemas import NormalizedAlertDTO, normalize_severity
 
 
+pytestmark = pytest.mark.unit
+
+
 def _make_alert(**overrides) -> NormalizedAlert:
     """Helper para criar NormalizedAlert de teste."""
     defaults = {

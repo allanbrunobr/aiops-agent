@@ -28,6 +28,9 @@ from auth.token_store import InMemoryTokenStore
 from auth.pkce import generate_verifier, derive_challenge
 from auth.jwt_validator import issue_token
 
+
+pytestmark = pytest.mark.unit
+
 _BASE_URL = "http://aiops-agent.internal"
 _JWT_SECRET = "test-a2a-32bytes-secret-minimum!!"
 # Segredo de cliente gerado em tempo de execução (client_secret_post, SEC-01).

@@ -15,6 +15,9 @@ from pipeline.log_predictor import (
     detect_novel_templates,
 )
 
+
+pytestmark = pytest.mark.unit
+
 _TS = datetime.datetime(2026, 3, 4, 14, 0, 0)
 
 

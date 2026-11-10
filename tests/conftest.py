@@ -30,14 +30,39 @@ def pytest_addoption(parser):
     )
 
 
+# Todo teste precisa de um nível: é ele que decide em qual job do CI roda.
+# Sem marcador, o teste só rodava no job rust-build, fora dos jobs rápidos (T-a).
+TIER_MARKERS = ("unit", "integration", "snapshot", "rust")
+
+
+def untiered_items(items) -> list[str]:
+    """nodeids dos itens sem nenhum marcador de nível."""
+    return [
+        item.nodeid for item in items
+        if not any(item.get_closest_marker(m) for m in TIER_MARKERS)
+    ]
+
+
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(config, items):
-    """Verifica que módulos ML pesados não foram importados durante coleta."""
+    """Portões de coleta: sem ML importado e todo teste com marcador de nível.
+
+    tryfirst: roda antes da desseleção por -m, então vê a suíte inteira.
+    """
     for mod in _ML_MODULES:
         if mod in sys.modules:
             raise ImportError(
                 f"Módulo ML '{mod}' foi importado durante coleta de testes! "
                 f"Isso viola AC #4. Use imports lazy ou modo --no-rag."
             )
+    missing = untiered_items(items)
+    if missing:
+        listed = "\n  ".join(missing[:20])
+        more = f"\n  ... e mais {len(missing) - 20}" if len(missing) > 20 else ""
+        raise pytest.UsageError(
+            f"{len(missing)} teste(s) sem marcador de nível {TIER_MARKERS}. "
+            f"Sem ele o teste fica fora dos jobs rápidos do CI:\n  {listed}{more}"
+        )
 
 
 _REPO_MEMORY_DB = "data/incident_memory.db"

@@ -6,6 +6,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 def test_create_incident_state_has_required_fields():
     """create_incident_state() deve produzir IncidentState valido."""

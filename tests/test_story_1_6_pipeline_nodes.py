@@ -11,6 +11,10 @@ from config.loader import AppConfig
 from blueprint.pipelines.incident_response import build_incident_response_pipeline
 from blueprint.nodes import NodeType, OnFailure
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 def test_pipeline_has_correct_node_count():
     """Pipeline deve ter 8 nodes (4 pipeline + 4 safety)."""

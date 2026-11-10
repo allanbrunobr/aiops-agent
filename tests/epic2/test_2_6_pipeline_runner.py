@@ -14,6 +14,9 @@ from domain.alert import NormalizedAlert
 from interfaces.http.webhook.pipeline_runner import PipelineRunner
 
 
+pytestmark = pytest.mark.unit
+
+
 # Restringe este modulo ao backend asyncio
 @pytest.fixture(params=["asyncio"])
 def anyio_backend(request):

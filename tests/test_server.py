@@ -10,6 +10,9 @@ from httpx import ASGITransport, AsyncClient
 from interfaces.http.app import LazyRAG, create_app
 
 
+pytestmark = pytest.mark.unit
+
+
 @pytest.fixture
 def app():
     """Cria app FastAPI para teste."""

@@ -15,6 +15,9 @@ from interfaces.http.notifications.slack import SlackNotifier
 from interfaces.http.app import handle_prediction_event
 
 
+pytestmark = pytest.mark.unit
+
+
 def _make_notifier(has_token: bool = True) -> SlackNotifier:
     """Cria SlackNotifier com ou sem token para testes."""
     creds = MagicMock()

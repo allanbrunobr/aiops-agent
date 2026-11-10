@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 """
 Testes para Story 4.4: New Diagnostic Scenario Template.
 Cobre tests/support/golden_validator.py.
@@ -7,6 +8,8 @@ Cobre tests/support/golden_validator.py.
 
 import json
 import pytest
+
+pytestmark = pytest.mark.unit
 
 from tests.support.golden_validator import validate_against_golden, ValidationResult
 

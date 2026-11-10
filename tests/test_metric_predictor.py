@@ -16,6 +16,7 @@ def _make_point(value: float, minute: int = 0) -> MetricPoint:
 
 # ── Testes de MetricSeries ────────────────────────────────────────────────────
 
+@pytest.mark.unit
 class TestMetricSeriesInstantiation:
     """Verifica a instanciação do dataclass MetricSeries."""
 

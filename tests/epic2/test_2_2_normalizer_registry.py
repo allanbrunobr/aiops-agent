@@ -7,6 +7,9 @@ from interfaces.http.webhook.normalizers.base import AlertNormalizer
 from interfaces.http.webhook.normalizers.registry import NormalizerRegistry, register_normalizer
 
 
+pytestmark = pytest.mark.unit
+
+
 @pytest.fixture(autouse=True)
 def clean_registry():
     """Limpa registry antes e depois de cada teste."""

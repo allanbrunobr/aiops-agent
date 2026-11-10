@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 """Testes de correctude e benchmark de performance para detect_latency_drift em Rust.
 
 Verifica equivalência de resultados entre implementação Python e Rust,
@@ -10,6 +11,8 @@ e valida que _percentile em Rust é >= 3x mais rápido que Python para n=10k
 import time
 
 import pytest
+
+pytestmark = pytest.mark.rust
 
 pytest.importorskip("_aiops_rust")
 
