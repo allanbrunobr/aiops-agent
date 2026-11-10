@@ -106,7 +106,11 @@ def _require_bearer(request: Request) -> Any:
     if not header.startswith("Bearer ") or not header[7:].strip():
         raise HTTPException(status_code=401, detail="Bearer token required")
     try:
-        return validate_token(header[7:].strip(), secret)
+        return validate_token(
+            header[7:].strip(), secret,
+            issuer=getattr(request.app.state, "a2a_jwt_issuer", "") or None,
+            audience=getattr(request.app.state, "a2a_jwt_audience", "") or None,
+        )
     except pyjwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="JWT has expired")
     except pyjwt.InvalidTokenError:

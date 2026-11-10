@@ -683,3 +683,34 @@ vazio.
   Só os códigos de status foram impressos.
 - **Rotação:** apague os dois arquivos, rode a geração de novo e redistribua.
   Os segredos de hoje existem só nesta máquina.
+
+### `aud`/`iss` configuráveis (SEC-11) — a decisão do valor é do Allan
+
+**O que mudou:** `mcp.oauth.issuer` e `mcp.oauth.audience`. Pela env:
+`AIOPS_MCP__OAUTH__ISSUER` e `AIOPS_MCP__OAUTH__AUDIENCE`.
+
+- **Configurados:** o `/auth/token/register` emite os claims `iss`/`aud`, e
+  todos os validadores os exigem e conferem: introspect, A2A
+  (`_require_bearer`) e SSE do MCP.
+- **Vazios (o padrão):** nada muda; os tokens saem sem esses claims, como
+  antes.
+
+**Testes:** `tests/test_oauth_aud_iss.py`, 8 testes marcados `unit`.
+
+- **Antes da implementação:** 5 falharam. Os 3 que passavam cobrem o
+  comportamento padrão, que tinha de continuar igual.
+- **Cenários cobertos:**
+  - ida e volta com os claims;
+  - `aud` errado é recusado;
+  - token sem os claims é recusado quando eles são exigidos;
+  - o padrão não emite claims;
+  - o servidor emite os claims configurados;
+  - introspect e A2A aceitam um token com os claims certos;
+  - A2A e introspect recusam um token sem `aud`.
+
+**CI local:** os três jobs com status 0 (ver o commit).
+
+**Decisão pendente do Allan:** qual URL usar como `issuer` e qual `audience`.
+Hoje o `create_app` usa `base_url=""` no discovery, então o `issuer` não sai
+automaticamente do discovery. Ao ativar, todos os clientes precisam de token
+novo, porque tokens antigos sem `aud` passam a ser recusados.

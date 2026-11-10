@@ -173,6 +173,10 @@ class OAuthConfig(BaseModel):
     # JSON {client_id: sha256 hex} fora do repositório; completa secret_sha256
     # dos clientes acima. Env: AIOPS_MCP__OAUTH__CLIENT_SECRETS_FILE.
     client_secrets_file: str = ""
+    # aud/iss dos tokens (SEC-11). Vazio = não emite nem exige. Valor a definir
+    # pelo Allan (docs/p1-progresso.md).
+    issuer: str = ""
+    audience: str = ""
 
     # Phase 2 — RS256 assimétrico
     private_key_path: str = ""   # caminho para chave privada RSA PEM

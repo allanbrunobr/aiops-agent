@@ -40,6 +40,9 @@ _allowed_clients: dict[str, list[str]] = {}  # client_id → scopes permitidos
 _client_secret_hashes: dict[str, str] = {}
 _SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 _base_url: str = "http://localhost:8000"
+# aud/iss (SEC-11): vazios = tokens sem esses claims, como antes.
+_issuer: str = ""
+_audience: str = ""
 
 # Phase 2 — RS256 assimétrico
 _rsa_private_pem: str | None = None
@@ -57,6 +60,8 @@ def configure(
     rsa_private_pem: str | None = None,
     rsa_public_pem: str | None = None,
     kid: str = "aiops-rs256-1",
+    issuer: str = "",
+    audience: str = "",
 ) -> None:
     """Configura o Authorization Server com os valores do OAuthConfig.
 
@@ -74,6 +79,7 @@ def configure(
     """
     global _jwt_secret, _token_ttl, _allowed_clients, _base_url, _token_store
     global _rsa_private_pem, _rsa_public_pem, _kid, _jwk_set, _client_secret_hashes
+    global _issuer, _audience
     # HS256 is the signer unless an RSA pair is supplied. A short or empty
     # HMAC key must not be stored: PyJWT warns and still signs keys under 32 bytes.
     if not (rsa_private_pem and rsa_public_pem):
@@ -84,6 +90,8 @@ def configure(
     _jwt_secret = jwt_secret
     _token_ttl = token_ttl
     _base_url = base_url
+    _issuer = issuer
+    _audience = audience
     _kid = kid
     if token_store is not None:
         _token_store = token_store
@@ -217,6 +225,8 @@ async def register(body: RegisterRequest) -> RegisterResponse:
         scopes=effective_scopes,
         secret=_jwt_secret,
         ttl=_token_ttl,
+        issuer=_issuer or None,
+        audience=_audience or None,
     )
 
     return RegisterResponse(
@@ -234,7 +244,9 @@ async def introspect(body: IntrospectRequest) -> dict:
     Retorna active=False (sem erro 401) para tokens inválidos/expirados.
     """
     try:
-        claims: TokenClaims = validate_token(body.token, _jwt_secret)
+        claims: TokenClaims = validate_token(
+            body.token, _jwt_secret, issuer=_issuer or None, audience=_audience or None,
+        )
         return {
             "active": True,
             "sub": claims.sub,
