@@ -18,7 +18,7 @@ def test_isolated_cli_disables_slack_even_with_token(isolated_cli):
     os.environ["SLACK_CHANNEL"] = "#should-not-be-used"
 
     # Mesmo caminho de import que main() e main_v1() usam, em tempo de chamada.
-    from tools.slack_setup import setup_slack_notifier
+    from app.slack_setup import setup_slack_notifier
 
     assert setup_slack_notifier() is None
 
@@ -48,6 +48,6 @@ def test_slack_is_disabled_even_without_requesting_the_fixture(monkeypatch):
     monkeypatch.setenv("SLACK_BOT_TOKEN", "xoxb-" + secrets.token_hex(8))
     monkeypatch.setenv("SLACK_CHANNEL", "#should-not-be-used")
 
-    from tools.slack_setup import setup_slack_notifier
+    from app.slack_setup import setup_slack_notifier
 
     assert setup_slack_notifier() is None

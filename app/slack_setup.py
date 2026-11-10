@@ -1,5 +1,8 @@
 """Setup do SlackNotifier — extraído de main.py (Story 4.1).
 
+Fica em app/ (raiz de composição): monta um notificador da borda
+(interfaces/http/notifications). Em tools/ violava a regra de camadas.
+
 Encapsula configuração do SlackNotifier a partir de variáveis de ambiente
 SLACK_BOT_TOKEN e SLACK_CHANNEL.
 """

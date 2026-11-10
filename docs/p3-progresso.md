@@ -141,3 +141,36 @@ verdade. Toda a evolução de skills era código morto.
 
 **Fora do escopo:** o pipeline V1 (Blueprint) não tem esse ciclo de
 aprendizado de skills. Igualar o V1 ao V0 depende da decisão V0 × V1.
+
+## P3-3a — Regra de camadas verificada por teste, sem violações (A6/ARQ-15)
+
+**Defeito.** A regra de dependências existia só em docstring, sem portão, e
+já tinha duas violações:
+
+- `agents/diagnoser.py` importava um adapter concreto
+  (`adapters.llm.anthropic_client`);
+- `tools/slack_setup.py` importava `interfaces.http.notifications.slack`.
+
+**Correção:**
+
+- `tests/test_layer_dependencies.py`: varre por AST os arquivos versionados
+  e falha listando cada import proibido. O mapa de proibições:
+  - `domain` não importa nada interno;
+  - `application` importa só `domain`;
+  - o núcleo (`agents`, `pipeline`, `rag`, `safety`) não importa adapters,
+    `interfaces`, `app`, `infra` nem `blueprint`;
+  - `tools` e `adapters` não importam a borda (`interfaces`) nem a composição
+    (`app`).
+- `agents/diagnoser.py`: recebe `client_factory` por injeção. O `main`, raiz
+  de composição, passa a fábrica do adapter Anthropic.
+- `tools/slack_setup.py` → `app/slack_setup.py` (com `git mv`), porque montar
+  um notificador da borda é trabalho da raiz de composição. Referências
+  atualizadas em `main.py`, no `conftest` e em `test_cli_isolation.py`.
+
+**Teste:** antes da correção, o teste listou exatamente as 2 violações.
+
+**Suíte completa:** ruff limpo. unit 1472 passaram, integration 138
+passaram, suíte completa 1650 passaram e 10 foram pulados. Status 0 nos três.
+
+**Fora:** o import-linter como step de CI exige mexer em `.github/`. O teste
+de AST cumpre o mesmo papel dentro dos jobs que já existem.

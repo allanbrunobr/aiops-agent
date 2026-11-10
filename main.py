@@ -483,12 +483,14 @@ def step_agents(report, retriever, use_llm: bool = True,
             reporter=_reporter,
         )
     # Estágio 1 (fallback --no-llm): DiagnosisAgent heurístico
+    from adapters.llm.anthropic_client import create_anthropic_llm_client as _llm_client_factory
     diagnoser = DiagnosisAgent(
         max_iterations=1,
         model=llm_model,
         similar_incidents=_similar_incidents,
         skill=_skill,
         reporter=_reporter,
+        client_factory=_llm_client_factory,
     )
     mitigator = MitigationAgent(reporter=_reporter)
     tnr_guard = TNRSafetyGuard(regression_threshold=config.thresholds.regression_threshold)
@@ -1970,7 +1972,7 @@ def main_v1(args: argparse.Namespace) -> int:
     # Slack notifier — opcional, wired se SLACK_BOT_TOKEN estiver no ambiente
     from core.lifecycle import LifecycleEvent
     from datetime import timezone as _tz
-    from tools.slack_setup import setup_slack_notifier
+    from app.slack_setup import setup_slack_notifier
     _slack_notifier = setup_slack_notifier()
     if _slack_notifier is not None:
         _slack_channel = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
@@ -2175,7 +2177,7 @@ def main() -> int:
     import asyncio as _asyncio
     from core.lifecycle import LifecycleEvent as _LifecycleEvent
     from datetime import timezone as _tz2
-    from tools.slack_setup import setup_slack_notifier as _setup_slack
+    from app.slack_setup import setup_slack_notifier as _setup_slack
     _notifier = _setup_slack()
     if _notifier is not None:
         _slack_ch = os.environ.get("SLACK_CHANNEL", "").lstrip("#")

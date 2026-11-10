@@ -121,7 +121,7 @@ def isolated_cli(monkeypatch):
         for key in [k for k in os.environ
                     if k.startswith(("SLACK_", "ANTHROPIC_", "JIRA_", "DATABRICKS_"))]:
             del os.environ[key]
-        monkeypatch.setattr("tools.slack_setup.setup_slack_notifier",
+        monkeypatch.setattr("app.slack_setup.setup_slack_notifier",
                             lambda *args, **kwargs: None)
         yield
 
