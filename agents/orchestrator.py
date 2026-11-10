@@ -237,6 +237,10 @@ class AgentOrchestrator:
     """
 
     MAX_REPLANS = 2
+    # Teto de steps por plano vindo do LLM. Junto com MAX_REPLANS e a saída
+    # quando o plano se esgota, limita as chamadas de reflexão por run a
+    # (MAX_REPLANS + 1) * MAX_STEPS_PER_PLAN.
+    MAX_STEPS_PER_PLAN = 8
 
     def __init__(
         self,
@@ -308,6 +312,11 @@ class AgentOrchestrator:
                     break
 
                 # decision == "continue" → próximo step
+            else:
+                # Plano esgotado sem finalize nem replan (inclusive quando toda
+                # reflexão falha e vira "continue"): repetir o mesmo plano não
+                # traz evidência nova. Sai e sintetiza com o que foi coletado.
+                break
 
             if diagnosis:
                 break
@@ -402,7 +411,7 @@ class AgentOrchestrator:
             )
             for s in data.get("steps", [])
             if s.get("tool") in _VALID_TOOLS
-        ]
+        ][: self.MAX_STEPS_PER_PLAN]
 
         if not steps:
             return self._default_plan(report)
@@ -512,7 +521,7 @@ class AgentOrchestrator:
                 )
                 for s in data.get("steps", [])
                 if s.get("tool") in _VALID_TOOLS
-            ]
+            ][: self.MAX_STEPS_PER_PLAN]
             return InvestigationPlan(
                 hypothesis=data.get("hypothesis", old_plan.hypothesis),
                 steps=steps or old_plan.steps,
@@ -551,9 +560,14 @@ class AgentOrchestrator:
             kwargs["system"] = system_msg
         try:
             response = self.client.create_message(**kwargs)
-            return json.loads(response.content[0].text)
+            data = json.loads(response.content[0].text)
         except Exception:  # noqa: BLE001
             return DiagnosisAgent()._heuristic_diagnosis(report)
+        # O resto do pipeline faz diagnosis.get(...) e decide por root_cause:
+        # lista, null ou dict sem root_cause não são diagnóstico.
+        if not isinstance(data, dict) or not data.get("root_cause"):
+            return DiagnosisAgent()._heuristic_diagnosis(report)
+        return data
 
     def _reflect_final(
         self,
