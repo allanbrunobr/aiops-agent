@@ -108,7 +108,14 @@ class GrafanaNormalizer(AlertNormalizer):
         if not alerts:
             raise ValueError("Grafana payload missing 'alerts' array or empty")
 
-        alert = alerts[0]  # Processa primeiro alerta do grupo
+        # Processa o primeiro alerta EM DISPARO do grupo; só um grupo todo
+        # resolvido vira notificação de resolução. Com alerts[0], um grupo
+        # [resolved, firing] era descartado como "resolved" e o alerta que
+        # ainda disparava não abria pipeline.
+        alert = next(
+            (a for a in alerts if a.get("status", "firing") != "resolved"),
+            alerts[0],
+        )
         labels = alert.get("labels", {})
         annotations = alert.get("annotations", {})
 

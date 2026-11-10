@@ -51,6 +51,37 @@ class TestResolvedNotification:
         assert resp.json()["ignored_reason"] == "resolved_notification"
         assert runner.submitted == []
 
+    def test_group_with_a_firing_alert_is_not_discarded(self):
+        """Grupo [resolved, firing]: o alerta em disparo abre pipeline.
+
+        O Alertmanager do Grafana manda alertas firing e resolved do mesmo
+        grupo na mesma notificação. Ler só alerts[0] descartava o grupo.
+        """
+        p = _payload("warning", status="firing")
+        still_firing = copy.deepcopy(p["alerts"][0])
+        p["alerts"][0]["status"] = "resolved"
+        still_firing["fingerprint"] = "still-firing-fp"
+        still_firing["labels"]["alertname"] = "StillFiring"
+        p["alerts"].append(still_firing)
+
+        alert = GrafanaNormalizer().normalize(p)
+        assert alert.alert_type == "grafana.firing"
+        assert alert.title == "StillFiring"
+
+        runner = _Runner([True])
+        resp = _post(TestClient(_app(runner)), payload=p)
+        assert resp.status_code == 202
+        assert resp.json().get("ignored_reason") is None
+        assert len(runner.submitted) == 1
+
+    def test_group_with_only_resolved_alerts_is_a_resolution(self):
+        p = _payload("warning", status="resolved")
+        p["alerts"].append(copy.deepcopy(p["alerts"][0]))
+        runner = _Runner([True])
+        resp = _post(TestClient(_app(runner)), payload=p)
+        assert resp.json()["ignored_reason"] == "resolved_notification"
+        assert runner.submitted == []
+
     def test_firing_after_resolved_is_still_processed(self):
         runner = _Runner([True])
         client = TestClient(_app(runner))

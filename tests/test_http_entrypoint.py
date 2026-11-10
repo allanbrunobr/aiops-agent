@@ -38,6 +38,29 @@ def test_entrypoint_serves_create_app_on_localhost(captured_run):
     assert TestClient(app).get("/health").status_code == 200
 
 
+def test_http_access_log_is_suppressed_on_purpose(captured_run):
+    """Sem log_level, uvicorn.access fica em WARNING: o session_id do MCP SSE
+    vai na query string e não deve parar em access log."""
+    from interfaces.http.__main__ import main
+
+    main([])
+    (_, kwargs), = captured_run
+    assert "log_level" not in kwargs
+
+
+def test_demo_keeps_its_access_log(captured_run, monkeypatch):
+    """A demo mostrava as linhas de acesso antes do log_config=None (pré-PR)."""
+    import sys
+
+    from interfaces.demo import server
+
+    monkeypatch.setattr(sys, "argv", ["server"])
+    server.main()
+    (_, kwargs), = captured_run
+    assert kwargs["log_config"] is None
+    assert kwargs["log_level"] == "info"
+
+
 def test_entrypoint_accepts_host_port_and_config(captured_run, tmp_path):
     from interfaces.http.__main__ import main
 

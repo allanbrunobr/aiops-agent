@@ -37,6 +37,9 @@ def main(argv: list[str] | None = None) -> None:
     app = create_app(load_config(config_path=args.config))
     # log_config=None: os logs do uvicorn passam pelo handler configurado
     # (JSON, com redação de segredos) em vez da config própria dele.
+    # Sem log_level, o access log fica em WARNING (configure_logging), ou
+    # seja, suprimido DE PROPÓSITO: este app serve o MCP SSE, cujo session_id
+    # vai na query string de POST /mcp/messages (analise-20261109, 4B).
     uvicorn.run(app, host=args.host, port=args.port, log_config=None)
 
 

@@ -344,13 +344,11 @@ async def handle_validate_action(
         correlation_id=correlation_id,
     )
 
-    tnr_detail = orch_result.layer_details.get("tnr")
-    tnr_msg = getattr(tnr_detail, "message", "TNR check passed") or "TNR check passed"
     layer_3 = LayerResult(
         layer_name="TNR",
         passed="tnr" not in orch_result.blocked_by,
         risk_contribution=0.3 if "tnr" in orch_result.blocked_by else 0.0,
-        detail=tnr_msg if isinstance(tnr_msg, str) else "TNR check passed",
+        detail=_tnr_layer_detail(orch_result.layer_details.get("tnr")),
     )
     layer_results.append(layer_3)
     log.info(
@@ -559,6 +557,27 @@ def _check_version_validator(command: str, version_validator: object) -> LayerRe
         )
 
 
+TNR_NOT_VERIFIED = "TNR not verified"
+
+
+def _tnr_layer_detail(detail: object) -> str:
+    """Texto da camada TNR a partir do que o SafetyOrchestrator registrou.
+
+    Sem medição de saúde pré/pós, o orquestrador grava um dict
+    `{"verified": False, ...}` (P2-11). Antes este adaptador procurava
+    `.message` no dict, não achava, e respondia "TNR check passed" para uma
+    checagem que não aconteceu.
+    """
+    if isinstance(detail, dict):
+        if "error" in detail:
+            return f"TNR check failed: {detail['error']}"
+        return f"{TNR_NOT_VERIFIED}: {detail.get('reason', 'no health measurement')}"
+    if detail is None:
+        return f"{TNR_NOT_VERIFIED}: no health measurement"
+    message = getattr(detail, "message", None)
+    return message if isinstance(message, str) and message else "TNR check passed"
+
+
 def _build_verdict(layer_results: list[LayerResult]) -> ValidationVerdict:
     """Constrói veredicto final a partir dos resultados das 4 camadas.
 
@@ -572,7 +591,14 @@ def _build_verdict(layer_results: list[LayerResult]) -> ValidationVerdict:
     risk_score = min(1.0, sum(lr.risk_contribution for lr in layer_results))
 
     # Rationale: combina detalhes das camadas que bloquearam
-    if approved:
+    unverified = [lr for lr in layer_results if lr.detail.startswith(TNR_NOT_VERIFIED)]
+    if approved and unverified:
+        # Não bloquear é o projetado (P2-11); afirmar que o TNR aprovou, não.
+        rationale = (
+            "Action approved by the safety layers that ran. "
+            + " | ".join(lr.detail for lr in unverified)
+        )
+    elif approved:
         rationale = "Action approved by all 4 safety layers."
     else:
         blocking_details = [

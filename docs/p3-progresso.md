@@ -682,6 +682,10 @@ roda com a extensão nova. Status 0 nos três.
     `configure_logging()`.
   - Os três servidores (HTTP, demo e webhook) passam `log_config=None` ao
     uvicorn, então os logs dele também saem em JSON com redação.
+  - **Access log:** a demo e o webhook passam `log_level="info"` e mostram as
+    linhas de acesso. O HTTP não mostra, de propósito: `configure_logging()`
+    deixa `uvicorn.access` em WARNING, e o `session_id` do MCP SSE vai na query
+    string. (Achado do pré-PR: a demo tinha perdido o access log.)
 - **Medido com o processo real** (script no scratchpad): `/health` respondeu
   200. As 10 linhas de log saíram em JSON. Antes do `log_config=None`, só 2
   de 11 saíam em JSON.
@@ -778,3 +782,28 @@ passaram, suíte completa 1802 passaram e 10 foram pulados. Status 0 nos três.
 
 **Suíte completa:** ruff limpo. unit 1520 passaram, integration 138
 passaram, suíte completa 1805 passaram e 10 foram pulados. Status 0 nos três.
+
+## Revisão pré-PR (`pre-pr-contradicoes` em `2b6bf7b`)
+
+Quatro achados sobreviveram à refutação. Todos foram corrigidos com teste
+que falha no código antigo (medido no clone em `2b6bf7b`: 9 falhas, 20
+passaram) e passa no novo.
+
+- **MCP `validate_action` dizia "TNR check passed"** quando o orquestrador
+  registra `{"verified": False}` (P2-11 mudou o produtor; o adaptador do MCP
+  procurava `.message` no dict). Agora a camada diz `TNR not verified: …` e o
+  `rationale` não afirma que as 4 camadas aprovaram. Continua sem bloquear,
+  como projetado. Teste: `tests/test_mcp_validate_tnr_not_verified.py`.
+- **Grafana: grupo `[resolved, firing]` era descartado** como notificação de
+  resolução, porque só `alerts[0]` era lido. O normalizador processa o
+  primeiro alerta em disparo; só grupo todo resolvido é resolução. Testes em
+  `tests/test_grafana_severity_resolved.py`.
+- **A skill `default` enfileirava uma proposta por execução** (e uma chamada
+  ao LLM), porque ela é roteada sem olhar o score. `should_evolve` não dispara
+  enquanto houver proposta pendente para a skill. Medido antes: 4 pendentes e
+  4 chamadas em 6 rodadas; agora 1 e 1. Teste em
+  `tests/test_skill_score_learning.py`.
+- **A demo tinha perdido o access log** com o `log_config=None`. Ela passa
+  `log_level="info"`, como o webhook. O HTTP continua sem access log de
+  propósito (o `session_id` do MCP SSE vai na query string), e o registro
+  acima diz isso. Testes em `tests/test_http_entrypoint.py`.

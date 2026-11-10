@@ -490,7 +490,10 @@ def main() -> None:
 
     configure_logging()
     logger.info("Demo server ready on http://%s:%d/demo/", args.host, args.port)
-    uvicorn.run(app, host=args.host, port=args.port, log_config=None)
+    # log_level="info": o uvicorn reaplica o nível de uvicorn.access, que o
+    # configure_logging() baixa para WARNING; sem ele o access log da demo,
+    # que existia antes do log_config=None, sumia.
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info", log_config=None)
 
 
 if __name__ == "__main__":

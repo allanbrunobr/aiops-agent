@@ -47,6 +47,29 @@ def test_llm_run_updates_score_and_uses(tmp_path):
     assert updated.utility_score == pytest.approx(0.3 * 1.0 + 0.7 * 0.6)
 
 
+def test_pending_proposal_blocks_new_rewrites_of_the_default_skill(tmp_path):
+    """A skill `default` é roteada sem olhar o score, então continua fraca.
+
+    Sem trava, cada execução abaixo do limiar pagava uma chamada ao LLM e
+    enfileirava mais uma proposta (medido no pré-PR: 4 pendentes em 6 rodadas).
+    """
+    from main import step_skill_learning
+    from agents.skill_router import SkillRouter
+
+    db = IncidentMemoryDB(db_path=str(tmp_path / "m.db"))
+    router = SkillRouter(db)
+    router.seed_default_skills()
+    client = _client()
+    for _ in range(6):
+        skill = router.route(["unknown-thing"], ["svc"])
+        assert skill.skill_id == "default"
+        step_skill_learning(db, skill, tnr_result="not_verified",
+                            reflection={"score": 0.25, "lesson": "x"}, tools_used=[],
+                            iteration_count=1, use_llm=True, client=client)
+    assert len(db.list_skill_proposals(status="pending")) == 1
+    assert client.create_message.call_count == 1
+
+
 def test_low_scores_trigger_a_pending_proposal(tmp_path):
     from main import step_skill_learning
 

@@ -55,11 +55,22 @@ class SkillEvolver:
         Critérios:
         - total_uses >= _EVOLVE_MIN_USES  (evita decisões com dados insuficientes)
         - utility_score < _EVOLVE_SCORE_THRESHOLD  (performance abaixo do mínimo)
+        - nenhuma proposta pendente para esta skill: a proposta não muda a
+          skill ativa até ser aprovada, então o score continua baixo — sem
+          esta trava, cada execução pagava uma chamada ao LLM e enfileirava
+          mais uma proposta (a skill `default` nunca sai do roteamento)
         """
         return (
             skill.total_uses >= _EVOLVE_MIN_USES
             and skill.utility_score < _EVOLVE_SCORE_THRESHOLD
+            and not self._has_pending_proposal(skill.skill_id)
         )
+
+    def _has_pending_proposal(self, skill_id: str) -> bool:
+        if self.memory_db is None:
+            return False
+        pending = self.memory_db.list_skill_proposals(status="pending")
+        return any(p.get("skill_id") == skill_id for p in pending)
 
     def evolve(self, skill: DiagnosticSkill) -> DiagnosticSkill | None:
         """Reescreve o system_prompt da skill via LLM.
