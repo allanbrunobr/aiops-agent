@@ -1013,9 +1013,9 @@ def _serialize_result(result: dict, incident) -> dict:
         if post is not None:
             verification["post_snapshot"] = _serialize_health_snapshot(post)
 
-    # Action items
+    # Action items (vazio sem incidente, como no Markdown)
     pattern_matched = mitigation_raw.get("pattern_matched", "default") if mitigation_raw else "default"
-    action_items = _get_action_items(pattern_matched)
+    action_items = [] if _no_incident(result) else _get_action_items(pattern_matched)
 
     # Timeline
     timeline = {
@@ -1124,6 +1124,16 @@ def step_predict(result: dict, report, *,
     console.print()
 
 
+def _no_incident(result) -> bool:
+    """A detecção concluiu que não há incidente (saída antecipada para IDLE).
+
+    Veredito, Action Items, tracking e resumo da CLI consultam este mesmo
+    predicado: antes só o veredito sabia, e o resto tratava a janela saudável
+    como incidente (pré-PR em 2b4f094).
+    """
+    return (result.get("stages", {}).get("detection") or {}).get("is_incident") is False
+
+
 def _postmortem_verdict(result) -> dict:
     """Veredito único do postmortem, para o markdown E o JSON.
 
@@ -1141,7 +1151,7 @@ def _postmortem_verdict(result) -> dict:
     )
     proposed = bool((stages.get("mitigation") or {}).get("action"))
     tnr = (stages.get("verification") or {}).get("result")
-    no_incident = (stages.get("detection") or {}).get("is_incident") is False
+    no_incident = _no_incident(result)
     if awaiting_human:
         resolution = "Awaiting human approval (mitigation proposed, not executed)"
     elif no_incident:
@@ -1289,10 +1299,14 @@ def step_postmortem(result, incident, output_dir: str = "output",
 """
 
     # Gera action items dinâmicos com base no pattern_matched da mitigação.
+    # Sem incidente não há tarefa: a lista "default" ao lado de "no action
+    # required" se contradizia.
     pattern_matched = mitigation.get("pattern_matched", "default") if mitigation else "default"
-    items = _get_action_items(pattern_matched)
+    items = [] if _no_incident(result) else _get_action_items(pattern_matched)
     for i, item in enumerate(items, 1):
         postmortem += f"{i}. [ ] {item}\n"
+    if not items:
+        postmortem += "- None (no incident detected)\n"
 
     # Incident Tracking section (Story 6.3)
     if tracker_url and tracker_issue_key:
@@ -1395,6 +1409,9 @@ def print_summary(result, compression_stats=None, safety_result=None,
     awaiting_human = _requires_human(safety_result, remediation_result)
     if awaiting_human:
         status_icon = "[bold yellow]AWAITING HUMAN[/bold yellow]"
+    elif _no_incident(result):
+        # Janela saudável sai com exit 0; UNRESOLVED em vermelho contradizia.
+        status_icon = "[bold green]NO INCIDENT[/bold green]"
     elif success:
         status_icon = "[bold green]RESOLVED[/bold green]"
     else:
@@ -1460,7 +1477,7 @@ def print_summary(result, compression_stats=None, safety_result=None,
     table.add_row(
         "Diagnosis",
         f"[green]{diagnosis.get('confidence', '?')} confidence[/green]",
-        f"{diagnosis.get('root_cause', 'N/A')[:60]} [dim](model: {llm_model})[/dim]",
+        f"{(diagnosis.get('root_cause') or 'N/A')[:60]} [dim](model: {llm_model})[/dim]",
     )
 
     # Mitigation
@@ -1717,6 +1734,12 @@ def step_tracking(result, tracker) -> str | None:
     console.print(Rule("[bold]Stage 5b: Incident Tracking[/bold]", style="cyan"))
     console.print()
 
+    if _no_incident(result):
+        # Janela saudável: abrir um Bug "AIOps detected incident" contradizia o
+        # postmortem ("no action required") que aponta para ele.
+        console.print("  [dim]No incident detected; no issue created[/dim]")
+        return None
+
     diagnosis = result.get("stages", {}).get("diagnosis", {})
     detection = result.get("stages", {}).get("detection", {})
 
@@ -1756,7 +1779,9 @@ def _attach_postmortem_to_tracker(tracker, issue_key: str, result) -> str | None
     diagnosis = result.get("stages", {}).get("diagnosis", {})
     mitigation = result.get("stages", {}).get("mitigation", {})
 
-    root_cause = diagnosis.get("root_cause", "Unable to determine root cause")
+    # `or`: diagnóstico FAILED grava root_cause None, e o formatter do Jira
+    # quebrava no join (pré-PR em 2b4f094).
+    root_cause = diagnosis.get("root_cause") or "Unable to determine root cause"
 
     # Mapeia timeline do pipeline para formato do tracker
     timeline = []
@@ -1950,7 +1975,7 @@ def display_results(state: "IncidentState", compact: bool = False) -> None:
     diagnosis = state.diagnosis or {}
     if diagnosis:
         console.print(Panel(
-            f"[bold]Root Cause:[/bold] {diagnosis.get('root_cause', 'Unknown')}\n"
+            f"[bold]Root Cause:[/bold] {diagnosis.get('root_cause') or 'Unknown'}\n"
             f"[bold]Confidence:[/bold] {diagnosis.get('confidence', 'unknown')}\n"
             f"[bold]Evidence:[/bold] {', '.join(diagnosis.get('evidence', [])[:3])}",
             title="Diagnosis Result",
@@ -2152,7 +2177,7 @@ def main_v1(args: argparse.Namespace) -> int:
         diagnosis = state.diagnosis or {}
         _conf_v1 = confidence_to_score(diagnosis.get("confidence"))
         _fire("pipeline.completed", cid=_cid, data={
-            "root_cause": diagnosis.get("root_cause", ""),
+            "root_cause": diagnosis.get("root_cause") or "",
             "confidence": _conf_v1,
             "proposed_fix": diagnosis.get("proposed_fix") or diagnosis.get("fix_command", ""),
             "risk_level": state.safety_verdict or "unknown",
@@ -2361,7 +2386,7 @@ def main() -> int:
         )
         _conf_for_slack = confidence_to_score(_diag_for_slack.get("confidence"))
         _slack_fire("diagnosis.completed", cid=_pipeline_cid, data={
-            "root_cause": _diag_for_slack.get("root_cause", ""),
+            "root_cause": _diag_for_slack.get("root_cause") or "",
             "proposed_fix": _proposed_fix_slack,
             "risk_level": safety_result.risk_level.value if safety_result else "unknown",
             "requires_human": requires_human,
@@ -2441,7 +2466,7 @@ def main() -> int:
             else "unknown"
         )
         _slack_fire("pipeline.completed", cid=_pipeline_cid, data={
-            "root_cause": _diag.get("root_cause", ""),
+            "root_cause": _diag.get("root_cause") or "",
             "confidence": _conf,
             "proposed_fix": _fix,
             "risk_level": safety_result.risk_level.value if safety_result else "unknown",

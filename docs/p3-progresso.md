@@ -988,3 +988,30 @@ duplicatas. Dez achados foram refutados. Corrigidos num único commit:
   Com o `main.py` de `78c4689`, os 2 que cobrem os defeitos de `main.py`
   falham; com o novo, os 13 passam. `test_snapshots.py` e
   `test_unknown_fault.py` (38) passam. Ruff limpo.
+
+## Pré-PR em `2b4f094` (delta `78c4689..2b4f094`)
+
+Revisão estática no M5, enquanto o CI de `2b4f094` rodava no M1 (verde:
+unit 1559, integration 138, completa 1844). Dez achados sobreviveram,
+agrupados em quatro defeitos, e quatro foram refutados. A causa comum é que
+só `_postmortem_verdict` sabia que não houve incidente. Agora o predicado
+`_no_incident(result)` é usado em todos os pontos. Corrigido num único
+commit:
+
+- **`--tracker jira` numa janela saudável** abria um Bug "AIOps detected
+  incident", e o postmortem, que diz "no action required", apontava para
+  ele. Agora `step_tracking` não cria issue sem incidente.
+- **Action Items sem incidente:** quatro tarefas `[ ]` apareciam abaixo de
+  "no action required", no markdown e no `action_items` do JSON. Agora a
+  lista vem vazia, com "None (no incident detected)" no markdown.
+- **Resumo da CLI numa janela saudável:** mostrava UNRESOLVED em vermelho
+  com exit 0 "resolved". Agora mostra NO INCIDENT.
+- **`root_cause` None** ainda quebrava o anexo do postmortem no Jira
+  (`_attach_postmortem_to_tracker`) e o `print_summary`, que levava o run a
+  exit 1. As demais leituras de `root_cause` (Slack e V1) também passaram a
+  usar `or`.
+- **Medido:** `tests/test_postmortem_coherence.py` tem 18 testes. Com o
+  `main.py` de `2b4f094`, os 5 novos falham; com o novo, os 18 passam.
+  `test_tracker_integration.py`, `test_json_output.py`, `test_snapshots.py`
+  e `test_unknown_fault.py` (88 testes) passam, e os snapshots não mudaram.
+  Ruff limpo.

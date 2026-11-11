@@ -173,3 +173,78 @@ def test_transition_before_the_gate_does_not_claim_pending_approval():
     import main
 
     assert "human approval still pending" not in inspect.getsource(main.step_agents)
+
+
+# ── Pré-PR em 2b4f094: o resto do fluxo também sabe que não houve incidente ──
+
+NO_INCIDENT = {"success": False, "stages": {"detection": {"is_incident": False, "severity": "low"}},
+               "timeline": []}
+FAILED_DIAGNOSIS = {
+    "success": False,
+    "stages": {"detection": {"is_incident": True, "severity": "high"},
+               "diagnosis": {"root_cause": None, "is_incident": False}},
+    "timeline": [{"time": "10:00", "from": "DIAGNOSING", "to": "FAILED", "reason": "x"}],
+}
+
+
+class _JiraLike:
+    """Formata como o JiraTracker de verdade, sem rede."""
+
+    url = "https://jira.invalid"
+
+    def __init__(self):
+        self.created = []
+
+    def create_incident(self, title, severity, description):
+        self.created.append(title)
+        return "OPS-1"
+
+    def create_postmortem(self, incident_id, timeline, root_cause, action_items):
+        from tools.jira_tracker import JiraIncidentTracker
+
+        self.body = JiraIncidentTracker._format_postmortem(timeline, root_cause, action_items)
+        return "c-1"
+
+
+def test_healthy_window_opens_no_tracker_issue():
+    import main
+
+    tracker = _JiraLike()
+    assert main.step_tracking(NO_INCIDENT, tracker) is None
+    assert tracker.created == []
+
+
+def test_healthy_window_has_no_action_items(tmp_path):
+    text, data = _postmortem(tmp_path, NO_INCIDENT, fmt="both")
+    assert "No incident detected; no action required" in text
+    assert "[ ]" not in text
+    assert "- None (no incident detected)" in text
+    assert data["action_items"] == []
+
+
+def test_failed_diagnosis_postmortem_attaches_to_tracker():
+    import main
+
+    tracker = _JiraLike()
+    assert main._attach_postmortem_to_tracker(tracker, "OPS-1", FAILED_DIAGNOSIS) == "c-1"
+    assert "Unable to determine root cause" in tracker.body
+
+
+@pytest.mark.parametrize(("result", "status"), [
+    (NO_INCIDENT, "NO INCIDENT"),
+    (FAILED_DIAGNOSIS, "UNRESOLVED"),
+], ids=["no-incident", "failed-diagnosis"])
+def test_cli_summary_matches_the_verdict(monkeypatch, result, status):
+    """print_summary: janela saudável não é UNRESOLVED (exit 0), e
+    root_cause None não derruba o resumo (que levava o run a exit 1)."""
+    from rich.console import Console
+
+    import main
+
+    console = Console(record=True, width=200)
+    monkeypatch.setattr(main, "console", console)
+    main.print_summary(result)
+    out = console.export_text()
+    assert status in out
+    if status == "NO INCIDENT":
+        assert "UNRESOLVED" not in out
