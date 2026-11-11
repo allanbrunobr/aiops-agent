@@ -1130,6 +1130,24 @@ def step_postmortem(result, incident, output_dir: str = "output",
     diagnosis = result.get("stages", {}).get("diagnosis", {})
     mitigation = result.get("stages", {}).get("mitigation", {})
     verification = result.get("stages", {}).get("verification", {})
+    detection_stage = result.get("stages", {}).get("detection", {})
+
+    # Veredito do gate humano, usado no Summary e nas Lições: os dois têm de
+    # dizer a mesma coisa (pré-PR em 00cb1c5: "Resolved" no topo e "awaiting
+    # approval" nas lições, no mesmo documento).
+    _safety_decision = result.get("stages", {}).get("safety_decision")
+    _safety_validation = result.get("stages", {}).get("safety_validation", {})
+    awaiting_human = bool(
+        _safety_decision.get("requires_human")
+        if _safety_decision is not None
+        else _safety_validation.get("requires_human")
+    )
+    if awaiting_human:
+        resolution = "Awaiting human approval (mitigation proposed, not executed)"
+    elif result.get("success"):
+        resolution = "Resolved"
+    else:
+        resolution = "Requires manual intervention"
 
     scenario_name = result.get("scenario_name", "payment-pool-exhaustion")
     now = datetime.now()
@@ -1144,7 +1162,7 @@ def step_postmortem(result, incident, output_dir: str = "output",
 - **Duration**: ~{(incident.fix_time - incident.deploy_time).total_seconds() / 60:.0f} minutes
 - **Severity**: {result.get('stages', {}).get('detection', {}).get('severity', 'UNKNOWN')}
 - **Impact**: Service degradation detected via automated analysis
-- **Resolution**: {'Resolved' if result.get('success') else 'Requires manual intervention'}
+- **Resolution**: {resolution}
 
 ## Root Cause
 
@@ -1256,22 +1274,23 @@ def step_postmortem(result, incident, output_dir: str = "output",
         "regression": "TNR detected a regression after the mitigation",
         "not_verified": "TNR did not verify the mitigation (no post-action health measurement)",
     }.get(verification.get("result"), "TNR verification did not run")
-    _safety_decision = result.get("stages", {}).get("safety_decision")
-    _safety_validation = result.get("stages", {}).get("safety_validation", {})
-    awaiting_human = bool(
-        _safety_decision.get("requires_human")
-        if _safety_decision is not None
-        else _safety_validation.get("requires_human")
-    )
-    pipeline_lesson = (
-        "Pipeline stopped at the human approval gate (mitigation awaiting approval)"
-        if awaiting_human
-        else "Incident response pipeline completed all stages"
+    if not mitigation:
+        # Saída antecipada (sem incidente, diagnóstico FAILED): nada foi
+        # mitigado, e "completed all stages" seria falso.
+        pipeline_lesson = "Pipeline stopped before mitigation (see State Machine Transitions)"
+    elif awaiting_human:
+        pipeline_lesson = "Pipeline stopped at the human approval gate (mitigation awaiting approval)"
+    else:
+        pipeline_lesson = "Incident response pipeline completed all stages"
+    detection_lesson = (
+        "Automated detection identified the incident promptly"
+        if detection_stage.get("is_incident", True)
+        else "Automated detection found no incident in the analysed window"
     )
     postmortem += f"""
 ## Lessons Learned
 
-- Automated detection identified the incident promptly
+- {detection_lesson}
 - Heuristic diagnosis provided {confidence}-confidence assessment
 - {tnr_lesson}
 - {pipeline_lesson}

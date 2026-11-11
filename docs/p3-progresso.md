@@ -898,3 +898,24 @@ Revisão estática, sem M1. Um achado sobreviveu e os outros foram refutados.
   novo. Medido: com o `main.py` antigo e os snapshots novos,
   `test_postmortem_structure_snapshot` falha. Com o novo, `test_snapshots.py`
   (12 testes) e `test_unknown_fault.py` (26 testes) passam.
+
+## Quarta revisão pré-PR (`00cb1c5`, delta `eee1245..00cb1c5`)
+
+Revisão estática, sem M1. Dois achados sobreviveram, cada um com
+duplicatas. Os outros oito foram refutados.
+
+- **Summary × Lições com aprovação pendente:** o Summary dizia
+  `Resolution: Resolved` e as Lições, no mesmo postmortem, "Pipeline stopped
+  at the human approval gate". A linha `Resolution` já existia. A contradição
+  dentro do documento nasceu da lição nova. Agora o veredito do gate é
+  calculado uma vez e vale para os dois. Com aprovação pendente, o Summary
+  diz `Awaiting human approval (mitigation proposed, not executed)`. Os dois
+  snapshots foram atualizados.
+- **"completed all stages" numa saída antecipada:** sem incidente
+  (`DETECTING -> IDLE`) ou com diagnóstico `FAILED`, não há mitigação, e a
+  lição dizia que o pipeline concluiu todas as etapas. A lição de detecção
+  dizia "identified the incident promptly". Agora as duas descrevem a parada.
+- **Medido:** `tests/test_postmortem_coherence.py`, 3 testes. Com o
+  `main.py` antigo, 2 falham, e o terceiro guarda o caso auto-aprovado, que
+  já funcionava. Com o novo, os 3 passam, e também `test_snapshots.py` (12) e
+  `test_unknown_fault.py` (26).

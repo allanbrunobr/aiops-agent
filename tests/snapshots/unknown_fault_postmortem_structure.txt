@@ -8,7 +8,7 @@
 - **Duration**: ~35 minutes
 - **Severity**: CRITICAL
 - **Impact**: Service degradation detected via automated analysis
-- **Resolution**: Resolved
+- **Resolution**: Awaiting human approval (mitigation proposed, not executed)
 
 ## Root Cause
 
