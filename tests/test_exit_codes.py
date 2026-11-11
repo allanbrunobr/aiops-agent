@@ -56,6 +56,10 @@ class TestHelpShowsExitCodes:
         assert "1  Invalid arguments, or an unrecoverable error" in help_text
         assert "2  TNR regression detected" in help_text
         assert "3  Safety blocked action" in help_text
+        # O exit 0 inclui o TNR not_verified (sem medição pós-ação): o --help
+        # não pode prometer verificação, como os READMEs (pré-PR em c89f52e).
+        assert "TNR verified" not in help_text
+        assert "not_verified" in help_text
 
 
 @pytest.mark.unit

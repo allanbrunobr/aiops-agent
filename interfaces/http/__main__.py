@@ -2,8 +2,10 @@
 
 Serve health, A2A (exige Bearer JWT), o servidor OAuth (só com segredo
 configurado) e, se `mcp.enabled` e `transport: sse`, o MCP via SSE. Escuta em
-127.0.0.1 por padrão. Equivalente: `uvicorn interfaces.http.app:create_app
---factory --host 127.0.0.1 --port 47893` (sem `--config`).
+127.0.0.1 por padrão. Use este entrypoint, não `uvicorn ... --factory`: a
+CLI do uvicorn não chama `configure_logging()`, então os logs saem sem
+redação e o access log fica em INFO, gravando o `session_id` do MCP SSE
+(query string de `POST /mcp/messages`).
 
 P3-2 (docs/analise-20261109.md, A5): antes nenhum processo servia create_app.
 """

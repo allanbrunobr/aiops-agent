@@ -864,3 +864,21 @@ passaram) e passa no novo.
   enquanto o primeiro ainda está no `submit` recebe 202 `deduplicated`, mesmo
   que o primeiro termine em 503 (fila cheia). A reserva é liberada na recusa,
   então o próximo reenvio do emissor é aceito.
+
+## Segunda revisão pré-PR (`c89f52e`, os 8 commits depois de `2b6bf7b`)
+
+Base do PR decidida pelo Allan: `main`. A revisão foi estática, sem M1, e
+mediu só com checagens leves. Dois achados sobreviveram, dos quais um tinha
+duplicatas. Oito foram refutados. Corrigidos:
+
+- **`--help` contradizia os READMEs:** o epílogo dizia que o exit 0 é
+  "TNR verified", e o README corrigido diz que, sem medição pós-ação, o TNR
+  é `not_verified`. Medido em `c89f52e`: o `--help` imprimia "TNR verified".
+  O texto agora diz o mesmo que o README, e `tests/test_exit_codes.py`
+  barra a volta. O rótulo `resolved` fica, porque é um identificador estável
+  fixado por testes.
+- **O "Equivalente" do app HTTP não era equivalente:** a docstring de
+  `interfaces/http/__main__.py` indicava `uvicorn ...:create_app --factory`.
+  Esse caminho não chama `configure_logging()`: os logs saem sem redação e o
+  access log em INFO grava o `session_id` do MCP SSE. A docstring agora manda
+  usar `python -m interfaces.http` e diz por quê.

@@ -1466,9 +1466,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = _CliParser(
         description="AIOps Agent - Agentic Incident Response Demo",
         epilog="""Exit codes:
-  0  Pipeline resolved successfully (TNR verified, no human gate left)
+  0  Pipeline resolved successfully (no regression, no human gate left;
+     without a post-action measurement TNR is not_verified, not success)
   1  Invalid arguments, or an unrecoverable error in a stage
-  2  TNR regression detected (post-health worse than pre-health)
+  2  TNR regression detected (measured post-health worse than pre-health)
   3  Safety blocked action (human approval required)""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
