@@ -99,4 +99,4 @@ Each `step_*()` function in `main.py` writes to `result["stages"]`:
 
 ---
 
-> **See also**: [Data Models](data-models.md) for dataclass field definitions | [Project Context](./../_bmad-output/project-context.md) for implementation rules
+> **See also**: [Data Models](data-models.md) for dataclass field definitions | [Code Conventions](../CONTRIBUTING.md#code-conventions) for implementation rules

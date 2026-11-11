@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 """Testes unitários para as funções extraídas de ObservabilityIndexerWithHistory.
 
 Cobre _carregar_documentos e _embedar_e_indexar com mocks de faiss e
@@ -11,6 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
+
+pytestmark = pytest.mark.unit
 
 
 # ---------------------------------------------------------------------------

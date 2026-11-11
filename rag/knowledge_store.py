@@ -88,6 +88,7 @@ class KnowledgeStore:
                 "tags": p.tags,
                 "confidence": p.confidence,
                 "is_negative_example": p.is_negative_example,
+                "source_incident_id": p.source_incident_id,
                 "created_at": p.created_at,
             }
             for p in self._patterns

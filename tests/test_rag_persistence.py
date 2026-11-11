@@ -97,7 +97,15 @@ def _mock_faiss_module():
     """Cria mock do módulo faiss para injetar em sys.modules."""
     mock = MagicMock()
     mock.write_index = MagicMock()
-    mock.read_index = MagicMock()
+    # Coerente com um índice real: tantos vetores quantos textos únicos no
+    # chunks.json gravado ao lado (load_index confere ntotal × chunks).
+    def _read_index(path):
+        chunks_path = os.path.join(os.path.dirname(path), "chunks.json")
+        with open(chunks_path, encoding="utf-8") as fh:
+            texts = {c["text"] for c in json.load(fh)}
+        return MagicMock(ntotal=len(texts))
+
+    mock.read_index = MagicMock(side_effect=_read_index)
     mock.IndexFlatIP = MagicMock()
     return mock
 
@@ -347,7 +355,9 @@ class TestLoadIndex:
         self._create_valid_cache(cache_dir, content_hash="abc")
 
         indexer = ObservabilityIndexer()
-        mock_faiss_index = MagicMock()
+        # 2 chunks únicos no cache → 2 vetores no índice (load_index confere).
+        mock_faiss_index = MagicMock(ntotal=2)
+        faiss_mock.read_index.side_effect = None
         faiss_mock.read_index.return_value = mock_faiss_index
 
         result = indexer.load_index(cache_dir, content_hash="abc")

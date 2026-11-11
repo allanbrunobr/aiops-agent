@@ -1,6 +1,10 @@
 # AIOps Agent — Source Tree Analysis
 
 > Annotated directory structure with purpose, entry points, and critical paths.
+>
+> **Status:** snapshot generated in early 2026 and only partially updated. Per-file line counts,
+> complexity notes and model names below may be stale. The enforced layer rule lives in
+> `tests/test_layer_dependencies.py`; ports live in `application/ports/`.
 
 ---
 
@@ -8,12 +12,10 @@
 
 ```
 aiops-agent/
-├── main.py                            # ENTRY POINT — CLI pipeline orchestrator (731 lines)
+├── main.py                            # ENTRY POINT — CLI pipeline orchestrator (~2400 lines)
 │                                      #   Usage: python main.py [--no-llm] [--no-rag]
 │                                      #   Contains all step_*() functions and print_summary()
-├── requirements.txt                   # 9 dependencies with version constraints
-├── CLAUDE.md                          # Claude Code AI agent guidance
-├── ARCHITECTURE - AIOPS-AGENT.md      # 78KB academic architecture document (14 sections)
+├── requirements.txt                   # Runtime dependencies (see the file for the current list)
 │
 ├── agents/                            # Layer 3: Multi-agent decision-making
 │   ├── __init__.py                    #   (empty)
@@ -70,7 +72,6 @@ aiops-agent/
 └── docs/                              # Project documentation
     ├── data-models.md                 # Dataclass catalog and data flow diagram
     ├── api-contracts-internal.md      # Internal API contracts and ReAct tools
-    ├── project-scan-report.json       # Documentation workflow state
     └── papers/                        # 7 reference papers (STRATUS, Acon, AOI, etc.)
 ```
 
@@ -103,6 +104,9 @@ Layer 4: safety/        → validates agent-proposed actions
 
 All imports flow downward (lower layer → consumed by higher layer). The sole lateral exception is `agents/mitigator.py → safety/tnr.py`.
 
+This diagram predates `domain/`, `application/ports/`, `adapters/` and `interfaces/`. The current
+rule (which layer may not import which) is the `FORBIDDEN` table in `tests/test_layer_dependencies.py`.
+
 ---
 
 ## Entry Points
@@ -114,3 +118,7 @@ All imports flow downward (lower layer → consumed by higher layer). The sole l
 | `main.py` | `python main.py --no-rag` | Skip FAISS/embedding model load |
 | `telemetry_sanitizer.py` | `python -m pipeline.telemetry_sanitizer` | Standalone adversarial demo |
 | `version_validator.py` | `python -m safety.version_validator` | Standalone version validation demo |
+| `infra/run_webhook_server.py` | `python infra/run_webhook_server.py` | Webhook server on `127.0.0.1:47890` (see [LOCAL_TESTING_SETUP](LOCAL_TESTING_SETUP.md)) |
+| `interfaces/mcp/server.py` | `python -m interfaces.mcp.server` | MCP server (stdio) |
+| `interfaces/http/__main__.py` | `python -m interfaces.http` | HTTP app (`create_app`): health, A2A, OAuth, optional MCP SSE on `127.0.0.1:47893` |
+| `interfaces/demo/server.py` | `python interfaces/demo/server.py` | Demo dashboard (default port 47891) |

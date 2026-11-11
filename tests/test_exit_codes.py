@@ -56,6 +56,10 @@ class TestHelpShowsExitCodes:
         assert "1  Invalid arguments, or an unrecoverable error" in help_text
         assert "2  TNR regression detected" in help_text
         assert "3  Safety blocked action" in help_text
+        # O exit 0 inclui o TNR not_verified (sem medição pós-ação): o --help
+        # não pode prometer verificação, como os READMEs (pré-PR em c89f52e).
+        assert "TNR verified" not in help_text
+        assert "not_verified" in help_text
 
 
 @pytest.mark.unit
@@ -116,7 +120,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch("main.step_generate_data", return_value=(mock_incident, "test-scenario")),
             patch("main.step_sanitize", return_value=MagicMock(threat_detected=False, total_entries=100)),
@@ -142,7 +146,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch("main.step_generate_data", side_effect=RuntimeError("stage failure")),
             redirect_stdout(io.StringIO()),
@@ -206,7 +210,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch("main.step_generate_data", return_value=(mock_incident, "test-scenario")),
             patch("main.step_sanitize", return_value=MagicMock(threat_detected=False, total_entries=100)),
@@ -276,7 +280,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch("main.step_generate_data", return_value=(mock_incident, "test-scenario")),
             patch("main.step_sanitize", return_value=MagicMock(threat_detected=False, total_entries=100)),
@@ -348,7 +352,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch("main.step_generate_data", return_value=(mock_incident, "test-scenario")),
             patch("main.step_sanitize", return_value=MagicMock(threat_detected=False, total_entries=100)),
@@ -371,7 +375,7 @@ class TestMainExitCodes:
 class TestExitCodeIntegration:
     """Testes de integração: exit codes em pipeline real."""
 
-    def test_no_llm_no_rag_returns_valid_exit_code(self) -> None:
+    def test_no_llm_no_rag_returns_valid_exit_code(self, tmp_path) -> None:
         """Pipeline real com --no-llm --no-rag deve retornar exit code válido (0-3).
 
         O cenário default (payment-pool-exhaustion) retorna exit code 3
@@ -380,7 +384,7 @@ class TestExitCodeIntegration:
         """
         from main import main, EXIT_APPROVAL_NEEDED
 
-        test_args = ["main.py", "--no-llm", "--no-rag"]
+        test_args = ["main.py", "--no-llm", "--no-rag", "--output-dir", str(tmp_path)]
 
         with (
             patch("sys.argv", test_args),
@@ -392,11 +396,11 @@ class TestExitCodeIntegration:
         # O cenário default sempre requer aprovação humana (safety MEDIUM risk).
         assert exit_code == EXIT_APPROVAL_NEEDED
 
-    def test_exit_code_is_integer(self) -> None:
+    def test_exit_code_is_integer(self, tmp_path) -> None:
         """main() deve retornar um inteiro válido (0-3)."""
         from main import main
 
-        test_args = ["main.py", "--no-llm", "--no-rag"]
+        test_args = ["main.py", "--no-llm", "--no-rag", "--output-dir", str(tmp_path)]
 
         with (
             patch("sys.argv", test_args),

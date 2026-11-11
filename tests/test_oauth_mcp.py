@@ -25,6 +25,9 @@ from auth.scopes import TOOL_SCOPES, require_scope
 from auth.token_store import InMemoryTokenStore
 import auth.server as auth_server
 
+
+pytestmark = pytest.mark.unit
+
 # Segredo de cliente gerado em tempo de execução (client_secret_post, SEC-01).
 CLIENT_SECRET = secrets.token_urlsafe(32)
 CLIENT_SECRET_SHA256 = hashlib.sha256(CLIENT_SECRET.encode()).hexdigest()

@@ -20,7 +20,7 @@ from agents.mitigator import MitigationAgent
 from agents.skill_router import DEFAULT_SKILL, SkillRouter
 from application.ports.llm_client import LLMClient
 from application.ports.reporter import NullReporter, Reporter
-from rag.memory import IncidentMemoryDB
+from application.ports.incident_memory import IncidentMemory
 from safety.tnr import TNRSafetyGuard
 
 logger = logging.getLogger(__name__)
@@ -210,6 +210,7 @@ class AgentOutcome:
     iterations: int = 0
     replans: int = 0
     tnr_passed: bool = False
+    tnr_result: str = ""  # "success" | "regression" | "not_verified" | ...
     tnr_health_delta: float = 0.0
     tnr_message: str = ""
     mitigation: dict = field(default_factory=dict)
@@ -259,7 +260,7 @@ class AgentOrchestrator:
         self,
         client: LLMClient | None,
         model: str,
-        memory_db: IncidentMemoryDB | None,
+        memory_db: IncidentMemory | None,
         skill_router: SkillRouter | None,
         config=None,
         reporter: Reporter | None = None,
@@ -346,10 +347,11 @@ class AgentOrchestrator:
         mitigation = mitigator.propose_safe(diagnosis)
         tnr_guard = TNRSafetyGuard()
         tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
-        tnr_passed = getattr(getattr(tnr_result, "result", None), "value", None) == "success"
+        tnr_value = getattr(getattr(tnr_result, "result", None), "value", None)
+        tnr_passed = tnr_value == "success"
 
-        # TNR regression com replans disponíveis → mais uma tentativa
-        if not tnr_passed and replans < self.MAX_REPLANS:
+        # Só REGRESSÃO medida dispara replan; "not_verified" não é regressão.
+        if tnr_value == "regression" and replans < self.MAX_REPLANS:
             replans += 1
             plan = self._replan(
                 plan,
@@ -366,16 +368,18 @@ class AgentOrchestrator:
             diagnosis = self._synthesize_diagnosis(plan, report, {}, skill)
             mitigation = mitigator.propose_safe(diagnosis)
             tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
-            tnr_passed = getattr(getattr(tnr_result, "result", None), "value", None) == "success"
+            tnr_value = getattr(getattr(tnr_result, "result", None), "value", None)
+            tnr_passed = tnr_value == "success"
 
         # ── 5. LEARN ─────────────────────────────────────────────────
-        final_reflection = self._reflect_final(diagnosis, tnr_passed, tools_used, plan)
+        final_reflection = self._reflect_final(diagnosis, tnr_value or "unknown", tools_used, plan)
 
         return AgentOutcome(
             diagnosis=diagnosis,
             plan=plan,
             mitigation=mitigation,
             tnr_passed=tnr_passed,
+            tnr_result=tnr_value or "",
             tnr_health_delta=getattr(tnr_result, "health_delta", 0.0),
             tnr_message=getattr(tnr_result, "message", ""),
             tools_used=tools_used,
@@ -619,7 +623,7 @@ class AgentOrchestrator:
     def _reflect_final(
         self,
         diagnosis: dict,
-        tnr_passed: bool,
+        tnr_result: str,
         tools_used: list[str],
         plan: InvestigationPlan,
     ) -> dict:
@@ -632,7 +636,7 @@ class AgentOrchestrator:
                     "role": "user",
                     "content": FINAL_REFLECT_PROMPT.format(
                         diagnosis=json.dumps(diagnosis, default=str)[:500],
-                        tnr_result="success" if tnr_passed else "regression",
+                        tnr_result=tnr_result,
                         tools_used=tools_used,
                         plan_steps=len(plan.steps),
                         hypothesis=plan.hypothesis,

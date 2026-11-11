@@ -5,10 +5,10 @@
 - **Date**: NORMALIZED_TIMESTAMP NORMALIZED_TIMESTAMP
 - **Scenario**: unknown-fault
 - **LLM Model**: unknown
-- **Duration**: ~35 minutes
+- **Duration**: ~35 minutes (scenario: deploy to reference fix time)
 - **Severity**: CRITICAL
 - **Impact**: Service degradation detected via automated analysis
-- **Resolution**: Resolved
+- **Resolution**: Awaiting human approval (mitigation proposed, not executed)
 
 ## Root Cause
 
@@ -31,7 +31,6 @@ Data corruption or serialization/schema error detected in data-processor
 | NORMALIZED_TIMESTAMP | Deployment or configuration change applied |
 | NORMALIZED_TIMESTAMP | Data corruption or serialization/schema error detected in data-processor |
 | NORMALIZED_TIMESTAMP | Automated detection triggered |
-| NORMALIZED_TIMESTAMP | Mitigation applied |
 
 ### State Machine Transitions
 
@@ -39,10 +38,11 @@ Data corruption or serialization/schema error detected in data-processor
 - **NORMALIZED_TIMESTAMP** DETECTING -> DIAGNOSING: Investigando incidente em data-processor, ingest-svc, scheduler, storage-gw
 - **NORMALIZED_TIMESTAMP** DIAGNOSING -> MITIGATING: Propondo remediação...
 - **NORMALIZED_TIMESTAMP** MITIGATING -> VERIFYING: Verificando impacto (TNR)...
-- **NORMALIZED_TIMESTAMP** VERIFYING -> RESOLVED: Incidente resolvido: SUCCESS: health 19% → 97% (delta: +77.9)
+- **NORMALIZED_TIMESTAMP** VERIFYING -> RESOLVED: Mitigation proposed (not executed); safety gate decides next: TNR not verified: no post-action health measurement (the action was not executed)
 
-## Mitigation Applied
+## Mitigation Proposed
 
+- **Executed by the agent**: No (the agent proposes; execution is a human step)
 - **Action**: Rollback deployment to v3.9.2 and verify schema/data compatibility with previous version
 - **Command**: `kubectl rollout undo deployment/data-processor`
 - **Risk Level**: LOW
@@ -67,9 +67,9 @@ Data corruption or serialization/schema error detected in data-processor
 
 ## TNR Verification
 
-- **Result**: success
-- **Health Delta**: 77.9
-- **Message**: SUCCESS: health 19% → 97% (delta: +77.9)
+- **Result**: not_verified
+- **Health Delta**: 0.0
+- **Message**: TNR not verified: no post-action health measurement (the action was not executed)
 
 ## Action Items
 
@@ -81,9 +81,9 @@ Data corruption or serialization/schema error detected in data-processor
 ## Lessons Learned
 
 - Automated detection identified the incident promptly
-- Heuristic diagnosis provided low-confidence assessment
-- TNR verification validated the mitigation outcome
-- Incident response pipeline completed all stages successfully
+- Diagnosis provided low-confidence assessment
+- TNR did not verify the mitigation (no post-action health measurement)
+- Pipeline stopped at the human approval gate (mitigation awaiting approval)
 
 ---
 

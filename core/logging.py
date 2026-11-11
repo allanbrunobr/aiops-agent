@@ -14,8 +14,9 @@ import sys
 import structlog
 
 
-# Padroes de secrets para redacao — reutilizados de main.py
-_SECRET_PATTERNS = [
+# Padroes de secrets para redacao — fonte unica (main.py reexporta como
+# API_KEY_PATTERNS para sanitizar texto que vai ao console e ao Slack).
+SECRET_PATTERNS = [
     re.compile(r"sk-ant-[a-zA-Z0-9_-]{20,}"),      # Anthropic API keys
     re.compile(r"dapi[a-zA-Z0-9]{20,}"),             # Databricks API keys
     re.compile(r"sk-[a-zA-Z0-9]{32,}"),              # OpenAI-style keys
@@ -23,6 +24,14 @@ _SECRET_PATTERNS = [
     re.compile(r"xoxb-[a-zA-Z0-9-]+"),               # Slack Bot tokens
     re.compile(r"Bearer\s+[a-zA-Z0-9._-]{20,}"),     # Bearer tokens
 ]
+_SECRET_PATTERNS = SECRET_PATTERNS  # nome antigo
+
+
+def redact_text(text: str) -> str:
+    """Substitui por [REDACTED] todo trecho que casa com SECRET_PATTERNS."""
+    for pattern in SECRET_PATTERNS:
+        text = pattern.sub("[REDACTED]", text)
+    return text
 
 # Chaves cujo valor SEMPRE deve ser redactado
 _SENSITIVE_KEYS = frozenset({
@@ -45,9 +54,7 @@ def _redact_secrets(
                 event_dict[key] = "[REDACTED]"
                 continue
             # Redacta por padrao de secret no valor
-            for pattern in _SECRET_PATTERNS:
-                value = pattern.sub("[REDACTED]", value)
-            event_dict[key] = value
+            event_dict[key] = redact_text(value)
     return event_dict
 
 
@@ -87,7 +94,10 @@ def configure_logging(log_level: str | None = None) -> None:
     )
 
     # Configura stdlib logging para rotear pela mesma cadeia
+    # foreign_pre_chain: registros da stdlib (logging.getLogger) também passam
+    # pela redação; sem isto só o que vem do structlog era redigido.
     formatter = structlog.stdlib.ProcessorFormatter(
+        foreign_pre_chain=shared_processors,
         processors=[
             structlog.stdlib.ProcessorFormatter.remove_processors_meta,
             structlog.processors.JSONRenderer(),

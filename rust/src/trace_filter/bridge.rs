@@ -13,14 +13,20 @@ use super::types::SpanData;
 /// Filtra traces lentos (>p95) e extrai call paths.
 ///
 /// Chamado por pipeline/trace_filter.py quando _RUST_AVAILABLE = True.
+/// Os limiares vêm da configuração (ThresholdsConfig) e são obrigatórios.
 /// Retorna lista de dicts com campos equivalentes ao SlowCallPath Python.
 #[pyfunction]
-pub fn filter_traces(py: Python<'_>, spans: &Bound<'_, PyList>) -> PyResult<Py<PyList>> {
+pub fn filter_traces(
+    py: Python<'_>,
+    spans: &Bound<'_, PyList>,
+    percentile_threshold: f64,
+    max_hops: usize,
+) -> PyResult<Py<PyList>> {
     // ── Fase 1: extrair dados enquanto segura o GIL ───────────────────────────
     let span_data = extract_spans(py, spans)?;
 
     // ── Fase 2: processar p95 + DFS sem GIL ──────────────────────────────────
-    let slow_paths = py.detach(|| filter_slow_traces(span_data, 95.0, 3));
+    let slow_paths = py.detach(|| filter_slow_traces(span_data, percentile_threshold, max_hops));
 
     // ── Fase 3: construir dicts Python enquanto segura o GIL ─────────────────
     build_python_result(py, slow_paths)

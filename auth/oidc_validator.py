@@ -23,6 +23,10 @@ from jwt.algorithms import RSAAlgorithm
 from auth.jwt_validator import TokenClaims
 
 
+# Janela mínima entre buscas forçadas do JWKS por kid desconhecido (por issuer).
+FORCED_REFRESH_INTERVAL_SECONDS = 60.0
+
+
 @dataclass(frozen=True)
 class TrustedIssuerConfig:
     """Configuração de um provedor de identidade externo confiável."""
@@ -60,6 +64,8 @@ class OIDCValidator:
         self._http_timeout = http_timeout
         # issuer → (jwks_dict, expires_at_unix)
         self._jwks_cache: dict[str, tuple[dict, float]] = {}
+        # issuer → instante da última busca FORÇADA por kid desconhecido.
+        self._last_forced_refresh: dict[str, float] = {}
 
     async def validate(self, token: str) -> TokenClaims:
         """Valida um token OIDC externo e retorna os claims.
@@ -94,10 +100,19 @@ class OIDCValidator:
         # 2. Busca JWKS com cache TTL
         jwks = await self._fetch_jwks(iss)
 
-        # 3. Seleciona chave pelo kid
+        # 3. Seleciona chave pelo kid. kid desconhecido = provável rotação no
+        # IdP: busca o JWKS de novo (no máximo 1x por janela, para que tokens
+        # com kid aleatório não virem DoS contra o IdP). Nunca verifica com
+        # outra chave (antes caía em keys[0] e recusava todo token novo).
         header = pyjwt.get_unverified_header(token)
         kid = header.get("kid")
         public_key = self._find_key(jwks, kid)
+        if public_key is None and self._may_force_refresh(iss):
+            self.invalidate_cache(iss)
+            jwks = await self._fetch_jwks(iss)
+            public_key = self._find_key(jwks, kid)
+        if public_key is None:
+            raise pyjwt.InvalidTokenError(f"Unknown signing key (kid={kid!r}) for issuer '{iss}'")
 
         # 4. Valida assinatura, exp, aud
         payload = pyjwt.decode(
@@ -108,12 +123,21 @@ class OIDCValidator:
             issuer=iss,
         )
 
-        # 5. Mapeia para TokenClaims
+        # 5. Mapeia para TokenClaims. Claim fora do formato é token inválido
+        # (401), não erro interno (antes KeyError → 503 "IdP indisponível").
+        sub = payload.get("sub")
+        if not isinstance(sub, str) or not sub:
+            raise pyjwt.InvalidTokenError("Token sem claim 'sub' válido")
         raw_scope = payload.get(cfg.scope_claim, "")
-        scopes = raw_scope.split() if raw_scope else []
+        if isinstance(raw_scope, list):
+            scopes = [str(s) for s in raw_scope]
+        elif isinstance(raw_scope, str):
+            scopes = raw_scope.split()
+        else:
+            raise pyjwt.InvalidTokenError(f"Claim '{cfg.scope_claim}' em formato inválido")
 
         return TokenClaims(
-            sub=payload["sub"],
+            sub=sub,
             scopes=scopes,
             exp=int(payload.get("exp", 0)),
         )
@@ -155,7 +179,7 @@ class OIDCValidator:
         self._jwks_cache[issuer] = (jwks, now + self._cache_ttl)
         return jwks
 
-    def _find_key(self, jwks: dict, kid: str | None) -> object:
+    def _find_key(self, jwks: dict, kid: str | None) -> object | None:
         """Seleciona a chave pública correta do JWKS pelo kid.
 
         Args:
@@ -176,8 +200,19 @@ class OIDCValidator:
             for k in keys:
                 if k.get("kid") == kid:
                     return RSAAlgorithm.from_jwk(k)
-            # kid não encontrado — tenta primeira chave como fallback
-        return RSAAlgorithm.from_jwk(keys[0])
+            return None  # kid desconhecido: quem chama decide (nova busca ou recusa)
+        if len(keys) == 1:
+            return RSAAlgorithm.from_jwk(keys[0])
+        raise pyjwt.InvalidTokenError("Token sem kid e JWKS com várias chaves")
+
+    def _may_force_refresh(self, issuer: str) -> bool:
+        """No máximo uma busca forçada por issuer a cada FORCED_REFRESH_INTERVAL."""
+        now = time.time()
+        last = self._last_forced_refresh.get(issuer, 0.0)
+        if now - last < FORCED_REFRESH_INTERVAL_SECONDS:
+            return False
+        self._last_forced_refresh[issuer] = now
+        return True
 
     def invalidate_cache(self, issuer: str | None = None) -> None:
         """Invalida cache JWKS (útil em rotação de chaves).

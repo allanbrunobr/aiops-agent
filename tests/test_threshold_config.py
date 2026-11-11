@@ -12,6 +12,9 @@ from __future__ import annotations
 import pytest
 
 
+pytestmark = pytest.mark.unit
+
+
 # === Task 1 Tests: config/loader.py module ===
 
 class TestThresholdConfigDefaults:

@@ -13,7 +13,8 @@ import json
 import logging
 
 from application.ports.llm_client import LLMClient
-from rag.memory import DiagnosticSkill, IncidentMemoryDB
+from application.ports.incident_memory import IncidentMemory
+from rag.memory import DiagnosticSkill
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ _EVOLVE_MIN_USES = 3
 class SkillEvolver:
     """Decide quando e como evoluir uma DiagnosticSkill com baixa performance."""
 
-    def __init__(self, client: LLMClient | None, memory_db: IncidentMemoryDB | None) -> None:
+    def __init__(self, client: LLMClient | None, memory_db: IncidentMemory | None) -> None:
         self.client = client
         self.memory_db = memory_db
 
@@ -54,17 +55,29 @@ class SkillEvolver:
         Critérios:
         - total_uses >= _EVOLVE_MIN_USES  (evita decisões com dados insuficientes)
         - utility_score < _EVOLVE_SCORE_THRESHOLD  (performance abaixo do mínimo)
+        - nenhuma proposta pendente para esta skill: a proposta não muda a
+          skill ativa até ser aprovada, então o score continua baixo — sem
+          esta trava, cada execução pagava uma chamada ao LLM e enfileirava
+          mais uma proposta (a skill `default` nunca sai do roteamento)
         """
         return (
             skill.total_uses >= _EVOLVE_MIN_USES
             and skill.utility_score < _EVOLVE_SCORE_THRESHOLD
+            and not self._has_pending_proposal(skill.skill_id)
         )
+
+    def _has_pending_proposal(self, skill_id: str) -> bool:
+        if self.memory_db is None:
+            return False
+        pending = self.memory_db.list_skill_proposals(status="pending")
+        return any(p.get("skill_id") == skill_id for p in pending)
 
     def evolve(self, skill: DiagnosticSkill) -> DiagnosticSkill | None:
         """Reescreve o system_prompt da skill via LLM.
 
-        Retorna a skill atualizada (com version+1) ou None se o LLM não estiver
-        disponível ou a chamada falhar.
+        Retorna a skill candidata (com version+1) ou None se o LLM não estiver
+        disponível ou a chamada falhar. A candidata é gravada como PROPOSTA
+        pendente; só IncidentMemoryDB.approve_skill_proposal a torna ativa.
         """
         if self.client is None:
             logger.warning("SkillEvolver: cliente LLM ausente — evolução ignorada.")
@@ -107,8 +120,15 @@ class SkillEvolver:
             version=skill.version + 1,
         )
 
+        # Proposta PENDENTE de revisão humana, não skill ativa (S8): o texto
+        # vem do LLM, que lê telemetria — pode carregar prompt injection.
         if self.memory_db is not None:
-            self.memory_db.save_skill(evolved)
+            self.memory_db.save_skill_proposal(
+                skill_id=skill.skill_id,
+                base_version=skill.version,
+                proposed_prompt=new_prompt,
+                rationale=str(data.get("rationale", "")),
+            )
 
         return evolved
 

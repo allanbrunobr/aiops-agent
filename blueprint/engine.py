@@ -84,7 +84,12 @@ class BlueprintEngine:
             node_count=len(pipeline.nodes),
         )
 
-        self.results = []
+        # Lista própria desta execução: a mesma engine (app.state.engine) roda
+        # em várias threads (A2A/MCP via to_thread), e zerar/encher
+        # self.results misturava os nós de execuções concorrentes no
+        # pipeline.completed. self.results continua apontando para a última.
+        results: list[NodeResult] = []
+        self.results = results
 
         pipeline_start = time.monotonic()
         timeout_s = getattr(getattr(self.config, "blueprint", None), "pipeline_timeout_seconds", None)
@@ -118,7 +123,7 @@ class BlueprintEngine:
                         duration_ms=(time.monotonic() - start) * 1000,
                     )
 
-                self.results.append(result)
+                results.append(result)
                 log.info(
                     "node.completed",
                     node_id=node.id,
@@ -135,7 +140,7 @@ class BlueprintEngine:
                 )
 
                 if node.on_failure == OnFailure.ABORT:
-                    self.results.append(NodeResult(
+                    results.append(NodeResult(
                         node_id=node.id,
                         success=False,
                         duration_ms=duration,
@@ -149,7 +154,7 @@ class BlueprintEngine:
                 elif node.on_failure == OnFailure.FALLBACK and node.fallback:
                     try:
                         state = node.fallback(state)
-                        self.results.append(NodeResult(
+                        results.append(NodeResult(
                             node_id=node.id,
                             success=True,
                             duration_ms=(time.monotonic() - start) * 1000,
@@ -157,7 +162,7 @@ class BlueprintEngine:
                         ))
                         log.info("node.fallback_succeeded", node_id=node.id)
                     except Exception as fb_exc:
-                        self.results.append(NodeResult(
+                        results.append(NodeResult(
                             node_id=node.id,
                             success=False,
                             duration_ms=(time.monotonic() - start) * 1000,
@@ -169,7 +174,7 @@ class BlueprintEngine:
                         ) from fb_exc
 
                 elif node.on_failure == OnFailure.SKIP:
-                    self.results.append(NodeResult(
+                    results.append(NodeResult(
                         node_id=node.id,
                         success=False,
                         duration_ms=duration,
@@ -181,8 +186,8 @@ class BlueprintEngine:
         log.info(
             "pipeline.completed",
             pipeline=pipeline.name,
-            nodes_run=len(self.results),
-            all_success=all(r.success for r in self.results),
+            nodes_run=len(results),
+            all_success=all(r.success for r in results),
         )
 
         if self.store is not None:

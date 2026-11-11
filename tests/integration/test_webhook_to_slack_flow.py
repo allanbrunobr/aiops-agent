@@ -24,6 +24,9 @@ from pathlib import Path
 import httpx
 import pytest
 
+
+pytestmark = pytest.mark.integration
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------

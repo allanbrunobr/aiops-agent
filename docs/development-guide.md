@@ -125,4 +125,4 @@ Postmortems are saved to `output/postmortem_YYYY-MM-DD_HHMMSS.md`. The `output/`
 
 ---
 
-> **See also**: [Source Tree](source-tree-analysis.md) | [Data Models](data-models.md) | [API Contracts](api-contracts-internal.md) | [Project Context](../_bmad-output/project-context.md)
+> **See also**: [Source Tree](source-tree-analysis.md) | [Data Models](data-models.md) | [API Contracts](api-contracts-internal.md) | [Code Conventions](../CONTRIBUTING.md#code-conventions)

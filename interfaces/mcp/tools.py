@@ -9,7 +9,9 @@ Histórias: 5.2 (diagnose_incident), 5.3 (validate_action), 5.4 (search_incident
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import time
 import uuid
 from dataclasses import dataclass
@@ -18,6 +20,7 @@ from datetime import datetime, timezone
 import structlog
 
 from domain.alert import NormalizedAlert
+from domain.confidence import confidence_to_score
 from domain.incident import MitigationAction
 from safety.orchestrator import SafetyOrchestrator
 
@@ -341,13 +344,11 @@ async def handle_validate_action(
         correlation_id=correlation_id,
     )
 
-    tnr_detail = orch_result.layer_details.get("tnr")
-    tnr_msg = getattr(tnr_detail, "message", "TNR check passed") or "TNR check passed"
     layer_3 = LayerResult(
         layer_name="TNR",
         passed="tnr" not in orch_result.blocked_by,
         risk_contribution=0.3 if "tnr" in orch_result.blocked_by else 0.0,
-        detail=tnr_msg if isinstance(tnr_msg, str) else "TNR check passed",
+        detail=_tnr_layer_detail(orch_result.layer_details.get("tnr")),
     )
     layer_results.append(layer_3)
     log.info(
@@ -556,6 +557,27 @@ def _check_version_validator(command: str, version_validator: object) -> LayerRe
         )
 
 
+TNR_NOT_VERIFIED = "TNR not verified"
+
+
+def _tnr_layer_detail(detail: object) -> str:
+    """Texto da camada TNR a partir do que o SafetyOrchestrator registrou.
+
+    Sem medição de saúde pré/pós, o orquestrador grava um dict
+    `{"verified": False, ...}` (P2-11). Antes este adaptador procurava
+    `.message` no dict, não achava, e respondia "TNR check passed" para uma
+    checagem que não aconteceu.
+    """
+    if isinstance(detail, dict):
+        if "error" in detail:
+            return f"TNR check failed: {detail['error']}"
+        return f"{TNR_NOT_VERIFIED}: {detail.get('reason', 'no health measurement')}"
+    if detail is None:
+        return f"{TNR_NOT_VERIFIED}: no health measurement"
+    message = getattr(detail, "message", None)
+    return message if isinstance(message, str) and message else "TNR check passed"
+
+
 def _build_verdict(layer_results: list[LayerResult]) -> ValidationVerdict:
     """Constrói veredicto final a partir dos resultados das 4 camadas.
 
@@ -569,7 +591,14 @@ def _build_verdict(layer_results: list[LayerResult]) -> ValidationVerdict:
     risk_score = min(1.0, sum(lr.risk_contribution for lr in layer_results))
 
     # Rationale: combina detalhes das camadas que bloquearam
-    if approved:
+    unverified = [lr for lr in layer_results if lr.detail.startswith(TNR_NOT_VERIFIED)]
+    if approved and unverified:
+        # Não bloquear é o projetado (P2-11); afirmar que o TNR aprovou, não.
+        rationale = (
+            "Action approved by the safety layers that ran. "
+            + " | ".join(lr.detail for lr in unverified)
+        )
+    elif approved:
         rationale = "Action approved by all 4 safety layers."
     else:
         blocking_details = [
@@ -674,42 +703,67 @@ async def handle_diagnose_incident(
             normalizer_registry=normalizer_registry,
         )
 
-        # Executa pipeline via BlueprintEngine.run()
-        result = engine.run(normalized_alert)
+        # Contrato real da engine: run(pipeline, state) -> IncidentState.
+        from app.builders import build_pipeline
+        from config.loader import AppConfig
+        from domain.incident_state import IncidentState
+
+        now = datetime.now(timezone.utc)
+        state = IncidentState(
+            incident_id=correlation_id,
+            correlation_id=correlation_id,
+            alert=normalized_alert,
+            received_at=now,
+            started_at=getattr(normalized_alert, "timestamp", now),
+            # Mesma regra da CLI: LLM só com chave configurada.
+            no_llm=not os.environ.get("ANTHROPIC_API_KEY"),
+            no_rag=True,
+        )
+        pipeline = build_pipeline(getattr(engine, "config", None) or AppConfig())
+        # engine.run é síncrono (nodes com LLM): fora do event loop (4B-04).
+        result = await asyncio.to_thread(engine.run, pipeline, state)
 
         elapsed_ms = (time.monotonic() - start_time) * 1000
 
-        # Extrai campos do resultado do engine
-        diagnosis = getattr(result, "diagnosis", str(result))
-        evidence_chain = getattr(result, "evidence_chain", [])
-        confidence = float(getattr(result, "confidence", 0.5))
-        proposed_fix = getattr(result, "proposed_fix", "")
-        risk_assessment = getattr(result, "risk_assessment", {})
-        mode = getattr(result, "mode", "heuristic")
+        diagnosis = dict(result.diagnosis or {})
+        proposed = result.proposed_action or {}
+        confidence = confidence_to_score(diagnosis.get("confidence"))
 
         log.info(
             "mcp.diagnose_incident.completed",
             client_id=client_id,
             correlation_id=correlation_id,
             confidence=confidence,
+            safety_verdict=result.safety_verdict,
             latency_ms=round(elapsed_ms, 1),
         )
 
         return json.dumps(
             {
-                "incident_id": correlation_id,
+                "incident_id": result.incident_id,
                 "diagnosis": diagnosis,
-                "evidence_chain": evidence_chain,
+                "evidence_chain": list(diagnosis.get("evidence", []) or []),
                 "confidence": round(confidence, 2),
-                "proposed_fix": proposed_fix,
-                "risk_assessment": risk_assessment,
-                "mode": mode,
+                "proposed_fix": proposed.get("command", ""),
+                "risk_assessment": {
+                    "safety_verdict": result.safety_verdict,
+                    "safety_reasons": list(result.safety_reasons),
+                    "requires_human": result.safety_verdict != "APPROVED",
+                },
+                "mode": "heuristic" if result.no_llm else "llm",
                 "latency_ms": round(elapsed_ms, 1),
                 "correlation_id": correlation_id,
-            }
+            },
+            default=str,
         )
 
     except Exception as exc:
+        blocked = _safety_block_response(exc, correlation_id)
+        if blocked is not None:
+            log.warning("mcp.diagnose_incident.safety_blocked",
+                        client_id=client_id, correlation_id=correlation_id,
+                        blocked_by=blocked["blocked_by"])
+            return json.dumps(blocked, default=str)
         elapsed_ms = (time.monotonic() - start_time) * 1000
         log.error(
             "mcp.diagnose_incident.error",
@@ -727,6 +781,26 @@ async def handle_diagnose_incident(
                 "latency_ms": round(elapsed_ms, 1),
             }
         )
+
+
+def _safety_block_response(exc: Exception, correlation_id: str) -> dict | None:
+    """Resposta para um aborto causado por uma camada de safety; None se não for."""
+    from blueprint.adapters.safety_nodes import SafetyBlockedError
+    from blueprint.engine import PipelineAborted
+
+    if not (isinstance(exc, PipelineAborted) and isinstance(exc.__cause__, SafetyBlockedError)):
+        return None
+    state = getattr(exc, "state", None)
+    return {
+        "type": "safety_blocked",
+        "title": "Proposed action blocked by a safety layer",
+        "blocked_by": getattr(exc, "node_id", None) or "safety",
+        "reason": str(exc.__cause__),
+        "diagnosis": dict(getattr(state, "diagnosis", None) or {}),
+        "requires_human": True,
+        "status": 409,
+        "correlation_id": correlation_id,
+    }
 
 
 def _validate_diagnose_input(arguments: dict) -> str | None:

@@ -14,9 +14,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from collections import defaultdict
 
+from config.loader import ThresholdsConfig
+
+# Defaults vêm de ThresholdsConfig (o YAML sobrescreve na composição).
+_DEFAULTS = ThresholdsConfig()
+
 try:
     import _aiops_rust as _rust
-    _RUST_AVAILABLE = True
+    from pipeline.rust_compat import has_params
+
+    _RUST_AVAILABLE = has_params(_rust, "filter_metrics", "sigma_threshold", "baseline_ratio")
 except ImportError:
     _rust = None
     _RUST_AVAILABLE = False
@@ -39,22 +46,26 @@ class MetricAnomaly:
 class MetricFilter:
     """Detecta anomalias em séries temporais usando 3-sigma."""
 
-    def __init__(self, sigma_threshold: float = 3.0, baseline_ratio: float = 0.5):
+    def __init__(self, sigma_threshold: float = _DEFAULTS.sigma_threshold,
+                 baseline_ratio: float = _DEFAULTS.baseline_ratio):
         self.sigma_threshold = sigma_threshold
         self.baseline_ratio = baseline_ratio  # % dos dados usados como baseline
 
     def detect_anomalies(self, metrics: list) -> list[MetricAnomaly]:
         """Detecta anomalias em todas as métricas."""
-        if _RUST_AVAILABLE and self.sigma_threshold == 3.0 and self.baseline_ratio == 0.5:
+        if _RUST_AVAILABLE:
             return self._detect_rust(metrics)
         return self._detect_python(metrics)
 
     def _detect_rust(self, metrics: list) -> list[MetricAnomaly]:
-        """Delegação para implementação Rust (3-sigma com defaults)."""
-        raw = _rust.filter_metrics(metrics)
+        """Delegação para implementação Rust, com os limiares desta instância."""
+        raw = _rust.filter_metrics(metrics, self.sigma_threshold, self.baseline_ratio)
+        # O Rust devolve epoch; converte no fuso da entrada (F15). Sem isso,
+        # entrada aware saía naive em hora local.
+        tz = metrics[0].timestamp.tzinfo if metrics else None
         result = []
         for r in raw:
-            ts = datetime.fromtimestamp(r["timestamp"])
+            ts = datetime.fromtimestamp(r["timestamp"], tz)
             result.append(MetricAnomaly(
                 service=r["service"],
                 metric_name=r["metric_name"],

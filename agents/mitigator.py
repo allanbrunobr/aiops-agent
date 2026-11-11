@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
 
 from application.ports.reporter import (
     HUMAN_APPROVAL_REQUESTED,
@@ -20,7 +19,7 @@ from application.ports.reporter import (
 )
 from domain.incident import MitigationAction
 from safety.tnr import (
-    TNRSafetyGuard, TNRReport, HealthSnapshot
+    TNRSafetyGuard, TNRReport, TNRResult, HealthSnapshot
 )
 
 # Mapeamento de versões implantadas → versão estável anterior para rollback
@@ -212,31 +211,33 @@ class MitigationAgent:
                 "diagnosis": diagnosis,
             }
 
-    def verify_with_tnr(self, mitigation: dict, tnr_guard: TNRSafetyGuard) -> TNRReport:
-        """Verifica a mitigação usando TNR (simulado no protótipo)."""
+    def verify_with_tnr(
+        self,
+        mitigation: dict,
+        tnr_guard: TNRSafetyGuard,
+        pre_health: HealthSnapshot | None = None,
+        post_health: HealthSnapshot | None = None,
+    ) -> TNRReport:
+        """Verifica a mitigação com TNR a partir de snapshots de saúde REAIS.
+
+        Sem os dois snapshots (nada executa a ação neste projeto), devolve
+        NOT_VERIFIED. Antes comparava snapshots fixos que simulavam uma melhora
+        e sempre dava SUCCESS (F09).
+        """
         action = mitigation["action"]
 
-        # Simula estados pré e pós mitigação
-        pre_health = HealthSnapshot(
-            timestamp=datetime.now(),
-            error_rate=45.0,
-            latency_p99_ms=4500.0,
-            availability=55.0,
-            connection_pool_active=50,
-            connection_pool_max=50,
-        )
-
-        # Simula melhoria após fix
-        post_health = HealthSnapshot(
-            timestamp=datetime.now(),
-            error_rate=0.1,
-            latency_p99_ms=120.0,
-            availability=99.9,
-            connection_pool_active=25,
-            connection_pool_max=200,
-        )
-
-        report = tnr_guard.simulate_check(action, pre_health, post_health)
+        if pre_health is None or post_health is None:
+            report = TNRReport(
+                result=TNRResult.NOT_VERIFIED,
+                pre_snapshot=pre_health,
+                post_snapshot=post_health,
+                action=action,
+                health_delta=0.0,
+                message="TNR not verified: no post-action health measurement "
+                        "(the action was not executed)",
+            )
+        else:
+            report = tnr_guard.simulate_check(action, pre_health, post_health)
 
         self.reporter.emit(
             TNR_VERIFIED,

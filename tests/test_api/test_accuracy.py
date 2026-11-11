@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 """
 Testes para Story 3.3: Diagnostic Accuracy Tracking.
 Cobre endpoints PATCH /accuracy e GET /metrics/accuracy.
@@ -7,6 +8,8 @@ Cobre endpoints PATCH /accuracy e GET /metrics/accuracy.
 
 import dataclasses
 import pytest
+
+pytestmark = pytest.mark.unit
 from httpx import AsyncClient, ASGITransport
 
 from adapters.persistence.in_memory_store import InMemoryStore

@@ -182,10 +182,16 @@ class TelemetrySanitizer:
         self._suspicious_patterns = [
             re.compile(p, re.IGNORECASE) for p in SUSPICIOUS_EMBEDDED_CONTENT
         ]
+        # O caminho Rust não recebe padrões customizados: com eles, o
+        # sanitizador usa o caminho Python, que os conhece (ARQ-12).
+        self._has_custom_patterns = bool(custom_patterns)
         if custom_patterns:
             self._adversarial_patterns.extend(
                 re.compile(p, re.IGNORECASE) for p in custom_patterns
             )
+
+    def _use_rust(self) -> bool:
+        return _RUST_AVAILABLE and not self._has_custom_patterns
 
     def sanitize_logs(self, logs: list) -> tuple[list, SanitizationReport]:
         """
@@ -205,7 +211,7 @@ class TelemetrySanitizer:
         sanitized_logs = []
 
         # Pré-computa taint levels em batch usando Rust+Rayon (paralelo)
-        if _RUST_AVAILABLE and logs:
+        if self._use_rust() and logs:
             messages = [log.message for log in logs]
             taint_strs = _rust.detect_taint_batch(messages)
             taint_cache = {i: TaintLevel(t) for i, t in enumerate(taint_strs)}
@@ -451,6 +457,18 @@ class TelemetrySanitizer:
     # Internal methods
     # ========================================================================
 
+    def sanitize_text(self, text: str) -> str:
+        """Sanitiza texto livre com as mesmas regras do campo `message` de log.
+
+        Usado pelas ferramentas MCP (validate_action e search_incidents):
+        neutraliza payload adversarial, redige PII (email, IP, URL) e, em modo
+        estrito, abstrai conteúdo user-generated.
+        """
+        if not isinstance(text, str):
+            text = str(text)
+        entry = _TextEntry(message=text)
+        return self._sanitize_log_entry(entry).sanitized
+
     def _sanitize_log_entry(self, log, precomputed_taint=None) -> SanitizationResult:
         """Sanitiza uma única entrada de log."""
         message = log.message
@@ -506,7 +524,7 @@ class TelemetrySanitizer:
         if not text:
             return TaintLevel.CLEAN
 
-        if _RUST_AVAILABLE:
+        if self._use_rust():
             return TaintLevel(_rust.detect_taint_single(text))
 
         # Fallback Python
@@ -644,6 +662,13 @@ class TelemetrySanitizer:
     def get_abstraction_map(self) -> dict[str, str]:
         """Retorna o mapa de abstrações (para debugging)."""
         return dict(self._abstraction_map)
+
+
+@dataclass
+class _TextEntry:
+    """Entrada mínima para sanitizar texto solto pelo mesmo caminho dos logs."""
+
+    message: str
 
 
 def _clone_log_entry(log, new_message: str):

@@ -173,12 +173,21 @@ def normalize_text_timestamps(text: str) -> str:
     return result
 
 
+def _require_existing(snapshot_path: Path) -> None:
+    if not snapshot_path.exists():
+        raise AssertionError(
+            f"Snapshot ausente: {snapshot_path.name}. Gere com --snapshot-update, "
+            f"revise o arquivo e versione-o."
+        )
+
+
 class SnapshotManager:
     """Gerencia snapshots JSON para testes de determinismo.
 
     Armazena snapshots como arquivos JSON em tests/snapshots/.
-    Na primeira execução, cria o snapshot. Nas subsequentes, compara.
-    Com --snapshot-update, sobrescreve snapshots existentes.
+    Compara contra o snapshot versionado. Snapshot ausente FALHA (antes era
+    criado e o teste passava, inclusive no CI). Com --snapshot-update, cria ou
+    sobrescreve.
     """
 
     def __init__(self, snapshot_dir: Path | None = None, *, update: bool = False):
@@ -189,8 +198,8 @@ class SnapshotManager:
     def assert_match(self, data: object, snapshot_name: str) -> None:
         """Compara dados normalizados contra snapshot armazenado.
 
-        Se o snapshot não existe, cria-o (primeira execução).
-        Se --snapshot-update foi passado, sobrescreve o existente.
+        Se --snapshot-update foi passado, cria ou sobrescreve o snapshot.
+        Se o snapshot não existe, falha sem criá-lo.
         Caso contrário, compara e falha com diff legível se diferir.
         """
         snapshot_path = self.snapshot_dir / f"{snapshot_name}.json"
@@ -200,9 +209,10 @@ class SnapshotManager:
             ensure_ascii=False, default=str,
         )
 
-        if self.update or not snapshot_path.exists():
+        if self.update:
             snapshot_path.write_text(current, encoding="utf-8")
             return
+        _require_existing(snapshot_path)
 
         stored = snapshot_path.read_text(encoding="utf-8")
         if current != stored:
@@ -227,9 +237,10 @@ class SnapshotManager:
         snapshot_path = self.snapshot_dir / f"{snapshot_name}.txt"
         normalized = normalize_text_timestamps(text)
 
-        if self.update or not snapshot_path.exists():
+        if self.update:
             snapshot_path.write_text(normalized, encoding="utf-8")
             return
+        _require_existing(snapshot_path)
 
         stored = snapshot_path.read_text(encoding="utf-8")
         if normalized != stored:

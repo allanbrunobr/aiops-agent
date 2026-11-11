@@ -114,16 +114,19 @@ class SafetyOrchestrator:
         layer_details: dict[str, object] = {}
         risk_scores: list[float] = []
 
-        # Camada 1: Sanitizer (se presente)
+        # Camada 1: Sanitizer (se presente). Comando que o sanitizer altera
+        # (PII/payload) bloqueia; exceção falha FECHADO (antes contava aprovado).
         if self._sanitizer is not None:
+            command = getattr(action, "command", "")
             try:
-                command = getattr(action, "command", "")
-                sanitizer_ok = self._sanitizer.sanitize(command)  # type: ignore[union-attr]
-                layer_details["sanitizer"] = {"passed": bool(sanitizer_ok)}
-                if not sanitizer_ok:
-                    blocked_by.append("sanitizer")
-            except Exception:
-                layer_details["sanitizer"] = {"passed": True, "skipped": True}
+                sanitized = self._sanitizer.sanitize_text(command)  # type: ignore[union-attr]
+                sanitizer_ok = sanitized == command
+                layer_details["sanitizer"] = {"passed": sanitizer_ok}
+            except Exception as exc:  # noqa: BLE001 — falha fechado, registrado no detalhe
+                sanitizer_ok = False
+                layer_details["sanitizer"] = {"passed": False, "error": repr(exc)}
+            if not sanitizer_ok:
+                blocked_by.append("sanitizer")
 
         # Camada 2: PreExecutionValidator — blast radius + blocklist
         try:
@@ -141,34 +144,30 @@ class SafetyOrchestrator:
         if not pre_result.is_safe:
             blocked_by.append("pre_validator")
 
-        # Camada 3: TNR — verificação de regressão de saúde (simulada)
-        tnr_passed = True
-        try:
-            from safety.tnr import HealthSnapshot, TNRResult
-            from datetime import datetime
-
-            now = datetime.now()
-            baseline = HealthSnapshot(
-                timestamp=now,
-                error_rate=0.0,
-                latency_p99_ms=100.0,
-                availability=100.0,
-                connection_pool_active=0,
-                connection_pool_max=10,
-            )
+        # Camada 3: TNR — só compara saúde MEDIDA. Sem snapshots pré/pós em
+        # system_state, "não verificado" (antes comparava um baseline com ele
+        # mesmo e sempre aprovava). Exceção falha FECHADO.
+        state = system_state or {}
+        pre_health = state.get("pre_health")
+        post_health = state.get("post_health")
+        if pre_health is None or post_health is None:
+            layer_details["tnr"] = {"verified": False,
+                                    "reason": "no post-action health measurement"}
+        else:
+            from safety.tnr import TNRResult
             try:
-                tnr_report = self._tnr.simulate_check(
-                    action, baseline, baseline, correlation_id=correlation_id
-                )
-            except TypeError:
-                tnr_report = self._tnr.simulate_check(action, baseline, baseline)
-            layer_details["tnr"] = tnr_report
-            tnr_passed = tnr_report.result == TNRResult.SUCCESS
-        except Exception:
-            layer_details["tnr"] = {"passed": True, "skipped": True}
-
-        if not tnr_passed:
-            blocked_by.append("tnr")
+                try:
+                    tnr_report = self._tnr.simulate_check(
+                        action, pre_health, post_health, correlation_id=correlation_id
+                    )
+                except TypeError:
+                    tnr_report = self._tnr.simulate_check(action, pre_health, post_health)
+                layer_details["tnr"] = tnr_report
+                if tnr_report.result != TNRResult.SUCCESS:
+                    blocked_by.append("tnr")
+            except Exception as exc:  # noqa: BLE001 — falha fechado, registrado no detalhe
+                layer_details["tnr"] = {"verified": False, "error": repr(exc)}
+                blocked_by.append("tnr")
 
         # Camada 4: VersionValidator — CVE e versões
         # Tenta validate_mitigation_action primeiro (interface completa), depois validate_remediation

@@ -6,30 +6,37 @@ Verifica normalização, dispatch para BlueprintEngine, e tratamento de erros.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 
 import pytest
 
 
 class _MockEngine:
-    """BlueprintEngine mock que retorna diagnóstico estruturado."""
+    """BlueprintEngine fake com o contrato REAL: run(pipeline, state) -> IncidentState.
 
-    def run(self, alert):
-        class Result:
-            diagnosis = "Connection pool exhausted after config deploy"
-            evidence_chain = ["error_rate spike", "slow traces", "pool metrics"]
-            confidence = 0.87
-            proposed_fix = "kubectl rollout undo deployment/payment-svc"
-            risk_assessment = {"risk": "LOW", "blast_radius": 1}
-            mode = "heuristic"
+    Antes o fake tinha `run(self, alert)`, a mesma assinatura errada da
+    produção — por isso o defeito ARQ-02 passava verde.
+    """
 
-        return Result()
+    def run(self, pipeline, state):
+        return dataclasses.replace(
+            state,
+            diagnosis={
+                "root_cause": "Connection pool exhausted after config deploy",
+                "evidence": ["error_rate spike", "slow traces", "pool metrics"],
+                "confidence": "high",
+            },
+            proposed_action={"command": "kubectl rollout undo deployment/payment-svc",
+                             "risk_level": "LOW"},
+            safety_verdict="APPROVED",
+        )
 
 
 class _MockEngineWithError:
     """BlueprintEngine que levanta exceção."""
 
-    def run(self, alert):
+    def run(self, pipeline, state):
         raise RuntimeError("Pipeline failed: FAISS not loaded")
 
 
@@ -189,18 +196,9 @@ class TestHandleDiagnoseIncident:
         run_calls = []
 
         class TrackingEngine:
-            def run(self, alert):
-                run_calls.append(alert)
-
-                class Result:
-                    diagnosis = "test"
-                    evidence_chain = []
-                    confidence = 0.5
-                    proposed_fix = ""
-                    risk_assessment = {}
-                    mode = "heuristic"
-
-                return Result()
+            def run(self, pipeline, state):
+                run_calls.append((pipeline, state))
+                return dataclasses.replace(state, diagnosis={"root_cause": "test"})
 
         await handle_diagnose_incident(
             arguments={
@@ -215,6 +213,9 @@ class TestHandleDiagnoseIncident:
         )
 
         assert len(run_calls) == 1
+        pipeline, state = run_calls[0]
+        assert pipeline.nodes  # pipeline real de incident response
+        assert state.alert.title == "Job failure"
 
     @pytest.mark.asyncio
     async def test_nollm_mode_in_response(self):

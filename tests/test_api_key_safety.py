@@ -113,7 +113,7 @@ class TestContainsApiKeyPattern:
 class TestPipelineOutputNoApiKeys:
     """Testes de integração: output do pipeline não contém API keys."""
 
-    def test_pipeline_output_contains_no_api_keys(self) -> None:
+    def test_pipeline_output_contains_no_api_keys(self, tmp_path) -> None:
         """Output do pipeline com fake API key em env NÃO deve conter a key."""
         from main import _contains_api_key_pattern, main
 
@@ -121,7 +121,7 @@ class TestPipelineOutputNoApiKeys:
         stderr_buf = io.StringIO()
 
         with patch.dict(os.environ, {"ANTHROPIC_API_KEY": FAKE_ANTHROPIC_KEY}), \
-             patch("sys.argv", ["main.py", "--no-llm", "--no-rag"]), \
+             patch("sys.argv", ["main.py", "--no-llm", "--no-rag", "--output-dir", str(tmp_path)]), \
              redirect_stdout(stdout_buf), \
              redirect_stderr(stderr_buf):
             main()
@@ -143,12 +143,12 @@ class TestPipelineOutputNoApiKeys:
 class TestPostmortemNoApiKeys:
     """Testes de integração: postmortem não contém API keys."""
 
-    def test_postmortem_contains_no_api_keys(self, pipeline_result, simulated_incident) -> None:
+    def test_postmortem_contains_no_api_keys(self, pipeline_result, simulated_incident, tmp_path) -> None:
         """Postmortem gerado NÃO deve conter padrões de API key."""
         from main import step_postmortem, _contains_api_key_pattern
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            path, _ = step_postmortem(pipeline_result, simulated_incident)
+            path, _ = step_postmortem(pipeline_result, simulated_incident, output_dir=str(tmp_path))
 
         text = path.read_text(encoding="utf-8")
         path.unlink(missing_ok=True)
@@ -177,7 +177,7 @@ class TestPostmortemNoApiKeys:
 class TestMissingApiKeyFallback:
     """Testes de integração: missing API key produz fallback limpo."""
 
-    def test_missing_api_key_produces_clean_fallback(self) -> None:
+    def test_missing_api_key_produces_clean_fallback(self, tmp_path) -> None:
         """Pipeline sem API key roda em modo heurístico sem stack trace."""
         from main import main
 
@@ -187,7 +187,7 @@ class TestMissingApiKeyFallback:
         # Garante que ANTHROPIC_API_KEY NÃO está definida
         env_without_key = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
         with patch.dict(os.environ, env_without_key, clear=True), \
-             patch("sys.argv", ["main.py", "--no-llm", "--no-rag"]), \
+             patch("sys.argv", ["main.py", "--no-llm", "--no-rag", "--output-dir", str(tmp_path)]), \
              redirect_stdout(stdout_buf), \
              redirect_stderr(stderr_buf):
             exit_code = main()

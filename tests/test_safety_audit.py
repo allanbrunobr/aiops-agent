@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+
 """
 Testes para Story 3.4: Safety Audit Trail.
 Cobre SafetyAuditEvent, SafetyAuditor e instrumentação das 4 camadas de segurança.
 """
 
 import pytest
+
+pytestmark = pytest.mark.unit
 import structlog.testing
 
 from safety.audit import SafetyAuditEvent, SafetyAuditor

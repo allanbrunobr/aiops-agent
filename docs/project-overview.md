@@ -29,9 +29,9 @@ It demonstrates the full incident response pipeline in a single CLI application,
 
 The prototype simulates a **payment-svc connection pool exhaustion** caused by a bad config deploy:
 
-- **500 log entries** across 6 services (payment-svc, order-svc, api-gateway, etc.)
-- **240 metric data points** (error rates, latency, connection pools)
-- **100 distributed traces** with varying latencies
+- **~500 log entries** from 4 services (payment-svc, gateway, auth-svc, order-svc) plus the deployment-controller
+- **240 samples per metric series** over 1 hour (2,160 points in total: error rates, latency, connection pools)
+- **100 distributed traces** (~280 spans) with varying latencies
 
 The agent processes this data and produces a diagnosis, mitigation proposal, and postmortem — all in one run.
 

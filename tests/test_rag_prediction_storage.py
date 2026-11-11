@@ -13,6 +13,9 @@ import pytest
 from rag.memory import IncidentMemoryDB
 
 
+pytestmark = pytest.mark.unit
+
+
 class _FakeSignal:
     """Sinal fictício para testes."""
 

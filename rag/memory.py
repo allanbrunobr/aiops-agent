@@ -154,6 +154,24 @@ CREATE INDEX IF NOT EXISTS idx_outcomes_skill
 """
 
 
+# Propostas de reescrita de skill feitas pelo LLM. Só viram skill ativa
+# depois de aprovação humana (S8): o texto pode carregar prompt injection.
+_DDL_SKILL_PROPOSALS = """
+CREATE TABLE IF NOT EXISTS skill_proposals (
+    proposal_id         TEXT PRIMARY KEY,
+    skill_id            TEXT NOT NULL,
+    base_version        INTEGER NOT NULL,
+    proposed_prompt     TEXT NOT NULL,
+    rationale           TEXT NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'pending',
+    reviewer            TEXT,
+    created_at          TEXT NOT NULL,
+    reviewed_at         TEXT,
+    FOREIGN KEY (skill_id) REFERENCES diagnostic_skills(skill_id)
+);
+"""
+
+
 _DDL_SIGNATURES = """
 CREATE TABLE IF NOT EXISTS degradation_signatures (
     incident_id   TEXT PRIMARY KEY,
@@ -183,6 +201,7 @@ class IncidentMemoryDB:
             conn.executescript(_DDL)
             conn.executescript(_DDL_SKILLS)
             conn.executescript(_DDL_SKILL_OUTCOMES)
+            conn.executescript(_DDL_SKILL_PROPOSALS)
 
     def _connect(self) -> sqlite3.Connection:
         """Abre conexão SQLite com suporte a chaves estrangeiras."""
@@ -369,6 +388,78 @@ class IncidentMemoryDB:
                 """,
                 (new_score, 1 if tnr_passed else 0, now, skill_id),
             )
+
+    # ── Propostas de evolução de skill (revisão humana) ─────────────────
+
+    def save_skill_proposal(
+        self, skill_id: str, base_version: int, proposed_prompt: str, rationale: str,
+    ) -> str:
+        """Registra uma proposta PENDENTE. Não altera a skill ativa."""
+        import datetime
+        import uuid
+
+        proposal_id = uuid.uuid4().hex
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO skill_proposals (proposal_id, skill_id, base_version,"
+                " proposed_prompt, rationale, status, created_at)"
+                " VALUES (?, ?, ?, ?, ?, 'pending', ?)",
+                (proposal_id, skill_id, base_version, proposed_prompt, rationale, now),
+            )
+        return proposal_id
+
+    def list_skill_proposals(self, status: str | None = None) -> list[dict]:
+        """Lista propostas (todas ou por status: pending/approved/rejected)."""
+        query = "SELECT * FROM skill_proposals"
+        params: tuple = ()
+        if status is not None:
+            query += " WHERE status = ?"
+            params = (status,)
+        query += " ORDER BY created_at"
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+
+    def _review_proposal(self, proposal_id: str, status: str, reviewer: str) -> dict | None:
+        import datetime
+
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM skill_proposals WHERE proposal_id = ? AND status = 'pending'",
+                (proposal_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            conn.execute(
+                "UPDATE skill_proposals SET status = ?, reviewer = ?, reviewed_at = ?"
+                " WHERE proposal_id = ?",
+                (status, reviewer, now, proposal_id),
+            )
+        return dict(row)
+
+    def approve_skill_proposal(self, proposal_id: str, reviewer: str) -> bool:
+        """Aplica a proposta à skill ativa (version+1). False se não houver pendente."""
+        import dataclasses
+
+        proposal = self._review_proposal(proposal_id, "approved", reviewer)
+        if proposal is None:
+            return False
+        skill = self.get_skill(proposal["skill_id"])
+        if skill is None:
+            return False
+        self.save_skill(dataclasses.replace(
+            skill,
+            system_prompt=proposal["proposed_prompt"],
+            version=skill.version + 1,
+            utility_score=0.5,  # nova chance para a skill revisada
+        ))
+        return True
+
+    def reject_skill_proposal(self, proposal_id: str, reviewer: str) -> bool:
+        """Descarta a proposta. A skill ativa não muda."""
+        return self._review_proposal(proposal_id, "rejected", reviewer) is not None
 
     def save_skill_outcome(self, outcome: SkillOutcome) -> None:
         """Registra o resultado de uma execução de skill."""

@@ -115,7 +115,8 @@ def test_mitigator_emits_tnr_verified():
 
     assert reporter.names() == [TNR_VERIFIED]
     payload = reporter.first(TNR_VERIFIED)
-    assert payload["result"] in {"success", "warning", "failure"}
+    # Sem snapshots de saúde medidos, o TNR não é verificado (antes: sucesso inventado).
+    assert payload["result"] == "not_verified"
 
 
 # ---------------------------------------------------------------------------

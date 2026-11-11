@@ -16,6 +16,15 @@ from contextlib import redirect_stdout, redirect_stderr
 
 import pytest
 
+import config.env as _config_env
+
+# Nenhum teste lê o .env.local/.env do checkout — nem na coleta. Módulos que
+# carregam o env no import (interfaces/demo/server.py) são importados no nível
+# de módulo por arquivos de teste, antes de qualquer fixture rodar. A raiz
+# aponta para um caminho que não existe; o fixture isolated_cli repete isso
+# por teste (tmp_path).
+_config_env.REPO_ROOT = _config_env.REPO_ROOT / "tests" / "_sem_env_local_"
+
 # Módulos ML que NUNCA devem ser importados durante coleta de testes
 _ML_MODULES = ("torch", "sentence_transformers", "faiss")
 
@@ -30,14 +39,39 @@ def pytest_addoption(parser):
     )
 
 
+# Todo teste precisa de um nível: é ele que decide em qual job do CI roda.
+# Sem marcador, o teste só rodava no job rust-build, fora dos jobs rápidos (T-a).
+TIER_MARKERS = ("unit", "integration", "snapshot", "rust")
+
+
+def untiered_items(items) -> list[str]:
+    """nodeids dos itens sem nenhum marcador de nível."""
+    return [
+        item.nodeid for item in items
+        if not any(item.get_closest_marker(m) for m in TIER_MARKERS)
+    ]
+
+
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(config, items):
-    """Verifica que módulos ML pesados não foram importados durante coleta."""
+    """Portões de coleta: sem ML importado e todo teste com marcador de nível.
+
+    tryfirst: roda antes da desseleção por -m, então vê a suíte inteira.
+    """
     for mod in _ML_MODULES:
         if mod in sys.modules:
             raise ImportError(
                 f"Módulo ML '{mod}' foi importado durante coleta de testes! "
                 f"Isso viola AC #4. Use imports lazy ou modo --no-rag."
             )
+    missing = untiered_items(items)
+    if missing:
+        listed = "\n  ".join(missing[:20])
+        more = f"\n  ... e mais {len(missing) - 20}" if len(missing) > 20 else ""
+        raise pytest.UsageError(
+            f"{len(missing)} teste(s) sem marcador de nível {TIER_MARKERS}. "
+            f"Sem ele o teste fica fora dos jobs rápidos do CI:\n  {listed}{more}"
+        )
 
 
 _REPO_MEMORY_DB = "data/incident_memory.db"
@@ -76,13 +110,14 @@ def _isolate_incident_memory_db(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def isolated_cli(monkeypatch):
+def isolated_cli(monkeypatch, tmp_path):
     """Roda main()/main_v1() sem efeitos externos nem vazamento de ambiente.
 
-    Os dois entrypoints leem `.env.local` do diretório atual para dentro de
-    os.environ (setdefault) e montam um SlackNotifier real quando há
+    Os entrypoints carregam `.env.local`/`.env` da raiz do repositório
+    (config.env.load_local_env) e montam um SlackNotifier real quando há
     SLACK_BOT_TOKEN. Num checkout com `.env.local` de verdade, um teste que
-    chama main() postaria no canal. Aqui:
+    chama main() postaria no canal ou usaria a chave real. Aqui:
+      - load_local_env aponta para um diretório vazio (nenhum arquivo real é lido);
       - o notifier é desligado (setup_slack_notifier → None);
       - variáveis de credencial já presentes são removidas;
       - os.environ inteiro é restaurado ao fim do teste.
@@ -96,9 +131,71 @@ def isolated_cli(monkeypatch):
         for key in [k for k in os.environ
                     if k.startswith(("SLACK_", "ANTHROPIC_", "JIRA_", "DATABRICKS_"))]:
             del os.environ[key]
-        monkeypatch.setattr("tools.slack_setup.setup_slack_notifier",
+        monkeypatch.setattr("app.slack_setup.setup_slack_notifier",
                             lambda *args, **kwargs: None)
+        monkeypatch.setattr("config.env.REPO_ROOT", tmp_path / "no-local-env")
         yield
+
+
+@pytest.fixture(autouse=True)
+def _isolate_external_side_effects(isolated_cli):
+    """`isolated_cli` em TODO teste, não só nos que lembram de pedir.
+
+    A revisão pré-PR achou testes de main() (test_api_key_safety.py) sem a
+    fixture, que podiam postar no Slack real num checkout com `.env.local`.
+    Depender de cada teste pedir é regra de obediência; isto é o portão.
+    """
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _restore_logging_config():
+    """Desfaz `configure_logging()` ao fim de cada teste.
+
+    main(), main_v1() e os servidores chamam configure_logging(), que troca os
+    handlers do root logger e a configuração global do structlog. Sem isto, o
+    primeiro teste que chama main() muda o log de todos os seguintes.
+    """
+    import logging
+
+    import structlog
+
+    root = logging.getLogger()
+    handlers, level = list(root.handlers), root.level
+    was_configured = structlog.is_configured()
+    config = structlog.get_config()
+    yield
+    root.handlers[:] = handlers
+    root.setLevel(level)
+    if was_configured:
+        structlog.configure(**config)
+    else:
+        structlog.reset_defaults()
+
+
+_REPO_ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
+
+
+def _repo_output_files() -> set[str]:
+    out = _REPO_ROOT / "output"
+    return {str(p) for p in out.rglob("*") if p.is_file()} if out.is_dir() else set()
+
+
+@pytest.fixture(autouse=True)
+def _forbid_writes_to_repo_output():
+    """Nenhum teste grava em output/ do repositório (relatório §2.4).
+
+    Postmortems de teste iam para output/ do checkout. Teste que precisa
+    gravar passa output_dir=tmp_path.
+    """
+    before = _repo_output_files()
+    yield
+    created = sorted(_repo_output_files() - before)
+    if created:
+        pytest.fail(
+            "Teste gravou em output/ do repositório (use tmp_path): " + ", ".join(created[:5]),
+            pytrace=False,
+        )
 
 
 @pytest.fixture(scope="class")
@@ -196,7 +293,11 @@ def _run_pipeline(incident, scenario_name: str | None = None):
                     "message": tnr_check.message,
                 }
                 if tnr_check.result.value != "regression":
-                    _rec("VERIFYING", "RESOLVED", f"Incidente resolvido: {tnr_check.message}")
+                    # Mesmo texto de main.step_agents: o gate decide depois.
+                    _label = ("TNR check passed; mitigation proposed, safety gate decides next"
+                              if tnr_check.result.value == "success"
+                              else "Mitigation proposed (not executed); safety gate decides next")
+                    _rec("VERIFYING", "RESOLVED", f"{_label}: {tnr_check.message}")
                     result["success"] = True
                 else:
                     _rec("VERIFYING", "ROLLBACK", f"Regressão detectada: {tnr_check.message}")

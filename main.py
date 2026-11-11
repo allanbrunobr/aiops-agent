@@ -44,16 +44,15 @@ if TYPE_CHECKING:
 import enum
 import json
 import os
-import re
 import sys
 import time
 import traceback
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from config.loader import AppConfig, load_config
-from dotenv import load_dotenv
+from config.loader import AppConfig, SafetyConfig, load_config, resolve_llm_model
+from config.env import load_local_env
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -69,7 +68,7 @@ from pipeline.aggregator import Aggregator, AggregatedReport
 from rag.indexer import ObservabilityIndexer
 from rag.retriever_history import ObservabilityRetrieverWithHistory
 from rag.memory import IncidentMemoryDB, IncidentRecord
-from core.logging import get_logger
+from core.logging import SECRET_PATTERNS, configure_logging, get_logger, redact_text
 from domain.confidence import confidence_to_score
 
 # Falhas best-effort (persistência, precedentes, evolução de skills) vão para
@@ -101,20 +100,13 @@ EXIT_CODE_LABELS = {
     EXIT_APPROVAL_NEEDED: "approval-needed",
 }
 
-# Padrões de API key para sanitização de secrets (Story 3.3)
-API_KEY_PATTERNS = [
-    re.compile(r"sk-ant-[a-zA-Z0-9_-]{20,}"),      # Anthropic API keys
-    re.compile(r"dapi[a-zA-Z0-9]{20,}"),             # Databricks API keys
-    re.compile(r"sk-[a-zA-Z0-9]{32,}"),              # OpenAI-style keys
-    re.compile(r"key-[a-zA-Z0-9]{32,}"),             # Generic API keys
-]
+# Padrões de segredo: lista única em core/logging.py (a mesma do log).
+API_KEY_PATTERNS = SECRET_PATTERNS
 
 
 def _sanitize_secrets(text: str) -> str:
-    """Remove padrões de API key do texto, substituindo por [REDACTED]."""
-    for pattern in API_KEY_PATTERNS:
-        text = pattern.sub("[REDACTED]", text)
-    return text
+    """Remove padrões de segredo do texto, substituindo por [REDACTED]."""
+    return redact_text(text)
 
 
 def _contains_api_key_pattern(text: str) -> bool:
@@ -483,12 +475,14 @@ def step_agents(report, retriever, use_llm: bool = True,
             reporter=_reporter,
         )
     # Estágio 1 (fallback --no-llm): DiagnosisAgent heurístico
+    from adapters.llm.anthropic_client import create_anthropic_llm_client as _llm_client_factory
     diagnoser = DiagnosisAgent(
         max_iterations=1,
         model=llm_model,
         similar_incidents=_similar_incidents,
         skill=_skill,
         reporter=_reporter,
+        client_factory=_llm_client_factory,
     )
     mitigator = MitigationAgent(reporter=_reporter)
     tnr_guard = TNRSafetyGuard(regression_threshold=config.thresholds.regression_threshold)
@@ -559,10 +553,13 @@ def step_agents(report, retriever, use_llm: bool = True,
     _transition("MITIGATING", "VERIFYING", "Verificando impacto (TNR)...")
     if use_llm:
         # Reutiliza resultado TNR já computado dentro do orchestrator (evita duplicata)
-        _tnr_regression = not _outcome.tnr_passed
+        # Valor real do TNR: "not_verified" não é regressão (antes, tudo que não
+        # era success virava "regression" e exit 2).
+        _tnr_value = _outcome.tnr_result or ("success" if _outcome.tnr_passed else "regression")
+        _tnr_regression = _tnr_value == "regression"
         _tnr_msg = _outcome.tnr_message
         result["stages"]["verification"] = {
-            "result": "success" if _outcome.tnr_passed else "regression",
+            "result": _tnr_value,
             "health_delta": _outcome.tnr_health_delta,
             "message": _tnr_msg,
         }
@@ -580,10 +577,15 @@ def step_agents(report, retriever, use_llm: bool = True,
         _transition("VERIFYING", "ROLLBACK", f"Regressão detectada: {_tnr_msg}")
         result["stages"]["rollback"] = {"message": "Rollback executado, retornando ao diagnostico"}
     else:
+        _verification = result["stages"]["verification"]["result"]
         _transition(
             "VERIFYING",
             "RESOLVED",
-            f"TNR check passed; human approval still pending: {_tnr_msg}",
+            # O gate de aprovação roda DEPOIS (step_safety_validation); aqui
+            # não dá para afirmar "approval pending" (pré-PR em 9db0afd).
+            (f"TNR check passed; mitigation proposed, safety gate decides next: {_tnr_msg}"
+             if _verification == "success"
+             else f"Mitigation proposed (not executed); safety gate decides next: {_tnr_msg}"),
         )
         result["success"] = True
 
@@ -611,38 +613,12 @@ def step_agents(report, retriever, use_llm: bool = True,
 
     # Persiste outcome independente do modo (write funciona em --no-llm)
     try:
-        from rag.memory import SkillOutcome
-        import datetime as _dt
-        # Fix 2: renomeado para _skill_outcome — evita shadow sobre AgentOutcome
-        _skill_outcome = SkillOutcome(
-            outcome_id=str(uuid.uuid4()),
-            skill_id=getattr(getattr(diagnoser, "skill", None), "skill_id", "default"),
-            incident_id=str(uuid.uuid4()),
-            tnr_passed=_tnr_passed,
-            reflection_score=float(_reflection.get("score", 0.5)),
-            reflection_lesson=str(_reflection.get("lesson", "")),
-            tools_used=diagnoser.tools_used,
-            iteration_count=diagnoser.iteration_count,
-            timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+        step_skill_learning(
+            _memory_db, getattr(diagnoser, "skill", None),
+            tnr_result=_tnr_str, reflection=_reflection,
+            tools_used=diagnoser.tools_used, iteration_count=diagnoser.iteration_count,
+            use_llm=use_llm, client=_orchestrator.client if use_llm else None,
         )
-        _memory_db.save_skill_outcome(_skill_outcome)
-
-        # ── Fase 5: EVOLVE — reescreve skills fracas ─────────────────────
-        from agents.skill_evolver import SkillEvolver
-
-        _active_skill = getattr(diagnoser, "skill", None)
-        if _active_skill is not None:
-            # Fix 6: usa client do orchestrator (diagnoser.client é None no Estágio 2)
-            _evolver = SkillEvolver(
-                client=_orchestrator.client if use_llm else None,
-                memory_db=_memory_db,
-            )
-            if _evolver.should_evolve(_active_skill):
-                _evolved = _evolver.evolve(_active_skill)
-                if _evolved:
-                    console.print(
-                        f"  [dim]Skill evolved: {_evolved.name} → v{_evolved.version}[/dim]"
-                    )
     except Exception as exc:  # noqa: BLE001 — write/evolve é best-effort; não bloqueia o pipeline
         _persist_log.warning("skills.write_evolve_failed", error=repr(exc))
     # ─────────────────────────────────────────────────────────────────────
@@ -653,8 +629,62 @@ def step_agents(report, retriever, use_llm: bool = True,
     return result
 
 
-def step_safety_validation(result):
-    """Etapa 4b: Pre-Execution Safety Validation."""
+def step_skill_learning(memory_db, skill, *, tnr_result: str, reflection: dict,
+                        tools_used: list, iteration_count: int, use_llm: bool, client):
+    """Fases WRITE + EVOLVE do ciclo de skills: grava o outcome e, se a skill
+    estiver fraca, propõe uma reescrita (pendente de revisão humana).
+
+    Returns:
+        A skill candidata proposta, ou None.
+    """
+    from rag.memory import SkillOutcome
+    import datetime as _dt
+
+    skill_id = getattr(skill, "skill_id", "default")
+    tnr_passed = tnr_result == "success"
+    outcome = SkillOutcome(
+        outcome_id=str(uuid.uuid4()),
+        skill_id=skill_id,
+        incident_id=str(uuid.uuid4()),
+        tnr_passed=tnr_passed,
+        reflection_score=float(reflection.get("score", 0.5)),
+        reflection_lesson=str(reflection.get("lesson", "")),
+        tools_used=tools_used,
+        iteration_count=iteration_count,
+        timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+    )
+    memory_db.save_skill_outcome(outcome)
+
+    # Atualiza utility_score/total_uses (EMA). Antes update_skill_score nunca
+    # era chamado: o score ficava congelado e a evolução nunca disparava (F16).
+    # Sem LLM a "reflexão" é um placeholder (0.5) — não há sinal para aprender.
+    if use_llm and skill is not None:
+        memory_db.update_skill_score(skill_id, tnr_passed, outcome.reflection_score)
+        skill = memory_db.get_skill(skill_id) or skill
+
+    # ── Fase 5: EVOLVE — reescreve skills fracas ─────────────────────
+    from agents.skill_evolver import SkillEvolver
+
+    if skill is None:
+        return None
+    evolver = SkillEvolver(client=client, memory_db=memory_db)
+    if not evolver.should_evolve(skill):
+        return None
+    evolved = evolver.evolve(skill)
+    if evolved:
+        console.print(
+            f"  [dim]Skill rewrite proposed for {evolved.name} "
+            f"(v{evolved.version}) — pending human review[/dim]"
+        )
+    return evolved
+
+
+def step_safety_validation(result, config: AppConfig | None = None):
+    """Etapa 4b: Pre-Execution Safety Validation.
+
+    Usa `safety.require_human_approval` e `safety.blast_radius_limit` da config
+    (antes fixava auto-aprovação e limite 3, ignorando o YAML — F13).
+    """
     console.print(Rule("[bold]Stage 4b: Pre-Execution Safety Validation[/bold]", style="cyan"))
     console.print()
 
@@ -665,9 +695,10 @@ def step_safety_validation(result):
         console.print("  [dim]No mitigation to validate (skipping)[/dim]\n")
         return None
 
+    safety_cfg = getattr(config, "safety", None) or SafetyConfig()
     pre_validator = PreExecutionValidator(
-        auto_approve_low_risk=True,
-        max_blast_radius=3,
+        auto_approve_low_risk=not safety_cfg.require_human_approval,
+        max_blast_radius=safety_cfg.blast_radius_limit,
         require_rollback_plan=True,
     )
     orchestrator = SafetyOrchestrator(pre_validator=pre_validator)
@@ -939,6 +970,9 @@ def _serialize_result(result: dict, incident) -> dict:
         "llm_model": result.get("llm_model", "unknown"),
         "config_source": result.get("config_source", "defaults"),
         "success": result.get("success", False),
+        # Mesmo veredito do markdown (_postmortem_verdict): "success" sozinho
+        # dizia true com a aprovação humana pendente.
+        **_postmortem_verdict(result),
         "duration_minutes": round(
             (incident.fix_time - incident.deploy_time).total_seconds() / 60, 1
         ),
@@ -979,9 +1013,9 @@ def _serialize_result(result: dict, incident) -> dict:
         if post is not None:
             verification["post_snapshot"] = _serialize_health_snapshot(post)
 
-    # Action items
+    # Action items (vazio sem incidente, como no Markdown)
     pattern_matched = mitigation_raw.get("pattern_matched", "default") if mitigation_raw else "default"
-    action_items = _get_action_items(pattern_matched)
+    action_items = [] if _no_incident(result) else _get_action_items(pattern_matched)
 
     # Timeline
     timeline = {
@@ -1090,6 +1124,55 @@ def step_predict(result: dict, report, *,
     console.print()
 
 
+def _no_incident(result) -> bool:
+    """A detecção concluiu que não há incidente (saída antecipada para IDLE).
+
+    Veredito, Action Items, tracking e resumo da CLI consultam este mesmo
+    predicado: antes só o veredito sabia, e o resto tratava a janela saudável
+    como incidente (pré-PR em 2b4f094).
+    """
+    return (result.get("stages", {}).get("detection") or {}).get("is_incident") is False
+
+
+def _postmortem_verdict(result) -> dict:
+    """Veredito único do postmortem, para o markdown E o JSON.
+
+    Revisão pré-PR do step_postmortem inteiro (9db0afd): Summary, Timeline,
+    Lições e JSON afirmavam coisas diferentes do mesmo run ("Resolved" ×
+    "awaiting approval", "Mitigation applied" sem nada executado). Este
+    projeto propõe a mitigação; quem executa é uma pessoa, fora dele.
+    """
+    stages = result.get("stages", {})
+    decision = stages.get("safety_decision")
+    validation = stages.get("safety_validation") or {}
+    awaiting_human = bool(
+        decision.get("requires_human") if decision is not None
+        else validation.get("requires_human")
+    )
+    proposed = bool((stages.get("mitigation") or {}).get("action"))
+    tnr = (stages.get("verification") or {}).get("result")
+    no_incident = _no_incident(result)
+    if awaiting_human:
+        resolution = "Awaiting human approval (mitigation proposed, not executed)"
+    elif no_incident:
+        # Janela saudável: a CLI sai com exit 0; "Requires manual intervention"
+        # escalaria quem automatiza em cima de meta.resolution (pré-PR 78c4689).
+        resolution = "No incident detected; no action required"
+    elif result.get("success") and tnr == "success":
+        resolution = "Resolved"
+    elif result.get("success"):
+        resolution = (f"Resolved (mitigation approved, not executed by the agent; "
+                      f"TNR {tnr or 'did not run'})")
+    else:
+        resolution = "Requires manual intervention"
+    return {
+        "awaiting_human": awaiting_human,
+        "mitigation_proposed": proposed,
+        "resolution": resolution,
+        "safety_blocked_by": list((decision or {}).get("blocked_by", [])),
+    }
+
+
 def step_postmortem(result, incident, output_dir: str = "output",
                     output_format: str = "markdown",
                     tracker_url: str | None = None,
@@ -1101,6 +1184,15 @@ def step_postmortem(result, incident, output_dir: str = "output",
     diagnosis = result.get("stages", {}).get("diagnosis", {})
     mitigation = result.get("stages", {}).get("mitigation", {})
     verification = result.get("stages", {}).get("verification", {})
+    detection_stage = result.get("stages", {}).get("detection", {})
+
+    # Um veredito só para Summary, Timeline, Lições e JSON (_postmortem_verdict).
+    verdict = _postmortem_verdict(result)
+    awaiting_human = verdict["awaiting_human"]
+    resolution = verdict["resolution"]
+    is_incident = detection_stage.get("is_incident", True)
+    root_cause = diagnosis.get("root_cause") or "Unable to determine root cause"
+    diagnosis_failed = any(t.get("to") == "FAILED" for t in result.get("timeline", []))
 
     scenario_name = result.get("scenario_name", "payment-pool-exhaustion")
     now = datetime.now()
@@ -1112,21 +1204,21 @@ def step_postmortem(result, incident, output_dir: str = "output",
 - **Date**: {now.strftime('%Y-%m-%d %H:%M')}
 - **Scenario**: {scenario_name}
 - **LLM Model**: {llm_model}
-- **Duration**: ~{(incident.fix_time - incident.deploy_time).total_seconds() / 60:.0f} minutes
+- **Duration**: ~{(incident.fix_time - incident.deploy_time).total_seconds() / 60:.0f} minutes (scenario: deploy to reference fix time)
 - **Severity**: {result.get('stages', {}).get('detection', {}).get('severity', 'UNKNOWN')}
-- **Impact**: Service degradation detected via automated analysis
-- **Resolution**: {'Resolved' if result.get('success') else 'Requires manual intervention'}
+- **Impact**: {'Service degradation detected via automated analysis' if is_incident else 'No incident detected in the analysed window'}
+- **Resolution**: {resolution}
 
 ## Root Cause
 
-{diagnosis.get('root_cause', 'Unable to determine root cause')}
+{root_cause}
 
 **Confidence**: {diagnosis.get('confidence', 'unknown')}
 
 ## Evidence
 
 """
-    for i, ev in enumerate(diagnosis.get("evidence", []), 1):
+    for i, ev in enumerate(diagnosis.get("evidence") or [], 1):
         postmortem += f"{i}. {ev}\n"
 
     postmortem += f"""
@@ -1135,9 +1227,8 @@ def step_postmortem(result, incident, output_dir: str = "output",
 | Time | Event |
 |------|-------|
 | {incident.deploy_time.strftime('%H:%M:%S')} | Deployment or configuration change applied |
-| {incident.spike_start.strftime('%H:%M:%S')} | {diagnosis.get('root_cause', 'Anomaly detected')[:80]} |
+| {incident.spike_start.strftime('%H:%M:%S')} | {(diagnosis.get('root_cause') or 'Anomaly detected')[:80]} |
 | {incident.detection_time.strftime('%H:%M:%S')} | Automated detection triggered |
-| {incident.fix_time.strftime('%H:%M:%S')} | Mitigation applied |
 
 ### State Machine Transitions
 
@@ -1145,10 +1236,15 @@ def step_postmortem(result, incident, output_dir: str = "output",
     for t in result.get("timeline", []):
         postmortem += f"- **{t['time']}** {t['from']} -> {t['to']}: {t['reason']}\n"
 
+    # O agente propõe; nada neste projeto executa a ação (agents/mitigator.py).
     postmortem += """
-## Mitigation Applied
+## Mitigation Proposed
 
 """
+    if verdict["mitigation_proposed"]:
+        postmortem += "- **Executed by the agent**: No (the agent proposes; execution is a human step)\n"
+    else:
+        postmortem += "- No mitigation was proposed (the pipeline stopped before mitigation)\n"
     if mitigation:
         action = mitigation.get("action")
         if action:
@@ -1203,10 +1299,14 @@ def step_postmortem(result, incident, output_dir: str = "output",
 """
 
     # Gera action items dinâmicos com base no pattern_matched da mitigação.
+    # Sem incidente não há tarefa: a lista "default" ao lado de "no action
+    # required" se contradizia.
     pattern_matched = mitigation.get("pattern_matched", "default") if mitigation else "default"
-    items = _get_action_items(pattern_matched)
+    items = [] if _no_incident(result) else _get_action_items(pattern_matched)
     for i, item in enumerate(items, 1):
         postmortem += f"{i}. [ ] {item}\n"
+    if not items:
+        postmortem += "- None (no incident detected)\n"
 
     # Incident Tracking section (Story 6.3)
     if tracker_url and tracker_issue_key:
@@ -1219,13 +1319,45 @@ def step_postmortem(result, incident, output_dir: str = "output",
 """
 
     confidence = diagnosis.get("confidence", "unknown")
+    # As lições dizem o que aconteceu. Antes eram fixas e afirmavam que o TNR
+    # validou a mitigação logo abaixo de "Result: not_verified" (pré-PR em
+    # eee1245, a mesma contradição já corrigida no --help e nos READMEs).
+    tnr_lesson = {
+        "success": "TNR verification validated the mitigation outcome",
+        "regression": "TNR detected a regression after the mitigation",
+        "not_verified": "TNR did not verify the mitigation (no post-action health measurement)",
+    }.get(verification.get("result"), "TNR verification did not run")
+    if not verdict["mitigation_proposed"]:
+        # Saída antecipada (sem incidente, diagnóstico FAILED): nada foi
+        # mitigado, e "completed all stages" seria falso.
+        pipeline_lesson = "Pipeline stopped before mitigation (see State Machine Transitions)"
+    elif awaiting_human:
+        pipeline_lesson = "Pipeline stopped at the human approval gate (mitigation awaiting approval)"
+    else:
+        pipeline_lesson = ("Incident response pipeline completed all stages "
+                           "(mitigation approved; execution is outside the agent)")
+    detection_lesson = (
+        "Automated detection identified the incident promptly"
+        if is_incident
+        else "Automated detection found no incident in the analysed window"
+    )
+    if diagnosis_failed:
+        diagnosis_lesson = "Diagnosis failed (see State Machine Transitions)"
+    elif not diagnosis:
+        diagnosis_lesson = "No diagnosis was run"
+    elif llm_model == "heuristic":
+        diagnosis_lesson = f"Heuristic diagnosis provided {confidence}-confidence assessment"
+    elif llm_model == "unknown":
+        diagnosis_lesson = f"Diagnosis provided {confidence}-confidence assessment"
+    else:
+        diagnosis_lesson = f"LLM diagnosis ({llm_model}) provided {confidence}-confidence assessment"
     postmortem += f"""
 ## Lessons Learned
 
-- Automated detection identified the incident promptly
-- Heuristic diagnosis provided {confidence}-confidence assessment
-- TNR verification validated the mitigation outcome
-- Incident response pipeline completed all stages successfully
+- {detection_lesson}
+- {diagnosis_lesson}
+- {tnr_lesson}
+- {pipeline_lesson}
 
 ---
 
@@ -1277,6 +1409,9 @@ def print_summary(result, compression_stats=None, safety_result=None,
     awaiting_human = _requires_human(safety_result, remediation_result)
     if awaiting_human:
         status_icon = "[bold yellow]AWAITING HUMAN[/bold yellow]"
+    elif _no_incident(result):
+        # Janela saudável sai com exit 0; UNRESOLVED em vermelho contradizia.
+        status_icon = "[bold green]NO INCIDENT[/bold green]"
     elif success:
         status_icon = "[bold green]RESOLVED[/bold green]"
     else:
@@ -1342,7 +1477,7 @@ def print_summary(result, compression_stats=None, safety_result=None,
     table.add_row(
         "Diagnosis",
         f"[green]{diagnosis.get('confidence', '?')} confidence[/green]",
-        f"{diagnosis.get('root_cause', 'N/A')[:60]} [dim](model: {llm_model})[/dim]",
+        f"{(diagnosis.get('root_cause') or 'N/A')[:60]} [dim](model: {llm_model})[/dim]",
     )
 
     # Mitigation
@@ -1388,7 +1523,9 @@ def print_summary(result, compression_stats=None, safety_result=None,
     verification = result.get("stages", {}).get("verification", {})
     if verification:
         tnr_result = verification.get("result", "N/A")
-        style = "green" if tnr_result == "success" else "red"
+        # not_verified não é falha (sem medição pós-ação): amarelo, como no
+        # reporter (adapters/reporter/rich_console.py).
+        style = {"success": "green", "not_verified": "yellow"}.get(tnr_result, "red")
         table.add_row("TNR Verify", f"[{style}]{tnr_result}[/{style}]", verification.get("message", "")[:80])
 
     # Incident Tracking (Story 6.3)
@@ -1401,6 +1538,9 @@ def print_summary(result, compression_stats=None, safety_result=None,
                 f"[green]{issue_key}[/green]",
                 f"{tracker_url}/browse/{issue_key}" if tracker_url else issue_key,
             )
+        elif _no_incident(result):
+            # step_tracking pulou de propósito: não é erro do tracker.
+            table.add_row("Tracking", "[dim]not created[/dim]", "no incident detected")
         else:
             table.add_row(
                 "Tracking",
@@ -1435,9 +1575,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = _CliParser(
         description="AIOps Agent - Agentic Incident Response Demo",
         epilog="""Exit codes:
-  0  Pipeline resolved successfully (TNR verified, no human gate left)
+  0  Pipeline resolved successfully (no regression, no human gate left;
+     without a post-action measurement TNR is not_verified, not success)
   1  Invalid arguments, or an unrecoverable error in a stage
-  2  TNR regression detected (post-health worse than pre-health)
+  2  TNR regression detected (measured post-health worse than pre-health)
   3  Safety blocked action (human approval required)""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1591,17 +1732,27 @@ def step_tracking(result, tracker) -> str | None:
 
     Extrai titulo, severidade e descricao do resultado do diagnostico
     e cria um incidente no tracker. Erros nao interrompem o pipeline.
-    Retorna issue_key ou None se falhar.
+    Retorna issue_key, ou None se falhar OU se não houver incidente (nesse
+    caso nenhuma issue é criada; print_summary distingue os dois por
+    _no_incident).
     """
     console.print(Rule("[bold]Stage 5b: Incident Tracking[/bold]", style="cyan"))
     console.print()
 
+    if _no_incident(result):
+        # Janela saudável: abrir um Bug "AIOps detected incident" contradizia o
+        # postmortem ("no action required") que aponta para ele.
+        console.print("  [dim]No incident detected; no issue created[/dim]")
+        return None
+
     diagnosis = result.get("stages", {}).get("diagnosis", {})
     detection = result.get("stages", {}).get("detection", {})
 
-    root_cause = diagnosis.get("root_cause", "AIOps detected incident")
-    severity = detection.get("severity", "medium")
-    evidence = diagnosis.get("evidence", [])
+    # `or`: diagnóstico FAILED grava root_cause None, e len(None) derrubava o
+    # run antes do postmortem (pré-PR em 78c4689).
+    root_cause = diagnosis.get("root_cause") or "AIOps detected incident"
+    severity = detection.get("severity") or "medium"
+    evidence = diagnosis.get("evidence") or []
 
     # Titulo: primeiros 100 chars do root cause
     title = root_cause[:100] if len(root_cause) > 100 else root_cause
@@ -1633,7 +1784,9 @@ def _attach_postmortem_to_tracker(tracker, issue_key: str, result) -> str | None
     diagnosis = result.get("stages", {}).get("diagnosis", {})
     mitigation = result.get("stages", {}).get("mitigation", {})
 
-    root_cause = diagnosis.get("root_cause", "Unable to determine root cause")
+    # `or`: diagnóstico FAILED grava root_cause None, e o formatter do Jira
+    # quebrava no join (pré-PR em 2b4f094).
+    root_cause = diagnosis.get("root_cause") or "Unable to determine root cause"
 
     # Mapeia timeline do pipeline para formato do tracker
     timeline = []
@@ -1654,6 +1807,9 @@ def _attach_postmortem_to_tracker(tracker, issue_key: str, result) -> str | None
     except Exception as e:
         console.print(f"[yellow]  Warning: Postmortem attachment failed: {e}[/yellow]")
         return None
+
+
+DATABRICKS_LOOKBACK_MINUTES = 60
 
 
 def step_fetch_databricks_data(
@@ -1679,11 +1835,13 @@ def step_fetch_databricks_data(
     console.print()
 
     now = datetime.now()
+    # Janela explícita: sem ela as métricas faziam None.isoformat() e voltavam vazias.
+    window_start = now - timedelta(minutes=DATABRICKS_LOOKBACK_MINUTES)
 
     # --- Logs ---
     logs: list[LogEntry] = []
     try:
-        raw_logs = log_source.search(query="*", service="", start=None, end=None)
+        raw_logs = log_source.search(query="*", service="", start=window_start, end=now)
         for d in raw_logs:
             ts = datetime.fromisoformat(d["timestamp"]) if d.get("timestamp") else now
             logs.append(LogEntry(
@@ -1699,7 +1857,7 @@ def step_fetch_databricks_data(
     # --- Metrics ---
     metrics: list[MetricPoint] = []
     try:
-        raw_metrics = metrics_source.query(promql="", start=None, end=None)
+        raw_metrics = metrics_source.query(promql="", start=window_start, end=now)
         for d in raw_metrics:
             ts = datetime.fromisoformat(d["timestamp"]) if d.get("timestamp") else now
             metrics.append(MetricPoint(
@@ -1715,7 +1873,9 @@ def step_fetch_databricks_data(
     # --- Traces ---
     traces: list[Span] = []
     try:
-        raw_traces = trace_source.find_traces(service="", min_duration_ms=0.0)
+        raw_traces = trace_source.find_traces(
+            service="", min_duration_ms=0.0, start=window_start, end=now,
+        )
         for d in raw_traces:
             traces.append(Span(
                 trace_id=d.get("trace_id", ""),
@@ -1731,6 +1891,18 @@ def step_fetch_databricks_data(
         console.print(f"  [green]Traces:[/green] {len(traces)} spans fetched")
     except Exception as exc:
         console.print(f"  [yellow]Traces:[/yellow] fetch failed ({exc}), using empty list")
+
+    if not (logs or metrics or traces):
+        # Fallback gracioso mantido, mas nunca silencioso: o pipeline vai rodar
+        # sobre nada e o diagnóstico não terá base.
+        console.print(
+            f"[bold red]Databricks returned no telemetry in the last "
+            f"{DATABRICKS_LOOKBACK_MINUTES} minutes (logs, metrics and traces are empty). "
+            f"The diagnosis below has no data behind it.[/bold red]"
+        )
+        _persist_log.warning(
+            "databricks.no_telemetry", lookback_minutes=DATABRICKS_LOOKBACK_MINUTES,
+        )
 
     incident = SimulatedIncident(
         logs=logs,
@@ -1808,7 +1980,7 @@ def display_results(state: "IncidentState", compact: bool = False) -> None:
     diagnosis = state.diagnosis or {}
     if diagnosis:
         console.print(Panel(
-            f"[bold]Root Cause:[/bold] {diagnosis.get('root_cause', 'Unknown')}\n"
+            f"[bold]Root Cause:[/bold] {diagnosis.get('root_cause') or 'Unknown'}\n"
             f"[bold]Confidence:[/bold] {diagnosis.get('confidence', 'unknown')}\n"
             f"[bold]Evidence:[/bold] {', '.join(diagnosis.get('evidence', [])[:3])}",
             title="Diagnosis Result",
@@ -1888,22 +2060,13 @@ def main_v1(args: argparse.Namespace) -> int:
     """
     import asyncio
     import os
-    from pathlib import Path as _Path
     from adapters.persistence.in_memory_store import InMemoryStore
-    from core.logging import configure_logging, get_logger
     from adapters.credentials import EnvCredentialProvider
     from config.loader import load_config as load_app_config
     from blueprint.engine import PipelineAborted, LLMCallLimitExceeded
     from app.builders import build_engine, build_pipeline, build_rag
 
-    # Carrega .env.local se existir (sem dependencia de python-dotenv)
-    _env_file = _Path(".env.local")
-    if _env_file.exists():
-        for _line in _env_file.read_text().splitlines():
-            _line = _line.strip()
-            if _line and not _line.startswith("#") and "=" in _line:
-                _k, _, _v = _line.partition("=")
-                os.environ.setdefault(_k.strip(), _v.strip())
+    load_local_env()
 
     log = get_logger("main")
 
@@ -1916,7 +2079,7 @@ def main_v1(args: argparse.Namespace) -> int:
     # Slack notifier — opcional, wired se SLACK_BOT_TOKEN estiver no ambiente
     from core.lifecycle import LifecycleEvent
     from datetime import timezone as _tz
-    from tools.slack_setup import setup_slack_notifier
+    from app.slack_setup import setup_slack_notifier
     _slack_notifier = setup_slack_notifier()
     if _slack_notifier is not None:
         _slack_channel = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
@@ -2019,7 +2182,7 @@ def main_v1(args: argparse.Namespace) -> int:
         diagnosis = state.diagnosis or {}
         _conf_v1 = confidence_to_score(diagnosis.get("confidence"))
         _fire("pipeline.completed", cid=_cid, data={
-            "root_cause": diagnosis.get("root_cause", ""),
+            "root_cause": diagnosis.get("root_cause") or "",
             "confidence": _conf_v1,
             "proposed_fix": diagnosis.get("proposed_fix") or diagnosis.get("fix_command", ""),
             "risk_level": state.safety_verdict or "unknown",
@@ -2092,15 +2255,12 @@ def main() -> int:
     # Validate mutual exclusion rules
     _validate_args(parser, args)
 
-    # Load .env e .env.local
-    load_dotenv()
-    _env_local = Path(".env.local")
-    if _env_local.exists():
-        for _ln in _env_local.read_text().splitlines():
-            _ln = _ln.strip()
-            if _ln and not _ln.startswith("#") and "=" in _ln:
-                _ek, _, _ev = _ln.partition("=")
-                os.environ.setdefault(_ek.strip(), _ev.strip())
+    # .env.local e .env da raiz do repositório (config/env.py)
+    load_local_env()
+
+    # Log estruturado com redação de segredos (core/logging.py). Na CLI o
+    # padrão é WARNING, para não intercalar JSON com a saída do Rich.
+    configure_logging(os.environ.get("AIOPS_LOG_LEVEL", "WARNING"))
 
     # Verifica API key se vai usar LLM
     use_llm = not args.no_llm
@@ -2121,7 +2281,7 @@ def main() -> int:
     import asyncio as _asyncio
     from core.lifecycle import LifecycleEvent as _LifecycleEvent
     from datetime import timezone as _tz2
-    from tools.slack_setup import setup_slack_notifier as _setup_slack
+    from app.slack_setup import setup_slack_notifier as _setup_slack
     _notifier = _setup_slack()
     if _notifier is not None:
         _slack_ch = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
@@ -2146,11 +2306,12 @@ def main() -> int:
     # O path V0 e mantido como default para compatibilidade com testes existentes.
     # Para usar o Blueprint Engine diretamente, chame main_v1(args).
 
-    # Leitura do modelo LLM configuravel via env var (Story 5.1)
-    llm_model = os.environ.get("AIOPS_LLM_MODEL", "claude-sonnet-4-20250514")
-
     # Carrega configuracao via YAML (Pydantic Settings)
     threshold_config = load_config(config_path=args.config)
+
+    # Modelo LLM: AIOPS_LLM_MODEL (legado) > llm.model_name da config (Story 5.1).
+    # Antes só a variável de ambiente era lida e o YAML não tinha efeito.
+    llm_model = resolve_llm_model(threshold_config)
     config_source = args.config or "config/defaults.yaml"
 
     # Resolve tracker (Story 6.3) — antes do pipeline para falhar rapido em config invalida
@@ -2210,7 +2371,7 @@ def main() -> int:
                      slack_fire=_slack_fire, correlation_id=_pipeline_cid)
 
         # 4b. Pre-Execution Safety Validation
-        safety_result = step_safety_validation(result)
+        safety_result = step_safety_validation(result, config=threshold_config)
 
         # 4c. Remediation Version/CVE Validation
         remediation_result = step_remediation_validation(result)
@@ -2229,14 +2390,17 @@ def main() -> int:
             or ""
         )
         _conf_for_slack = confidence_to_score(_diag_for_slack.get("confidence"))
-        _slack_fire("diagnosis.completed", cid=_pipeline_cid, data={
-            "root_cause": _diag_for_slack.get("root_cause", ""),
-            "proposed_fix": _proposed_fix_slack,
-            "risk_level": safety_result.risk_level.value if safety_result else "unknown",
-            "requires_human": requires_human,
-            "confidence": float(_conf_for_slack),
-            "evidence": list(_diag_for_slack.get("evidence", []))[:5],
-        })
+        # Sem incidente não há diagnóstico nem correção a anunciar: o Slack
+        # postava "Diagnóstico + Correção Proposta" com Root Cause em branco.
+        if not _no_incident(result):
+            _slack_fire("diagnosis.completed", cid=_pipeline_cid, data={
+                "root_cause": _diag_for_slack.get("root_cause") or "",
+                "proposed_fix": _proposed_fix_slack,
+                "risk_level": safety_result.risk_level.value if safety_result else "unknown",
+                "requires_human": requires_human,
+                "confidence": float(_conf_for_slack),
+                "evidence": list(_diag_for_slack.get("evidence", []))[:5],
+            })
 
         # Armazena nome do cenário e config no resultado para postmortem e summary.
         result["scenario_name"] = scenario_name
@@ -2310,13 +2474,14 @@ def main() -> int:
             else "unknown"
         )
         _slack_fire("pipeline.completed", cid=_pipeline_cid, data={
-            "root_cause": _diag.get("root_cause", ""),
+            "root_cause": _diag.get("root_cause") or "",
             "confidence": _conf,
             "proposed_fix": _fix,
             "risk_level": safety_result.risk_level.value if safety_result else "unknown",
             "blast_radius": _br,
             "evidence": list(_diag.get("evidence", []))[:5],
             "total_duration_ms": int(elapsed_total * 1000),
+            "no_incident": _no_incident(result),
         })
 
         console.print(f"\n  [dim]Total execution time: {elapsed_total:.1f}s[/dim]")

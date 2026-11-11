@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 """
 Testes para Stories 4.1 e 4.2: RAG Knowledge Base e Graceful Degradation.
 Evita imports de ML pesados (torch, faiss, sentence_transformers).

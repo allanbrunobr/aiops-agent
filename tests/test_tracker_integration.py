@@ -22,6 +22,9 @@ from main import (
 )
 
 
+pytestmark = pytest.mark.unit
+
+
 # --- Fixtures ---
 
 @pytest.fixture

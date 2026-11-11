@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hmac as hmac_mod
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -9,13 +8,27 @@ import structlog
 
 from application.ports.credential_provider import CredentialProvider
 from domain.alert import NormalizedAlert
-from interfaces.http.webhook.normalizers.base import AlertNormalizer
+from interfaces.http.webhook.normalizers.base import AlertNormalizer, secrets_match
 from interfaces.http.webhook.normalizers.registry import register_normalizer
 from interfaces.http.webhook.schemas import NormalizedAlertDTO
 
 log = structlog.get_logger()
 
 # Mapeamento de estado Grafana -> severidade NormalizedAlert
+# Valor do label `severity` → severidade canônica. Antes só havia o mapa de
+# STATUS abaixo, e `severity: warning` com status firing saía "critical".
+_LABEL_SEVERITY_MAP: dict[str, str] = {
+    "critical": "critical",
+    "error": "error",
+    "high": "error",
+    "major": "error",
+    "warning": "warning",
+    "medium": "warning",
+    "minor": "warning",
+    "info": "info",
+    "low": "info",
+}
+
 _SEVERITY_MAP: dict[str, str] = {
     "alerting": "critical",
     "firing": "critical",
@@ -63,7 +76,7 @@ class GrafanaNormalizer(AlertNormalizer):
             return False
 
         # Comparacao em tempo constante para evitar timing attacks
-        is_valid = hmac_mod.compare_digest(received_token, expected_token)
+        is_valid = secrets_match(received_token, expected_token)
         if not is_valid:
             log.warning("grafana.auth_failed", reason="token mismatch")
         return is_valid
@@ -94,7 +107,14 @@ class GrafanaNormalizer(AlertNormalizer):
         if not alerts:
             raise ValueError("Grafana payload missing 'alerts' array or empty")
 
-        alert = alerts[0]  # Processa primeiro alerta do grupo
+        # Processa o primeiro alerta EM DISPARO do grupo; só um grupo todo
+        # resolvido vira notificação de resolução. Com alerts[0], um grupo
+        # [resolved, firing] era descartado como "resolved" e o alerta que
+        # ainda disparava não abria pipeline.
+        alert = next(
+            (a for a in alerts if a.get("status", "firing") != "resolved"),
+            alerts[0],
+        )
         labels = alert.get("labels", {})
         annotations = alert.get("annotations", {})
 
@@ -103,7 +123,11 @@ class GrafanaNormalizer(AlertNormalizer):
         description = annotations.get("description") or annotations.get("summary", "")
         status = alert.get("status", "firing")
         severity_label = labels.get("severity", "")
-        severity = _SEVERITY_MAP.get(severity_label.lower(), _SEVERITY_MAP.get(status, "warning"))
+        # Label primeiro; sem label reconhecido, o status decide (firing → critical).
+        severity = _LABEL_SEVERITY_MAP.get(
+            str(severity_label).strip().lower(),
+            _SEVERITY_MAP.get(status, "warning"),
+        )
 
         # Timestamp
         starts_at = alert.get("startsAt")

@@ -16,13 +16,10 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Load .env.local before any import that uses os.environ
+from config.env import load_local_env  # noqa: E402
+
 env_file = project_root / ".env.local"
-if env_file.exists():
-    for line in env_file.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, _, value = line.partition("=")
-            os.environ.setdefault(key.strip(), value.strip())
+load_local_env()
 
 
 from fastapi import FastAPI
@@ -90,6 +87,9 @@ def create_webhook_app() -> FastAPI:
 
 
 if __name__ == "__main__":
+    from core.logging import configure_logging
+
+    configure_logging()
     app = create_webhook_app()
     print("=" * 60)
     print("AIOps Agent — Webhook Server")
@@ -101,4 +101,4 @@ if __name__ == "__main__":
     print(f"  GRAFANA_TOKEN: {'set' if os.environ.get('GRAFANA_WEBHOOK_TOKEN') else 'MISSING'}")
     print(f"  SLACK_TOKEN:   {'set' if os.environ.get('SLACK_BOT_TOKEN') else 'MISSING'}")
     print("=" * 60)
-    uvicorn.run(app, host="127.0.0.1", port=47890, log_level="info")
+    uvicorn.run(app, host="127.0.0.1", port=47890, log_level="info", log_config=None)

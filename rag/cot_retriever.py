@@ -49,8 +49,11 @@ class CoTObservabilityRetriever(ObservabilityRetriever):
 
         # Realiza a busca — com reranker se disponível, caso contrário FAISS direto
         if self.reranker is not None:
-            raw = self.search(expanded_query, top_k=top_k)
-            results = self.reranker.rerank(query, raw)
+            # Busca sem o rerank interno do search() e reordena UMA vez contra a
+            # query original. Antes: rerank duplo, um deles com (query, results)
+            # trocados em relação à assinatura rerank(results, query, top_k).
+            raw = self.search(expanded_query, top_k=top_k, use_reranking=False)
+            results = self.reranker.rerank(raw, query, top_k=top_k)
         else:
             results = self.search(expanded_query, top_k=top_k)
 

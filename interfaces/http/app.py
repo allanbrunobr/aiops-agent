@@ -11,15 +11,10 @@ História 5.6: Montagem condicional com base em config.mcp.enabled.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
-
 import structlog
 from fastapi import FastAPI
 
 from config.loader import AppConfig
-
-if TYPE_CHECKING:
-    from rag.knowledge_store import KnowledgeStore
 
 log = structlog.get_logger()
 
@@ -122,6 +117,13 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # MCP SSE — montado somente se habilitado e transporte = sse
     # --------------------------------------------------------
 
+    # Engine e retriever ANTES do MCP: o SSE precisa recebê-los (ARQ-02).
+    # Antes eram criados depois do mount_sse, e diagnose/search ficavam sem eles.
+    from app.builders import build_engine, build_rag
+
+    _engine = build_engine(config)
+    _, _retriever = build_rag()
+
     if config.mcp.enabled and config.mcp.transport == "sse":
         from interfaces.mcp.sse import mount_sse
         from interfaces.mcp.rate_limiter import InMemoryRateLimiter
@@ -149,6 +151,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             pre_validator=pre_validator,
             tnr=tnr,
             version_validator=version_validator,
+            engine=_engine,
+            retriever=_retriever,
         )
 
     # --------------------------------------------------------
@@ -215,15 +219,13 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # --------------------------------------------------------
     # app.state — engine e retriever para handlers A2A
     # --------------------------------------------------------
-    from app.builders import build_engine, build_rag
-
     app.state.config = config
     app.state.a2a_jwt_secret = _jwt_secret if _hmac_ok else ""
     # Mesmos aud/iss do servidor OAuth (vazio = não exige).
     app.state.a2a_jwt_issuer = _oauth.issuer
     app.state.a2a_jwt_audience = _oauth.audience
-    app.state.engine = build_engine(config)
-    _, app.state.retriever = build_rag()
+    app.state.engine = _engine
+    app.state.retriever = _retriever
     log.info("a2a.state.populated", engine=type(app.state.engine).__name__)
 
     # --------------------------------------------------------
@@ -309,26 +311,3 @@ async def handle_prediction_event(
             event_type=event_type,
             exc_info=True,
         )
-
-
-# ------------------------------------------------------------------ #
-# Estado global para injeção de dependência (server/dependencies.py)  #
-# ------------------------------------------------------------------ #
-
-from dataclasses import dataclass as _dataclass
-
-
-@_dataclass
-class AppState:
-    """Estado global da aplicação para injeção de dependência FastAPI."""
-
-    config: AppConfig | None = None
-    store: object = None  # IncidentStore
-    engine: object = None  # BlueprintEngine
-    knowledge_store: KnowledgeStore | None = None
-
-
-app_state = AppState()
-
-# Compatibilidade retroativa — referenciado por server/handlers/false_positive.py
-knowledge_store: KnowledgeStore | None = None

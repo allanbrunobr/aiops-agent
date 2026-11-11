@@ -28,6 +28,13 @@ from interfaces.mcp.server import (
     create_server,
 )
 
+class _AlreadySent(Response):
+    """Resposta vazia para quando o transporte MCP já respondeu pelo ASGI."""
+
+    async def __call__(self, scope, receive, send) -> None:  # noqa: D102
+        return None
+
+
 # Estado do módulo — transporte e servidor MCP compartilhados
 _sse_transport: SseServerTransport | None = None
 _mcp_server = None
@@ -155,7 +162,15 @@ def mount_sse(
                 )
             return client_id, list(allowed_header_clients[client_id]), True
 
-        return "anonymous", [], False
+        if auth_method == "none":
+            return "anonymous", [], False
+
+        # Valor desconhecido: falha fechado (antes caía em "anonymous").
+        return Response(
+            status_code=401,
+            content='{"error":"unauthorized","detail":"MCP auth_method is not configured correctly"}',
+            media_type="application/json",
+        )
 
     @app.get("/mcp/sse")
     async def sse_endpoint(request: Request) -> Response:
@@ -249,3 +264,6 @@ def mount_sse(
         await _sse_transport.handle_post_message(  # type: ignore[union-attr]
             request.scope, request.receive, request._send
         )
+        # O transporte já respondeu pelo `send`; devolver None fazia o FastAPI
+        # enviar uma segunda resposta ("null") depois da primeira.
+        return _AlreadySent()

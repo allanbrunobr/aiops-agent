@@ -10,7 +10,13 @@
   python3.12 -m venv .venv
   .venv/bin/pip install -r requirements.txt
   ```
-- Copy `.env.example` to `.env` and add your `ANTHROPIC_API_KEY` (required for full LLM mode only)
+  or, with [uv](https://docs.astral.sh/uv/) and the lockfile: `uv sync --frozen --no-install-project --group test`
+  (`--no-install-project`: installing the project itself builds the optional Rust extension; use
+  `scripts/build_rust.sh` for that).
+  Dependencies are declared in `pyproject.toml` (`[project].dependencies` plus the `test` and
+  `build` groups); `requirements.txt` mirrors them for CI, and `tests/test_packaging_consistency.py`
+  fails if the two diverge. After changing dependencies, run `uv lock`.
+- Copy `.env.example` to `.env.local` and add your `ANTHROPIC_API_KEY` (required for full LLM mode only). The CLI, the demo and the webhook server load `.env.local` (then `.env`) from the repository root.
 
 ### Project Structure
 
@@ -69,7 +75,7 @@ Contributors MUST verify their changes work in all three modes before submitting
 ```bash
 python main.py
 ```
-Requires `ANTHROPIC_API_KEY` in `.env`. Uses LLM for diagnosis + RAG for semantic search.
+Requires `ANTHROPIC_API_KEY` in `.env.local` (or `.env`). Uses LLM for diagnosis + RAG for semantic search.
 
 ### 2. No-LLM Mode
 ```bash
@@ -85,10 +91,10 @@ Stdlib-only execution. No API calls, no ML model loading. Fastest mode for devel
 
 ### Additional CLI Flags
 
-- `--scenario <name>` — Select incident scenario (`connection-pool-exhaustion`, `memory-leak`, `unknown-fault`)
+- `--scenario <name>` — Select incident scenario (`payment-pool-exhaustion`, `memory-leak`, `unknown-fault`)
 - `--output-dir <path>` — Custom postmortem output directory (default: `output/`)
 - `--output-format <format>` — Postmortem output format: `markdown` (default), `json`, or `both`
-- `--config <file>` — Path to TOML config file for analysis thresholds
+- `--config <file>` — Path to YAML config file for analysis thresholds (default: `config/defaults.yaml`)
 - `--rebuild-rag` — Force RAG index reconstruction, ignoring any cached index
 - `--compact` — Compact terminal output
 
@@ -104,6 +110,10 @@ When using `--output-format json` or `--output-format both`, the generated JSON 
     "llm_model": "string",
     "config_source": "string",
     "success": true,
+    "awaiting_human": true,
+    "mitigation_proposed": true,
+    "resolution": "Awaiting human approval (mitigation proposed, not executed)",
+    "safety_blocked_by": ["pre_validator"],
     "duration_minutes": 0.0
   },
   "detection": { "is_incident": true, "severity": "string", "signals": [] },
@@ -119,6 +129,8 @@ When using `--output-format json` or `--output-format both`, the generated JSON 
 ```
 
 **Schema stability**: The 10 top-level keys are considered stable API. Sections may have empty values (`{}`, `[]`) when pipeline stages are skipped, but the keys are always present.
+
+**`meta.success` is not "resolved"**: it is true whenever the pipeline proposed a mitigation without a TNR regression, including when human approval is still pending. Read `meta.resolution` and `meta.awaiting_human` for the verdict. They are the same values the Markdown postmortem prints. The agent proposes mitigations; it never executes them.
 
 ## Test Requirements
 
@@ -144,10 +156,10 @@ pytest tests/ -v -m integration
 ### Python
 
 - Every module starts with `from __future__ import annotations`
-- Use `@dataclass` for all data models (not Pydantic, not plain dicts)
+- Domain models in `domain/` are pure `@dataclass` (no Pydantic, no plain dicts) — see [ADR 0003](docs/adr/0003-domain-purity.md). Pydantic is used only at the edges (HTTP DTOs in `interfaces/`, settings in `config/loader.py`)
 - Docstrings and comments in **PT-BR** (Portuguese)
 - Variable names, CLI output, LLM prompts in **English**
-- 7 modules are stdlib-only — do NOT add heavy imports to: `orchestrator`, `detector`, `metric_filter`, `trace_filter`, `context_compressor`, `pre_validator`, `version_validator`
+- Keep these 7 modules free of heavy ML imports (torch, sentence-transformers, faiss): `orchestrator`, `detector`, `metric_filter`, `trace_filter`, `context_compressor`, `pre_validator`, `version_validator`. `metric_filter` and `trace_filter` use numpy and read their defaults from `config.loader`
 
 ### Safety Rules (Non-Negotiable)
 

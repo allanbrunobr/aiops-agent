@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+
 """
 Testes para Story 4.3: Add Incident Patterns to Knowledge Base.
 Cobre POST /api/v1/knowledge/patterns e GET /api/v1/knowledge/patterns.
 """
 
 import pytest
+
+pytestmark = pytest.mark.unit
 from httpx import AsyncClient, ASGITransport
 from fastapi import FastAPI
 

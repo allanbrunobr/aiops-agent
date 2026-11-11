@@ -348,4 +348,8 @@ async def run_stdio() -> None:
 
 
 if __name__ == "__main__":
+    from core.logging import configure_logging
+
+    # stdout é o canal do protocolo: o log vai para stderr, com redação.
+    configure_logging()
     asyncio.run(run_stdio())

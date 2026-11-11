@@ -40,14 +40,10 @@ from interfaces.demo.scenarios import DemoScenarioConfig, SCENARIOS, get_scenari
 
 logger = logging.getLogger("interfaces.demo.server")
 
-# Carrega .env.local se existir (credenciais locais não versionadas)
-_env_local = Path(__file__).parent.parent.parent / ".env.local"
-if _env_local.exists():
-    for _line in _env_local.read_text().splitlines():
-        if _line.startswith("#") or "=" not in _line:
-            continue
-        _k, _v = _line.split("=", 1)
-        os.environ.setdefault(_k.strip(), _v.strip())
+# Carrega .env.local/.env (credenciais locais não versionadas)
+from config.env import load_local_env  # noqa: E402
+
+load_local_env()
 
 from core.lifecycle import LifecycleEvent
 
@@ -490,9 +486,14 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1", help="Host de escuta (padrão: localhost)")
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
+    from core.logging import configure_logging
+
+    configure_logging()
     logger.info("Demo server ready on http://%s:%d/demo/", args.host, args.port)
-    uvicorn.run(app, host=args.host, port=args.port)
+    # log_level="info": o uvicorn reaplica o nível de uvicorn.access, que o
+    # configure_logging() baixa para WARNING; sem ele o access log da demo,
+    # que existia antes do log_config=None, sumia.
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info", log_config=None)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 """
 Testes para Story 3.5: Pipeline Processing Metrics.
 Cobre PipelineMetricsCollector e endpoint GET /api/v1/metrics/pipeline.
@@ -8,6 +9,8 @@ Cobre PipelineMetricsCollector e endpoint GET /api/v1/metrics/pipeline.
 import datetime
 
 import pytest
+
+pytestmark = pytest.mark.unit
 from httpx import AsyncClient, ASGITransport
 
 from core.lifecycle import LifecycleEvent

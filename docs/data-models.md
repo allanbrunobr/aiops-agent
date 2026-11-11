@@ -123,4 +123,4 @@ Path (output/postmortem_YYYY-MM-DD_HHMMSS.md)
 
 ---
 
-> **See also**: [API Contracts](api-contracts-internal.md) | [Project Context](./../_bmad-output/project-context.md)
+> **See also**: [API Contracts](api-contracts-internal.md) | [Code Conventions](../CONTRIBUTING.md#code-conventions)
