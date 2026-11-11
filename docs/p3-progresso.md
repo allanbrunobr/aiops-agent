@@ -847,3 +847,12 @@ passaram) e passa no novo.
   versão do teste passava no código antigo por coincidência (1 nó da outra
   execução substituía 1 nó apagado); com 2 nós, o código antigo dá
   `assert 4 == 3` e o novo passa. Teste: `tests/test_engine_concurrent_runs.py`.
+- **`POST /mcp/messages` respondia duas vezes** (pendência anotada na P2): o
+  transporte do MCP responde pelo `send` do ASGI, e o endpoint devolvia
+  `None`, que o FastAPI transformava numa segunda resposta. Medido antes:
+  `AssertionError: Received multiple "http.response.start" messages`. Agora o
+  endpoint devolve uma resposta que não envia nada. Teste:
+  `tests/test_mcp_messages_single_response.py`, com o transporte real.
+  **Não feito:** o `GET /mcp/sse` tem o mesmo padrão (devolve `None` depois
+  do `connect_sse`), mas o efeito só apareceria na desconexão de um stream
+  real, e não medi. Fica anotado.
