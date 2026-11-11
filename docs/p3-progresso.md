@@ -919,3 +919,51 @@ duplicatas. Os outros oito foram refutados.
   `main.py` antigo, 2 falham, e o terceiro guarda o caso auto-aprovado, que
   já funcionava. Com o novo, os 3 passam, e também `test_snapshots.py` (12) e
   `test_unknown_fault.py` (26).
+
+## Revisão do `step_postmortem` inteiro (`9db0afd`)
+
+Pedido do coordenador: revisar a função inteira de uma vez, em vez de um
+achado por rodada. A revisão foi estática, sem M1, e cobriu aprovação
+automática, aprovação pendente, sem incidente, diagnóstico FAILED,
+mitigação falha ou bloqueada e os caminhos V1 e Databricks. Catorze achados
+sobreviveram, agrupados em sete defeitos. Dois foram refutados. Todos foram
+corrigidos num único commit.
+
+1. **"Mitigation applied"** saía na Timeline e no título em toda combinação,
+   mas nada no projeto executa a ação. A linha da Timeline saiu. A seção
+   passou a se chamar "Mitigation Proposed" e diz que o agente não executa.
+   Sem mitigação, ela diz que nenhuma foi proposta. A Duration diz que é
+   do cenário (do deploy ao horário de referência da correção).
+2. **A transição VERIFYING -> RESOLVED** dizia "human approval still
+   pending", mas era gravada em `step_agents`, antes de o gate decidir.
+   Agora diz que o gate decide em seguida.
+3. **Aprovação automática com TNR `not_verified`:** "Resolved" vinha sem
+   qualificação. Agora a Resolution diz `Resolved (mitigation approved, not
+   executed by the agent; TNR not_verified)`, e a lição diz que a execução
+   fica fora do agente. "Resolved" puro só sai com TNR `success`.
+4. **O JSON não carregava o veredito:** `meta.success` era true com a
+   aprovação pendente. O `meta` ganhou `resolution`, `awaiting_human`,
+   `mitigation_proposed` e `safety_blocked_by`, calculados pela mesma função
+   do markdown (`_postmortem_verdict`). As 10 chaves de topo, que são API
+   estável, não mudaram, e a `CONTRIBUTING.md` documenta os campos novos.
+5. **Diagnóstico FAILED derrubava o postmortem:** com `root_cause` None, o
+   `[:80]` quebrava. Agora o postmortem sai com "Unable to determine root
+   cause" e a lição "Diagnosis failed".
+6. **"Heuristic diagnosis"** aparecia mesmo com LLM. A lição agora nomeia o
+   modelo, diz "Heuristic" só no modo heurístico e "Diagnosis" quando o modelo
+   é desconhecido.
+7. **"Impact: Service degradation"** saía sem incidente. Agora diz que
+   nenhum incidente foi detectado.
+
+**Medido:**
+
+- `tests/test_postmortem_coherence.py` tem 11 testes. Com o `main.py` de
+  `9db0afd`, 10 falham e 1 passa (o caso pendente, já corrigido ali). Com o
+  novo, os 11 passam.
+- Os snapshots foram regenerados com `--snapshot-update`. O diff traz só a
+  Duration, a linha removida da Timeline, o título da seção, a linha
+  "Executed by the agent" e a lição de diagnóstico.
+- `test_snapshots.py` e `test_unknown_fault.py` (38), `test_json_output.py`,
+  `test_tnr_not_verified.py` e `test_cli_safety_decision.py` (41) e
+  `test_docs_consistency.py` (4) passam. Ruff limpo.
+- A suíte completa roda no M1.

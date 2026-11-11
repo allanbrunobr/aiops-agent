@@ -581,9 +581,11 @@ def step_agents(report, retriever, use_llm: bool = True,
         _transition(
             "VERIFYING",
             "RESOLVED",
-            (f"TNR check passed; human approval still pending: {_tnr_msg}"
+            # O gate de aprovação roda DEPOIS (step_safety_validation); aqui
+            # não dá para afirmar "approval pending" (pré-PR em 9db0afd).
+            (f"TNR check passed; mitigation proposed, safety gate decides next: {_tnr_msg}"
              if _verification == "success"
-             else f"Mitigation proposed; human approval still pending: {_tnr_msg}"),
+             else f"Mitigation proposed (not executed); safety gate decides next: {_tnr_msg}"),
         )
         result["success"] = True
 
@@ -968,6 +970,9 @@ def _serialize_result(result: dict, incident) -> dict:
         "llm_model": result.get("llm_model", "unknown"),
         "config_source": result.get("config_source", "defaults"),
         "success": result.get("success", False),
+        # Mesmo veredito do markdown (_postmortem_verdict): "success" sozinho
+        # dizia true com a aprovação humana pendente.
+        **_postmortem_verdict(result),
         "duration_minutes": round(
             (incident.fix_time - incident.deploy_time).total_seconds() / 60, 1
         ),
@@ -1119,6 +1124,40 @@ def step_predict(result: dict, report, *,
     console.print()
 
 
+def _postmortem_verdict(result) -> dict:
+    """Veredito único do postmortem, para o markdown E o JSON.
+
+    Revisão pré-PR do step_postmortem inteiro (9db0afd): Summary, Timeline,
+    Lições e JSON afirmavam coisas diferentes do mesmo run ("Resolved" ×
+    "awaiting approval", "Mitigation applied" sem nada executado). Este
+    projeto propõe a mitigação; quem executa é uma pessoa, fora dele.
+    """
+    stages = result.get("stages", {})
+    decision = stages.get("safety_decision")
+    validation = stages.get("safety_validation") or {}
+    awaiting_human = bool(
+        decision.get("requires_human") if decision is not None
+        else validation.get("requires_human")
+    )
+    proposed = bool((stages.get("mitigation") or {}).get("action"))
+    tnr = (stages.get("verification") or {}).get("result")
+    if awaiting_human:
+        resolution = "Awaiting human approval (mitigation proposed, not executed)"
+    elif result.get("success") and tnr == "success":
+        resolution = "Resolved"
+    elif result.get("success"):
+        resolution = (f"Resolved (mitigation approved, not executed by the agent; "
+                      f"TNR {tnr or 'did not run'})")
+    else:
+        resolution = "Requires manual intervention"
+    return {
+        "awaiting_human": awaiting_human,
+        "mitigation_proposed": proposed,
+        "resolution": resolution,
+        "safety_blocked_by": list((decision or {}).get("blocked_by", [])),
+    }
+
+
 def step_postmortem(result, incident, output_dir: str = "output",
                     output_format: str = "markdown",
                     tracker_url: str | None = None,
@@ -1132,22 +1171,13 @@ def step_postmortem(result, incident, output_dir: str = "output",
     verification = result.get("stages", {}).get("verification", {})
     detection_stage = result.get("stages", {}).get("detection", {})
 
-    # Veredito do gate humano, usado no Summary e nas Lições: os dois têm de
-    # dizer a mesma coisa (pré-PR em 00cb1c5: "Resolved" no topo e "awaiting
-    # approval" nas lições, no mesmo documento).
-    _safety_decision = result.get("stages", {}).get("safety_decision")
-    _safety_validation = result.get("stages", {}).get("safety_validation", {})
-    awaiting_human = bool(
-        _safety_decision.get("requires_human")
-        if _safety_decision is not None
-        else _safety_validation.get("requires_human")
-    )
-    if awaiting_human:
-        resolution = "Awaiting human approval (mitigation proposed, not executed)"
-    elif result.get("success"):
-        resolution = "Resolved"
-    else:
-        resolution = "Requires manual intervention"
+    # Um veredito só para Summary, Timeline, Lições e JSON (_postmortem_verdict).
+    verdict = _postmortem_verdict(result)
+    awaiting_human = verdict["awaiting_human"]
+    resolution = verdict["resolution"]
+    is_incident = detection_stage.get("is_incident", True)
+    root_cause = diagnosis.get("root_cause") or "Unable to determine root cause"
+    diagnosis_failed = any(t.get("to") == "FAILED" for t in result.get("timeline", []))
 
     scenario_name = result.get("scenario_name", "payment-pool-exhaustion")
     now = datetime.now()
@@ -1159,21 +1189,21 @@ def step_postmortem(result, incident, output_dir: str = "output",
 - **Date**: {now.strftime('%Y-%m-%d %H:%M')}
 - **Scenario**: {scenario_name}
 - **LLM Model**: {llm_model}
-- **Duration**: ~{(incident.fix_time - incident.deploy_time).total_seconds() / 60:.0f} minutes
+- **Duration**: ~{(incident.fix_time - incident.deploy_time).total_seconds() / 60:.0f} minutes (scenario: deploy to reference fix time)
 - **Severity**: {result.get('stages', {}).get('detection', {}).get('severity', 'UNKNOWN')}
-- **Impact**: Service degradation detected via automated analysis
+- **Impact**: {'Service degradation detected via automated analysis' if is_incident else 'No incident detected in the analysed window'}
 - **Resolution**: {resolution}
 
 ## Root Cause
 
-{diagnosis.get('root_cause', 'Unable to determine root cause')}
+{root_cause}
 
 **Confidence**: {diagnosis.get('confidence', 'unknown')}
 
 ## Evidence
 
 """
-    for i, ev in enumerate(diagnosis.get("evidence", []), 1):
+    for i, ev in enumerate(diagnosis.get("evidence") or [], 1):
         postmortem += f"{i}. {ev}\n"
 
     postmortem += f"""
@@ -1182,9 +1212,8 @@ def step_postmortem(result, incident, output_dir: str = "output",
 | Time | Event |
 |------|-------|
 | {incident.deploy_time.strftime('%H:%M:%S')} | Deployment or configuration change applied |
-| {incident.spike_start.strftime('%H:%M:%S')} | {diagnosis.get('root_cause', 'Anomaly detected')[:80]} |
+| {incident.spike_start.strftime('%H:%M:%S')} | {(diagnosis.get('root_cause') or 'Anomaly detected')[:80]} |
 | {incident.detection_time.strftime('%H:%M:%S')} | Automated detection triggered |
-| {incident.fix_time.strftime('%H:%M:%S')} | Mitigation applied |
 
 ### State Machine Transitions
 
@@ -1192,10 +1221,15 @@ def step_postmortem(result, incident, output_dir: str = "output",
     for t in result.get("timeline", []):
         postmortem += f"- **{t['time']}** {t['from']} -> {t['to']}: {t['reason']}\n"
 
+    # O agente propõe; nada neste projeto executa a ação (agents/mitigator.py).
     postmortem += """
-## Mitigation Applied
+## Mitigation Proposed
 
 """
+    if verdict["mitigation_proposed"]:
+        postmortem += "- **Executed by the agent**: No (the agent proposes; execution is a human step)\n"
+    else:
+        postmortem += "- No mitigation was proposed (the pipeline stopped before mitigation)\n"
     if mitigation:
         action = mitigation.get("action")
         if action:
@@ -1274,24 +1308,35 @@ def step_postmortem(result, incident, output_dir: str = "output",
         "regression": "TNR detected a regression after the mitigation",
         "not_verified": "TNR did not verify the mitigation (no post-action health measurement)",
     }.get(verification.get("result"), "TNR verification did not run")
-    if not mitigation:
+    if not verdict["mitigation_proposed"]:
         # Saída antecipada (sem incidente, diagnóstico FAILED): nada foi
         # mitigado, e "completed all stages" seria falso.
         pipeline_lesson = "Pipeline stopped before mitigation (see State Machine Transitions)"
     elif awaiting_human:
         pipeline_lesson = "Pipeline stopped at the human approval gate (mitigation awaiting approval)"
     else:
-        pipeline_lesson = "Incident response pipeline completed all stages"
+        pipeline_lesson = ("Incident response pipeline completed all stages "
+                           "(mitigation approved; execution is outside the agent)")
     detection_lesson = (
         "Automated detection identified the incident promptly"
-        if detection_stage.get("is_incident", True)
+        if is_incident
         else "Automated detection found no incident in the analysed window"
     )
+    if diagnosis_failed:
+        diagnosis_lesson = "Diagnosis failed (see State Machine Transitions)"
+    elif not diagnosis:
+        diagnosis_lesson = "No diagnosis was run"
+    elif llm_model == "heuristic":
+        diagnosis_lesson = f"Heuristic diagnosis provided {confidence}-confidence assessment"
+    elif llm_model == "unknown":
+        diagnosis_lesson = f"Diagnosis provided {confidence}-confidence assessment"
+    else:
+        diagnosis_lesson = f"LLM diagnosis ({llm_model}) provided {confidence}-confidence assessment"
     postmortem += f"""
 ## Lessons Learned
 
 - {detection_lesson}
-- Heuristic diagnosis provided {confidence}-confidence assessment
+- {diagnosis_lesson}
 - {tnr_lesson}
 - {pipeline_lesson}
 

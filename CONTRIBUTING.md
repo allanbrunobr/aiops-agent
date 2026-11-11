@@ -110,6 +110,10 @@ When using `--output-format json` or `--output-format both`, the generated JSON 
     "llm_model": "string",
     "config_source": "string",
     "success": true,
+    "awaiting_human": true,
+    "mitigation_proposed": true,
+    "resolution": "Awaiting human approval (mitigation proposed, not executed)",
+    "safety_blocked_by": ["pre_validator"],
     "duration_minutes": 0.0
   },
   "detection": { "is_incident": true, "severity": "string", "signals": [] },
@@ -125,6 +129,8 @@ When using `--output-format json` or `--output-format both`, the generated JSON 
 ```
 
 **Schema stability**: The 10 top-level keys are considered stable API. Sections may have empty values (`{}`, `[]`) when pipeline stages are skipped, but the keys are always present.
+
+**`meta.success` is not "resolved"**: it is true whenever the pipeline proposed a mitigation without a TNR regression, including when human approval is still pending. Read `meta.resolution` and `meta.awaiting_human` for the verdict. They are the same values the Markdown postmortem prints. The agent proposes mitigations; it never executes them.
 
 ## Test Requirements
 
