@@ -83,8 +83,8 @@ Connection pool exhaustion in payment-svc due to config change (max_connections 
 
 - Automated detection identified the incident promptly
 - Heuristic diagnosis provided medium-confidence assessment
-- TNR verification validated the mitigation outcome
-- Incident response pipeline completed all stages successfully
+- TNR did not verify the mitigation (no post-action health measurement)
+- Pipeline stopped at the human approval gate (mitigation awaiting approval)
 
 ---
 

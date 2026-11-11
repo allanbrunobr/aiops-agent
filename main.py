@@ -1248,13 +1248,33 @@ def step_postmortem(result, incident, output_dir: str = "output",
 """
 
     confidence = diagnosis.get("confidence", "unknown")
+    # As lições dizem o que aconteceu. Antes eram fixas e afirmavam que o TNR
+    # validou a mitigação logo abaixo de "Result: not_verified" (pré-PR em
+    # eee1245, a mesma contradição já corrigida no --help e nos READMEs).
+    tnr_lesson = {
+        "success": "TNR verification validated the mitigation outcome",
+        "regression": "TNR detected a regression after the mitigation",
+        "not_verified": "TNR did not verify the mitigation (no post-action health measurement)",
+    }.get(verification.get("result"), "TNR verification did not run")
+    _safety_decision = result.get("stages", {}).get("safety_decision")
+    _safety_validation = result.get("stages", {}).get("safety_validation", {})
+    awaiting_human = bool(
+        _safety_decision.get("requires_human")
+        if _safety_decision is not None
+        else _safety_validation.get("requires_human")
+    )
+    pipeline_lesson = (
+        "Pipeline stopped at the human approval gate (mitigation awaiting approval)"
+        if awaiting_human
+        else "Incident response pipeline completed all stages"
+    )
     postmortem += f"""
 ## Lessons Learned
 
 - Automated detection identified the incident promptly
 - Heuristic diagnosis provided {confidence}-confidence assessment
-- TNR verification validated the mitigation outcome
-- Incident response pipeline completed all stages successfully
+- {tnr_lesson}
+- {pipeline_lesson}
 
 ---
 

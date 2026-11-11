@@ -82,8 +82,8 @@ Data corruption or serialization/schema error detected in data-processor
 
 - Automated detection identified the incident promptly
 - Heuristic diagnosis provided low-confidence assessment
-- TNR verification validated the mitigation outcome
-- Incident response pipeline completed all stages successfully
+- TNR did not verify the mitigation (no post-action health measurement)
+- Pipeline stopped at the human approval gate (mitigation awaiting approval)
 
 ---
 

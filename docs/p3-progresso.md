@@ -882,3 +882,19 @@ duplicatas. Oito foram refutados. Corrigidos:
   Esse caminho não chama `configure_logging()`: os logs saem sem redação e o
   access log em INFO grava o `session_id` do MCP SSE. A docstring agora manda
   usar `python -m interfaces.http` e diz por quê.
+
+## Terceira revisão pré-PR (`eee1245`, delta `c89f52e..eee1245`)
+
+Revisão estática, sem M1. Um achado sobreviveu e os outros foram refutados.
+
+- **O postmortem afirmava que o TNR validou a mitigação**, logo abaixo de
+  `Result: not_verified`. Ele também dizia que o pipeline concluiu todas as
+  etapas com sucesso, mesmo com a aprovação humana pendente. É a mesma
+  contradição corrigida no `--help` e nos READMEs, e os dois snapshots de
+  postmortem fixavam o texto errado. As duas lições agora seguem o
+  resultado do TNR (`success`, `regression`, `not_verified`) e o gate
+  humano. Os snapshots `postmortem_structure.txt` e
+  `unknown_fault_postmortem_structure.txt` foram atualizados com o texto
+  novo. Medido: com o `main.py` antigo e os snapshots novos,
+  `test_postmortem_structure_snapshot` falha. Com o novo, `test_snapshots.py`
+  (12 testes) e `test_unknown_fault.py` (26 testes) passam.
