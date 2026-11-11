@@ -312,3 +312,35 @@ def test_cli_does_not_announce_a_diagnosis_without_incident():
                 isinstance(a, ast.Constant) and a.value == "pipeline.completed" for a in node.args):
             flagged |= "no_incident" in ast.unparse(node)
     assert guarded and flagged
+
+
+@pytest.mark.parametrize("with_initial_message", [True, False], ids=["chat_update", "chat_postMessage"])
+@pytest.mark.parametrize(("no_incident", "expected"), [
+    (True, "No incident detected: inc-x"),
+    (False, "Incident inc-x: Diagnosis complete"),
+], ids=["healthy", "incident"])
+def test_slack_final_notification_text_matches_the_blocks(with_initial_message, no_incident, expected):
+    """O `text` enviado à API (notificação, prévia, leitor de tela) dizia
+    "Diagnosis complete" mesmo com o header "No Incident Detected"."""
+    import asyncio
+    from datetime import datetime, timezone
+    from unittest.mock import AsyncMock
+
+    from adapters.credentials import EnvCredentialProvider
+    from core.lifecycle import LifecycleEvent
+    from interfaces.http.notifications.slack import SlackNotifier
+
+    notifier = SlackNotifier(channel="C1", creds=EnvCredentialProvider(), dry_run=True)
+    notifier._dry_run = False
+    notifier._client = AsyncMock()
+    if with_initial_message:
+        notifier._message_ts["inc-x"] = "1.0"
+    event = LifecycleEvent(event_type="pipeline.completed", node_name=None, correlation_id="inc-x",
+                           timestamp=datetime.now(timezone.utc),
+                           data={"no_incident": no_incident, "total_duration_ms": 5})
+    asyncio.run(notifier._post_final_message(event))
+    call = (notifier._client.chat_update if with_initial_message
+            else notifier._client.chat_postMessage).call_args
+    assert call.kwargs["text"] == expected
+    header = call.kwargs["blocks"][0]["text"]["text"]
+    assert ("No Incident Detected" in header) is no_incident

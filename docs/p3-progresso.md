@@ -1041,3 +1041,21 @@ commit:
   existia. Com o código novo, os 22 passam. `test_notifications.py`,
   `test_tracker_integration.py`, `test_json_output.py` e `test_snapshots.py`
   passam (98 testes, 5 pulados). Ruff limpo.
+
+## Pré-PR em `35b958d` (delta `5e418c3..35b958d`)
+
+Revisão estática no M5, enquanto o CI de `35b958d` rodava no M1 (verde:
+unit 1568, integration 138, completa 1853). Um defeito sobreviveu, achado
+por quatro agentes. Seis achados foram refutados.
+
+- **O texto da mensagem final do Slack** (`text`, que aparece na
+  notificação, na prévia e no leitor de tela) dizia "Incident <cid>:
+  Diagnosis complete" mesmo com o header "No Incident Detected". Agora,
+  com `no_incident`, ele diz `No incident detected: <cid>`.
+- **Medido:** `test_slack_final_notification_text_matches_the_blocks` lê o
+  `text` enviado à API nos dois caminhos (`chat_update` e
+  `chat_postMessage`). Com o `slack.py` antigo, os 2 casos de janela
+  saudável falham. Os 2 com incidente passam nas duas versões, porque
+  protegem o comportamento que já existia. `test_postmortem_coherence.py`
+  (26 testes), `test_notifications.py` e `test_rag_slack_scale.py`
+  (82 testes, 5 pulados) passam. Ruff limpo.

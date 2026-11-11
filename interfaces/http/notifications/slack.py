@@ -314,7 +314,12 @@ class SlackNotifier:
         cid = event.correlation_id
         ts = self._message_ts.get(cid)
         blocks = self._build_final_blocks(event)
-        fallback_text = f"Incident {cid}: Diagnosis complete"
+        # O text é o que a notificação, a prévia e o leitor de tela mostram:
+        # tem de dizer o mesmo que os blocos (pré-PR em 35b958d).
+        if event.data.get("no_incident"):
+            fallback_text = f"No incident detected: {cid}"
+        else:
+            fallback_text = f"Incident {cid}: Diagnosis complete"
 
         if self._dry_run:
             log.info(
