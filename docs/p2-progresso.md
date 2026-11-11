@@ -800,3 +800,10 @@ três.
 - `tests/test_search_incidents.py:150` não tem asserção;
 - dedup sem reserva atômica entre envios simultâneos;
 - `engine.results` compartilhado entre execuções concorrentes.
+
+> **Atualização (P3, revisão pré-PR):** a resposta dupla de
+> `POST /mcp/messages` (`3bb2dd2`), a dedup sem reserva (`50ce9e3`) e o
+> `engine.results` compartilhado (`e369494`) foram corrigidos, cada um com
+> teste que falha no código antigo. O teste de `test_search_incidents.py`
+> já tinha asserção; ele ganhou a checagem de que o PII não chega à
+> resposta (`1b47099`). Detalhes em `docs/p3-progresso.md`.
