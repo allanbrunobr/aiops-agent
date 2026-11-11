@@ -839,3 +839,11 @@ passaram) e passa no novo.
   `tests/test_webhook_auth_non_ascii.py` (4 falhas antes, 6 aprovações
   depois). O `auth/server.py` compara hashes hexadecimais e não tem o
   problema.
+- **`engine.results` compartilhado entre execuções concorrentes** (pendência
+  anotada na P2): a mesma engine roda em várias threads (A2A e MCP via
+  `to_thread`), e cada `run()` zerava e enchia `self.results`. Cada execução
+  usa agora uma lista própria. O efeito era só no log `pipeline.completed`
+  (`nodes_run`, `all_success`), o único leitor fora dos testes. A primeira
+  versão do teste passava no código antigo por coincidência (1 nó da outra
+  execução substituía 1 nó apagado); com 2 nós, o código antigo dá
+  `assert 4 == 3` e o novo passa. Teste: `tests/test_engine_concurrent_runs.py`.
