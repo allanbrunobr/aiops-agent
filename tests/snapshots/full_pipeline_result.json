@@ -114,7 +114,7 @@
     },
     {
       "from": "VERIFYING",
-      "reason": "Mitigação proposta, aguardando aprovação: TNR not verified: no post-action health measurement (the action was not executed)",
+      "reason": "Mitigation proposed (not executed); safety gate decides next: TNR not verified: no post-action health measurement (the action was not executed)",
       "time": "NORMALIZED_TIMESTAMP",
       "to": "RESOLVED"
     }

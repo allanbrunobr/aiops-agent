@@ -967,3 +967,24 @@ corrigidos num único commit.
   `test_tnr_not_verified.py` e `test_cli_safety_decision.py` (41) e
   `test_docs_consistency.py` (4) passam. Ruff limpo.
 - A suíte completa roda no M1.
+
+## Pré-PR em `78c4689` (delta `9db0afd..78c4689`)
+
+Revisão estática, sem M1. Três defeitos sobreviveram, alguns com
+duplicatas. Dez achados foram refutados. Corrigidos num único commit:
+
+- **Sem incidente:** a Resolution e o `meta.resolution` diziam "Requires
+  manual intervention", mas a CLI sai com exit 0 ("resolved") numa janela
+  saudável. Agora dizem `No incident detected; no action required`. O
+  diagnóstico FAILED continua com "Requires manual intervention".
+- **`step_tracking` com `root_cause` None:** com `--tracker jira`, o
+  `len(None)` derrubava o run antes do postmortem. Root cause, severidade e
+  evidências agora têm fallback.
+- **A réplica do pipeline em `tests/conftest.py`**, que gera os snapshots,
+  ainda gravava a transição antiga ("aguardando aprovação"). Agora usa o
+  mesmo texto de `main.step_agents`, e os três snapshots que vêm dela foram
+  regenerados. Um teste barra a volta do texto antigo.
+- **Medido:** `tests/test_postmortem_coherence.py` passou a ter 13 testes.
+  Com o `main.py` de `78c4689`, os 2 que cobrem os defeitos de `main.py`
+  falham; com o novo, os 13 passam. `test_snapshots.py` e
+  `test_unknown_fault.py` (38) passam. Ruff limpo.

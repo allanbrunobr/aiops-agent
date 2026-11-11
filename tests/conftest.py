@@ -293,8 +293,10 @@ def _run_pipeline(incident, scenario_name: str | None = None):
                     "message": tnr_check.message,
                 }
                 if tnr_check.result.value != "regression":
-                    _label = ("Incidente resolvido" if tnr_check.result.value == "success"
-                              else "Mitigação proposta, aguardando aprovação")
+                    # Mesmo texto de main.step_agents: o gate decide depois.
+                    _label = ("TNR check passed; mitigation proposed, safety gate decides next"
+                              if tnr_check.result.value == "success"
+                              else "Mitigation proposed (not executed); safety gate decides next")
                     _rec("VERIFYING", "RESOLVED", f"{_label}: {tnr_check.message}")
                     result["success"] = True
                 else:

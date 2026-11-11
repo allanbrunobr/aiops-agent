@@ -96,7 +96,10 @@ def test_early_exit_does_not_claim_completed_stages(tmp_path):
     assert "found no incident" in text
     assert "- **Impact**: No incident detected" in text
     assert "No mitigation was proposed" in text
-    assert "- **Resolution**: Requires manual intervention" in text
+    # A CLI sai com exit 0 ("resolved") sem incidente: o veredito não pode
+    # pedir intervenção manual (pré-PR em 78c4689).
+    assert "- **Resolution**: No incident detected; no action required" in text
+    assert "Requires manual intervention" not in text
 
 
 def test_failed_diagnosis_with_no_root_cause_does_not_crash(tmp_path):
@@ -109,6 +112,40 @@ def test_failed_diagnosis_with_no_root_cause_does_not_crash(tmp_path):
     assert "Unable to determine root cause" in text
     assert "Diagnosis failed" in text
     assert "completed all stages" not in text
+    assert "- **Resolution**: Requires manual intervention" in text
+
+
+def test_tracking_survives_a_failed_diagnosis():
+    """--tracker jira roda antes do postmortem; root_cause None dava len(None)."""
+    import main
+
+    class _Tracker:
+        url = "https://jira.invalid"
+
+        def __init__(self):
+            self.calls = []
+
+        def create_incident(self, title, severity, description):
+            self.calls.append((title, severity, description))
+            return "OPS-1"
+
+    tracker = _Tracker()
+    key = main.step_tracking({"stages": {"detection": {"severity": None},
+                                         "diagnosis": {"root_cause": None, "evidence": None}}},
+                             tracker)
+    assert key == "OPS-1"
+    assert tracker.calls[0][0] == "AIOps detected incident"
+    assert tracker.calls[0][1] == "medium"
+
+
+def test_replica_pipeline_uses_the_production_transition_text():
+    """Os snapshots vêm da réplica do pipeline em conftest.py: ela tem de gravar
+    o mesmo texto que main.step_agents, senão o snapshot não mede a correção."""
+    import pathlib
+
+    conftest = (pathlib.Path(__file__).parent / "conftest.py").read_text(encoding="utf-8")
+    assert "aguardando aprovação" not in conftest
+    assert "safety gate decides next" in conftest
 
 
 def test_diagnosis_lesson_names_the_llm(tmp_path):

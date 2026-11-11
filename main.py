@@ -1141,8 +1141,13 @@ def _postmortem_verdict(result) -> dict:
     )
     proposed = bool((stages.get("mitigation") or {}).get("action"))
     tnr = (stages.get("verification") or {}).get("result")
+    no_incident = (stages.get("detection") or {}).get("is_incident") is False
     if awaiting_human:
         resolution = "Awaiting human approval (mitigation proposed, not executed)"
+    elif no_incident:
+        # Janela saudável: a CLI sai com exit 0; "Requires manual intervention"
+        # escalaria quem automatiza em cima de meta.resolution (pré-PR 78c4689).
+        resolution = "No incident detected; no action required"
     elif result.get("success") and tnr == "success":
         resolution = "Resolved"
     elif result.get("success"):
@@ -1715,9 +1720,11 @@ def step_tracking(result, tracker) -> str | None:
     diagnosis = result.get("stages", {}).get("diagnosis", {})
     detection = result.get("stages", {}).get("detection", {})
 
-    root_cause = diagnosis.get("root_cause", "AIOps detected incident")
-    severity = detection.get("severity", "medium")
-    evidence = diagnosis.get("evidence", [])
+    # `or`: diagnóstico FAILED grava root_cause None, e len(None) derrubava o
+    # run antes do postmortem (pré-PR em 78c4689).
+    root_cause = diagnosis.get("root_cause") or "AIOps detected incident"
+    severity = detection.get("severity") or "medium"
+    evidence = diagnosis.get("evidence") or []
 
     # Titulo: primeiros 100 chars do root cause
     title = root_cause[:100] if len(root_cause) > 100 else root_cause
