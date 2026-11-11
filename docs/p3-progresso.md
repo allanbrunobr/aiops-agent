@@ -807,3 +807,16 @@ passaram) e passa no novo.
   `log_level="info"`, como o webhook. O HTTP continua sem access log de
   propósito (o `session_id` do MCP SSE vai na query string), e o registro
   acima diz isso. Testes em `tests/test_http_entrypoint.py`.
+
+**Correções leves que vieram dos achados refutados ou secundários:**
+
+- **Resumo da CLI:** `print_summary` pintava `not_verified` de vermelho,
+  enquanto o reporter usa amarelo. Agora as duas superfícies concordam. O
+  teste `tests/test_summary_tnr_style.py` falhou no código antigo (1 falha,
+  2 aprovações) e passa no novo.
+- **Tabela de exit codes (README e README.pt-BR):** o `0` dizia "resolvido e
+  verificado pelo TNR". Sem medição pós-ação, o TNR é `not_verified`. A
+  tabela diz agora o que o código faz. A imprecisão é anterior a esta branch.
+- **`tests/test_search_incidents.py`:** o teste de PII só conferia que o
+  sanitizador foi chamado. Agora confere também que o e-mail não chega à
+  resposta do MCP.

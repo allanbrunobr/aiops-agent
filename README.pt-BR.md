@@ -184,9 +184,9 @@ python main.py [opções]
 
 | Código | Significado |
 |--------|-------------|
-| `0` | Incidente resolvido e verificado pelo TNR |
+| `0` | Pipeline concluído sem regressão e sem ação aguardando aprovação. Sem medição de saúde pós-ação, o TNR fica `not_verified`, não sucesso |
 | `1` | Argumento inválido, ou erro irrecuperável em algum estágio |
-| `2` | Regressão detectada pelo TNR (saúde pós-ação pior que a pré-ação) |
+| `2` | Regressão detectada pelo TNR (saúde pós-ação medida pior que a pré-ação) |
 | `3` | Ação bloqueada pela camada de segurança (requer aprovação humana) |
 
 ---

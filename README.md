@@ -186,9 +186,9 @@ python main.py [options]
 
 | Code | Meaning |
 |------|---------|
-| `0` | Incident resolved and verified by TNR |
+| `0` | Pipeline completed with no regression and no action awaiting approval. Without a post-action health measurement, TNR reports `not_verified`, not success |
 | `1` | Invalid arguments, or an unrecoverable error in a pipeline stage |
-| `2` | Regression detected by TNR (post-action health worse than pre-action) |
+| `2` | Regression detected by TNR (measured post-action health worse than pre-action) |
 | `3` | Action blocked by the safety layer (requires human approval) |
 
 ---

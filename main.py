@@ -1417,7 +1417,9 @@ def print_summary(result, compression_stats=None, safety_result=None,
     verification = result.get("stages", {}).get("verification", {})
     if verification:
         tnr_result = verification.get("result", "N/A")
-        style = "green" if tnr_result == "success" else "red"
+        # not_verified não é falha (sem medição pós-ação): amarelo, como no
+        # reporter (adapters/reporter/rich_console.py).
+        style = {"success": "green", "not_verified": "yellow"}.get(tnr_result, "red")
         table.add_row("TNR Verify", f"[{style}]{tnr_result}[/{style}]", verification.get("message", "")[:80])
 
     # Incident Tracking (Story 6.3)
