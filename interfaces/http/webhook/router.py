@@ -244,9 +244,12 @@ async def receive_webhook(request: Request) -> WebhookResponse:
             ignored_reason="resolved_notification",
         )
 
-    # 6. Deduplicacao (consulta). O registro do fingerprint só acontece depois
-    # que o pipeline ACEITA o alerta: gravar antes fazia o retry de um 503
-    # (fila cheia) ser respondido como duplicata e o alerta se perdia (4B-01).
+    # 6. Deduplicacao. Consulta e reserva acontecem juntas, sem `await` no
+    # meio: o `submit` abaixo pode ceder o event loop (lock de admissão
+    # disputado), e com o registro só depois dele dois envios simultâneos do
+    # mesmo alerta passavam ambos. Se o pipeline RECUSAR, a reserva é
+    # desfeita: o retry de um 503 (fila cheia) não pode virar duplicata e
+    # perder o alerta (4B-01).
     dedup_store: DedupStore | None = getattr(request.app.state, "dedup_store", None)
     fingerprint = None
     dedup_window = 300
@@ -268,12 +271,20 @@ async def receive_webhook(request: Request) -> WebhookResponse:
                 correlation_id=alert.correlation_id,
                 deduplicated=True,
             )
+        dedup_store.record(fingerprint, alert.correlation_id, dedup_window)  # reserva
 
     # 7. Submissao ao pipeline
     pipeline_runner: PipelineRunner | None = getattr(request.app.state, "pipeline_runner", None)
     if pipeline_runner is not None:
-        accepted = await pipeline_runner.submit(alert)
+        try:
+            accepted = await pipeline_runner.submit(alert)
+        except BaseException:
+            if fingerprint is not None:
+                dedup_store.release(fingerprint, alert.correlation_id)
+            raise
         if not accepted:
+            if fingerprint is not None:
+                dedup_store.release(fingerprint, alert.correlation_id)
             bound_log.warning("webhook.rejected", reason="queue_full")
             raise WebhookError(ProblemDetail(
                 type="urn:aiops:error:service-unavailable",
@@ -282,10 +293,6 @@ async def receive_webhook(request: Request) -> WebhookResponse:
                 detail="Pipeline queue is full. Try again later.",
                 correlation_id=correlation_id,
             ))
-
-    # Aceito: agora sim registra o fingerprint para futuras deduplicacoes.
-    if dedup_store is not None and fingerprint is not None:
-        dedup_store.record(fingerprint, alert.correlation_id, dedup_window)
 
     # 8. Sucesso — log de auditoria
     bound_log.info(

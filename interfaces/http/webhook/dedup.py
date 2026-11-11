@@ -72,6 +72,16 @@ class DedupStore:
             ttl_seconds=ttl_seconds,
         )
 
+    def release(self, fingerprint: str, correlation_id: str) -> None:
+        """Desfaz a reserva de `correlation_id` (o pipeline recusou o alerta).
+
+        Só remove se a entrada ainda for desta reserva: não apaga o registro
+        de outro alerta que tenha gravado o mesmo fingerprint depois.
+        """
+        entry = self._store.get(fingerprint)
+        if entry is not None and entry[0] == correlation_id:
+            del self._store[fingerprint]
+
     def _maybe_cleanup(self) -> None:
         """Remove entradas expiradas se passou tempo suficiente desde ultima limpeza."""
         now = time.monotonic()

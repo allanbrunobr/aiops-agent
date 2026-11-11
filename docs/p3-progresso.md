@@ -820,3 +820,12 @@ passaram) e passa no novo.
 - **`tests/test_search_incidents.py`:** o teste de PII só conferia que o
   sanitizador foi chamado. Agora confere também que o e-mail não chega à
   resposta do MCP.
+- **Dedup do webhook sem reserva atômica** (pendência anotada na P2): o
+  router consultava a dedup, fazia `await submit(...)` e só depois gravava o
+  fingerprint. Quando o `submit` cede o event loop, dois envios idênticos
+  passavam ambos. Agora consulta e reserva acontecem juntas, sem `await` no
+  meio, e a reserva é desfeita se o pipeline recusar ou levantar exceção (o
+  retry de um 503 continua funcionando, 4B-01). Medido no código antigo com
+  `tests/test_webhook_dedup_concurrency.py`: os 2 envios simultâneos abriram
+  2 pipelines (`assert 2 == 1`); no novo, 1 pipeline e 1 resposta
+  `deduplicated`.
