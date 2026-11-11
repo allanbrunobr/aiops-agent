@@ -829,3 +829,13 @@ passaram) e passa no novo.
   `tests/test_webhook_dedup_concurrency.py`: os 2 envios simultâneos abriram
   2 pipelines (`assert 2 == 1`); no novo, 1 pipeline e 1 resposta
   `deduplicated`.
+- **Token não-ASCII no webhook dava 500** (analise-20261109, 4B): o
+  `hmac.compare_digest` com `str` não-ASCII levanta TypeError, e o Starlette
+  decodifica headers em latin-1. Medido antes da correção:
+  `Authorization: Bearer té` no router levantou
+  `TypeError: comparing strings with non-ASCII characters is not supported`.
+  As três fontes (Grafana, Databricks, PagerDuty) comparam agora em bytes
+  UTF-8 (`normalizers/base.py::secrets_match`), e a resposta é 401. Teste:
+  `tests/test_webhook_auth_non_ascii.py` (4 falhas antes, 6 aprovações
+  depois). O `auth/server.py` compara hashes hexadecimais e não tem o
+  problema.
