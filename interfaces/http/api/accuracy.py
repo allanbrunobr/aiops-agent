@@ -90,8 +90,9 @@ async def update_accuracy(
         try:
             from interfaces.http.handlers.false_positive import handle_false_positive_side_effects
             await handle_false_positive_side_effects(correlation_id, body.notes, updated)
-        except Exception:
-            pass  # side-effects não bloqueiam a resposta principal
+        except Exception as exc:  # noqa: BLE001 — side-effects não bloqueiam a resposta principal
+            log.warning("accuracy.false_positive_side_effects_failed",
+                        correlation_id=correlation_id, error=repr(exc))
 
     log.info(
         "accuracy.reviewed",

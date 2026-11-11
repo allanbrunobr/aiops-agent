@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
 
 from adapters.llm.anthropic_client import create_anthropic_llm_client
 from application.ports.llm_client import LLMClient

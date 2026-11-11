@@ -5,9 +5,8 @@ Testes para Story 4.6: Bundled Test Scenarios.
 Cobre ValidationRunner, ScenarioResult, ValidationReport.
 """
 
-import pytest
 
-from validation.runner import ValidationRunner, ScenarioResult, ValidationReport
+from validation.runner import ValidationRunner, ScenarioResult
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

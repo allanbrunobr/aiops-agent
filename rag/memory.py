@@ -11,7 +11,7 @@ import json
 import os
 import sqlite3
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass

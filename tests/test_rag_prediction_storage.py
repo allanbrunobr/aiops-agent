@@ -7,8 +7,6 @@ corretamente e que o limiar de risk_score < 30 é respeitado.
 
 from __future__ import annotations
 
-import os
-import tempfile
 
 import pytest
 

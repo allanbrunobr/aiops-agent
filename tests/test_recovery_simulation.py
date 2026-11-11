@@ -15,8 +15,7 @@ Cenários cobertos:
 Usar: python -m pytest tests/test_recovery_simulation.py -v -s
 """
 
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 from unittest.mock import patch
 
@@ -433,7 +432,6 @@ def test_payment_pool_recovery_full_simulation() -> None:
 
     # --- Progressao de fases ---
     print("--- Progressao de Fases ---")
-    phase_order = ["PLAYING", "DEGRADING", "WARNING", "ALERT", "INCIDENT", "RESOLVED"]
     thresholds = {
         "DEGRADING": 15.0,
         "WARNING": 20.0,

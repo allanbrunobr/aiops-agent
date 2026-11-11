@@ -1,8 +1,6 @@
 from __future__ import annotations
 """Testes unitários para pipeline.predictive_stage."""
 
-import pytest
-from unittest.mock import patch, MagicMock
 import datetime
 
 from data.models import PredictionReport

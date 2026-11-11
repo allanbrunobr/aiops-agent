@@ -42,10 +42,25 @@ class AnthropicLLMClient:
         return self._client.messages.create(**kwargs)
 
 
-def create_anthropic_llm_client(api_key: str | None = None) -> AnthropicLLMClient:
+DEFAULT_TIMEOUT_SECONDS = 60.0
+DEFAULT_MAX_RETRIES = 2
+
+
+def create_anthropic_llm_client(
+    api_key: str | None = None,
+    *,
+    timeout: float = DEFAULT_TIMEOUT_SECONDS,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+) -> AnthropicLLMClient:
     """Factory para o adapter Anthropic.
 
     Quando ``api_key`` e ``None``, ``Anthropic`` le ``ANTHROPIC_API_KEY``
     do ambiente — comportamento preservado dos call sites originais.
+
+    ``timeout`` e ``max_retries`` sao explicitos: o timeout do Blueprint so
+    e checado entre nodes, entao uma chamada pendurada nao seria interrompida
+    por ninguem alem do proprio cliente.
     """
-    return AnthropicLLMClient(Anthropic(api_key=api_key))
+    return AnthropicLLMClient(
+        Anthropic(api_key=api_key, timeout=timeout, max_retries=max_retries)
+    )

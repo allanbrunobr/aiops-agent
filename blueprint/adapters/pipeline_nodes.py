@@ -9,7 +9,7 @@ O inverso NUNCA e verdadeiro.
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Callable
+from typing import Callable
 
 from config.loader import AppConfig
 from domain.incident_state import IncidentState
@@ -94,6 +94,23 @@ def make_context_compressor_node(config: AppConfig) -> Callable[[IncidentState],
     return execute
 
 
+def proposed_action_from_mitigation(mitigation: dict | None) -> dict | None:
+    """Converte a saída do MitigationAgent em IncidentState.proposed_action.
+
+    Os safety nodes (version_validator, pre_validator, tnr) leem
+    state.proposed_action; sem ele, os três fazem skip.
+    """
+    action = (mitigation or {}).get("action")
+    if action is None:
+        return None
+    return {
+        "description": getattr(action, "description", ""),
+        "command": getattr(action, "command", ""),
+        "risk_level": getattr(action, "risk_level", "MEDIUM"),
+        "rollback": getattr(action, "rollback_command", None),
+    }
+
+
 def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]:
     """Cria node agentic que usa AgentOrchestrator (Estágio 2) ou fallback heurístico."""
 
@@ -127,6 +144,7 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
         return dataclasses.replace(
             state,
             diagnosis=outcome.diagnosis,
+            proposed_action=proposed_action_from_mitigation(outcome.mitigation),
             metadata={**state.metadata, "_agent_outcome": outcome},
         )
 
@@ -159,7 +177,19 @@ def make_diagnoser_fallback(config: AppConfig) -> Callable[[IncidentState], Inci
             )
 
         diagnosis = diagnoser._heuristic_diagnosis(report_obj)
-        return dataclasses.replace(state, diagnosis=diagnosis)
+
+        # Mesma proposta que o caminho com LLM faz dentro do AgentOrchestrator:
+        # sem ela, os safety nodes seguintes não têm o que validar.
+        proposed_action = None
+        if diagnosis.get("root_cause"):
+            from agents.mitigator import MitigationAgent
+            proposed_action = proposed_action_from_mitigation(
+                MitigationAgent().propose_safe(diagnosis)
+            )
+
+        return dataclasses.replace(
+            state, diagnosis=diagnosis, proposed_action=proposed_action,
+        )
 
     return execute
 

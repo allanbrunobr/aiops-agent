@@ -7,7 +7,6 @@ em um relatório textual unificado, pronto para ingestão pelo agente.
 
 from __future__ import annotations
 
-from datetime import datetime
 from pipeline.log_parser import LogParser, LogTemplate
 from pipeline.metric_filter import MetricFilter, MetricAnomaly
 from pipeline.trace_filter import TraceFilter, SlowCallPath

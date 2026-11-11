@@ -9,7 +9,6 @@ Fluxo:
 
 from __future__ import annotations
 
-import uuid
 
 from rag.memory import DiagnosticSkill, IncidentMemoryDB
 

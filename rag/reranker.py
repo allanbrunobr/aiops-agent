@@ -11,7 +11,7 @@ Suporta modo Tier 2 opcional com cross-encoder para refinamento adicional.
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass

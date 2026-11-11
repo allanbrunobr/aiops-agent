@@ -5,11 +5,9 @@ Testes para Story 3.5: Pipeline Processing Metrics.
 Cobre PipelineMetricsCollector e endpoint GET /api/v1/metrics/pipeline.
 """
 
-import asyncio
 import datetime
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
 from core.lifecycle import LifecycleEvent

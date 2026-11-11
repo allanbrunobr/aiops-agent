@@ -7,6 +7,8 @@ Baseado no STRATUS: "human-in-the-loop for safety-critical actions".
 
 from __future__ import annotations
 
+import logging
+import re
 from datetime import datetime
 
 from application.ports.reporter import (
@@ -37,7 +39,9 @@ REMEDIATION_PATTERNS = {
     },
     "cpu": {
         "action": "Scale up replicas or rollback recent deployment",
-        "command": "kubectl scale deployment/{service} --replicas={current+2}",
+        # str.format não avalia expressões: `{current+2}` seria um NOME de
+        # campo (KeyError). O valor é calculado antes, em propose().
+        "command": "kubectl scale deployment/{service} --replicas={scale_up}",
         "risk": "LOW",
         "rollback": "kubectl scale deployment/{service} --replicas={current}",
     },
@@ -66,6 +70,22 @@ REMEDIATION_PATTERNS = {
         "rollback": "kubectl rollout undo deployment/{service}",
     },
 }
+
+
+# Nome de recurso Kubernetes (DNS-1123 subdomain): o nome do serviço vem da
+# telemetria ou do JSON do LLM e é interpolado no comando; fora deste formato
+# ele nunca entra no template.
+_K8S_NAME = re.compile(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$")
+_K8S_NAME_MAX_LEN = 253
+
+
+def is_valid_service_name(name: object) -> bool:
+    """True se `name` pode ser interpolado num comando kubectl com segurança."""
+    return (
+        isinstance(name, str)
+        and 0 < len(name) <= _K8S_NAME_MAX_LEN
+        and _K8S_NAME.match(name) is not None
+    )
 
 
 class MitigationAgent:
@@ -109,14 +129,35 @@ class MitigationAgent:
             elif rollback_version not in description:
                 description += f" (rollback to {rollback_version})"
 
-        action = MitigationAction(
-            description=description,
-            command=pattern["command"].format(service=primary_service, current=3, prev=1),
-            risk_level=pattern["risk"],
-            rollback_command=pattern["rollback"].format(
-                service=primary_service, current=3, prev=1
-            ) if pattern.get("rollback") else None,
-        )
+        if not is_valid_service_name(primary_service):
+            # Nome fora do formato Kubernetes: não gera comando. Sem comando,
+            # o PreExecutionValidator não aprova e a ação vai para humano.
+            action = MitigationAction(
+                description=(
+                    f"Service name {str(primary_service)[:60]!r} is not a valid "
+                    "Kubernetes resource name — manual investigation required, "
+                    "no command generated"
+                ),
+                command="",
+                risk_level="HIGH",
+                rollback_command=None,
+            )
+            matched_pattern = "invalid_service"
+        else:
+            current_replicas = 3
+            fields = {
+                "service": primary_service,
+                "current": current_replicas,
+                "scale_up": current_replicas + 2,
+                "prev": 1,
+            }
+            action = MitigationAction(
+                description=description,
+                command=pattern["command"].format(**fields),
+                risk_level=pattern["risk"],
+                rollback_command=pattern["rollback"].format(**fields)
+                if pattern.get("rollback") else None,
+            )
 
         self.reporter.emit(
             MITIGATION_PROPOSED,
@@ -133,6 +174,43 @@ class MitigationAgent:
             "pattern_matched": matched_pattern,
             "diagnosis": diagnosis,
         }
+
+    def propose_safe(self, diagnosis: dict) -> dict:
+        """propose() que nunca derruba quem chama.
+
+        Uma falha ao montar a proposta (ex.: template quebrado, NOVO-01) vira
+        uma ação de revisão manual: sem comando e com risco HIGH, que o
+        PreExecutionValidator nunca auto-aprova. O erro vai para o log.
+        """
+        try:
+            return self.propose(diagnosis)
+        except Exception as exc:  # noqa: BLE001 — degrada para revisão humana, registrado
+            logging.getLogger(__name__).warning(
+                "Mitigation proposal failed (%r); falling back to manual review", exc,
+            )
+            action = MitigationAction(
+                description=(
+                    "Automatic mitigation proposal failed — manual investigation "
+                    "required, no command generated"
+                ),
+                command="",
+                risk_level="HIGH",
+                rollback_command=None,
+            )
+            self.reporter.emit(
+                MITIGATION_PROPOSED,
+                description=action.description,
+                command=action.command,
+                risk_level=action.risk_level,
+                rollback_command=None,
+                pattern_matched="proposal_failed",
+            )
+            self.reporter.emit(HUMAN_APPROVAL_REQUESTED)
+            return {
+                "action": action,
+                "pattern_matched": "proposal_failed",
+                "diagnosis": diagnosis,
+            }
 
     def verify_with_tnr(self, mitigation: dict, tnr_guard: TNRSafetyGuard) -> TNRReport:
         """Verifica a mitigação usando TNR (simulado no protótipo)."""

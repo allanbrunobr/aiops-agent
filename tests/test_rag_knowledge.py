@@ -5,7 +5,6 @@ Testes para Stories 4.1 e 4.2: RAG Knowledge Base e Graceful Degradation.
 Evita imports de ML pesados (torch, faiss, sentence_transformers).
 """
 
-import pytest
 
 from rag.models import KnowledgePattern, KnowledgeSearchResult
 from rag.knowledge_store import KnowledgeStore

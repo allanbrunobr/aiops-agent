@@ -7,9 +7,7 @@ Suporta modo de comparação (dois motores simultâneos: preditivo vs tradiciona
 """
 
 import time
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any
+from dataclasses import dataclass
 
 from data.models import LogEntry, MetricPoint, Span
 from interfaces.demo.analyzer import DemoAnalyzer
@@ -253,8 +251,6 @@ class ScenarioEngine:
 
     def _advance_trad_phase(self, risk_score: float, wall_now: float) -> None:
         """Avança a máquina de estado do motor tradicional."""
-        old_phase = self._trad_phase
-
         if self._trad_phase == DemoPhase.PLAYING:
             if risk_score >= 30.0:
                 self._trad_phase = DemoPhase.DEGRADING

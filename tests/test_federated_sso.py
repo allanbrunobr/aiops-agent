@@ -23,7 +23,6 @@ Cenários:
 """
 from __future__ import annotations
 
-import json
 import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -36,7 +35,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from auth.keys import generate_rsa_keypair, public_key_to_jwk
-from auth.oidc_validator import OIDCValidator, TrustedIssuerConfig
+from auth.oidc_validator import TrustedIssuerConfig
 
 
 # ---------------------------------------------------------------------------

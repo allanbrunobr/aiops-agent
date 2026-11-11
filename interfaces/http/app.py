@@ -171,13 +171,18 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     _rsa_ok = bool(_rsa_private_pem and _rsa_public_pem)
     if _hmac_ok or _rsa_ok:
         import auth.server as auth_server
+        from auth.client_secrets import load_client_secret_hashes
         from auth.token_store import InMemoryTokenStore
+
+        # Hashes fora do repositório (fail-closed se ausente/inválido).
+        _secret_hashes = load_client_secret_hashes(_oauth.client_secrets_file)
 
         auth_server.configure(
             jwt_secret=_jwt_secret if _hmac_ok else "",
             token_ttl=_oauth.token_ttl,
             allowed_clients=[
-                {"id": c.id, "scopes": c.scopes}
+                {"id": c.id, "scopes": c.scopes,
+                 "secret_sha256": c.secret_sha256 or _secret_hashes.get(c.id, "")}
                 for c in _oauth.allowed_clients
             ],
             base_url="",
@@ -185,6 +190,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             rsa_private_pem=_rsa_private_pem,
             rsa_public_pem=_rsa_public_pem,
             kid=_oauth.kid,
+            issuer=_oauth.issuer,
+            audience=_oauth.audience,
         )
         app.include_router(auth_server.router)
         log.info("oauth.server.mounted", clients=len(_oauth.allowed_clients))
@@ -212,6 +219,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
     app.state.config = config
     app.state.a2a_jwt_secret = _jwt_secret if _hmac_ok else ""
+    # Mesmos aud/iss do servidor OAuth (vazio = não exige).
+    app.state.a2a_jwt_issuer = _oauth.issuer
+    app.state.a2a_jwt_audience = _oauth.audience
     app.state.engine = build_engine(config)
     _, app.state.retriever = build_rag()
     log.info("a2a.state.populated", engine=type(app.state.engine).__name__)

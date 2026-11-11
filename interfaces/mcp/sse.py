@@ -61,6 +61,8 @@ def mount_sse(
 
     auth_method = "header"
     jwt_secret = ""
+    jwt_issuer = ""
+    jwt_audience = ""
     allowed_header_clients: dict[str, list[str]] = {}
     _oidc_validator = None
     if config is not None:
@@ -68,6 +70,8 @@ def mount_sse(
         oauth_cfg = getattr(config, "oauth", None)
         if oauth_cfg is not None:
             jwt_secret = getattr(oauth_cfg, "jwt_secret", "") or ""
+            jwt_issuer = getattr(oauth_cfg, "issuer", "") or ""
+            jwt_audience = getattr(oauth_cfg, "audience", "") or ""
             for client in getattr(oauth_cfg, "allowed_clients", []) or []:
                 if isinstance(client, dict):
                     client_id = client.get("id")
@@ -123,7 +127,10 @@ def mount_sse(
                 )
             raw_token = auth_header[7:]
             try:
-                claims = validate_token(raw_token, jwt_secret)
+                claims = validate_token(
+                    raw_token, jwt_secret,
+                    issuer=jwt_issuer or None, audience=jwt_audience or None,
+                )
             except pyjwt.ExpiredSignatureError:
                 return Response(
                     status_code=401,
@@ -166,7 +173,6 @@ def mount_sse(
                 )
             raw_token = auth_header[7:]
             try:
-                import asyncio
                 claims = await _oidc_validator.validate(raw_token)  # type: ignore[union-attr]
             except pyjwt.ExpiredSignatureError:
                 return Response(

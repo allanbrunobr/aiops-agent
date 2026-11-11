@@ -37,6 +37,10 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from domain.incident_state import IncidentState
 import enum
 import json
 import os
@@ -63,9 +67,14 @@ from data.sample_incident import create_incident
 from data.registry import get_scenario, list_scenarios
 from pipeline.aggregator import Aggregator, AggregatedReport
 from rag.indexer import ObservabilityIndexer
-from rag.retriever import ObservabilityRetriever
 from rag.retriever_history import ObservabilityRetrieverWithHistory
 from rag.memory import IncidentMemoryDB, IncidentRecord
+from core.logging import get_logger
+from domain.confidence import confidence_to_score
+
+# Falhas best-effort (persistência, precedentes, evolução de skills) vão para
+# este log em vez de sumirem num `except Exception: pass`.
+_persist_log = get_logger("main.persistence")
 from adapters.reporter import RichConsoleReporter
 from agents.detector import DetectionAgent
 from agents.diagnoser import DiagnosisAgent
@@ -203,14 +212,14 @@ def step_sanitize(incident):
     console.print(table)
 
     if san_report.threat_detected:
-        console.print(f"  [bold red]🛡️ ADVERSARIAL PAYLOADS BLOCKED:[/bold red]")
+        console.print("  [bold red]🛡️ ADVERSARIAL PAYLOADS BLOCKED:[/bold red]")
         for i, payload in enumerate(san_report.adversarial_payloads_blocked[:5], 1):
             console.print(f"    {i}. [dim]{payload[:100]}...[/dim]")
     else:
-        console.print(f"  [green]✅ No adversarial payloads detected[/green]")
+        console.print("  [green]✅ No adversarial payloads detected[/green]")
 
     console.print(f"  [dim]Sanitization time: {elapsed:.3f}s[/dim]")
-    console.print(f"  [dim]Defense: AIOpsShield (taint analysis + pattern matching + abstraction)[/dim]\n")
+    console.print("  [dim]Defense: AIOpsShield (taint analysis + pattern matching + abstraction)[/dim]\n")
 
     # Update incident data with sanitized versions
     incident.logs = s_logs
@@ -299,7 +308,7 @@ def step_compression(report):
     console.print(table)
 
     console.print(f"  [dim]Compression time: {elapsed:.3f}s[/dim]")
-    console.print(f"  [dim]Level: balanced (priority-based classification + budget enforcement)[/dim]")
+    console.print("  [dim]Level: balanced (priority-based classification + budget enforcement)[/dim]")
 
     # Show priority breakdown
     by_priority = {}
@@ -353,7 +362,7 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
         console.print(f"  Cache: [dim]{cache_dir}[/dim]")
     else:
         if rebuild:
-            console.print(f"  [dim]--rebuild-rag: forcing index reconstruction[/dim]")
+            console.print("  [dim]--rebuild-rag: forcing index reconstruction[/dim]")
         num_chunks = indexer.build_index(
             report.log_templates,
             report.metric_anomalies,
@@ -368,12 +377,12 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
         elapsed = time.time() - t0
         console.print(f"  Indexed [bold]{num_chunks}[/bold] chunks in {elapsed:.2f}s")
 
-    console.print(f"  Model: [dim]all-MiniLM-L6-v2 (384 dimensions)[/dim]")
+    console.print("  Model: [dim]all-MiniLM-L6-v2 (384 dimensions)[/dim]")
 
     retriever = ObservabilityRetrieverWithHistory(indexer)
 
     # Demo query
-    console.print(f"\n  [dim]Sample query: 'connection pool timeout'[/dim]")
+    console.print("\n  [dim]Sample query: 'connection pool timeout'[/dim]")
     results = retriever.search("connection pool timeout", top_k=3)
     for i, r in enumerate(results, 1):
         console.print(f"    {i}. [{r.chunk.source.upper()}] (score={r.score:.3f}) {r.chunk.text[:100]}...")
@@ -384,11 +393,11 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
         tags = _extract_fault_tags(report)
         precedents = retriever.get_similar_past_incidents(services, tags, limit=3)
         if precedents:
-            console.print(f"\n  [bold cyan]Similar past incidents found:[/bold cyan]")
+            console.print("\n  [bold cyan]Similar past incidents found:[/bold cyan]")
             for p in precedents:
                 console.print(f"    • {p['scenario']}: {p['root_cause']}")
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 — exibição best-effort, mas registrada
+        _persist_log.warning("rag.precedents_failed", error=repr(exc))
 
     console.print()
     return retriever
@@ -543,7 +552,7 @@ def step_agents(report, retriever, use_llm: bool = True,
         # Reutiliza mitigation já computada dentro do orchestrator (evita duplicata)
         mitigation = _outcome.mitigation
     else:
-        mitigation = mitigator.propose(diagnosis)
+        mitigation = mitigator.propose_safe(diagnosis)
     result["stages"]["mitigation"] = mitigation
 
     # 4. VERIFYING (TNR)
@@ -634,8 +643,8 @@ def step_agents(report, retriever, use_llm: bool = True,
                     console.print(
                         f"  [dim]Skill evolved: {_evolved.name} → v{_evolved.version}[/dim]"
                     )
-    except Exception:
-        pass  # write/evolve é best-effort; não bloqueia o pipeline
+    except Exception as exc:  # noqa: BLE001 — write/evolve é best-effort; não bloqueia o pipeline
+        _persist_log.warning("skills.write_evolve_failed", error=repr(exc))
     # ─────────────────────────────────────────────────────────────────────
 
     result["timeline"] = timeline
@@ -712,6 +721,71 @@ def step_safety_validation(result):
     }
 
     return safety_result
+
+
+def _requires_human(safety_result, remediation_result) -> bool:
+    """Aprovação humana considerando TODAS as camadas pré-execução da CLI.
+
+    Uma camada que aprova não anula a que bloqueia: o PreExecutionValidator
+    pode auto-aprovar um comando que o VersionValidator classifica como
+    MALICIOUS (ex.: `kubectl rollout restart deployment/postgres:9.4`).
+    """
+    if safety_result is not None and safety_result.requires_human:
+        return True
+    if remediation_result is not None and not remediation_result.is_safe:
+        return True
+    return False
+
+
+def _record_safety_decision(result, safety_result, remediation_result) -> bool:
+    """Grava em result['stages']['safety_decision'] o veredito combinado."""
+    blocked_by = []
+    if safety_result is not None and safety_result.requires_human:
+        blocked_by.append("pre_validator")
+    if remediation_result is not None and not remediation_result.is_safe:
+        blocked_by.append("version_validator")
+    requires_human = _requires_human(safety_result, remediation_result)
+    result.setdefault("stages", {})["safety_decision"] = {
+        "requires_human": requires_human,
+        "blocked_by": blocked_by,
+    }
+    return requires_human
+
+
+def step_persist_incident(result, report, scenario_name: str, elapsed_sec: float,
+                          db: IncidentMemoryDB | None = None) -> bool:
+    """Etapa 5d: persiste o incidente na memória institucional (Story 7.3).
+
+    Best-effort: falha não derruba o pipeline, mas é registrada em log. Antes
+    o erro sumia num `except Exception: pass` — e todo save falhava, porque
+    float("medium") levanta ValueError (F07).
+
+    Returns:
+        True se gravou; False se não havia root_cause ou se a gravação falhou.
+    """
+    diagnosis = result.get("stages", {}).get("diagnosis", {})
+    root_cause = diagnosis.get("root_cause") or ""
+    if not root_cause:
+        return False
+    try:
+        detection = result.get("stages", {}).get("detection", {})
+        record = IncidentRecord.new(
+            scenario=scenario_name,
+            root_cause=root_cause,
+            affected_services=list(detection.get("affected_services", [])),
+            diagnosis_confidence=confidence_to_score(diagnosis.get("confidence")),
+            resolution_time_sec=elapsed_sec,
+            tags=_extract_fault_tags(report),
+            evidence_summary="; ".join(str(e) for e in diagnosis.get("evidence", [])[:5]),
+        )
+        (db if db is not None else IncidentMemoryDB()).save_incident(record)
+        return True
+    except Exception as exc:  # noqa: BLE001 — best-effort, mas registrado
+        _persist_log.warning(
+            "persistence.save_incident_failed",
+            scenario=scenario_name, error=repr(exc),
+        )
+        return False
 
 
 def step_remediation_validation(result):
@@ -967,7 +1041,7 @@ def step_predict(result: dict, report, *,
 
     try:
         from pipeline.predictive_stage import run_predictive_stage
-        from core.lifecycle import LifecycleEvent, ALLOWED_EVENT_TYPES
+        from core.lifecycle import LifecycleEvent
         from datetime import datetime, timezone
         import uuid
 
@@ -1071,7 +1145,7 @@ def step_postmortem(result, incident, output_dir: str = "output",
     for t in result.get("timeline", []):
         postmortem += f"- **{t['time']}** {t['from']} -> {t['to']}: {t['reason']}\n"
 
-    postmortem += f"""
+    postmortem += """
 ## Mitigation Applied
 
 """
@@ -1085,14 +1159,21 @@ def step_postmortem(result, incident, output_dir: str = "output",
 
     # Safety validation section
     safety_validation = result.get("stages", {}).get("safety_validation", {})
+    safety_decision = result.get("stages", {}).get("safety_decision")
     if safety_validation:
+        # Veredito combinado de todas as camadas quando disponível (F03).
+        needs_human = (
+            safety_decision.get("requires_human")
+            if safety_decision is not None
+            else safety_validation.get("requires_human")
+        )
         postmortem += f"""
 ## Pre-Execution Safety Check
 
 - **Risk Level**: {safety_validation.get('risk_level', 'N/A')}
 - **Risk Score**: {safety_validation.get('risk_score', 'N/A')}/100
 - **Approval Status**: {safety_validation.get('approval_status', 'N/A')}
-- **Requires Human**: {'Yes' if safety_validation.get('requires_human') else 'No'}
+- **Requires Human**: {'Yes' if needs_human else 'No'}
 - **Blast Radius**: {safety_validation.get('blast_radius_scope', 'N/A')}
 - **Recommendation**: {safety_validation.get('recommendation', 'N/A')}
 """
@@ -1193,7 +1274,7 @@ def print_summary(result, compression_stats=None, safety_result=None,
     console.print()
 
     success = result.get("success", False)
-    awaiting_human = bool(safety_result is not None and safety_result.requires_human)
+    awaiting_human = _requires_human(safety_result, remediation_result)
     if awaiting_human:
         status_icon = "[bold yellow]AWAITING HUMAN[/bold yellow]"
     elif success:
@@ -1750,6 +1831,44 @@ def display_results(state: "IncidentState", compact: bool = False) -> None:
         console.print(state.postmortem_md)
 
 
+def _state_after_abort(exc, config):
+    """Estado a exibir depois de um PipelineAborted no V1.
+
+    A engine anexa ao aborto o estado alcançado antes do node que falhou. Num
+    bloqueio de safety esse estado já tem o diagnóstico: marca o veredito como
+    BLOCKED e gera o postmortem (template, sem LLM) com a seção de safety —
+    o mesmo que o V0 mostra quando uma camada exige humano.
+    """
+    from blueprint.adapters.safety_nodes import SafetyBlockedError
+
+    state = getattr(exc, "state", None)
+    if state is None or not isinstance(exc.__cause__, SafetyBlockedError):
+        return state
+
+    node_id = getattr(exc, "node_id", None) or "safety"
+    reason = f"{node_id}: {exc.__cause__}"
+    state = dataclasses.replace(
+        state,
+        safety_verdict="BLOCKED",
+        safety_reasons=[*state.safety_reasons, reason],
+    )
+    if state.diagnosis and not state.postmortem_md:
+        try:
+            from blueprint.adapters.pipeline_nodes import make_postmortem_node
+            state = make_postmortem_node(config)(state)
+        except Exception as pm_exc:  # noqa: BLE001 — sem postmortem, mas registrado
+            _persist_log.warning("v1.postmortem_after_block_failed", error=repr(pm_exc))
+    if state.postmortem_md:
+        state = dataclasses.replace(state, postmortem_md=(
+            state.postmortem_md
+            + "\n## Safety\n"
+            + f"- **Verdict:** BLOCKED by `{node_id}`\n"
+            + f"- **Reason:** {exc.__cause__}\n"
+            + "- The proposed action was not approved and requires human review.\n"
+        ))
+    return state
+
+
 def _save_postmortem_v1(postmortem_md: str, output_dir: str = "output") -> Path | None:
     """Salva postmortem em arquivo markdown."""
     output_path = Path(output_dir)
@@ -1875,6 +1994,11 @@ def main_v1(args: argparse.Namespace) -> int:
     except PipelineAborted as exc:
         log.error("main.pipeline_aborted", error=str(exc))
         console.print(f"[red]Pipeline aborted: {exc}[/red]")
+        # Mostra o que o pipeline já tinha apurado (diagnóstico, postmortem),
+        # não o estado inicial.
+        _aborted_state = _state_after_abort(exc, app_config)
+        if _aborted_state is not None:
+            state = _aborted_state
         _fire("pipeline.failed", cid=_cid, data={"error": str(exc)})
         if "regression" in str(exc).lower():
             exit_code = EXIT_REGRESSION
@@ -1888,12 +2012,15 @@ def main_v1(args: argparse.Namespace) -> int:
         _fire("pipeline.failed", cid=_cid, data={"error": str(exc)})
         exit_code = EXIT_ERROR
     else:
-        # Pipeline completou com sucesso
+        # Pipeline completou. Ação que o PreValidator mandou para revisão
+        # exige humano, como no V0 (exit 3).
+        if state.safety_verdict == "NEEDS_REVIEW":
+            exit_code = EXIT_APPROVAL_NEEDED
         diagnosis = state.diagnosis or {}
-        _conf_v1 = diagnosis.get("confidence", 0.0)
+        _conf_v1 = confidence_to_score(diagnosis.get("confidence"))
         _fire("pipeline.completed", cid=_cid, data={
             "root_cause": diagnosis.get("root_cause", ""),
-            "confidence": float(_conf_v1) if isinstance(_conf_v1, (int, float)) else 0.0,
+            "confidence": _conf_v1,
             "proposed_fix": diagnosis.get("proposed_fix") or diagnosis.get("fix_command", ""),
             "risk_level": state.safety_verdict or "unknown",
             "evidence": diagnosis.get("evidence", []),
@@ -2064,13 +2191,6 @@ def main() -> int:
         # 2b. Context Compression
         compressor, compressed_text, compression_stats = step_compression(report)
 
-        # 2c. Predictive Stage (no-op se não disponível)
-        try:
-            _mem_db = IncidentMemoryDB()
-            step_predict(report, memory_db=_mem_db)
-        except Exception:
-            pass
-
         # 3. RAG Indexing
         if not args.no_rag:
             retriever = step_rag(report, rebuild=args.rebuild_rag)
@@ -2095,6 +2215,9 @@ def main() -> int:
         # 4c. Remediation Version/CVE Validation
         remediation_result = step_remediation_validation(result)
 
+        # 4d. Veredito combinado: qualquer camada que bloqueia exige humano.
+        requires_human = _record_safety_decision(result, safety_result, remediation_result)
+
         # 4e. Notificação Slack: diagnóstico + correção proposta
         _diag_for_slack = result.get("stages", {}).get("diagnosis", {})
         _mitigation_for_slack = result.get("stages", {}).get("mitigation", {})
@@ -2105,15 +2228,12 @@ def main() -> int:
             or (getattr(_fix_action, "command", None) if _fix_action else None)
             or ""
         )
-        _conf_for_slack = _diag_for_slack.get("confidence") or 0.0
-        _CONF_MAP_SLACK = {"high": 0.85, "medium": 0.5, "low": 0.25}
-        if not isinstance(_conf_for_slack, (int, float)):
-            _conf_for_slack = _CONF_MAP_SLACK.get(str(_conf_for_slack).lower(), 0.0)
+        _conf_for_slack = confidence_to_score(_diag_for_slack.get("confidence"))
         _slack_fire("diagnosis.completed", cid=_pipeline_cid, data={
             "root_cause": _diag_for_slack.get("root_cause", ""),
             "proposed_fix": _proposed_fix_slack,
             "risk_level": safety_result.risk_level.value if safety_result else "unknown",
-            "requires_human": safety_result.requires_human if safety_result else False,
+            "requires_human": requires_human,
             "confidence": float(_conf_for_slack),
             "evidence": list(_diag_for_slack.get("evidence", []))[:5],
         })
@@ -2132,7 +2252,7 @@ def main() -> int:
             exit_code = EXIT_REGRESSION
 
         # Check safety requires human (exit code 3) — only if no regression
-        if exit_code == EXIT_SUCCESS and safety_result is not None and safety_result.requires_human:
+        if exit_code == EXIT_SUCCESS and requires_human:
             exit_code = EXIT_APPROVAL_NEEDED
 
         # 5b. Incident Tracking (Story 6.3)
@@ -2165,29 +2285,7 @@ def main() -> int:
             _attach_postmortem_to_tracker(tracker, tracker_issue_key, result)
 
         # 5d. Persiste incidente na memória institucional (Story 7.3)
-        try:
-            diagnosis = result.get("stages", {}).get("diagnosis", {})
-            root_cause = diagnosis.get("root_cause") or ""
-            if root_cause:
-                detection = result.get("stages", {}).get("detection", {})
-                affected_services = list(detection.get("affected_services", []))
-                confidence = float(diagnosis.get("confidence") or 0.0)
-                elapsed_total_local = time.time() - t_total
-                tags = _extract_fault_tags(report)
-                evidence = "; ".join(str(e) for e in diagnosis.get("evidence", [])[:5])
-                record = IncidentRecord.new(
-                    scenario=scenario_name,
-                    root_cause=root_cause,
-                    affected_services=affected_services,
-                    diagnosis_confidence=confidence,
-                    resolution_time_sec=elapsed_total_local,
-                    tags=tags,
-                    evidence_summary=evidence,
-                )
-                db = IncidentMemoryDB()
-                db.save_incident(record)
-        except Exception:
-            pass
+        step_persist_incident(result, report, scenario_name, time.time() - t_total)
 
         # Summary
         print_summary(result, compression_stats, safety_result,
@@ -2198,12 +2296,7 @@ def main() -> int:
 
         # Envia mensagem final ao Slack
         _diag = result.get("stages", {}).get("diagnosis", {})
-        _conf_raw = _diag.get("confidence") or 0.0
-        _CONF_MAP = {"high": 0.85, "medium": 0.5, "low": 0.25}
-        if isinstance(_conf_raw, (int, float)):
-            _conf = float(_conf_raw)
-        else:
-            _conf = _CONF_MAP.get(str(_conf_raw).lower(), 0.0)
+        _conf = confidence_to_score(_diag.get("confidence"))
         _mitigation_action = result.get("stages", {}).get("mitigation", {}).get("action")
         _fix = (
             _diag.get("proposed_fix")

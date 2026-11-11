@@ -12,8 +12,6 @@ Ref: github.com/logpai/Drain3
 
 from __future__ import annotations
 
-import re
-from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 
@@ -71,7 +69,6 @@ class LogParser:
         convergem bem antes desse volume.
         Fallback para Python com cap de 500 amostras quando Rust não disponível.
         """
-        import random as _rng
         if _RUST_AVAILABLE:
             # Rust processa todos os logs sem cap de amostragem
             return self._rust_parse(logs)

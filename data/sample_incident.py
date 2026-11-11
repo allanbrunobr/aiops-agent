@@ -95,9 +95,9 @@ def generate_logs(count: int = 500) -> list[LogEntry]:
         ts = SPIKE_START + datetime.timedelta(seconds=random.randint(30, 5 * 60))
         cascade_msgs = [
             ("gateway", f"Upstream payment-svc returned 503 after {random.randint(30000, 35000)}ms"),
-            ("gateway", f"Circuit breaker tripped for payment-svc, routing to fallback"),
+            ("gateway", "Circuit breaker tripped for payment-svc, routing to fallback"),
             ("order-svc", f"Payment confirmation timeout for order {random.randint(10000, 99999)}"),
-            ("auth-svc", f"Token validation failed for request from payment-svc: connection refused"),
+            ("auth-svc", "Token validation failed for request from payment-svc: connection refused"),
         ]
         svc, msg = random.choice(cascade_msgs)
         logs.append(LogEntry(ts, "ERROR", svc, msg))
@@ -267,7 +267,7 @@ if __name__ == "__main__":
     print(f"Logs gerados: {len(incident.logs)}")
     print(f"Metric points: {len(incident.metrics)}")
     print(f"Trace spans: {len(incident.traces)}")
-    print(f"\nPrimeiros 5 logs:")
+    print("\nPrimeiros 5 logs:")
     for log in incident.logs[:5]:
         print(f"  {log}")
     print(f"\nRoot cause real: {incident.actual_root_cause}")

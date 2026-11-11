@@ -4,7 +4,6 @@ Valida que main.py usa o Blueprint Engine, preserva CLI flags e exit codes.
 """
 from __future__ import annotations
 
-import pytest
 from datetime import datetime, timezone
 
 
@@ -37,21 +36,26 @@ def test_create_incident_state_with_scenario():
     assert state.no_llm is False
 
 
-def test_main_v1_no_llm_no_rag(monkeypatch):
-    """main_v1() com --no-llm --no-rag deve completar com EXIT_SUCCESS."""
-    import sys
+def test_main_v1_no_llm_no_rag(tmp_path, isolated_cli):
+    """main_v1() com --no-llm --no-rag no cenário padrão pede aprovação humana.
+
+    Mesmo resultado do V0 (main() devolve 3 no mesmo cenário): o diagnóstico
+    afeta 4 serviços, acima do blast radius de 3, e o PreValidator manda para
+    revisão. Antes da fiação de proposed_action (ARQ-01), o V1 devolvia 0
+    porque as camadas de safety pulavam.
+    """
     from argparse import Namespace
-    from main import main_v1, EXIT_SUCCESS
+    from main import main_v1, EXIT_APPROVAL_NEEDED
 
     args = Namespace(
         no_llm=True, no_rag=True, compact=True,
         config=None, scenario=None, output_format="markdown",
-        output_dir="/tmp/aiops-test-output", rebuild_rag=False,
+        output_dir=str(tmp_path), rebuild_rag=False,
         data_source="simulated", tracker=None,
     )
 
     exit_code = main_v1(args)
-    assert exit_code == EXIT_SUCCESS
+    assert exit_code == EXIT_APPROVAL_NEEDED
 
 
 def test_exit_codes_preserved():

@@ -7,9 +7,7 @@ modo simulated).
 """
 from __future__ import annotations
 
-import os
 import sys
-import uuid
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 

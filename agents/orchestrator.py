@@ -191,6 +191,15 @@ class InvestigationPlan:
     max_steps: int = 5
 
 
+class LLMCallBudgetExhausted(Exception):
+    """Orçamento de chamadas ao LLM desta execução esgotado (NFR6).
+
+    Herda de Exception de propósito: cada ponto de chamada já tem fallback
+    determinístico (plano padrão, "continue", diagnóstico heurístico) e o
+    laço termina quando o plano se esgota.
+    """
+
+
 @dataclass
 class AgentOutcome:
     """Resultado completo de uma execução do AgentOrchestrator."""
@@ -205,6 +214,8 @@ class AgentOutcome:
     tnr_message: str = ""
     mitigation: dict = field(default_factory=dict)
     reflection: dict | None = None
+    llm_calls: int = 0                 # chamadas ao LLM feitas nesta execução
+    llm_budget_exhausted: bool = False  # True se max_llm_calls foi atingido
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +248,12 @@ class AgentOrchestrator:
     """
 
     MAX_REPLANS = 2
+    # Teto de steps por plano vindo do LLM. Junto com MAX_REPLANS e a saída
+    # quando o plano se esgota, limita as chamadas de reflexão por run a
+    # (MAX_REPLANS + 1) * MAX_STEPS_PER_PLAN.
+    MAX_STEPS_PER_PLAN = 8
+    # Usado quando não há config.blueprint.max_llm_calls (mesmo default do AppConfig).
+    DEFAULT_MAX_LLM_CALLS = 15
 
     def __init__(
         self,
@@ -253,6 +270,8 @@ class AgentOrchestrator:
         self.skill_router = skill_router
         self.config = config
         self.reporter = reporter or NullReporter()
+        self._llm_calls = 0
+        self._llm_budget_exhausted = False
 
     # ------------------------------------------------------------------
     # Public
@@ -260,6 +279,8 @@ class AgentOrchestrator:
 
     def run(self, report, retriever) -> AgentOutcome:
         """Execução completa: detect → plan → execute → safety → learn."""
+        self._llm_calls = 0
+        self._llm_budget_exhausted = False
         # ── DETECT (determinístico — não muda) ────────────────────────
         detector = DetectionAgent(reporter=self.reporter)
         detection = detector.detect(report)
@@ -308,6 +329,11 @@ class AgentOrchestrator:
                     break
 
                 # decision == "continue" → próximo step
+            else:
+                # Plano esgotado sem finalize nem replan (inclusive quando toda
+                # reflexão falha e vira "continue"): repetir o mesmo plano não
+                # traz evidência nova. Sai e sintetiza com o que foi coletado.
+                break
 
             if diagnosis:
                 break
@@ -317,7 +343,7 @@ class AgentOrchestrator:
 
         # ── 4. SAFETY (invariante — nunca controlada pelo LLM) ────────
         mitigator = MitigationAgent(reporter=self.reporter)
-        mitigation = mitigator.propose(diagnosis)
+        mitigation = mitigator.propose_safe(diagnosis)
         tnr_guard = TNRSafetyGuard()
         tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
         tnr_passed = getattr(getattr(tnr_result, "result", None), "value", None) == "success"
@@ -338,7 +364,7 @@ class AgentOrchestrator:
                 step.result = self._execute_step(step, report, retriever)
                 tools_used.append(step.tool)
             diagnosis = self._synthesize_diagnosis(plan, report, {}, skill)
-            mitigation = mitigator.propose(diagnosis)
+            mitigation = mitigator.propose_safe(diagnosis)
             tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
             tnr_passed = getattr(getattr(tnr_result, "result", None), "value", None) == "success"
 
@@ -356,11 +382,38 @@ class AgentOrchestrator:
             iterations=sum(1 for s in plan.steps if s.result is not None),
             replans=replans,
             reflection=final_reflection,
+            llm_calls=self._llm_calls,
+            llm_budget_exhausted=self._llm_budget_exhausted,
         )
 
     # ------------------------------------------------------------------
     # Internos
     # ------------------------------------------------------------------
+
+    def _max_llm_calls(self) -> int:
+        blueprint = getattr(self.config, "blueprint", None)
+        value = getattr(blueprint, "max_llm_calls", None)
+        return value if isinstance(value, int) and value >= 0 else self.DEFAULT_MAX_LLM_CALLS
+
+    def _create_message(self, *, investigation: bool = False, **kwargs):
+        """Única porta para o LLM: aplica config.blueprint.max_llm_calls por run.
+
+        Chamadas de investigação (plano, reflexão de step, replan) param uma
+        chamada antes do limite: a última fica reservada para a síntese do
+        diagnóstico, que senão cairia na heurística.
+        """
+        limit = self._max_llm_calls()
+        if investigation:
+            limit = max(0, limit - 1)
+        if self._llm_calls >= limit:
+            if not self._llm_budget_exhausted:
+                logging.getLogger(__name__).warning(
+                    "LLM call budget exhausted (%d calls); falling back to heuristics", limit,
+                )
+            self._llm_budget_exhausted = True
+            raise LLMCallBudgetExhausted(f"max_llm_calls={limit} reached")
+        self._llm_calls += 1
+        return self.client.create_message(**kwargs)
 
     def _generate_plan(self, report, skill, similar) -> InvestigationPlan:
         """LLM gera plano de investigação baseado em contexto + skill."""
@@ -370,7 +423,8 @@ class AgentOrchestrator:
         ) or "(nenhum incidente similar encontrado)"
 
         try:
-            response = self.client.create_message(
+            response = self._create_message(
+                investigation=True,
                 model=self.model,
                 max_tokens=1024,
                 messages=[{
@@ -402,7 +456,7 @@ class AgentOrchestrator:
             )
             for s in data.get("steps", [])
             if s.get("tool") in _VALID_TOOLS
-        ]
+        ][: self.MAX_STEPS_PER_PLAN]
 
         if not steps:
             return self._default_plan(report)
@@ -455,7 +509,8 @@ class AgentOrchestrator:
             if s.step_id > step.step_id and s.result is None
         ])
         try:
-            response = self.client.create_message(
+            response = self._create_message(
+                investigation=True,
                 model=self.model,
                 max_tokens=512,
                 messages=[{
@@ -487,7 +542,8 @@ class AgentOrchestrator:
             for s in old_plan.steps
         ]
         try:
-            response = self.client.create_message(
+            response = self._create_message(
+                investigation=True,
                 model=self.model,
                 max_tokens=1024,
                 messages=[{
@@ -512,7 +568,7 @@ class AgentOrchestrator:
                 )
                 for s in data.get("steps", [])
                 if s.get("tool") in _VALID_TOOLS
-            ]
+            ][: self.MAX_STEPS_PER_PLAN]
             return InvestigationPlan(
                 hypothesis=data.get("hypothesis", old_plan.hypothesis),
                 steps=steps or old_plan.steps,
@@ -550,10 +606,15 @@ class AgentOrchestrator:
         if system_msg:
             kwargs["system"] = system_msg
         try:
-            response = self.client.create_message(**kwargs)
-            return json.loads(response.content[0].text)
+            response = self._create_message(**kwargs)
+            data = json.loads(response.content[0].text)
         except Exception:  # noqa: BLE001
             return DiagnosisAgent()._heuristic_diagnosis(report)
+        # O resto do pipeline faz diagnosis.get(...) e decide por root_cause:
+        # lista, null ou dict sem root_cause não são diagnóstico.
+        if not isinstance(data, dict) or not data.get("root_cause"):
+            return DiagnosisAgent()._heuristic_diagnosis(report)
+        return data
 
     def _reflect_final(
         self,
@@ -564,7 +625,7 @@ class AgentOrchestrator:
     ) -> dict:
         """Reflexão final sobre toda a investigação."""
         try:
-            response = self.client.create_message(
+            response = self._create_message(
                 model=self.model,
                 max_tokens=512,
                 messages=[{

@@ -8,6 +8,8 @@ Baseado nos padrões de RAG-Based-DevOps-Log-Analysis (github.com/priyanshmathur
 
 from __future__ import annotations
 
+import logging
+
 import datetime
 import hashlib
 import json
@@ -438,9 +440,11 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
                             "chunk_weight": 0.5,
                         },
                     ))
-            except Exception:
-                # Degradação graciosa — continua sem histórico
-                pass
+            except Exception:  # noqa: BLE001 — degradação graciosa: continua sem histórico
+                logging.getLogger(__name__).warning(
+                    "historical chunks unavailable (%s); indexing without history",
+                    self.db_path, exc_info=True,
+                )
 
         return chunks
 

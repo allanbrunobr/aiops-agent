@@ -59,6 +59,7 @@ class TestHelpShowsExitCodes:
 
 
 @pytest.mark.unit
+@pytest.mark.usefixtures("isolated_cli")
 class TestMainExitCodes:
     """Testes de exit codes retornados por main()."""
 

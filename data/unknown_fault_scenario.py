@@ -89,7 +89,7 @@ def generate_logs(count: int = 500) -> list[LogEntry]:
             f"Serialization error rate rising: {err_rate}% of payloads failing validation",
             f"Internal state checksum mismatch: expected {random.randint(1000, 9999):04x}, got {random.randint(1000, 9999):04x}",
             f"Retry count elevated: {int(3 + progress * 20)} retries in last 60s",
-            f"Payload validation failure: field 'event_id' has unexpected null value",
+            "Payload validation failure: field 'event_id' has unexpected null value",
         ]
         logs.append(LogEntry(ts, "WARN", PRIMARY_SERVICE, random.choice(warns)))
 
@@ -111,9 +111,9 @@ def generate_logs(count: int = 500) -> list[LogEntry]:
         ts = SPIKE_START + datetime.timedelta(seconds=random.randint(60, 23 * 60))
         cascade_msgs = [
             ("ingest-svc", f"Upstream data-processor returned 503 after {random.randint(5000, 15000)}ms"),
-            ("ingest-svc", f"Batch ingestion stalled: data-processor not accepting records"),
-            ("scheduler", f"Job dispatch failed: data-processor reporting unhealthy"),
-            ("storage-gw", f"Write pipeline blocked: data-processor not flushing buffers"),
+            ("ingest-svc", "Batch ingestion stalled: data-processor not accepting records"),
+            ("scheduler", "Job dispatch failed: data-processor reporting unhealthy"),
+            ("storage-gw", "Write pipeline blocked: data-processor not flushing buffers"),
         ]
         svc, msg = random.choice(cascade_msgs)
         logs.append(LogEntry(ts, "ERROR", svc, msg))
@@ -299,7 +299,7 @@ if __name__ == "__main__":
     print(f"Logs gerados: {len(incident.logs)}")
     print(f"Metric points: {len(incident.metrics)}")
     print(f"Trace spans: {len(incident.traces)}")
-    print(f"\nPrimeiros 5 logs:")
+    print("\nPrimeiros 5 logs:")
     for log in incident.logs[:5]:
         print(f"  {log}")
     print(f"\nRoot cause real: {incident.actual_root_cause}")

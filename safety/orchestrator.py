@@ -13,9 +13,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from safety.pre_validator import PreExecutionValidator, SafetyCheckResult
-    from safety.tnr import TNRSafetyGuard, TNRReport
-    from safety.version_validator import RemediationValidation, VersionValidator
+    from safety.pre_validator import PreExecutionValidator
+    from safety.tnr import TNRSafetyGuard
+    from safety.version_validator import VersionValidator
 
 
 @dataclass

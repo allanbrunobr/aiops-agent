@@ -17,11 +17,9 @@ Use --snapshot-update para regenerar snapshots após mudanças intencionais.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sys
-import tempfile
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
@@ -489,7 +487,6 @@ class TestNoRagSkipsCache:
         """Verifica que a lógica em main() pula step_rag() quando --no-rag é True."""
         # Simula o code path de main() que decide se chama step_rag
         no_rag = True
-        rebuild_rag = False
         step_rag_called = False
 
         # Reproduz a lógica condicional de main()

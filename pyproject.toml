@@ -21,3 +21,18 @@ filterwarnings = [
     "ignore::DeprecationWarning:transformers.*",
     "ignore::FutureWarning:torch.*",
 ]
+
+[tool.ruff]
+target-version = "py312"
+extend-exclude = ["rust/target"]
+
+[tool.ruff.lint]
+# Conjunto explícito e estável (o padrão do ruff muda entre versões):
+# erros de sintaxe/runtime (E4, E7, E9), pyflakes (F) e try/except/pass (S110).
+select = ["E4", "E7", "E9", "F", "S110"]
+# Imports depois de ajuste de sys.path/pytest_plugins são intencionais.
+ignore = ["E402"]
+
+[tool.ruff.lint.per-file-ignores]
+# Pacotes reexportam nomes nos __init__.
+"**/__init__.py" = ["F401"]

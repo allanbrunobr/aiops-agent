@@ -307,6 +307,9 @@ async def _tick_loop() -> None:
 
 async def _maybe_notify_slack(frame: Any) -> None:
     """Envia notificação Slack quando a fase muda para WARNING, ALERT ou RESOLVED."""
+    # Sem `global`, a atribuição abaixo tornava o nome local: o ramo resolved
+    # levantava UnboundLocalError e o início do incidente nunca era gravado.
+    global _incident_start_wall_time
     if _slack is None or _engine is None:
         return
 

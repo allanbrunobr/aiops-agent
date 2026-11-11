@@ -18,11 +18,12 @@ Regra principal: NUNCA executar ações destrutivas sem aprovação humana.
 
 from __future__ import annotations
 
+import logging
+
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from datetime import datetime
 
 
 class RiskLevel(Enum):
@@ -98,6 +99,12 @@ BLOCKED_COMMANDS = [
     r"`",                      # substituição de comando
     r"\$\(",                   # substituição de comando
 ]
+
+# Encadeamento, redirecionamento e quebra de linha. A allow-list abaixo
+# classifica UM comando; com qualquer destes caracteres o texto pode conter
+# outro comando depois do prefixo aprovado ("kubectl get pods; kubectl apply
+# -f http://..."). Nenhum comando de mitigação legítimo precisa deles.
+SHELL_METACHARACTERS = re.compile(r"[;&|<>\n\r]")
 
 # Padrões que indicam risco elevado
 HIGH_RISK_PATTERNS = [
@@ -317,8 +324,10 @@ class PreExecutionValidator:
             try:
                 from safety.audit import SafetyAuditor
                 SafetyAuditor.log_error("pre_validator", correlation_id, exc)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 — auditoria nunca derruba a validação
+                logging.getLogger(__name__).warning(
+                    "audit log_error failed for layer %s", "pre_validator", exc_info=True,
+                )
 
         return result
 
@@ -331,19 +340,27 @@ class PreExecutionValidator:
             if re.search(pattern, cmd_lower):
                 return False, f"BLOCKED: matches dangerous pattern '{pattern}'"
 
+        # Encadeamento/redirecionamento: bloqueia antes de qualquer allow-list.
+        if SHELL_METACHARACTERS.search(command):
+            return False, (
+                "BLOCKED: shell metacharacter (; & | < > or newline) — "
+                "command chaining and redirection are not allowed"
+            )
+
         # Check high risk patterns
         for pattern, description in HIGH_RISK_PATTERNS:
             if re.search(pattern, cmd_lower):
                 return True, f"HIGH RISK: {description}"
 
-        # Check safe patterns
+        # Allow-list ancorada no início (re.match): o padrão tem de ser o
+        # próprio comando, não um trecho dele ("echo kubectl get pods").
         for pattern in SAFE_PATTERNS:
-            if re.search(pattern, cmd_lower):
+            if re.match(pattern, cmd_lower):
                 return True, "Read-only command"
 
         # Check rollout patterns (moderate risk but reversible)
         for pattern in ROLLOUT_PATTERNS:
-            if re.search(pattern, cmd_lower):
+            if re.match(pattern, cmd_lower):
                 return True, "Rollout operation (reversible)"
 
         # Default fechado: kubectl apply, comando desconhecido e o resto

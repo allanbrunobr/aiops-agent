@@ -16,7 +16,6 @@ Usage:
 
 import argparse
 import datetime
-import os
 import random
 import sys
 import time
@@ -26,10 +25,6 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from data.models import LogEntry, MetricPoint, Span
-from pipeline.log_parser import LogParser
-from pipeline.metric_filter import MetricFilter, MetricAnomaly
-from pipeline.trace_filter import TraceFilter, SlowCallPath
-from pipeline.aggregator import AggregatedReport
 from pipeline.context_compressor import ContextCompressor
 
 
@@ -81,7 +76,7 @@ ERROR_TEMPLATES = [
 ]
 
 FATAL_TEMPLATES = [
-    lambda: f"FATAL: connection pool completely drained — service entering degraded mode",
+    lambda: "FATAL: connection pool completely drained — service entering degraded mode",
     lambda: f"FATAL: unrecoverable database error — all {len(DB_HOSTS)} replicas unreachable",
 ]
 
@@ -157,7 +152,7 @@ def generate_logs(count: int, seed: int = 42) -> list[LogEntry]:
             level = "INFO"
         logs.append(LogEntry(ts, level, svc, msg))
 
-    logs.sort(key=lambda l: l.timestamp)
+    logs.sort(key=lambda entry: entry.timestamp)
     return logs
 
 
@@ -253,7 +248,7 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     print(f"         Distribution: {dict(sorted(level_counts.items()))}")
 
     # Raw size in tokens
-    raw_text = "\n".join(str(l) for l in logs)
+    raw_text = "\n".join(str(entry) for entry in logs)
     raw_tokens = len(raw_text) // 4
     print(f"         Raw text: {len(raw_text):,} chars = ~{raw_tokens:,} tokens")
 
@@ -314,7 +309,7 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     compressor = ContextCompressor(token_budget=4000)
     compressed_text, stats = compressor.compress(report)
     comp_time = time.time() - t0
-    print(f"\n  [4/4] Context Compressor:")
+    print("\n  [4/4] Context Compressor:")
     print(f"         {stats}")
     print(f"         Compressed text: {len(compressed_text):,} chars = ~{stats.compressed_tokens:,} tokens")
     print(f"         Time: {comp_time:.3f}s")
@@ -328,7 +323,7 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     cost_output = (output_tokens / 1_000_000) * 15.0
     total_cost = cost_input + cost_output
 
-    print(f"\n  ESTIMATED COST (Claude Sonnet 4):")
+    print("\n  ESTIMATED COST (Claude Sonnet 4):")
     print(f"    Input:  {input_tokens:,} tokens × $3/1M  = ${cost_input:.4f}")
     print(f"    Output: {output_tokens:,} tokens × $15/1M = ${cost_output:.4f}")
     print(f"    TOTAL:  ${total_cost:.4f} per incident")
@@ -367,7 +362,7 @@ def main():
 
     # Summary table
     print(f"\n\n{'='*90}")
-    print(f"  SUMMARY TABLE — Cost per Incident (Claude Sonnet 4)")
+    print("  SUMMARY TABLE — Cost per Incident (Claude Sonnet 4)")
     print(f"{'='*90}")
     print(f"  {'Volume':>12} | {'Raw':>12} | {'Drain3':>8} | {'Compressed':>12} | {'Reduction':>8} | {'Cost':>8} | {'Time':>8}")
     print(f"  {'':>12} | {'(tokens)':>12} | {'(tpls)':>8} | {'(tokens)':>12} | {'':>8} | {'(USD)':>8} | {'(sec)':>8}")
@@ -384,9 +379,9 @@ def main():
             f"{r['total_time_s']:>7.1f}s"
         )
 
-    print(f"\n  Conclusion: The cost is CONSTANT (~$0.004) regardless of log volume.")
-    print(f"  Drain3 collapses thousands of logs into ~20-35 unique templates.")
-    print(f"  The Context Compressor ensures that EVERYTHING fits in 4000 tokens.\n")
+    print("\n  Conclusion: The cost is CONSTANT (~$0.004) regardless of log volume.")
+    print("  Drain3 collapses thousands of logs into ~20-35 unique templates.")
+    print("  The Context Compressor ensures that EVERYTHING fits in 4000 tokens.\n")
 
 
 if __name__ == "__main__":

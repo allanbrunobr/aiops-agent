@@ -9,7 +9,6 @@ Exemplo: python scripts/new_scenario.py redis-timeout
 
 import argparse
 import os
-import sys
 import textwrap
 
 

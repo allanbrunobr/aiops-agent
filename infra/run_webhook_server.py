@@ -6,7 +6,6 @@ dedup store, pipeline runner and Slack notifier.
 Usage: python infra/run_webhook_server.py
 """
 
-import asyncio
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -96,8 +95,8 @@ if __name__ == "__main__":
     print("AIOps Agent — Webhook Server")
     print("=" * 60)
     print("  Listening:    http://127.0.0.1:47890")
-    print(f"  Health:       http://localhost:47890/health")
-    print(f"  Webhook:      POST http://localhost:47890/webhook")
+    print("  Health:       http://localhost:47890/health")
+    print("  Webhook:      POST http://localhost:47890/webhook")
     print(f"  .env.local:   {'loaded' if env_file.exists() else 'NOT FOUND'}")
     print(f"  GRAFANA_TOKEN: {'set' if os.environ.get('GRAFANA_WEBHOOK_TOKEN') else 'MISSING'}")
     print(f"  SLACK_TOKEN:   {'set' if os.environ.get('SLACK_BOT_TOKEN') else 'MISSING'}")

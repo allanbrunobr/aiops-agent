@@ -7,7 +7,6 @@ Cobre endpoints PATCH /accuracy e GET /metrics/accuracy.
 
 import dataclasses
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
 from adapters.persistence.in_memory_store import InMemoryStore
