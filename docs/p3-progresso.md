@@ -856,3 +856,11 @@ passaram) e passa no novo.
   **Não feito:** o `GET /mcp/sse` tem o mesmo padrão (devolve `None` depois
   do `connect_sse`), mas o efeito só apareceria na desconexão de um stream
   real, e não medi. Fica anotado.
+- **Access log medido no uvicorn, não só no argumento:** depois do
+  `configure_logging()`, um `uvicorn.Config(..., log_config=None)` sem
+  `log_level` deixa `uvicorn.access` em WARNING, e com `log_level="info"` o
+  deixa em INFO (`tests/test_http_entrypoint.py`).
+- **Mudança de comportamento da dedup:** um envio idêntico que chega
+  enquanto o primeiro ainda está no `submit` recebe 202 `deduplicated`, mesmo
+  que o primeiro termine em 503 (fila cheia). A reserva é liberada na recusa,
+  então o próximo reenvio do emissor é aceito.

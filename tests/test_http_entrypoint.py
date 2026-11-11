@@ -61,6 +61,22 @@ def test_demo_keeps_its_access_log(captured_run, monkeypatch):
     assert kwargs["log_level"] == "info"
 
 
+@pytest.mark.parametrize(("kwargs", "level"), [({}, "WARNING"), ({"log_level": "info"}, "INFO")])
+def test_log_level_decides_the_access_log(kwargs, level):
+    """O que os dois testes acima conferem no argumento, medido no uvicorn:
+    depois do configure_logging(), só log_level reabre o uvicorn.access."""
+    import logging
+
+    import uvicorn
+    from fastapi import FastAPI
+
+    from core.logging import configure_logging
+
+    configure_logging()
+    uvicorn.Config(FastAPI(), log_config=None, **kwargs)
+    assert logging.getLevelName(logging.getLogger("uvicorn.access").level) == level
+
+
 def test_entrypoint_accepts_host_port_and_config(captured_run, tmp_path):
     from interfaces.http.__main__ import main
 
