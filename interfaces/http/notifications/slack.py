@@ -651,7 +651,23 @@ class SlackNotifier:
         cid = event.correlation_id
         data = event.data
 
-        root_cause = data.get("root_cause", "N/A")
+        if data.get("no_incident"):
+            # Janela saudável: não houve diagnóstico nem correção (a CLI marca
+            # o pipeline.completed com no_incident).
+            return [
+                {"type": "header", "text": {"type": "plain_text",
+                                            "text": f"No Incident Detected: {cid}"}},
+                {"type": "section", "text": {"type": "mrkdwn", "text": (
+                    "The analysed window showed no incident. "
+                    "No diagnosis or mitigation was produced."
+                )}},
+                {"type": "context", "elements": [
+                    {"type": "mrkdwn", "text": (
+                        f"AIOps Agent | {cid} | {data.get('total_duration_ms', '?')}ms")},
+                ]},
+            ]
+
+        root_cause = data.get("root_cause") or "N/A"
         confidence = data.get("confidence", 0.0)
         evidence = data.get("evidence", [])
         proposed_fix = data.get("proposed_fix") or "N/A"

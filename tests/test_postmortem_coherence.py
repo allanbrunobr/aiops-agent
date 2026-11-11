@@ -248,3 +248,67 @@ def test_cli_summary_matches_the_verdict(monkeypatch, result, status):
     assert status in out
     if status == "NO INCIDENT":
         assert "UNRESOLVED" not in out
+
+
+# ── Pré-PR em 5e418c3: tracker e Slack também reconhecem a janela saudável ──
+
+def _summary_text(monkeypatch, result, tracker_info):
+    from rich.console import Console
+
+    import main
+
+    console = Console(record=True, width=200)
+    monkeypatch.setattr(main, "console", console)
+    main.print_summary(result, tracker_info=tracker_info)
+    return console.export_text()
+
+
+def test_skipped_tracker_on_healthy_window_is_not_a_tracker_error(monkeypatch):
+    import main
+
+    tracker = _JiraLike()
+    key = main.step_tracking(NO_INCIDENT, tracker)
+    out = _summary_text(monkeypatch, NO_INCIDENT, {"issue_key": key, "url": None})
+    assert "no incident detected" in out
+    assert "tracker error" not in out
+
+
+def test_real_tracker_failure_is_still_reported(monkeypatch):
+    out = _summary_text(monkeypatch, FAILED_DIAGNOSIS, {"issue_key": None, "url": None})
+    assert "tracker error" in out
+
+
+def test_slack_final_message_for_a_healthy_window():
+    from datetime import datetime, timezone
+
+    from adapters.credentials import EnvCredentialProvider
+    from core.lifecycle import LifecycleEvent
+    from interfaces.http.notifications.slack import SlackNotifier
+
+    notifier = SlackNotifier(channel="C1", creds=EnvCredentialProvider(), dry_run=True)
+    event = LifecycleEvent(event_type="pipeline.completed", node_name=None,
+                           correlation_id="inc-x", timestamp=datetime.now(timezone.utc),
+                           data={"no_incident": True, "root_cause": "", "total_duration_ms": 5})
+    text = json.dumps(notifier._build_final_blocks(event))
+    assert "No Incident Detected" in text
+    assert "Diagnosis Complete" not in text
+    assert "Proposed Fix" not in text
+
+
+def test_cli_does_not_announce_a_diagnosis_without_incident():
+    """O disparo de diagnosis.completed em main() fica dentro de `if not
+    _no_incident(result)`, e o pipeline.completed leva a marca no_incident."""
+    import ast
+
+    import main
+
+    tree = ast.parse(inspect.getsource(main.main))
+    guarded, flagged = False, False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.If) and "_no_incident" in ast.unparse(node.test):
+            guarded |= any(isinstance(c, ast.Constant) and c.value == "diagnosis.completed"
+                           for c in ast.walk(node))
+        if isinstance(node, ast.Call) and any(
+                isinstance(a, ast.Constant) and a.value == "pipeline.completed" for a in node.args):
+            flagged |= "no_incident" in ast.unparse(node)
+    assert guarded and flagged

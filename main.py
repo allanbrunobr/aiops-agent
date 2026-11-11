@@ -1538,6 +1538,9 @@ def print_summary(result, compression_stats=None, safety_result=None,
                 f"[green]{issue_key}[/green]",
                 f"{tracker_url}/browse/{issue_key}" if tracker_url else issue_key,
             )
+        elif _no_incident(result):
+            # step_tracking pulou de propósito: não é erro do tracker.
+            table.add_row("Tracking", "[dim]not created[/dim]", "no incident detected")
         else:
             table.add_row(
                 "Tracking",
@@ -1729,7 +1732,9 @@ def step_tracking(result, tracker) -> str | None:
 
     Extrai titulo, severidade e descricao do resultado do diagnostico
     e cria um incidente no tracker. Erros nao interrompem o pipeline.
-    Retorna issue_key ou None se falhar.
+    Retorna issue_key, ou None se falhar OU se não houver incidente (nesse
+    caso nenhuma issue é criada; print_summary distingue os dois por
+    _no_incident).
     """
     console.print(Rule("[bold]Stage 5b: Incident Tracking[/bold]", style="cyan"))
     console.print()
@@ -2385,14 +2390,17 @@ def main() -> int:
             or ""
         )
         _conf_for_slack = confidence_to_score(_diag_for_slack.get("confidence"))
-        _slack_fire("diagnosis.completed", cid=_pipeline_cid, data={
-            "root_cause": _diag_for_slack.get("root_cause") or "",
-            "proposed_fix": _proposed_fix_slack,
-            "risk_level": safety_result.risk_level.value if safety_result else "unknown",
-            "requires_human": requires_human,
-            "confidence": float(_conf_for_slack),
-            "evidence": list(_diag_for_slack.get("evidence", []))[:5],
-        })
+        # Sem incidente não há diagnóstico nem correção a anunciar: o Slack
+        # postava "Diagnóstico + Correção Proposta" com Root Cause em branco.
+        if not _no_incident(result):
+            _slack_fire("diagnosis.completed", cid=_pipeline_cid, data={
+                "root_cause": _diag_for_slack.get("root_cause") or "",
+                "proposed_fix": _proposed_fix_slack,
+                "risk_level": safety_result.risk_level.value if safety_result else "unknown",
+                "requires_human": requires_human,
+                "confidence": float(_conf_for_slack),
+                "evidence": list(_diag_for_slack.get("evidence", []))[:5],
+            })
 
         # Armazena nome do cenário e config no resultado para postmortem e summary.
         result["scenario_name"] = scenario_name
@@ -2473,6 +2481,7 @@ def main() -> int:
             "blast_radius": _br,
             "evidence": list(_diag.get("evidence", []))[:5],
             "total_duration_ms": int(elapsed_total * 1000),
+            "no_incident": _no_incident(result),
         })
 
         console.print(f"\n  [dim]Total execution time: {elapsed_total:.1f}s[/dim]")

@@ -1015,3 +1015,29 @@ commit:
   `test_tracker_integration.py`, `test_json_output.py`, `test_snapshots.py`
   e `test_unknown_fault.py` (88 testes) passam, e os snapshots não mudaram.
   Ruff limpo.
+
+## Pré-PR em `5e418c3` (delta `2b4f094..5e418c3`)
+
+Revisão estática no M5, enquanto o CI de `5e418c3` rodava no M1 (verde:
+unit 1564, integration 138, completa 1849). Dois defeitos sobreviveram, em
+cinco achados com duplicatas. Sete foram refutados. Corrigido num único
+commit:
+
+- **"tracker error" numa janela saudável:** o `step_tracking` pula de
+  propósito sem incidente e devolve o mesmo `None` da falha. O resumo da CLI
+  mostrava "tracker error" ao lado de "NO INCIDENT". Agora mostra "not
+  created — no incident detected". A falha real do tracker continua sendo
+  "tracker error", e a docstring do `step_tracking` diz os dois sentidos do
+  `None`.
+- **Slack numa janela saudável:** a CLI emitia `diagnosis.completed`, que
+  vira "Diagnóstico + Correção Proposta", e um `pipeline.completed` que vira
+  "Diagnosis Complete", com Root Cause em branco. Agora `diagnosis.completed`
+  não sai sem incidente. O `pipeline.completed` leva `no_incident: true`, e
+  o notifier posta "No Incident Detected". O Root Cause vazio volta a
+  aparecer como "N/A".
+- **Medido:** `tests/test_postmortem_coherence.py` tem 22 testes. Com
+  `main.py` e `slack.py` de `5e418c3`, os 3 dos defeitos falham. O da falha
+  real do tracker passa nos dois, porque guarda um comportamento que já
+  existia. Com o código novo, os 22 passam. `test_notifications.py`,
+  `test_tracker_integration.py`, `test_json_output.py` e `test_snapshots.py`
+  passam (98 testes, 5 pulados). Ruff limpo.
