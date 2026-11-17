@@ -81,9 +81,10 @@
       "risk_score": 35.0
     },
     "verification": {
-      "health_delta": 77.9,
-      "message": "SUCCESS: health 19% → 97% (delta: +77.9)",
-      "result": "success"
+      "health_delta": 59.3,
+      "message": "SUCCESS: health 36% → 96% (delta: +59.3)",
+      "result": "success",
+      "verification_mode": "simulated"
     }
   },
   "success": true,
@@ -114,7 +115,7 @@
     },
     {
       "from": "VERIFYING",
-      "reason": "Incidente resolvido: SUCCESS: health 19% → 97% (delta: +77.9)",
+      "reason": "Incidente resolvido: SUCCESS: health 36% → 96% (delta: +59.3)",
       "time": "NORMALIZED_TIMESTAMP",
       "to": "RESOLVED"
     }

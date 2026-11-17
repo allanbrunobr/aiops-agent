@@ -13,7 +13,10 @@ import dataclasses
 from typing import Callable
 
 from config.loader import AppConfig
+from core.logging import get_logger
 from domain.incident_state import IncidentState
+
+log = get_logger("blueprint.nodes")
 
 
 def make_aggregator_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]:
@@ -99,6 +102,54 @@ def make_context_compressor_node(
     return execute
 
 
+def _ensure_rag_index(state: IncidentState, report_obj) -> None:
+    """Build lazy do índice RAG a partir do report agregado (F2-2).
+
+    build_rag() cria o indexer vazio; o índice é construído aqui, no primeiro
+    node que tem o report — sem isso o RAG do V1 nasce vazio. Falha de
+    indexação degrada graciosamente (retriever retorna [] com index None),
+    com warning estruturado — RAG não é camada de safety.
+    """
+    if state.no_rag:
+        return
+    retriever = state.metadata.get("_retriever")
+    if retriever is None:
+        return
+    indexer = getattr(retriever, "indexer", None)
+    if indexer is None or getattr(indexer, "index", None) is not None:
+        return
+    try:
+        indexer.build_index(
+            report_obj.log_templates,
+            report_obj.metric_anomalies,
+            report_obj.slow_traces,
+        )
+    except Exception as exc:
+        log.warning(
+            "rag.index_build_failed",
+            correlation_id=state.correlation_id,
+            error=str(exc),
+        )
+
+
+def _proposed_action_from_mitigation(mitigation: dict) -> dict | None:
+    """Converte a mitigação do MitigationAgent no dict consumido pelos safety nodes.
+
+    Contrato de state.proposed_action (dict): description, command, risk_level,
+    rollback. O MitigationAction do domain é a fonte; a conversão acontece aqui,
+    na borda do blueprint (F2-1).
+    """
+    action = (mitigation or {}).get("action")
+    if action is None:
+        return None
+    return {
+        "description": action.description,
+        "command": action.command,
+        "risk_level": action.risk_level,
+        "rollback": action.rollback_command,
+    }
+
+
 def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]:
     """Cria node agentic que usa AgentOrchestrator (Estágio 2) ou fallback heurístico."""
 
@@ -117,6 +168,7 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
                 "AggregatedReport not available — aggregator node must run first"
             )
 
+        _ensure_rag_index(state, report_obj)
         retriever = state.metadata.get("_retriever")
         model = os.environ.get("AIOPS_LLM_MODEL", "claude-sonnet-4-20250514")
 
@@ -139,6 +191,7 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
         return dataclasses.replace(
             state,
             diagnosis=outcome.diagnosis,
+            proposed_action=_proposed_action_from_mitigation(outcome.mitigation),
             metadata={**state.metadata, "_agent_outcome": outcome},
         )
 
@@ -173,8 +226,19 @@ def make_diagnoser_fallback(
                 },
             )
 
+        _ensure_rag_index(state, report_obj)
         diagnosis = diagnoser._heuristic_diagnosis(report_obj)
-        return dataclasses.replace(state, diagnosis=diagnosis)
+
+        # Fallback também propõe ação — sem isso as safety layers skipam
+        # no modo --no-llm (F2-1)
+        from agents.mitigator import MitigationAgent
+
+        mitigation = MitigationAgent().propose(diagnosis)
+        return dataclasses.replace(
+            state,
+            diagnosis=diagnosis,
+            proposed_action=_proposed_action_from_mitigation(mitigation),
+        )
 
     return execute
 

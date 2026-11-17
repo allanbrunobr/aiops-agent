@@ -113,7 +113,9 @@ def test_mitigator_emits_tnr_verified():
         }
     )
     reporter.events.clear()  # foca o teste no evento TNR
-    MitigationAgent(reporter=reporter).verify_with_tnr(mitigation, TNRSafetyGuard())
+    MitigationAgent(reporter=reporter).simulate_tnr_verification(
+        mitigation, TNRSafetyGuard()
+    )
 
     assert reporter.names() == [TNR_VERIFIED]
     payload = reporter.first(TNR_VERIFIED)

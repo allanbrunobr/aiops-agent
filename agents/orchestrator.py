@@ -22,7 +22,7 @@ from agents.skill_router import DEFAULT_SKILL, SkillRouter
 from application.ports.llm_client import LLMClient
 from application.ports.reporter import NullReporter, Reporter
 from rag.memory import IncidentMemoryDB
-from safety.tnr import TNRSafetyGuard
+from safety.tnr import TNRResult, TNRSafetyGuard
 
 logger = logging.getLogger(__name__)
 
@@ -204,6 +204,7 @@ class AgentOutcome:
     tnr_passed: bool = False
     tnr_health_delta: float = 0.0
     tnr_message: str = ""
+    tnr_verification_mode: str = "simulated"
     mitigation: dict = field(default_factory=dict)
     reflection: dict | None = None
 
@@ -330,10 +331,8 @@ class AgentOrchestrator:
         mitigator = MitigationAgent(reporter=self.reporter)
         mitigation = mitigator.propose(diagnosis)
         tnr_guard = TNRSafetyGuard()
-        tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
-        tnr_passed = (
-            getattr(getattr(tnr_result, "result", None), "value", None) == "success"
-        )
+        tnr_result = mitigator.simulate_tnr_verification(mitigation, tnr_guard, report)
+        tnr_passed = tnr_result.result == TNRResult.SUCCESS
 
         # TNR regression com replans disponíveis → mais uma tentativa
         if not tnr_passed and replans < self.MAX_REPLANS:
@@ -341,7 +340,7 @@ class AgentOrchestrator:
             plan = self._replan(
                 plan,
                 {
-                    "reason": f"TNR regression: {getattr(tnr_result, 'message', '')}",
+                    "reason": f"TNR regression: {tnr_result.message}",
                     "decision": "replan",
                 },
                 report,
@@ -352,10 +351,10 @@ class AgentOrchestrator:
                 tools_used.append(step.tool)
             diagnosis = self._synthesize_diagnosis(plan, report, {}, skill)
             mitigation = mitigator.propose(diagnosis)
-            tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
-            tnr_passed = (
-                getattr(getattr(tnr_result, "result", None), "value", None) == "success"
+            tnr_result = mitigator.simulate_tnr_verification(
+                mitigation, tnr_guard, report
             )
+            tnr_passed = tnr_result.result == TNRResult.SUCCESS
 
         # ── 5. LEARN ─────────────────────────────────────────────────
         final_reflection = self._reflect_final(diagnosis, tnr_passed, tools_used, plan)
@@ -365,8 +364,9 @@ class AgentOrchestrator:
             plan=plan,
             mitigation=mitigation,
             tnr_passed=tnr_passed,
-            tnr_health_delta=getattr(tnr_result, "health_delta", 0.0),
-            tnr_message=getattr(tnr_result, "message", ""),
+            tnr_health_delta=tnr_result.health_delta,
+            tnr_message=tnr_result.message,
+            tnr_verification_mode=tnr_result.verification_mode,
             tools_used=tools_used,
             iterations=sum(1 for s in plan.steps if s.result is not None),
             replans=replans,

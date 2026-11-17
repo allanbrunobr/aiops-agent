@@ -55,7 +55,7 @@ The implementation is based on seven academic AIOps papers (2024–2025). See [A
 - **Telemetry preprocessing**: Drain3 for logs, 3-sigma detection for metrics and p95 filtering for traces.
 - **Priority-based context compression** within a token budget.
 - **RAG** over past incidents with FAISS and `sentence-transformers` (`all-MiniLM-L6-v2`, 384 dimensions).
-- **Safety layers**: sanitization against adversarial payloads, *blast radius* calculation, version/CVE checks and *Transactional No-Regression* (TNR).
+- **Safety layers**: sanitization against adversarial payloads, *blast radius* calculation, version/CVE checks and *Transactional No-Regression* (TNR). TNR verification is **simulated** in this prototype — no action is ever executed on real infrastructure (see `SECURITY.md`): the pre-action snapshot is derived from incident telemetry, the post-action snapshot is a declared deterministic projection of the action's effect, and reports/audit events carry `verification_mode: "simulated"` so simulation is never presented as real validation.
 - **Predictive detection**: risk score and degradation ETA before the incident happens.
 - **Interfaces**: CLI, real-time web dashboard (WebSocket), MCP server (stdio/SSE), A2A API and webhook normalizers (Grafana, PagerDuty, Databricks).
 - **Progressive Slack notifications** (Block Kit) and optional Jira issue creation.

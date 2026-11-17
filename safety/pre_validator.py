@@ -19,9 +19,14 @@ Regra principal: NUNCA executar ações destrutivas sem aprovação humana.
 from __future__ import annotations
 
 import re
+import shlex
 import time
 from dataclasses import dataclass
 from enum import Enum
+
+from core.logging import get_logger
+
+log = get_logger("safety.pre_validator")
 
 
 class RiskLevel(Enum):
@@ -329,36 +334,61 @@ class PreExecutionValidator:
                 from safety.audit import SafetyAuditor
 
                 SafetyAuditor.log_error("pre_validator", correlation_id, exc)
-            except Exception:
-                pass
+            except Exception as audit_exc:
+                # Auditoria que falha não pode ser silenciosa (F2-4);
+                # a decisão de validação em si não muda por falha de auditoria
+                log.error(
+                    "safety.pre_validator.audit_failed",
+                    correlation_id=correlation_id,
+                    error=str(audit_exc),
+                    original_error=str(exc),
+                )
 
         return result
 
     def _check_command_safety(self, command: str) -> tuple[bool, str]:
-        """Verifica se o comando é seguro."""
+        """Verifica se o comando é seguro.
+
+        Defesa em profundidade (F2-5): operadores de composição são rejeitados
+        ANTES das allowlists — um prefixo read-only não pode mascarar um
+        segundo comando (ex.: 'kubectl get pods && python -c ...'). As
+        allowlists casam o binário+subcomando reais (tokens shlex), ancorados
+        no início, não substrings em qualquer posição.
+        """
         cmd_lower = command.lower().strip()
 
-        # Check blocked commands
+        # 1. Composição/metacaracteres: nenhum comando composto passa
+        if any(op in command for op in ("&&", "||", ";", "|", "`", "$(", "\n", "\r")):
+            return False, "BLOCKED: shell composition operators are not allowed"
+        try:
+            tokens = shlex.split(cmd_lower)
+        except ValueError:
+            return False, "BLOCKED: malformed command (unbalanced quotes)"
+        if not tokens:
+            return False, "BLOCKED: empty command"
+        normalized = " ".join(tokens)
+
+        # 2. Blocklist de comandos perigosos
         for pattern in BLOCKED_COMMANDS:
             if re.search(pattern, cmd_lower):
                 return False, f"BLOCKED: matches dangerous pattern '{pattern}'"
 
-        # Check high risk patterns
+        # 3. Alto risco (ancorado no comando real)
         for pattern, description in HIGH_RISK_PATTERNS:
-            if re.search(pattern, cmd_lower):
+            if re.match(pattern, normalized):
                 return True, f"HIGH RISK: {description}"
 
-        # Check safe patterns
+        # 4. Allowlist read-only (ancorada no binário+subcomando)
         for pattern in SAFE_PATTERNS:
-            if re.search(pattern, cmd_lower):
+            if re.match(pattern, normalized):
                 return True, "Read-only command"
 
-        # Check rollout patterns (moderate risk but reversible)
+        # 5. Rollout (risco moderado, mas reversível; ancorado)
         for pattern in ROLLOUT_PATTERNS:
-            if re.search(pattern, cmd_lower):
+            if re.match(pattern, normalized):
                 return True, "Rollout operation (reversible)"
 
-        # Default fechado: kubectl apply, comando desconhecido e o resto
+        # 6. Default fechado: kubectl apply, comando desconhecido e o resto
         # não são AUTO_APPROVED. Quem for integrar execução trata is_safe=False.
         return False, "Command is not on the read-only allow list"
 

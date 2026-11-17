@@ -94,7 +94,7 @@
       "title": "V1: wire de state.proposed_action (safety nunca valida)",
       "description": "Nenhum código seta state.proposed_action (nem make_diagnoser_node em blueprint/adapters/pipeline_nodes.py:127-131,162, nem main_v1 em main.py:1764-1922) → blueprint/adapters/safety_nodes.py:90-99,151-159,222-230 fazem skip 'no_proposed_action' e version_validator/pre_validator/tnr passam direto, contradizendo o docstring 'ALL 4 safety layers execute' em blueprint/pipelines/incident_response.py:46. TNR tem ainda 2º skip 'no_health_snapshots' (safety_nodes.py:234-241). Fix: diagnoser node (e fallback determinístico) preenche state.proposed_action via dataclasses.replace. ATENÇÃO: o campo no estado é dict[str, Any] | None (domain/incident_state.py:46) — decidir e registrar o formato (dict serializado vs dataclass MitigationAction de domain/incident.py:90-101, tipo ÚNICO re-exportado por safety/tnr.py:21). Teste E2E V1: ação proposta perigosa → pipeline BLOQUEIA.",
       "acceptance": "Teste E2E V1 com ação perigosa bloqueado; nenhum skip 'no_proposed_action' quando há ação proposta.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Parcialmente confirmado: wiring ausente e skips reais (grep no repo: proposed_action só em 3 leituras). A alegação 'dois tipos MitigationAction' está DESATUALIZADA — já é tipo único (domain/incident.py:90-101; safety/tnr.py:21 só re-importa)."
     },
     {
@@ -103,7 +103,7 @@
       "title": "V1: RAG nasce vazio (build_rag sem build_index)",
       "description": "app/builders.py:47-51 (build_rag) cria indexer sem chamar build_index; comentário em main.py:1850-1851 admite 'por ora, sem report pre-pipeline'. Fix: construir índice a partir do report agregado (node de indexação após aggregator ou build lazy no primeiro retrieve com o report do estado). Teste: V1 com RAG habilitado → retriever retorna chunks do incidente corrente.",
       "acceptance": "Teste novo verde; smoke V1 inalterado.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado: único build_index de produção está no V0 (main.py:357, step_rag); nenhum node do blueprint indexa; retriever retorna [] se index/model None (rag/retriever.py:66-67) → RAG do V1 sempre vazio. HTTP também (interfaces/http/app.py:216 usa build_rag sem indexar)."
     },
     {
@@ -112,7 +112,7 @@
       "title": "TNR de teatro: substituir snapshots hardcoded por métricas reais",
       "description": "Dois lugares ALCANÇÁVEIS fabricam snapshots: agents/mitigator.py:137-165 (verify_with_tnr: error_rate 45.0→0.1, availability 55.0→99.9 hardcoded → qualquer ação passa; replan em agents/orchestrator.py:326 nunca dispara) e safety/orchestrator.py:151-164 (baseline fixo error_rate=0.0/p99=100.0/avail=100.0 + simulate_check(action, baseline, baseline) → delta 0 → SUCCESS sempre; alcançável via MCP validate_action). interfaces/mcp/tools.py:478-527 (_check_tnr: pré/pós idênticos error_rate=5.0/p99=200.0/avail=99.0) é CÓDIGO MORTO (zero callers) — remover ou wire. Há também command.format(..., current=3, prev=1) hardcoded (agents/mitigator.py:114,117) e ROLLBACK_VERSIONS fixo (:25-28). O design real está pronto em safety/tnr.py:96-169 (execute_with_safety: pré→exec→pós→rollback se delta<−5.0, threshold em :87) mas tem ZERO callers no repo. Fix: derivar snapshots do AggregatedReport/fonte de telemetria. Onde a simulação for intencional (PoC), renomear para simulate_*, documentar no docstring+README que NÃO é validação real, e tornar o resultado simulado distinguishable no postmortem/audit. Substituir o acoplamento getattr(getattr(tnr_result,'result',None),'value',None)=='success' (agents/orchestrator.py:323, repetido em :343) por acesso tipado. Teste: ação que piora métricas simuladas → TNR reporta regressão e dispara rollback/replan; caminho de replan exercitado.",
       "acceptance": "Teste de regressão TNR verde; replan dispara em teste; nenhuma métrica hardcoded apresentada como validação real.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado com ressalva de alcance: _check_tnr do MCP existe com os valores citados mas é morto (handle_validate_action usa _check_sanitizer + SafetyOrchestrator, tools.py:304-318). execute_with_safety também sem callers (nem testes). Caminho de produção do teatro: make_diagnoser_node → AgentOrchestrator.run → verify_with_tnr."
     },
     {
@@ -121,7 +121,7 @@
       "title": "Fail-open → fail-closed nas camadas de safety",
       "description": "safety/orchestrator.py:125-126 (exceção no sanitizer → passed=True) e :167-168 (exceção no TNR → passed=True); safety/pre_validator.py:316-321 (exceção de auditoria engolida); MCP _sanitize_result em interfaces/mcp/tools.py:189-199 (except Exception: pass mantém texto original → PII vaza no erro; chamado em :123, search_incidents). Fix: exceção em camada de safety = passed=False/blocked com motivo no audit; sanitizer MCP em erro = texto redigido/genérico, nunca o original; auditoria que falha loga erro estruturado. Teste: monkeypatch lançando exceção em cada camada → decisão final = bloqueio.",
       "acceptance": "rg -n 'passed=True' safety/ -A2 não mostra nenhum dentro de except; testes de exceção verdes.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado 4/4. Nuances: a exceção de auditoria em pre_validator só suprime o log (a decisão de validação em si não muda); _check_sanitizer (tools.py:407-429) já é fail-CLOSED — o fail-open é específico do caminho de sanitização de resultados."
     },
     {
@@ -130,7 +130,7 @@
       "title": "Bypass de allowlist por substring (shlex)",
       "description": "safety/pre_validator.py:115-127: SAFE_PATTERNS sem âncora (ex. padrão 'kubectl get' solto) + :341 (re.search casa em qualquer posição) → 'kubectl get pods && python -c ...' passa como read-only e pode chegar a AUTO_APPROVED (:244-252). Apenas o padrão curl já foi ancorado com $ (:122, comentário em :120-121 explica o fix anterior). Fix: tokenizar com shlex.split, rejeitar operadores de composição (&&, ||, ;, |, backticks, $()) ANTES da allowlist; validar binário+subcomando do primeiro token. Manter default-deny (:351) e blocklist (:82-103, que hoje só pega operadores em combinações específicas como '&& sh' ou '| bash'). Testes: compostos com prefixo read-only bloqueados; read-only simples passam; rm -fr / e find -delete seguem bloqueados.",
       "acceptance": "Testes novos verdes; scripts/ci-local.sh completo verde ao fim da Fase 2.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado: trace de 'kubectl get pods && python -c ...' → blocklist não casa → allowlist casa via re.search → 'Read-only command'. Default-deny existe mas é inalcançável nesse exemplo (allowlist casa primeiro)."
     },
     {

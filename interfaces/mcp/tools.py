@@ -187,14 +187,18 @@ def _format_search_result(result: object) -> dict:
 
 
 def _sanitize_result(result: dict, sanitizer: object) -> dict:
-    """Remove PII dos campos textuais do resultado."""
+    """Remove PII dos campos textuais do resultado.
+
+    Fail-closed (F2-4): se o sanitizer falhar, o campo recebe texto genérico
+    redigido — NUNCA o original, que poderia conter PII.
+    """
     text_fields = ["summary", "diagnosis", "resolution"]
     for field_name in text_fields:
         if field_name in result and result[field_name]:
             try:
                 result[field_name] = sanitizer.sanitize_text(result[field_name])
             except Exception:
-                pass  # Sanitizer não disponível — mantém texto original
+                result[field_name] = "[REDACTED: sanitization unavailable]"
     return result
 
 
@@ -474,61 +478,6 @@ def _check_pre_validator(
             passed=False,
             risk_contribution=0.5,
             detail=f"PreExecution validation failed: {exc}",
-        )
-
-
-def _check_tnr(command: str, target_service: str, tnr: object) -> LayerResult:
-    """Camada 3: Transactional No-Regression (simulação de snapshot).
-
-    Para validação MCP estática, usa snapshot simulado sem execução real.
-    """
-    try:
-        from datetime import datetime
-
-        from safety.tnr import HealthSnapshot, MitigationAction
-
-        # Snapshots simulados: pre=saúde nominal, post=estimativa após ação
-        pre = HealthSnapshot(
-            timestamp=datetime.now(),
-            error_rate=5.0,
-            latency_p99_ms=200.0,
-            availability=99.0,
-            connection_pool_active=10,
-            connection_pool_max=50,
-        )
-        # Assume que a ação não piora a saúde (simulação conservadora)
-        post = HealthSnapshot(
-            timestamp=datetime.now(),
-            error_rate=5.0,
-            latency_p99_ms=200.0,
-            availability=99.0,
-            connection_pool_active=10,
-            connection_pool_max=50,
-        )
-        action = MitigationAction(
-            description=f"MCP validate_action: {command[:80]}",
-            command=command,
-            risk_level="MEDIUM",
-            rollback_command=None,
-        )
-        report = tnr.simulate_check(action, pre, post)
-        from safety.tnr import TNRResult
-
-        passed = report.result == TNRResult.SUCCESS
-        return LayerResult(
-            layer_name="TNR",
-            passed=passed,
-            risk_contribution=0.3 if not passed else 0.0,
-            detail=report.message
-            if not passed
-            else "Health snapshot comparison passed",
-        )
-    except Exception as exc:
-        return LayerResult(
-            layer_name="TNR",
-            passed=False,
-            risk_contribution=0.3,
-            detail=f"TNR check failed: {exc}",
         )
 
 

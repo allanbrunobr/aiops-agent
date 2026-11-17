@@ -639,15 +639,17 @@ def step_agents(
             "result": "success" if _outcome.tnr_passed else "regression",
             "health_delta": _outcome.tnr_health_delta,
             "message": _tnr_msg,
+            "verification_mode": _outcome.tnr_verification_mode,
         }
     else:
-        tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
+        tnr_result = mitigator.simulate_tnr_verification(mitigation, tnr_guard, report)
         _tnr_regression = tnr_result.result.value == "regression"
         _tnr_msg = tnr_result.message
         result["stages"]["verification"] = {
             "result": tnr_result.result.value,
             "health_delta": tnr_result.health_delta,
             "message": _tnr_msg,
+            "verification_mode": tnr_result.verification_mode,
         }
 
     if _tnr_regression:

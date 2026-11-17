@@ -142,3 +142,98 @@ Cada bug: teste de regressão escrito ANTES do fix, visto falhar, corrigido, vis
 
 ### Testes adicionados na fase
 - 13 testes de regressão (1 F1-1 + 3 F1-2 + 4 F1-3 + 2 F1-4 + 3 F1-5).
+
+---
+
+## Fase 2 — V1 honesto + segurança real — DONE (2026-11-17)
+
+### F2-1 Wire de state.proposed_action — done
+- `make_diagnoser_node` extrai a ação de `outcome.mitigation` e seta
+  `state.proposed_action`; `make_diagnoser_fallback` (modo --no-llm) também
+  propõe via `MitigationAgent().propose(diagnosis)` — sem isso as safety
+  layers skipavam no modo padrão da demo.
+- Conversão na borda do blueprint (`_proposed_action_from_mitigation`):
+  dataclass MitigationAction (domain, tipo ÚNICO — alegação de "dois tipos"
+  da auditoria estava desatualizada) → dict {description, command, risk_level,
+  rollback}, o contrato que os safety nodes já consumiam.
+- Testes: `tests/test_v1_safety_wiring.py` (3): fallback seta ação; pipeline
+  completo sem skips (safety_reasons com VersionValidator+PreValidator);
+  E2E ação perigosa injetada → PipelineAborted em version/pre_validator.
+  Os 2 primeiros falhavam antes do fix.
+
+### F2-2 RAG nasce vazio no V1 — done
+- `_ensure_rag_index(state, report_obj)` chamado nos dois diagnoser nodes:
+  build lazy do índice a partir do report agregado quando o retriever está
+  anexado e `no_rag=False`. Falha de indexação degrada graciosamente com
+  warning estruturado (RAG não é camada de safety).
+- Testes: `tests/test_v1_rag_index.py` (2): índice construído + search retorna
+  chunks do incidente corrente (faiss/model mockados); no_rag=True não indexa.
+- Verificado end-to-end: smoke V1 COM RAG real (`--no-llm --pipeline-v1`,
+  sem --no-rag) exit 0 com modelo carregado.
+
+### F2-3 TNR de teatro → simulação declarada com dados reais — done
+- **PRÉ** derivado da telemetria: `health_snapshot_from_report(report)` em
+  agents/mitigator.py (error_rate da maior anomalia 'error'; latency do maior
+  slow trace; availability=100−error; pool de anomalias 'pool/connection').
+  Proxies documentados no docstring.
+- **PÓS** é projeção determinística DECLARADA: `simulate_action_effect(action,
+  pre)` em safety/tnr.py — destrutivos (delete/rm/drop/truncate/replicas=0)
+  degradam; rollback/undo/restart/scale-up recuperam; demais inalterado.
+  Nenhuma ação é executada em infra real (SECURITY.md) — o pós nunca é medição.
+- `TNRReport.verification_mode` ("simulated"/"real") distinguishable no
+  reporter (TNR_VERIFIED), audit (metadata) e JSON de verificação do V0;
+  `execute_with_safety` (design real, sem callers) marca "real".
+- Rename `verify_with_tnr` → `simulate_tnr_verification(mitigation, guard,
+  report)`; callers atualizados (orchestrator ×2, main.py V0, conftest,
+  test_smoke, test_reporter, mocks do test_orchestrator).
+- Orchestrator: acoplamento `getattr(getattr(...))` substituído por acesso
+  tipado (`tnr_result.result == TNRResult.SUCCESS`); AgentOutcome ganhou
+  `tnr_verification_mode`.
+- SafetyOrchestrator: baseline idêntico pré/pós eliminado — pré de
+  `system_state["pre_health"]` quando disponível, senão nominal documentado;
+  pós via projeção → ações destrutivas agora REGRIDEM e bloqueiam.
+- MCP `_check_tnr` (código morto com snapshots idênticos) REMOVIDO.
+- `current=3/prev=1` agora vêm do diagnóstico (`current_replicas`/
+  `previous_revision`) com defaults documentados como premissas PoC.
+- Testes: `tests/test_tnr_simulation.py` (6): pré derivado do report;
+  destrutiva → REGRESSION; rollback → SUCCESS; SafetyOrchestrator pré≠pós;
+  destrutiva bloqueada por TNR (approved=False); projeção determinística.
+  Replan por regressão exercitado no test_orchestrator atualizado (mocks
+  tipados com TNRResult).
+- **Diffs de snapshot (3, justificados — regra 8):** `full_pipeline_result`,
+  `postmortem_structure`, `unknown_fault_postmortem_structure` — a seção
+  verification mudou de saúde pré FABRICADA (19%, err=45/avail=55) para
+  saúde pré DERIVADA DA TELEMETRIA REAL (36%), pós simulado (96%), delta
+  +77.9→+59.3, e novo campo `verification_mode: "simulated"`. Resultado
+  continua "success"; estrutura e contrato de exit codes inalterados.
+- README.md + README.pt-BR.md: divulgada a natureza simulada do TNR.
+
+### F2-4 Fail-open → fail-closed — done
+- SafetyOrchestrator: exceção no sanitizer ou TNR → `passed=False` +
+  `blocked_by` (antes: `passed=True, skipped=True`).
+- MCP `_sanitize_result`: exceção → campo recebe "[REDACTED: sanitization
+  unavailable]" — nunca o texto original (PII vazava no erro).
+- pre_validator: falha de auditoria (inclusive do log_error) → log.error
+  estruturado `safety.pre_validator.audit_failed` (logger novo no módulo);
+  a decisão de validação não muda por falha de auditoria.
+- Testes: `tests/test_safety_fail_closed.py` (4), todos falhavam antes do fix.
+- Aceite: `rg '"passed": True' safety/` → zero ocorrências.
+
+### F2-5 Bypass de allowlist por substring — done
+- `_check_command_safety` reescrito: (1) rejeita operadores de composição
+  (&&, ||, ;, |, backtick, $(), newline) ANTES de qualquer allowlist;
+  (2) tokeniza com shlex (aspas malformadas → bloqueio); (3) blocklist;
+  (4) HIGH_RISK/SAFE/ROLLOUT com `re.match` ANCORADO nos tokens normalizados
+  (binário+subcomando reais); (5) default-deny preservado.
+- Testes: `tests/test_allowlist_bypass.py` (19): 8 compostos bloqueados
+  (6 falhavam antes do fix), 8 read-only simples passam, rollout reversível,
+  destrutivos (rm -fr /, find -delete, delete namespace) bloqueados,
+  desconhecidos em default-deny.
+
+### Verificação da fase
+- ruff ✓, mypy ✓, unit: **749 passed**; integration/snapshot: **138 passed**
+- Smokes: V0 exit 3, V1 exit 0; V1 com RAG real exit 0.
+- CI completo (`scripts/ci-local.sh`): registrado no commit da fase.
+
+### Testes adicionados na fase
+- 34 testes (3 F2-1 + 2 F2-2 + 6 F2-3 + 4 F2-4 + 19 F2-5).

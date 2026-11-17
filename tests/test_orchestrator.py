@@ -601,10 +601,14 @@ class TestOrchestratorRun:
             ):
                 MockDet.return_value.detect.return_value = {"is_incident": True}
                 MockMit.return_value.propose.return_value = {"action": "rollback"}
+                from safety.tnr import TNRResult
+
                 tnr_ok = MagicMock()
-                tnr_ok.result.value = "success"
+                tnr_ok.result = TNRResult.SUCCESS
                 tnr_ok.message = "ok"
-                MockMit.return_value.verify_with_tnr.return_value = tnr_ok
+                tnr_ok.health_delta = 10.0
+                tnr_ok.verification_mode = "simulated"
+                MockMit.return_value.simulate_tnr_verification.return_value = tnr_ok
 
                 orch = AgentOrchestrator(
                     client=_mock_client_seq(responses),
@@ -702,13 +706,22 @@ class TestOrchestratorRun:
                 MockDet.return_value.detect.return_value = {"is_incident": True}
                 MockMit.return_value.propose.return_value = {"action": "rollback"}
 
+                from safety.tnr import TNRResult
+
                 tnr_fail = MagicMock()
-                tnr_fail.result.value = "regression"
+                tnr_fail.result = TNRResult.REGRESSION
                 tnr_fail.message = "health degraded"
+                tnr_fail.health_delta = -20.0
+                tnr_fail.verification_mode = "simulated"
                 tnr_ok = MagicMock()
-                tnr_ok.result.value = "success"
+                tnr_ok.result = TNRResult.SUCCESS
                 tnr_ok.message = "ok"
-                MockMit.return_value.verify_with_tnr.side_effect = [tnr_fail, tnr_ok]
+                tnr_ok.health_delta = 10.0
+                tnr_ok.verification_mode = "simulated"
+                MockMit.return_value.simulate_tnr_verification.side_effect = [
+                    tnr_fail,
+                    tnr_ok,
+                ]
 
                 orch = AgentOrchestrator(
                     client=_mock_client_seq(responses),

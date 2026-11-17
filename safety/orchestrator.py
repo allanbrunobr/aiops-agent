@@ -125,8 +125,10 @@ class SafetyOrchestrator:
                 layer_details["sanitizer"] = {"passed": bool(sanitizer_ok)}
                 if not sanitizer_ok:
                     blocked_by.append("sanitizer")
-            except Exception:
-                layer_details["sanitizer"] = {"passed": True, "skipped": True}
+            except Exception as exc:
+                # Fail-closed: exceção em camada de safety BLOQUEIA (F2-4)
+                layer_details["sanitizer"] = {"passed": False, "error": str(exc)}
+                blocked_by.append("sanitizer")
 
         # Camada 2: PreExecutionValidator — blast radius + blocklist
         try:
@@ -144,32 +146,45 @@ class SafetyOrchestrator:
         if not pre_result.is_safe:
             blocked_by.append("pre_validator")
 
-        # Camada 3: TNR — verificação de regressão de saúde (simulada)
+        # Camada 3: TNR — verificação de regressão de saúde (SIMULADA, F2-3).
+        # PRÉ: telemetria real via system_state["pre_health"] quando disponível;
+        # sem ela, baseline nominal documentado. PÓS: projeção determinística
+        # do efeito da ação — nunca o mesmo snapshot (delta 0 garantido = teatro).
         tnr_passed = True
         try:
             from datetime import datetime
 
-            from safety.tnr import HealthSnapshot, TNRResult
+            from safety.tnr import HealthSnapshot, TNRResult, simulate_action_effect
 
-            now = datetime.now()
-            baseline = HealthSnapshot(
-                timestamp=now,
-                error_rate=0.0,
-                latency_p99_ms=100.0,
-                availability=100.0,
-                connection_pool_active=0,
-                connection_pool_max=10,
-            )
+            pre_health = None
+            if isinstance(system_state, dict):
+                raw_pre = system_state.get("pre_health")
+                if isinstance(raw_pre, HealthSnapshot):
+                    pre_health = raw_pre
+                elif isinstance(raw_pre, dict):
+                    pre_health = HealthSnapshot(**raw_pre)
+            if pre_health is None:
+                pre_health = HealthSnapshot(
+                    timestamp=datetime.now(),
+                    error_rate=1.0,
+                    latency_p99_ms=120.0,
+                    availability=99.0,
+                    connection_pool_active=0,
+                    connection_pool_max=100,
+                )
+            post_health = simulate_action_effect(action, pre_health)
             try:
                 tnr_report = self._tnr.simulate_check(
-                    action, baseline, baseline, correlation_id=correlation_id
+                    action, pre_health, post_health, correlation_id=correlation_id
                 )
             except TypeError:
-                tnr_report = self._tnr.simulate_check(action, baseline, baseline)
+                tnr_report = self._tnr.simulate_check(action, pre_health, post_health)
             layer_details["tnr"] = tnr_report
             tnr_passed = tnr_report.result == TNRResult.SUCCESS
-        except Exception:
-            layer_details["tnr"] = {"passed": True, "skipped": True}
+        except Exception as exc:
+            # Fail-closed: exceção em camada de safety BLOQUEIA (F2-4)
+            layer_details["tnr"] = {"passed": False, "error": str(exc)}
+            tnr_passed = False
 
         if not tnr_passed:
             blocked_by.append("tnr")

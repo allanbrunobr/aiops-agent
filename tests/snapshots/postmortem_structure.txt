@@ -39,7 +39,7 @@ Connection pool exhaustion in payment-svc due to config change (max_connections 
 - **NORMALIZED_TIMESTAMP** DETECTING -> DIAGNOSING: Investigando incidente em auth-svc, gateway, order-svc, payment-svc
 - **NORMALIZED_TIMESTAMP** DIAGNOSING -> MITIGATING: Propondo remediação...
 - **NORMALIZED_TIMESTAMP** MITIGATING -> VERIFYING: Verificando impacto (TNR)...
-- **NORMALIZED_TIMESTAMP** VERIFYING -> RESOLVED: Incidente resolvido: SUCCESS: health 19% → 97% (delta: +77.9)
+- **NORMALIZED_TIMESTAMP** VERIFYING -> RESOLVED: Incidente resolvido: SUCCESS: health 36% → 96% (delta: +59.3)
 
 ## Mitigation Applied
 
@@ -68,8 +68,8 @@ Connection pool exhaustion in payment-svc due to config change (max_connections 
 ## TNR Verification
 
 - **Result**: success
-- **Health Delta**: 77.9
-- **Message**: SUCCESS: health 19% → 97% (delta: +77.9)
+- **Health Delta**: 59.3
+- **Message**: SUCCESS: health 36% → 96% (delta: +59.3)
 
 ## Action Items
 

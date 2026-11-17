@@ -17,7 +17,62 @@ from application.ports.reporter import (
     Reporter,
 )
 from domain.incident import MitigationAction
-from safety.tnr import HealthSnapshot, TNRReport, TNRSafetyGuard
+from safety.tnr import (
+    HealthSnapshot,
+    TNRReport,
+    TNRSafetyGuard,
+    simulate_action_effect,
+)
+
+
+def health_snapshot_from_report(report) -> HealthSnapshot:
+    """Deriva o snapshot PRÉ-ação da telemetria real do AggregatedReport (F2-3).
+
+    Proxies documentados — o report não traz availability/pool diretamente:
+    - error_rate: maior anomalia de métrica contendo 'error' (senão 1.0 nominal);
+    - latency_p99_ms: maior total_duration_ms dos slow traces (senão 120 nominal);
+    - availability: 100 - error_rate;
+    - pool: anomalia contendo 'pool'/'connection' → active=max=value (exaustão);
+      senão 0/100 (neutro).
+    """
+    anomalies = getattr(report, "metric_anomalies", []) or []
+    error_values = [
+        float(getattr(a, "value", 0.0))
+        for a in anomalies
+        if "error" in str(getattr(a, "metric_name", "")).lower()
+    ]
+    error_rate = max(error_values) if error_values else 1.0
+
+    traces = getattr(report, "slow_traces", []) or []
+    latency = max(
+        (float(getattr(t, "total_duration_ms", 0.0)) for t in traces), default=0.0
+    )
+    if latency <= 0.0:
+        latency = 120.0
+
+    pool_values = [
+        float(getattr(a, "value", 0.0))
+        for a in anomalies
+        if any(
+            k in str(getattr(a, "metric_name", "")).lower()
+            for k in ("pool", "connection")
+        )
+    ]
+    if pool_values:
+        pool_active = int(max(pool_values))
+        pool_max = pool_active
+    else:
+        pool_active, pool_max = 0, 100
+
+    return HealthSnapshot(
+        timestamp=datetime.now(),
+        error_rate=error_rate,
+        latency_p99_ms=latency,
+        availability=max(0.0, 100.0 - error_rate),
+        connection_pool_active=pool_active,
+        connection_pool_max=pool_max,
+    )
+
 
 # Mapeamento de versões implantadas → versão estável anterior para rollback
 ROLLBACK_VERSIONS = {
@@ -107,14 +162,18 @@ class MitigationAgent:
             elif rollback_version not in description:
                 description += f" (rollback to {rollback_version})"
 
+        # Réplicas/revisão vêm do diagnóstico quando disponíveis; os defaults
+        # são premissas PoC documentadas, não medições (F2-3)
+        current = int(diagnosis.get("current_replicas", 3))
+        prev = int(diagnosis.get("previous_revision", 1))
         action = MitigationAction(
             description=description,
             command=pattern["command"].format(
-                service=primary_service, current=3, prev=1
+                service=primary_service, current=current, prev=prev
             ),
             risk_level=pattern["risk"],
             rollback_command=pattern["rollback"].format(
-                service=primary_service, current=3, prev=1
+                service=primary_service, current=current, prev=prev
             )
             if pattern.get("rollback")
             else None,
@@ -136,38 +195,47 @@ class MitigationAgent:
             "diagnosis": diagnosis,
         }
 
-    def verify_with_tnr(self, mitigation: dict, tnr_guard: TNRSafetyGuard) -> TNRReport:
-        """Verifica a mitigação usando TNR (simulado no protótipo)."""
+    def simulate_tnr_verification(
+        self,
+        mitigation: dict,
+        tnr_guard: TNRSafetyGuard,
+        report=None,
+    ) -> TNRReport:
+        """Verificação TNR SIMULADA — não é validação real (F2-3).
+
+        O protótipo nunca executa ações em infra real (SECURITY.md):
+        - PRÉ: derivado da telemetria do report quando disponível; sem report,
+          baseline nominal documentado (1% erro, 120ms, 99% avail, pool 0/100);
+        - PÓS: projeção determinística do efeito da ação
+          (safety.tnr.simulate_action_effect), não uma medição.
+
+        O resultado é distinguishable via TNRReport.verification_mode="simulated"
+        no reporter/audit/postmortem.
+        """
         action = mitigation["action"]
 
-        # Simula estados pré e pós mitigação
-        pre_health = HealthSnapshot(
-            timestamp=datetime.now(),
-            error_rate=45.0,
-            latency_p99_ms=4500.0,
-            availability=55.0,
-            connection_pool_active=50,
-            connection_pool_max=50,
-        )
+        if report is not None:
+            pre_health = health_snapshot_from_report(report)
+        else:
+            pre_health = HealthSnapshot(
+                timestamp=datetime.now(),
+                error_rate=1.0,
+                latency_p99_ms=120.0,
+                availability=99.0,
+                connection_pool_active=0,
+                connection_pool_max=100,
+            )
 
-        # Simula melhoria após fix
-        post_health = HealthSnapshot(
-            timestamp=datetime.now(),
-            error_rate=0.1,
-            latency_p99_ms=120.0,
-            availability=99.9,
-            connection_pool_active=25,
-            connection_pool_max=200,
-        )
-
-        report = tnr_guard.simulate_check(action, pre_health, post_health)
+        post_health = simulate_action_effect(action, pre_health)
+        tnr_report = tnr_guard.simulate_check(action, pre_health, post_health)
 
         self.reporter.emit(
             TNR_VERIFIED,
-            pre_snapshot=str(report.pre_snapshot),
-            post_snapshot=str(report.post_snapshot),
-            result=report.result.value,
-            message=report.message,
+            pre_snapshot=str(tnr_report.pre_snapshot),
+            post_snapshot=str(tnr_report.post_snapshot),
+            result=tnr_report.result.value,
+            message=tnr_report.message,
+            verification_mode=tnr_report.verification_mode,
         )
 
-        return report
+        return tnr_report

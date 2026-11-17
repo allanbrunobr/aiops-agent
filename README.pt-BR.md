@@ -53,7 +53,7 @@ A implementação é fundamentada em sete artigos acadêmicos de AIOps (2024–2
 - **Pré-processamento de telemetria**: Drain3 para logs, detecção 3-sigma para métricas e filtragem p95 para traces.
 - **Compressão de contexto** por prioridade, dentro de um orçamento de tokens.
 - **RAG** com FAISS e `sentence-transformers` (`all-MiniLM-L6-v2`, 384 dimensões) sobre incidentes históricos.
-- **Camadas de segurança**: sanitização contra payloads adversariais, cálculo de *blast radius*, checagem de versão/CVE e *Transactional No-Regression* (TNR).
+- **Camadas de segurança**: sanitização contra payloads adversariais, cálculo de *blast radius*, checagem de versão/CVE e *Transactional No-Regression* (TNR). A verificação TNR é **simulada** neste protótipo — nenhuma ação é executada em infraestrutura real (ver `SECURITY.md`): o snapshot pré-ação é derivado da telemetria do incidente, o pós-ação é uma projeção determinística declarada do efeito da ação, e relatórios/eventos de auditoria carregam `verification_mode: "simulated"` para que simulação nunca seja apresentada como validação real.
 - **Detecção preditiva**: score de risco e ETA de degradação antes do incidente.
 - **Interfaces**: CLI, dashboard web em tempo real (WebSocket), servidor MCP (stdio/SSE), API A2A e normalizadores de webhook (Grafana, PagerDuty, Databricks).
 - **Notificações** progressivas no Slack (Block Kit) e criação opcional de issues no Jira.

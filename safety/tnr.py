@@ -71,7 +71,13 @@ class HealthSnapshot:
 
 @dataclass
 class TNRReport:
-    """Relatório do TNR check."""
+    """Relatório do TNR check.
+
+    verification_mode distingue simulação de validação real: o protótipo
+    NUNCA executa ações em infra real (SECURITY.md), então checks simulados
+    são marcados como "simulated" e devem ser apresentados como tal no
+    postmortem/audit (F2-3).
+    """
 
     result: TNRResult
     pre_snapshot: HealthSnapshot
@@ -79,6 +85,60 @@ class TNRReport:
     action: MitigationAction
     health_delta: float
     message: str
+    verification_mode: str = "simulated"
+
+
+def simulate_action_effect(
+    action: MitigationAction, pre: HealthSnapshot
+) -> HealthSnapshot:
+    """Projeção determinística do efeito de uma ação — SIMULAÇÃO DECLARADA.
+
+    Como nenhuma ação é executada em infra real (SECURITY.md), o snapshot
+    pós-ação é uma projeção, não uma medição:
+    - comandos destrutivos (delete/rm/drop/truncate/replicas=0) → degradação;
+    - rollback/undo/restart/scale-up → recuperação em direção ao baseline;
+    - demais → estado inalterado (delta 0, dentro da tolerância).
+
+    A projeção é conservadora e documentada; não substitui validação real.
+    """
+    cmd = (action.command or "").lower()
+    destructive = any(
+        p in cmd
+        for p in ("delete", "rm -", "drop ", "truncate", "--replicas=0", "scale down")
+    )
+    recovery = not destructive and any(
+        p in cmd for p in ("rollout undo", "rollback", "restart", "--replicas=")
+    )
+    now = datetime.now()
+    if destructive:
+        return HealthSnapshot(
+            timestamp=now,
+            error_rate=min(100.0, pre.error_rate * 1.5 + 10.0),
+            latency_p99_ms=pre.latency_p99_ms * 1.5,
+            availability=max(0.0, pre.availability - 20.0),
+            connection_pool_active=pre.connection_pool_active,
+            connection_pool_max=pre.connection_pool_max,
+        )
+    if recovery:
+        error_rate = max(0.1, pre.error_rate * 0.05)
+        return HealthSnapshot(
+            timestamp=now,
+            error_rate=error_rate,
+            latency_p99_ms=max(120.0, pre.latency_p99_ms * 0.1),
+            availability=min(99.9, 100.0 - error_rate),
+            connection_pool_active=max(0, pre.connection_pool_active // 2),
+            connection_pool_max=max(
+                pre.connection_pool_max, pre.connection_pool_active * 4
+            ),
+        )
+    return HealthSnapshot(
+        timestamp=now,
+        error_rate=pre.error_rate,
+        latency_p99_ms=pre.latency_p99_ms,
+        availability=pre.availability,
+        connection_pool_active=pre.connection_pool_active,
+        connection_pool_max=pre.connection_pool_max,
+    )
 
 
 class TNRSafetyGuard:
@@ -125,6 +185,7 @@ class TNRSafetyGuard:
                 action=action,
                 health_delta=0,
                 message=f"Execution failed: {e}",
+                verification_mode="real",
             )
             self.history.append(report)
             return report
@@ -152,6 +213,7 @@ class TNRSafetyGuard:
                     f"({pre_snapshot.health_score:.0f}% → {post_snapshot.health_score:.0f}%). "
                     f"{'Rollback executed.' if rollback_fn else 'Manual rollback needed.'}"
                 ),
+                verification_mode="real",
             )
         else:
             # SUCESSO
@@ -165,6 +227,7 @@ class TNRSafetyGuard:
                     f"Mitigation successful: health improved {health_delta:.1f} points "
                     f"({pre_snapshot.health_score:.0f}% → {post_snapshot.health_score:.0f}%)"
                 ),
+                verification_mode="real",
             )
 
         self.history.append(report)
@@ -201,6 +264,7 @@ class TNRSafetyGuard:
             action=action,
             health_delta=health_delta,
             message=message,
+            verification_mode="simulated",
         )
         self.history.append(report)
 
@@ -239,6 +303,7 @@ class TNRSafetyGuard:
                         "pre_score": pre_health.health_score,
                         "post_score": post_health.health_score,
                         "delta": health_delta,
+                        "verification_mode": "simulated",
                     },
                 )
             )

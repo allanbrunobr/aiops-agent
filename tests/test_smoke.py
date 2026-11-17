@@ -174,11 +174,14 @@ class TestPipelineDeterminism:
                         mitigation_r = mitigator.propose(diagnosis)
                         result["stages"]["mitigation"] = mitigation_r
                         _r("MITIGATING", "VERIFYING", "Verificando impacto (TNR)...")
-                        tnr_check = mitigator.verify_with_tnr(mitigation_r, tnr_guard)
+                        tnr_check = mitigator.simulate_tnr_verification(
+                            mitigation_r, tnr_guard, report
+                        )
                         result["stages"]["verification"] = {
                             "result": tnr_check.result.value,
                             "health_delta": tnr_check.health_delta,
                             "message": tnr_check.message,
+                            "verification_mode": tnr_check.verification_mode,
                         }
                         if tnr_check.result.value != "regression":
                             _r(
