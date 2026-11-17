@@ -1,7 +1,7 @@
-/// Lógica de detecção CUSUM e cálculo EWMA em Rust puro.
-///
-/// CUSUM: S_t = max(0, S_{t-1} + x_t - k); dispara se S_t > h.
-/// EWMA: alpha = 2/(span+1); slope = ewma[-1] - ewma[-2].
+//! Lógica de detecção CUSUM e cálculo EWMA em Rust puro.
+//!
+//! CUSUM: S_t = max(0, S_{t-1} + x_t - k); dispara se S_t > h.
+//! EWMA: alpha = 2/(span+1); slope = ewma[-1] - ewma[-2].
 use super::types::{CusumResult, EwmaResult};
 
 /// Detecta ponto de mudança em uma série usando o algoritmo CUSUM.

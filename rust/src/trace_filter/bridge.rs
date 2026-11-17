@@ -1,9 +1,9 @@
 /// Fronteira PyO3: converte Span Python → Rust → dicts Python.
 ///
 /// Fluxo de execução:
-///   1. Extrai campos dos Span Python enquanto segura o GIL
-///   2. Libera o GIL para processar p95 + call paths em Rust puro
-///   3. Re-adquire o GIL para construir dicts Python de retorno
+/// 1. Extrai campos dos Span Python enquanto segura o GIL
+/// 2. Libera o GIL para processar p95 + call paths em Rust puro
+/// 3. Re-adquire o GIL para construir dicts Python de retorno
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
@@ -25,7 +25,7 @@ pub fn filter_traces(
     // F6-1: parâmetros espelham TraceFilter(percentile_threshold, max_hops).
     // Antes a ponte hardcodava 95.0/3 e o Python caía em fallback silencioso
     // para qualquer outro valor.
-    if !(percentile_threshold >= 0.0 && percentile_threshold <= 100.0) {
+    if !(0.0..=100.0).contains(&percentile_threshold) {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "percentile_threshold must be in [0, 100]",
         ));

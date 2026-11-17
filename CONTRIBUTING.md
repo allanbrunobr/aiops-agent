@@ -169,7 +169,7 @@ pytest tests/ -v -m integration
 scripts/ci-local.sh lint          # ruff check + format --check + mypy
 scripts/ci-local.sh unit          # unit tests + coverage report (sem gate de threshold)
 scripts/ci-local.sh integration   # integration & snapshot
-scripts/ci-local.sh rust          # cargo test + maturin build + suíte completa
+scripts/ci-local.sh rust          # cargo fmt/clippy/test + maturin build + suíte completa
 scripts/ci-local.sh               # todos os jobs
 ```
 

@@ -60,13 +60,11 @@ fn extract_log_entries(_py: Python<'_>, logs: &Bound<'_, PyList>) -> PyResult<Ve
             .getattr("timestamp")?
             .call_method0("timestamp")?
             .extract()?;
-        let str_repr: String = log.str()?.to_str()?.to_owned();
         entries.push(LogEntryData {
             message,
             level,
             service,
             timestamp,
-            str_repr,
         });
     }
 
@@ -131,7 +129,7 @@ fn run_drain3_pipeline(entries: Vec<LogEntryData>) -> Vec<LogTemplateData> {
             _ => {}
         }
 
-        // Até 3 sample_messages por template (usa message como substituto de str_repr)
+        // Até 3 sample_messages por template
         if tpl.sample_messages.len() < 3 {
             tpl.sample_messages.push(entry.message.clone());
         }

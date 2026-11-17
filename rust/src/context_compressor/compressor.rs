@@ -29,16 +29,10 @@ fn estimate_tokens(text: &str) -> usize {
 
 /// Trunca string a N codepoints Unicode para limitar tokens.
 fn truncate_str(s: &str, max_chars: usize) -> &str {
-    let mut end = s.len();
-    let mut count = 0;
-    for (i, _) in s.char_indices() {
-        if count >= max_chars {
-            end = i;
-            break;
-        }
-        count += 1;
+    match s.char_indices().nth(max_chars) {
+        Some((end, _)) => &s[..end],
+        None => s,
     }
-    &s[..end]
 }
 
 /// Formato ultra-compacto de log: apenas template (level/svc omitidos — redundantes com header/marker)
@@ -186,9 +180,9 @@ fn apply_compression(chunks: Vec<CompressedChunkInternal>) -> Vec<CompressedChun
         if chunk.priority < min_priority {
             continue;
         }
-        if chunk.priority == Priority::Critical && preserve_critical {
-            compressed.push(chunk);
-        } else if chunk.priority == Priority::Important {
+        if (chunk.priority == Priority::Critical && preserve_critical)
+            || chunk.priority == Priority::Important
+        {
             compressed.push(chunk);
         } else {
             let new_text = summarize_chunk(&chunk.text, summary_ratio);
@@ -277,4 +271,95 @@ pub fn compress_inner(proxy: AggregatedReportProxy) -> (String, CompressionStats
     stats.compression_ratio =
         1.0 - (stats.compressed_tokens as f64 / stats.original_tokens.max(1) as f64);
     (text, stats)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn report(n_errors: u64, sigma: f64) -> AggregatedReportProxy {
+        AggregatedReportProxy {
+            log_templates: vec![LogTemplateProxy {
+                template: "Connection pool exhausted, waiting=<*>".into(),
+                level: "ERROR".into(),
+                count: n_errors,
+                relevance_score: 7.0,
+                services: vec!["payment-svc".into()],
+            }],
+            metric_anomalies: vec![MetricAnomalyProxy {
+                service: "payment-svc".into(),
+                metric_name: "error_rate".into(),
+                anomaly_type: "level_shift".into(),
+                value: 0.4,
+                mean: 0.01,
+                deviation_sigma: sigma,
+            }],
+            slow_traces: vec![],
+            total_logs: n_errors,
+            total_metrics: 10,
+            total_traces: 0,
+        }
+    }
+
+    #[test]
+    fn truncate_str_counts_codepoints_not_bytes() {
+        assert_eq!(truncate_str("héllo wörld", 5), "héllo");
+        assert_eq!(truncate_str("abc", 10), "abc");
+        assert_eq!(truncate_str("", 3), "");
+    }
+
+    #[test]
+    fn estimate_tokens_is_chars_over_four() {
+        assert_eq!(estimate_tokens("abcdefgh"), 2);
+        assert_eq!(estimate_tokens("ééééééé"), 1); // 7 codepoints, não 14 bytes
+    }
+
+    /// Render = severidade[:4] — contrato com o Python (diagnose usa o report).
+    #[test]
+    fn compress_inner_renders_severity_prefix_and_valid_stats() {
+        let (text, stats) = compress_inner(report(2000, 9.0));
+        assert_eq!(text, "CRIT");
+        assert_eq!(stats.chunks_removed, 0);
+        assert_eq!(stats.chunks_kept, 2);
+        assert_eq!(stats.critical_preserved, 100.0);
+        assert!((0.0..=1.0).contains(&stats.compression_ratio));
+        assert!(stats.compressed_tokens <= stats.original_tokens.max(1));
+    }
+
+    #[test]
+    fn low_severity_report_renders_low() {
+        let (text, _) = compress_inner(report(3, 1.0));
+        assert_eq!(text, "LOW");
+    }
+
+    #[test]
+    fn empty_report_does_not_panic() {
+        let empty = AggregatedReportProxy {
+            log_templates: vec![],
+            metric_anomalies: vec![],
+            slow_traces: vec![],
+            total_logs: 0,
+            total_metrics: 0,
+            total_traces: 0,
+        };
+        let (text, stats) = compress_inner(empty);
+        assert_eq!(text, "LOW");
+        assert_eq!(stats.chunks_kept, 0);
+        assert_eq!(stats.original_tokens, 0);
+    }
+
+    /// Chunks Noise (INFO de baixa relevância) são descartados no nível balanced.
+    #[test]
+    fn noise_chunks_are_dropped() {
+        let mut r = report(2000, 9.0);
+        r.log_templates.push(LogTemplateProxy {
+            template: "heartbeat ok".into(),
+            level: "INFO".into(),
+            count: 500,
+            relevance_score: 0.1,
+            services: vec!["svc".into()],
+        });
+        let (_, stats) = compress_inner(r);
+        assert_eq!(stats.chunks_kept, 2); // o INFO ruidoso não entra
+    }
 }

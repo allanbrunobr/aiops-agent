@@ -1,9 +1,9 @@
-/// Reimplementação do algoritmo Drain3 em Rust puro.
-///
-/// Replica exatamente o comportamento do drain3.Drain com:
-///   depth=4, sim_th=0.4, max_children=100, parametrize_numeric_tokens=True
-///
-/// Ref: https://github.com/logpai/Drain3
+//! Reimplementação do algoritmo Drain3 em Rust puro.
+//!
+//! Replica exatamente o comportamento do drain3.Drain com:
+//! `depth=4, sim_th=0.4, max_children=100, parametrize_numeric_tokens=True`.
+//!
+//! Ref: https://github.com/logpai/Drain3
 use std::collections::HashMap;
 
 const PARAM_STR: &str = "<*>";
@@ -55,10 +55,9 @@ pub struct Drain3 {
 
 impl Drain3 {
     /// Cria nova instância com parâmetros equivalentes ao Python:
-    ///   sim_th=0.4, depth=4, parametrize_numeric_tokens=True
+    /// `sim_th=0.4, depth=4, parametrize_numeric_tokens=True`.
     pub fn new(sim_th: f64) -> Self {
-        let mut nodes = Vec::new();
-        nodes.push(Node::new()); // índice 0 = raiz
+        let nodes = vec![Node::new()]; // índice 0 = raiz
         Drain3 {
             nodes,
             clusters: HashMap::new(),
@@ -313,5 +312,67 @@ impl Drain3 {
             .children
             .insert(key.to_string(), new_idx);
         new_idx
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tokenize_splits_on_whitespace_and_trims() {
+        assert_eq!(
+            Drain3::tokenize("  Connection   pool exhausted\t50 "),
+            vec!["Connection", "pool", "exhausted", "50"]
+        );
+        assert!(Drain3::tokenize("").is_empty());
+    }
+
+    /// Mensagens iguais exceto por um número viram UM cluster com `<*>`.
+    #[test]
+    fn similar_messages_merge_into_one_template() {
+        let mut d = Drain3::new(0.4);
+        let (id1, _) = d.add_log_message("Connection pool exhausted, waiting=12");
+        let (id2, tpl) = d.add_log_message("Connection pool exhausted, waiting=99");
+        assert_eq!(id1, id2);
+        assert_eq!(tpl, "Connection pool exhausted, <*>");
+        assert_eq!(d.clusters[&id1].size, 2);
+    }
+
+    /// Contagem de tokens diferente → clusters diferentes (nível 1 da árvore).
+    #[test]
+    fn different_token_counts_never_share_a_cluster() {
+        let mut d = Drain3::new(0.4);
+        let (a, _) = d.add_log_message("db timeout");
+        let (b, _) = d.add_log_message("db timeout after retry");
+        assert_ne!(a, b);
+        assert_eq!(d.clusters.len(), 2);
+    }
+
+    /// Mensagens pouco similares (abaixo de sim_th) não se fundem.
+    #[test]
+    fn dissimilar_messages_stay_separate() {
+        let mut d = Drain3::new(0.4);
+        let (a, _) = d.add_log_message("user login ok");
+        let (b, _) = d.add_log_message("disk write failed");
+        assert_ne!(a, b);
+    }
+
+    /// Tokens numéricos são roteados para `<*>` na árvore e abstraídos no template.
+    #[test]
+    fn numeric_tokens_are_parametrized() {
+        let mut d = Drain3::new(0.4);
+        d.add_log_message("request 500 failed");
+        let (_, tpl) = d.add_log_message("request 503 failed");
+        assert_eq!(tpl, "request <*> failed");
+    }
+
+    /// Mensagem vazia é um cluster próprio e estável.
+    #[test]
+    fn empty_message_is_its_own_stable_cluster() {
+        let mut d = Drain3::new(0.4);
+        let (a, _) = d.add_log_message("");
+        let (b, _) = d.add_log_message("");
+        assert_eq!(a, b);
     }
 }

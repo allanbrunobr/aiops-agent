@@ -1,7 +1,7 @@
-/// Padrões compilados para detecção de conteúdo adversarial.
-///
-/// Usa std::sync::OnceLock para compilar uma única vez em runtime.
-/// Equivalente aos ADVERSARIAL_REWARD_HACKING_PATTERNS e TAINTED_LOG_FIELDS do Python.
+//! Padrões compilados para detecção de conteúdo adversarial.
+//!
+//! Usa std::sync::OnceLock para compilar uma única vez em runtime.
+//! Equivalente aos ADVERSARIAL_REWARD_HACKING_PATTERNS e TAINTED_LOG_FIELDS do Python.
 use regex::Regex;
 use std::sync::OnceLock;
 

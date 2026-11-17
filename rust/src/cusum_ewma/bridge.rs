@@ -1,9 +1,9 @@
-/// Fronteira PyO3: expõe detect_cusum e compute_ewma_slope ao Python.
-///
-/// Fluxo de execução:
-///   1. Recebe dados Python enquanto segura o GIL
-///   2. Libera o GIL para processar CUSUM/EWMA em Rust puro
-///   3. Re-adquire o GIL para construir dicts Python de retorno
+//! Fronteira PyO3: expõe detect_cusum e compute_ewma_slope ao Python.
+//!
+//! Fluxo de execução:
+//!   1. Recebe dados Python enquanto segura o GIL
+//!   2. Libera o GIL para processar CUSUM/EWMA em Rust puro
+//!   3. Re-adquire o GIL para construir dicts Python de retorno
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 

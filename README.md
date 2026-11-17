@@ -364,7 +364,7 @@ The [`.github/workflows/ci.yml`](.github/workflows/ci.yml) workflow runs three j
 
 1. **Unit Tests**: minimal dependencies.
 2. **Integration & Snapshot Tests**: full dependencies.
-3. **Rust Build & PyO3 Extension**: `cargo test`, extension build and full suite.
+3. **Rust Build & PyO3 Extension**: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`, extension build and full suite.
 
 To reproduce CI locally:
 

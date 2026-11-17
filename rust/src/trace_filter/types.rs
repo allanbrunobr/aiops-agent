@@ -1,4 +1,4 @@
-/// Tipos de dados internos para o módulo trace_filter.
+//! Tipos de dados internos para o módulo trace_filter.
 
 pub struct SpanData {
     pub trace_id: String,

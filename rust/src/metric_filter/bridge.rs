@@ -1,9 +1,9 @@
 /// Fronteira PyO3: converte MetricPoint Python → Rust → dicts Python.
 ///
 /// Fluxo de execução:
-///   1. Extrai campos dos MetricPoint Python enquanto segura o GIL
-///   2. Libera o GIL para processar 3-sigma em Rust puro
-///   3. Re-adquire o GIL para construir dicts Python de retorno
+/// 1. Extrai campos dos MetricPoint Python enquanto segura o GIL
+/// 2. Libera o GIL para processar 3-sigma em Rust puro
+/// 3. Re-adquire o GIL para construir dicts Python de retorno
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
@@ -25,12 +25,12 @@ pub fn filter_metrics(
     // F6-1: parâmetros espelham MetricFilter(sigma_threshold, baseline_ratio).
     // Antes a ponte hardcodava 3.0/0.5 e o Python caía em fallback silencioso
     // para qualquer outro valor.
-    if !(sigma_threshold > 0.0) {
+    if !sigma_threshold.is_finite() || sigma_threshold <= 0.0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "sigma_threshold must be > 0",
         ));
     }
-    if !(baseline_ratio > 0.0 && baseline_ratio < 1.0) {
+    if !baseline_ratio.is_finite() || baseline_ratio <= 0.0 || baseline_ratio >= 1.0 {
         return Err(pyo3::exceptions::PyValueError::new_err(
             "baseline_ratio must be in (0, 1)",
         ));

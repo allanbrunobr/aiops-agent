@@ -153,3 +153,86 @@ fn round2(x: f64) -> f64 {
 fn round1(x: f64) -> f64 {
     (x * 10.0).round() / 10.0
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pts(service: &str, metric: &str, values: &[f64]) -> Vec<MetricPointData> {
+        values
+            .iter()
+            .enumerate()
+            .map(|(i, &v)| MetricPointData {
+                timestamp: 1_700_000_000.0 + i as f64,
+                service: service.to_string(),
+                metric_name: metric.to_string(),
+                value: v,
+            })
+            .collect()
+    }
+
+    /// Baseline plano + salto na segunda metade → exatamente 1 anomalia
+    /// (deduplicada por métrica), com o maior desvio.
+    #[test]
+    fn detects_single_deduplicated_anomaly() {
+        let mut values = vec![10.0; 10];
+        values.extend([10.0, 10.0, 50.0, 90.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]);
+        let out = detect_anomalies(pts("svc", "cpu", &values), 3.0, 0.5);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].value, 90.0);
+        assert_eq!(out[0].mean, 10.0);
+        assert!(out[0].deviation_sigma > 3.0);
+    }
+
+    /// Menos de 5 pontos de baseline → métrica ignorada.
+    #[test]
+    fn skips_series_with_short_baseline() {
+        let out = detect_anomalies(pts("svc", "cpu", &[1.0, 1.0, 1.0, 100.0]), 3.0, 0.5);
+        assert!(out.is_empty());
+    }
+
+    /// Threshold mais estrito encontra <= anomalias que o frouxo.
+    #[test]
+    fn stricter_sigma_finds_fewer_or_equal() {
+        let mut values = vec![10.0; 10];
+        values.extend([10.5, 11.0, 12.0, 20.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0]);
+        let loose = detect_anomalies(pts("a", "m", &values), 1.0, 0.5).len();
+        let strict = detect_anomalies(pts("a", "m", &values), 6.0, 0.5).len();
+        assert!(strict <= loose);
+    }
+
+    /// baseline_ratio controla quantos pontos formam a baseline.
+    #[test]
+    fn baseline_ratio_changes_baseline_window() {
+        let values: Vec<f64> = (0..20).map(|i| if i < 15 { 10.0 } else { 100.0 }).collect();
+        // ratio 0.5 → baseline = 10 pontos planos → os 100.0 são anomalias
+        assert_eq!(detect_anomalies(pts("a", "m", &values), 3.0, 0.5).len(), 1);
+        // ratio 0.9 → baseline inclui 3 dos 100.0 → std enorme → nada anômalo
+        assert!(detect_anomalies(pts("a", "m", &values), 3.0, 0.9).is_empty());
+    }
+
+    /// Série monotônica após a baseline é classificada como steady_increase.
+    #[test]
+    fn classifies_steady_increase() {
+        let mut values = vec![10.0; 10];
+        values.extend([11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0]);
+        let out = detect_anomalies(pts("a", "m", &values), 3.0, 0.5);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].anomaly_type, "steady_increase");
+    }
+
+    /// Métricas distintas são avaliadas em separado e ordenadas por desvio desc.
+    #[test]
+    fn groups_by_service_and_metric_and_sorts_desc() {
+        let mut a = vec![10.0; 10];
+        a.extend([10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 200.0]);
+        let mut b = vec![10.0; 10];
+        b.extend([10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 50.0]);
+        let mut all = pts("svc", "big", &a);
+        all.extend(pts("svc", "small", &b));
+        let out = detect_anomalies(all, 3.0, 0.5);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].metric_name, "big");
+        assert!(out[0].deviation_sigma >= out[1].deviation_sigma);
+    }
+}

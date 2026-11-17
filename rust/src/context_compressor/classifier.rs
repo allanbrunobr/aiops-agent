@@ -57,3 +57,87 @@ pub fn classify_trace_priority(trace: &SlowTraceProxy) -> Priority {
         Priority::Context
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tpl(level: &str, score: f64) -> LogTemplateProxy {
+        LogTemplateProxy {
+            template: "t".into(),
+            level: level.into(),
+            count: 1,
+            relevance_score: score,
+            services: vec!["svc".into()],
+        }
+    }
+
+    #[test]
+    fn log_priority_mirrors_python_rules() {
+        assert_eq!(
+            classify_log_priority(&tpl("FATAL", 0.0)),
+            Priority::Critical
+        );
+        assert_eq!(
+            classify_log_priority(&tpl("ERROR", 5.0)),
+            Priority::Critical
+        );
+        assert_eq!(
+            classify_log_priority(&tpl("ERROR", 4.9)),
+            Priority::Important
+        );
+        assert_eq!(
+            classify_log_priority(&tpl("WARN", 3.0)),
+            Priority::Important
+        );
+        assert_eq!(classify_log_priority(&tpl("WARN", 2.9)), Priority::Context);
+        assert_eq!(classify_log_priority(&tpl("INFO", 2.0)), Priority::Context);
+        assert_eq!(classify_log_priority(&tpl("INFO", 1.9)), Priority::Noise);
+        assert_eq!(classify_log_priority(&tpl("DEBUG", 9.0)), Priority::Noise);
+    }
+
+    #[test]
+    fn metric_priority_by_sigma() {
+        let m = |sigma: f64| MetricAnomalyProxy {
+            service: "s".into(),
+            metric_name: "m".into(),
+            anomaly_type: "spike".into(),
+            value: 0.0,
+            mean: 0.0,
+            deviation_sigma: sigma,
+        };
+        assert_eq!(classify_metric_priority(&m(8.0)), Priority::Critical);
+        assert_eq!(classify_metric_priority(&m(5.0)), Priority::Important);
+        assert_eq!(classify_metric_priority(&m(3.0)), Priority::Context);
+        assert_eq!(classify_metric_priority(&m(2.9)), Priority::Noise);
+    }
+
+    #[test]
+    fn trace_priority_by_slowdown_ratio_with_zero_normal_guard() {
+        let t = |total: f64, normal: f64| SlowTraceProxy {
+            path: vec![],
+            total_duration_ms: total,
+            normal_duration_ms: normal,
+            bottleneck_service: "b".into(),
+            attributes: vec![],
+        };
+        assert_eq!(
+            classify_trace_priority(&t(2000.0, 100.0)),
+            Priority::Critical
+        ); // 20x
+        assert_eq!(
+            classify_trace_priority(&t(500.0, 100.0)),
+            Priority::Important
+        ); // 5x
+        assert_eq!(classify_trace_priority(&t(200.0, 100.0)), Priority::Context);
+        // normal 0 → divisor vira 1.0, não NaN
+        assert_eq!(classify_trace_priority(&t(50.0, 0.0)), Priority::Critical);
+    }
+
+    #[test]
+    fn priority_is_totally_ordered() {
+        assert!(Priority::Noise < Priority::Context);
+        assert!(Priority::Context < Priority::Important);
+        assert!(Priority::Important < Priority::Critical);
+    }
+}

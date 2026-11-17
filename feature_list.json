@@ -293,7 +293,7 @@
       "title": "Testes Rust nativos + clippy/fmt no CI",
       "description": "Só 2 de 7 módulos Rust têm testes (rust/src/cusum_ewma/analyzer.rs: 6 testes; rust/src/trace_predictor/predictor.rs: 9 testes — contagens conferidas em 2026-11-17). Adicionar testes unitários para context_compressor, log_parser, metric_filter, telemetry_sanitizer, trace_filter. Adicionar cargo clippy -- -D warnings e cargo fmt --check ao job rust do CI.",
       "acceptance": "cargo test + clippy + fmt verdes; job rust do CI atualizado.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Parcialmente confirmado: núcleo correto (7 módulos, só 2 com testes, CI sem clippy/fmt), mas as contagens originais (7/10) estavam erradas — são 6/9."
     },
     {

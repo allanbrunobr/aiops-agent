@@ -812,3 +812,35 @@ M1 com o mesmo cenário (`--no-llm --no-rag`), a paridade **não existe**:
 - M1: ruff/format/mypy ✓; unit **893 passed**; integration/snapshot **148
   passed**; smokes V0 exit 3 / V1 exit 0 / V1+RAG exit 0. **Diffs de snapshot:
   nenhum.**
+
+### F6-4 Testes Rust nativos + clippy/fmt no CI — done
+- **Testes nativos** nos 5 módulos que não tinham nenhum: `metric_filter`
+  (6: dedup por métrica, baseline curta, sigma estrito ≤ frouxo, `baseline_ratio`
+  muda a janela, `steady_increase`, ordenação), `trace_filter` (6: p95 seleciona
+  só o lento, path segue parent→child e NÃO a ordem temporal, `max_hops`, dedup
+  por padrão, sem root → vazio, `percentile` ≡ numpy linear), `log_parser`
+  (11: tokenize, merge com `<*>`, contagem de tokens separa clusters, dissimilar,
+  numéricos parametrizados, vazio estável; relevance: ERROR>INFO, teto 5.0,
+  raridade inversa, FATAL>ERROR, total 0 sem divisão por zero),
+  `telemetry_sanitizer` (8: clean/adversarial/suspicious/tainted, precedência,
+  batch ≡ single, `as_str` ≡ enum Python), `context_compressor` (10: regras de
+  prioridade espelham o Python, truncate por codepoint, tokens, render =
+  severity[:4], report vazio, Noise descartado). `cargo test`: **15 → 56**.
+- **`cargo fmt`**: 20 arquivos reformatados em commit separado só de formatação
+  (`d1226bb`), para que `--check` possa ser gate.
+- **`cargo clippy --all-targets -- -D warnings`: 30 erros → 0.** Correções
+  reais além de estilo: `lib.rs` tinha `detect_cusum`/`compute_ewma_slope`
+  **duplicados** inline (o módulo `cusum_ewma` inteiro, com seus 6 testes, era
+  código morto) — agora registra as funções do módulo; `log_parser/bridge.rs`
+  chamava `str(log)` em CADA entrada para um campo (`str_repr`) que nunca era
+  lido — removido (menos uma travessia do GIL por log). Campos-espelho do
+  contrato Python nunca lidos no Rust (`total_*`, `value`, `eta_minutes`)
+  ganharam `#[allow(dead_code)]` com o motivo em doc, não supressão cega.
+- CI (`.github/workflows/ci.yml` job rust + `scripts/ci-local.sh`): `cargo fmt
+  --check` → `cargo clippy --all-targets -- -D warnings` → `cargo test`;
+  toolchain com `components: rustfmt, clippy`. README/README.pt-BR/CONTRIBUTING
+  atualizados.
+
+### Verificação (F6-4)
+- M1: `cargo fmt --check` 0 diffs; clippy 0 erros; `cargo test` **56 passed**;
+  extensão recompilada; `tests/rust` **65 passed**; unit **893 passed**.

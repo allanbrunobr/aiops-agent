@@ -4,8 +4,7 @@ pub struct LogEntryData {
     pub message: String,
     pub level: String,
     pub service: String,
-    pub timestamp: f64,   // Unix epoch seconds
-    pub str_repr: String, // str(log) pré-computado para sample_messages
+    pub timestamp: f64, // Unix epoch seconds
 }
 
 /// Template de log com dados agregados — resultado do pipeline Drain3 Rust.

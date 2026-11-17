@@ -1,7 +1,7 @@
-/// Tipos de dados internos para o módulo metric_filter.
-///
-/// MetricPointData: entrada (equivalente ao MetricPoint Python)
-/// MetricAnomalyData: saída (equivalente ao MetricAnomaly Python)
+//! Tipos de dados internos para o módulo metric_filter.
+//!
+//! MetricPointData: entrada (equivalente ao MetricPoint Python)
+//! MetricAnomalyData: saída (equivalente ao MetricAnomaly Python)
 
 pub struct MetricPointData {
     pub timestamp: f64, // epoch seconds

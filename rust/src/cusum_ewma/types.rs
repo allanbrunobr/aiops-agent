@@ -1,7 +1,7 @@
-/// Tipos de dados internos para o módulo cusum_ewma.
-///
-/// CusumResult: resultado da detecção de ponto de mudança.
-/// EwmaResult: resultado do cálculo de slope EWMA.
+//! Tipos de dados internos para o módulo cusum_ewma.
+//!
+//! CusumResult: resultado da detecção de ponto de mudança.
+//! EwmaResult: resultado do cálculo de slope EWMA.
 
 /// Resultado da detecção CUSUM: indica se houve ponto de mudança e em que índice.
 pub struct CusumResult {
@@ -12,5 +12,7 @@ pub struct CusumResult {
 /// Resultado do cálculo EWMA: slope e estimativa de minutos até o limiar.
 pub struct EwmaResult {
     pub slope: f64,
+    /// Calculado no wrapper Python (precisa do threshold); a ponte devolve None.
+    #[allow(dead_code)]
     pub eta_minutes: Option<f64>,
 }

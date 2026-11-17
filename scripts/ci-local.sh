@@ -103,6 +103,8 @@ run_rust() {
   mkvenv "$VENV_BASE-rust"
   pip install --quiet -r "$ROOT/requirements.txt" "maturin>=1.4.0"
   cd "$ROOT"
+  cargo fmt --manifest-path rust/Cargo.toml --check
+  cargo clippy --manifest-path rust/Cargo.toml --all-targets -- -D warnings
   cargo test --manifest-path rust/Cargo.toml
   maturin build --manifest-path rust/Cargo.toml --release
   pip install --quiet --force-reinstall rust/target/wheels/*.whl

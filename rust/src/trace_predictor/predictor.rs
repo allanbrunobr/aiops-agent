@@ -1,9 +1,9 @@
-/// Lógica pura de detecção de drift de latência — sem dependências PyO3.
-///
-/// Implementa o mesmo algoritmo de `pipeline/trace_predictor.py`:
-///   - `percentile`: índice linear interpolado sobre slice ordenado
-///   - `detect_latency_drift_inner`: compara p95 e p99 entre duas janelas
-#[forbid(unsafe_code)]
+//! Lógica pura de detecção de drift de latência — sem dependências PyO3.
+//!
+//! Implementa o mesmo algoritmo de `pipeline/trace_predictor.py`:
+//!   - `percentile`: índice linear interpolado sobre slice ordenado
+//!   - `detect_latency_drift_inner`: compara p95 e p99 entre duas janelas
+#![forbid(unsafe_code)]
 
 /// Resultado de detecção de drift retornado pela camada de lógica pura.
 pub struct LatencyDriftResult {

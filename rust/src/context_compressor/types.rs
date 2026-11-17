@@ -1,5 +1,5 @@
-/// Structs proxy para transferência de dados Python → Rust através da fronteira PyO3.
-/// Todos os campos são extraídos do Python enquanto o GIL está sendo mantido.
+//! Structs proxy para transferência de dados Python → Rust através da fronteira PyO3.
+//! Todos os campos são extraídos do Python enquanto o GIL está sendo mantido.
 
 /// Proxy para pipeline.log_parser.LogTemplate
 #[derive(Debug, Clone)]
@@ -17,6 +17,8 @@ pub struct MetricAnomalyProxy {
     pub service: String,
     pub metric_name: String,
     pub anomaly_type: String,
+    /// Espelha MetricAnomaly; o render ultra-compacto não o usa.
+    #[allow(dead_code)]
     pub value: f64,
     #[allow(dead_code)]
     pub mean: f64,
@@ -42,8 +44,12 @@ pub struct AggregatedReportProxy {
     pub log_templates: Vec<LogTemplateProxy>,
     pub metric_anomalies: Vec<MetricAnomalyProxy>,
     pub slow_traces: Vec<SlowTraceProxy>,
+    /// Totais espelham AggregatedReport; o render atual (só severity) não os lê.
+    #[allow(dead_code)]
     pub total_logs: u64,
+    #[allow(dead_code)]
     pub total_metrics: u64,
+    #[allow(dead_code)]
     pub total_traces: u64,
 }
 

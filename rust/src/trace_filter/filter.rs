@@ -136,11 +136,9 @@ fn extract_call_path(spans: &[SpanData], sorted_indices: &[usize], max_hops: usi
     }
 
     // DFS linear (sempre primeiro filho)
-    let mut path = Vec::new();
     let mut current_id = Some(spans[roots[0]].span_id.clone());
     let mut current_idx = roots[0];
-
-    path.push(current_idx);
+    let mut path = vec![current_idx];
 
     while path.len() < max_hops {
         let kids = children.get(&current_id).cloned().unwrap_or_default();
@@ -200,5 +198,114 @@ fn percentile(values: &[f64], p: f64) -> f64 {
     } else {
         let frac = idx - lower as f64;
         sorted[lower] + frac * (sorted[upper] - sorted[lower])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn span(
+        trace: &str,
+        id: &str,
+        parent: Option<&str>,
+        svc: &str,
+        start: f64,
+        dur: f64,
+    ) -> SpanData {
+        SpanData {
+            trace_id: trace.to_string(),
+            span_id: id.to_string(),
+            parent_span_id: parent.map(str::to_string),
+            service: svc.to_string(),
+            operation: format!("op-{svc}"),
+            start_time: start,
+            duration_ms: dur,
+            status: "ok".to_string(),
+            attributes: vec![("k".to_string(), "v".to_string())],
+        }
+    }
+
+    /// 10 traces: 9 rápidos e 1 lento → só o lento passa o p95.
+    #[test]
+    fn selects_only_traces_above_percentile() {
+        let mut spans = Vec::new();
+        for i in 0..9 {
+            spans.push(span(&format!("t{i}"), "r", None, "gw", 0.0, 100.0));
+        }
+        spans.push(span("slow", "r", None, "gw", 0.0, 5000.0));
+        let out = filter_slow_traces(spans, 95.0, 3);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].trace_id, "slow");
+        assert_eq!(out[0].total_duration_ms, 5000.0);
+        assert_eq!(out[0].normal_duration_ms, 100.0);
+    }
+
+    /// Call path segue parent→child (DFS), não a ordem temporal dos spans.
+    #[test]
+    fn call_path_follows_parent_child_chain() {
+        let spans = vec![
+            // filho começa ANTES do pai no relógio para provar que a ordem é causal
+            span("t", "c", Some("b"), "postgres", 0.5, 900.0),
+            span("t", "a", None, "gateway", 0.0, 1000.0),
+            span("t", "b", Some("a"), "payment", 0.2, 950.0),
+            span("fast", "x", None, "gateway", 0.0, 10.0),
+        ];
+        let out = filter_slow_traces(spans, 50.0, 3);
+        let slow = out
+            .iter()
+            .find(|p| p.trace_id == "t")
+            .expect("trace lento presente");
+        assert_eq!(slow.path, vec!["gateway", "payment", "postgres"]);
+        assert_eq!(slow.bottleneck_service, "gateway"); // span mais longo
+        assert_eq!(slow.attributes, vec![("k".to_string(), "v".to_string())]);
+    }
+
+    /// max_hops limita o comprimento do path.
+    #[test]
+    fn max_hops_truncates_path() {
+        let spans = vec![
+            span("t", "a", None, "s1", 0.0, 1000.0),
+            span("t", "b", Some("a"), "s2", 0.1, 900.0),
+            span("t", "c", Some("b"), "s3", 0.2, 800.0),
+            span("fast", "x", None, "s1", 0.0, 1.0),
+        ];
+        let out = filter_slow_traces(spans, 50.0, 2);
+        let slow = out.iter().find(|p| p.trace_id == "t").unwrap();
+        assert_eq!(slow.path.len(), 2);
+    }
+
+    /// Mesmo padrão de path: mantém só o mais lento.
+    #[test]
+    fn deduplicates_by_path_keeping_slowest() {
+        let mut spans = vec![
+            span("t1", "a", None, "gw", 0.0, 3000.0),
+            span("t2", "a", None, "gw", 0.0, 4000.0),
+        ];
+        for i in 0..8 {
+            spans.push(span(&format!("f{i}"), "a", None, "other", 0.0, 10.0));
+        }
+        let out = filter_slow_traces(spans, 50.0, 3);
+        let gw: Vec<_> = out.iter().filter(|p| p.path == vec!["gw"]).collect();
+        assert_eq!(gw.len(), 1);
+        assert_eq!(gw[0].trace_id, "t2");
+    }
+
+    /// Traces sem root span não têm duração → nada é retornado.
+    #[test]
+    fn no_root_spans_returns_empty() {
+        let spans = vec![span("t", "b", Some("missing"), "s", 0.0, 100.0)];
+        assert!(filter_slow_traces(spans, 95.0, 3).is_empty());
+    }
+
+    /// percentile = interpolação linear como numpy.percentile.
+    #[test]
+    fn percentile_matches_numpy_linear_interpolation() {
+        let v = [1.0, 2.0, 3.0, 4.0];
+        assert!((percentile(&v, 50.0) - 2.5).abs() < 1e-12);
+        assert!((percentile(&v, 100.0) - 4.0).abs() < 1e-12);
+        assert!((percentile(&v, 0.0) - 1.0).abs() < 1e-12);
+        assert_eq!(percentile(&[7.0], 95.0), 7.0);
+        assert_eq!(percentile(&[], 95.0), 0.0);
     }
 }
