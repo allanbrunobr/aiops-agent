@@ -103,10 +103,10 @@ class TestAiopsLlmModelEnvVar:
         mock_report.to_text.return_value = "test report"
 
         with (
-            patch("main.DiagnosisAgent") as MockDiagnoser,
-            patch("main.DetectionAgent") as MockDetector,
-            patch("main.MitigationAgent"),
-            patch("main.TNRSafetyGuard"),
+            patch("interfaces.cli.v0_pipeline.DiagnosisAgent") as MockDiagnoser,
+            patch("interfaces.cli.v0_pipeline.DetectionAgent") as MockDetector,
+            patch("interfaces.cli.v0_pipeline.MitigationAgent"),
+            patch("interfaces.cli.v0_pipeline.TNRSafetyGuard"),
         ):
             # Setup mocks
             MockDetector.return_value = MagicMock()
@@ -151,10 +151,10 @@ class TestAiopsLlmModelEnvVar:
         mock_report.to_text.return_value = "test report"
 
         with (
-            patch("main.DiagnosisAgent") as MockDiagnoser,
-            patch("main.DetectionAgent"),
-            patch("main.MitigationAgent"),
-            patch("main.TNRSafetyGuard"),
+            patch("interfaces.cli.v0_pipeline.DiagnosisAgent") as MockDiagnoser,
+            patch("interfaces.cli.v0_pipeline.DetectionAgent"),
+            patch("interfaces.cli.v0_pipeline.MitigationAgent"),
+            patch("interfaces.cli.v0_pipeline.TNRSafetyGuard"),
         ):
             from main import step_agents
 
@@ -183,10 +183,10 @@ class TestAiopsLlmModelEnvVar:
         mock_report.to_text.return_value = "test report"
 
         with (
-            patch("main.DiagnosisAgent") as MockDiag,
-            patch("main.DetectionAgent"),
-            patch("main.MitigationAgent"),
-            patch("main.TNRSafetyGuard"),
+            patch("interfaces.cli.v0_pipeline.DiagnosisAgent") as MockDiag,
+            patch("interfaces.cli.v0_pipeline.DetectionAgent"),
+            patch("interfaces.cli.v0_pipeline.MitigationAgent"),
+            patch("interfaces.cli.v0_pipeline.TNRSafetyGuard"),
         ):
             _inst = MockDiag.return_value
             _inst.reflect.return_value = {
@@ -223,10 +223,10 @@ class TestAiopsLlmModelEnvVar:
         mock_report.to_text.return_value = "test report"
 
         with (
-            patch("main.DiagnosisAgent"),
-            patch("main.DetectionAgent"),
-            patch("main.MitigationAgent"),
-            patch("main.TNRSafetyGuard"),
+            patch("interfaces.cli.v0_pipeline.DiagnosisAgent"),
+            patch("interfaces.cli.v0_pipeline.DetectionAgent"),
+            patch("interfaces.cli.v0_pipeline.MitigationAgent"),
+            patch("interfaces.cli.v0_pipeline.TNRSafetyGuard"),
         ):
             from main import step_agents
 

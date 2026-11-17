@@ -134,7 +134,7 @@ class TestMainExitCodes:
         with (
             patch("sys.argv", test_args),
             patch("main.load_local_env"),
-            patch("main.print_banner"),
+            patch("interfaces.cli.v0_pipeline.print_banner"),
             patch(
                 "main.step_generate_data", return_value=(mock_incident, "test-scenario")
             ),
@@ -142,7 +142,7 @@ class TestMainExitCodes:
                 "main.step_sanitize",
                 return_value=MagicMock(threat_detected=False, total_entries=100),
             ),
-            patch("main.step_pipeline", return_value=MagicMock()),
+            patch("interfaces.cli.v0_pipeline.step_pipeline", return_value=MagicMock()),
             patch(
                 "main.step_compression",
                 return_value=(
@@ -156,10 +156,19 @@ class TestMainExitCodes:
                     ),
                 ),
             ),
-            patch("main.step_agents", return_value=mock_result),
-            patch("main.step_safety_validation", return_value=mock_safety),
-            patch("main.step_remediation_validation", return_value=mock_remediation),
-            patch("main.step_postmortem", return_value=(MagicMock(), None)),
+            patch("interfaces.cli.v0_pipeline.step_agents", return_value=mock_result),
+            patch(
+                "interfaces.cli.v0_pipeline.step_safety_validation",
+                return_value=mock_safety,
+            ),
+            patch(
+                "interfaces.cli.v0_pipeline.step_remediation_validation",
+                return_value=mock_remediation,
+            ),
+            patch(
+                "interfaces.cli.v0_pipeline.step_postmortem",
+                return_value=(MagicMock(), None),
+            ),
             redirect_stdout(io.StringIO()),
             redirect_stderr(io.StringIO()),
         ):
@@ -176,8 +185,11 @@ class TestMainExitCodes:
         with (
             patch("sys.argv", test_args),
             patch("main.load_local_env"),
-            patch("main.print_banner"),
-            patch("main.step_generate_data", side_effect=RuntimeError("stage failure")),
+            patch("interfaces.cli.v0_pipeline.print_banner"),
+            patch(
+                "interfaces.cli.v0_pipeline.step_generate_data",
+                side_effect=RuntimeError("stage failure"),
+            ),
             redirect_stdout(io.StringIO()),
             redirect_stderr(io.StringIO()),
         ):
@@ -250,7 +262,7 @@ class TestMainExitCodes:
         with (
             patch("sys.argv", test_args),
             patch("main.load_local_env"),
-            patch("main.print_banner"),
+            patch("interfaces.cli.v0_pipeline.print_banner"),
             patch(
                 "main.step_generate_data", return_value=(mock_incident, "test-scenario")
             ),
@@ -258,7 +270,7 @@ class TestMainExitCodes:
                 "main.step_sanitize",
                 return_value=MagicMock(threat_detected=False, total_entries=100),
             ),
-            patch("main.step_pipeline", return_value=MagicMock()),
+            patch("interfaces.cli.v0_pipeline.step_pipeline", return_value=MagicMock()),
             patch(
                 "main.step_compression",
                 return_value=(
@@ -272,10 +284,19 @@ class TestMainExitCodes:
                     ),
                 ),
             ),
-            patch("main.step_agents", return_value=mock_result),
-            patch("main.step_safety_validation", return_value=mock_safety),
-            patch("main.step_remediation_validation", return_value=mock_remediation),
-            patch("main.step_postmortem", return_value=(MagicMock(), None)),
+            patch("interfaces.cli.v0_pipeline.step_agents", return_value=mock_result),
+            patch(
+                "interfaces.cli.v0_pipeline.step_safety_validation",
+                return_value=mock_safety,
+            ),
+            patch(
+                "interfaces.cli.v0_pipeline.step_remediation_validation",
+                return_value=mock_remediation,
+            ),
+            patch(
+                "interfaces.cli.v0_pipeline.step_postmortem",
+                return_value=(MagicMock(), None),
+            ),
             redirect_stdout(io.StringIO()),
             redirect_stderr(io.StringIO()),
         ):
@@ -347,7 +368,7 @@ class TestMainExitCodes:
         with (
             patch("sys.argv", test_args),
             patch("main.load_local_env"),
-            patch("main.print_banner"),
+            patch("interfaces.cli.v0_pipeline.print_banner"),
             patch(
                 "main.step_generate_data", return_value=(mock_incident, "test-scenario")
             ),
@@ -355,7 +376,7 @@ class TestMainExitCodes:
                 "main.step_sanitize",
                 return_value=MagicMock(threat_detected=False, total_entries=100),
             ),
-            patch("main.step_pipeline", return_value=MagicMock()),
+            patch("interfaces.cli.v0_pipeline.step_pipeline", return_value=MagicMock()),
             patch(
                 "main.step_compression",
                 return_value=(
@@ -369,10 +390,19 @@ class TestMainExitCodes:
                     ),
                 ),
             ),
-            patch("main.step_agents", return_value=mock_result),
-            patch("main.step_safety_validation", return_value=mock_safety),
-            patch("main.step_remediation_validation", return_value=mock_remediation),
-            patch("main.step_postmortem", return_value=(MagicMock(), None)),
+            patch("interfaces.cli.v0_pipeline.step_agents", return_value=mock_result),
+            patch(
+                "interfaces.cli.v0_pipeline.step_safety_validation",
+                return_value=mock_safety,
+            ),
+            patch(
+                "interfaces.cli.v0_pipeline.step_remediation_validation",
+                return_value=mock_remediation,
+            ),
+            patch(
+                "interfaces.cli.v0_pipeline.step_postmortem",
+                return_value=(MagicMock(), None),
+            ),
             redirect_stdout(io.StringIO()),
             redirect_stderr(io.StringIO()),
         ):
@@ -445,7 +475,7 @@ class TestMainExitCodes:
         with (
             patch("sys.argv", test_args),
             patch("main.load_local_env"),
-            patch("main.print_banner"),
+            patch("interfaces.cli.v0_pipeline.print_banner"),
             patch(
                 "main.step_generate_data", return_value=(mock_incident, "test-scenario")
             ),
@@ -453,7 +483,7 @@ class TestMainExitCodes:
                 "main.step_sanitize",
                 return_value=MagicMock(threat_detected=False, total_entries=100),
             ),
-            patch("main.step_pipeline", return_value=MagicMock()),
+            patch("interfaces.cli.v0_pipeline.step_pipeline", return_value=MagicMock()),
             patch(
                 "main.step_compression",
                 return_value=(
@@ -467,10 +497,19 @@ class TestMainExitCodes:
                     ),
                 ),
             ),
-            patch("main.step_agents", return_value=mock_result),
-            patch("main.step_safety_validation", return_value=mock_safety),
-            patch("main.step_remediation_validation", return_value=mock_remediation),
-            patch("main.step_postmortem", return_value=(MagicMock(), None)),
+            patch("interfaces.cli.v0_pipeline.step_agents", return_value=mock_result),
+            patch(
+                "interfaces.cli.v0_pipeline.step_safety_validation",
+                return_value=mock_safety,
+            ),
+            patch(
+                "interfaces.cli.v0_pipeline.step_remediation_validation",
+                return_value=mock_remediation,
+            ),
+            patch(
+                "interfaces.cli.v0_pipeline.step_postmortem",
+                return_value=(MagicMock(), None),
+            ),
             redirect_stdout(io.StringIO()),
             redirect_stderr(io.StringIO()),
         ):
