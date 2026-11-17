@@ -1,0 +1,121 @@
+"""Parser de argumentos da CLI e validação de exclusão mútua.
+
+Separado do entrypoint para permitir testes sem executar o pipeline.
+``--pipeline-v1`` seleciona o Blueprint Engine; o V0 sequencial é o default
+até a remoção prevista em F5-4.
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+
+from data.registry import list_scenarios
+from interfaces.cli.exit_codes import EXIT_ERROR
+
+# Nomes de tracker aceitos por --tracker. A factory concreta de cada um vive
+# em interfaces/cli/trackers.py (lazy import de requests/Jira); aqui só o
+# contrato de CLI, para que o parser não arraste dependências de rede.
+TRACKER_CHOICES: tuple[str, ...] = ("jira",)
+
+
+class _CliParser(argparse.ArgumentParser):
+    """Erros de argumento saem com código 1. O código 2 fica para regressão do TNR."""
+
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        self.exit(EXIT_ERROR, f"{self.prog}: error: {message}\n")
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Cria o parser de argumentos CLI.
+
+    Separado de main() para permitir testes sem executar o pipeline.
+    """
+    parser = _CliParser(
+        description="AIOps Agent - Agentic Incident Response Demo",
+        epilog="""Exit codes:
+  0  Pipeline resolved successfully (TNR verified, no human gate left)
+  1  Invalid arguments, or an unrecoverable error in a stage
+  2  TNR regression detected (post-health worse than pre-health)
+  3  Safety blocked action (human approval required)""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--no-llm", action="store_true", help="Skip LLM calls (heuristic mode)"
+    )
+    parser.add_argument("--compact", action="store_true", help="Compact output")
+    parser.add_argument(
+        "--no-rag", action="store_true", help="Skip RAG indexing (faster)"
+    )
+    parser.add_argument(
+        "--pipeline-v1", action="store_true", help="Use Blueprint Engine (V1) pipeline"
+    )
+    parser.add_argument(
+        "--scenario",
+        choices=list_scenarios(),
+        default=None,
+        metavar="NAME",
+        help="Incident scenario to run (default: payment-pool-exhaustion). Choices: %(choices)s",
+    )
+    parser.add_argument(
+        "--data-source",
+        choices=["simulated", "databricks"],
+        default="simulated",
+        metavar="SOURCE",
+        help="Data source for observability data (default: simulated). Choices: simulated, databricks",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="output",
+        metavar="DIR",
+        help="Directory for postmortem output files (default: output/)",
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        metavar="FILE",
+        help="Path to YAML config file for analysis thresholds (default: config/defaults.yaml)",
+    )
+    parser.add_argument(
+        "--output-format",
+        choices=["markdown", "json", "both"],
+        default="markdown",
+        metavar="FORMAT",
+        help="Postmortem output format: markdown (default), json, or both",
+    )
+    parser.add_argument(
+        "--rebuild-rag",
+        action="store_true",
+        help="Force RAG index reconstruction, ignoring any cached index",
+    )
+    parser.add_argument(
+        "--tracker",
+        choices=list(TRACKER_CHOICES) + ["none"],
+        default=None,
+        metavar="TRACKER",
+        help=(
+            "Incident tracker for auto-creating issues after diagnosis. "
+            "Choices: jira, none. Default: omitted (no tracking, backward-compatible). "
+            "'none' explicitly disables tracking."
+        ),
+    )
+    return parser
+
+
+def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    """Valida regras de exclusao mutua entre argumentos CLI.
+
+    Regras:
+      --data-source databricks + --scenario sao mutuamente exclusivos.
+      Dados reais nao possuem cenarios simulados.
+    """
+    if args.data_source == "databricks" and args.scenario is not None:
+        parser.error(
+            "--data-source databricks cannot be combined with --scenario (real data has no simulated scenarios)"
+        )
+
+
+__all__ = ["TRACKER_CHOICES", "_CliParser", "build_arg_parser", "_validate_args"]

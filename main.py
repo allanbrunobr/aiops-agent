@@ -40,7 +40,6 @@ import dataclasses
 import enum
 import json
 import os
-import re
 import sys
 import time
 import traceback
@@ -48,7 +47,6 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.rule import Rule
@@ -61,12 +59,28 @@ from agents.diagnoser import DiagnosisAgent
 from agents.mitigator import MitigationAgent
 from config.env import load_local_env
 from config.loader import AppConfig, load_config
+from core.secrets import API_KEY_PATTERNS  # noqa: F401  (compat: tests importam de main)
+from core.secrets import contains_api_key_pattern as _contains_api_key_pattern  # noqa: F401
+from core.secrets import sanitize_secrets as _sanitize_secrets
 
 # Modulos do projeto
 from data.models import SimulatedIncident
-from data.registry import get_scenario, list_scenarios
+from data.registry import get_scenario
 from data.sample_incident import create_incident
 from domain.incident_state import IncidentState
+from interfaces.cli.args import (  # noqa: F401 — compat: tests importam de main
+    _CliParser,
+    _validate_args,
+    build_arg_parser,
+)
+from interfaces.cli.console import console
+from interfaces.cli.exit_codes import (  # noqa: F401 — compat: tests importam de main
+    EXIT_APPROVAL_NEEDED,
+    EXIT_CODE_LABELS,
+    EXIT_ERROR,
+    EXIT_REGRESSION,
+    EXIT_SUCCESS,
+)
 from pipeline.aggregator import AggregatedReport, Aggregator
 from pipeline.context_compressor import ContextCompressor
 from pipeline.telemetry_sanitizer import TelemetrySanitizer
@@ -77,41 +91,6 @@ from safety.orchestrator import SafetyOrchestrator
 from safety.pre_validator import PreExecutionValidator
 from safety.tnr import TNRSafetyGuard
 from safety.version_validator import VersionValidator
-
-console = Console()
-
-# Exit codes para pipeline outcomes (Story 3.2)
-EXIT_SUCCESS = 0  # Pipeline resolved (TNR success)
-EXIT_ERROR = 1  # Unrecoverable error (exception in any stage)
-EXIT_REGRESSION = 2  # TNR detected regression (post-health worse)
-EXIT_APPROVAL_NEEDED = 3  # Safety blocked action (human approval required)
-
-EXIT_CODE_LABELS = {
-    EXIT_SUCCESS: "resolved",
-    EXIT_ERROR: "error",
-    EXIT_REGRESSION: "regression",
-    EXIT_APPROVAL_NEEDED: "approval-needed",
-}
-
-# Padrões de API key para sanitização de secrets (Story 3.3)
-API_KEY_PATTERNS = [
-    re.compile(r"sk-ant-[a-zA-Z0-9_-]{20,}"),  # Anthropic API keys
-    re.compile(r"dapi[a-zA-Z0-9]{20,}"),  # Databricks API keys
-    re.compile(r"sk-[a-zA-Z0-9]{32,}"),  # OpenAI-style keys
-    re.compile(r"key-[a-zA-Z0-9]{32,}"),  # Generic API keys
-]
-
-
-def _sanitize_secrets(text: str) -> str:
-    """Remove padrões de API key do texto, substituindo por [REDACTED]."""
-    for pattern in API_KEY_PATTERNS:
-        text = pattern.sub("[REDACTED]", text)
-    return text
-
-
-def _contains_api_key_pattern(text: str) -> bool:
-    """Verifica se o texto contém algum padrão de API key."""
-    return any(pattern.search(text) for pattern in API_KEY_PATTERNS)
 
 
 def print_banner():
@@ -1525,105 +1504,6 @@ def print_summary(
         }.get(t["to"], "->")
         console.print(
             f"    {t['time']} {icon} {t['from']} -> [bold]{t['to']}[/bold]: {t['reason'][:60]}"
-        )
-
-
-class _CliParser(argparse.ArgumentParser):
-    """Erros de argumento saem com código 1. O código 2 fica para regressão do TNR."""
-
-    def error(self, message: str) -> None:
-        self.print_usage(sys.stderr)
-        self.exit(EXIT_ERROR, f"{self.prog}: error: {message}\n")
-
-
-def build_arg_parser() -> argparse.ArgumentParser:
-    """Cria o parser de argumentos CLI.
-
-    Separado de main() para permitir testes sem executar o pipeline.
-    """
-    parser = _CliParser(
-        description="AIOps Agent - Agentic Incident Response Demo",
-        epilog="""Exit codes:
-  0  Pipeline resolved successfully (TNR verified, no human gate left)
-  1  Invalid arguments, or an unrecoverable error in a stage
-  2  TNR regression detected (post-health worse than pre-health)
-  3  Safety blocked action (human approval required)""",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument(
-        "--no-llm", action="store_true", help="Skip LLM calls (heuristic mode)"
-    )
-    parser.add_argument("--compact", action="store_true", help="Compact output")
-    parser.add_argument(
-        "--no-rag", action="store_true", help="Skip RAG indexing (faster)"
-    )
-    parser.add_argument(
-        "--pipeline-v1", action="store_true", help="Use Blueprint Engine (V1) pipeline"
-    )
-    parser.add_argument(
-        "--scenario",
-        choices=list_scenarios(),
-        default=None,
-        metavar="NAME",
-        help="Incident scenario to run (default: payment-pool-exhaustion). Choices: %(choices)s",
-    )
-    parser.add_argument(
-        "--data-source",
-        choices=["simulated", "databricks"],
-        default="simulated",
-        metavar="SOURCE",
-        help="Data source for observability data (default: simulated). Choices: simulated, databricks",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default="output",
-        metavar="DIR",
-        help="Directory for postmortem output files (default: output/)",
-    )
-    parser.add_argument(
-        "--config",
-        type=str,
-        default=None,
-        metavar="FILE",
-        help="Path to YAML config file for analysis thresholds (default: config/defaults.yaml)",
-    )
-    parser.add_argument(
-        "--output-format",
-        choices=["markdown", "json", "both"],
-        default="markdown",
-        metavar="FORMAT",
-        help="Postmortem output format: markdown (default), json, or both",
-    )
-    parser.add_argument(
-        "--rebuild-rag",
-        action="store_true",
-        help="Force RAG index reconstruction, ignoring any cached index",
-    )
-    parser.add_argument(
-        "--tracker",
-        choices=list(TRACKER_REGISTRY.keys()) + ["none"],
-        default=None,
-        metavar="TRACKER",
-        help=(
-            "Incident tracker for auto-creating issues after diagnosis. "
-            "Choices: jira, none. Default: omitted (no tracking, backward-compatible). "
-            "'none' explicitly disables tracking."
-        ),
-    )
-    return parser
-
-
-def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
-    """Valida regras de exclusao mutua entre argumentos CLI.
-
-    Regras:
-      --data-source databricks + --scenario sao mutuamente exclusivos.
-      Dados reais nao possuem cenarios simulados.
-    """
-    if args.data_source == "databricks" and args.scenario is not None:
-        parser.error(
-            "--data-source databricks cannot be combined with --scenario (real data has no simulated scenarios)"
         )
 
 
