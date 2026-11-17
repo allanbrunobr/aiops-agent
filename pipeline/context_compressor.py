@@ -18,12 +18,12 @@ Ref: "Acon reduces memory usage by 26-54% while largely preserving task performa
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
 from enum import Enum
 
 try:
     import _aiops_rust as _rust
+
     _RUST_AVAILABLE = True
 except ImportError:
     _rust = None
@@ -32,15 +32,17 @@ except ImportError:
 
 class Priority(Enum):
     """Prioridade de informação para compressão."""
-    CRITICAL = 3    # Preservar 100%: errors, high-sigma anomalies, bottlenecks
-    IMPORTANT = 2   # Resumir: warnings, medium anomalies, slow traces
-    CONTEXT = 1     # Compactar: info logs, normal metrics
-    NOISE = 0       # Remover: debug, repetitive info
+
+    CRITICAL = 3  # Preservar 100%: errors, high-sigma anomalies, bottlenecks
+    IMPORTANT = 2  # Resumir: warnings, medium anomalies, slow traces
+    CONTEXT = 1  # Compactar: info logs, normal metrics
+    NOISE = 0  # Remover: debug, repetitive info
 
 
 @dataclass
 class CompressedChunk:
     """Um pedaço de informação com metadados de prioridade."""
+
     text: str
     priority: Priority
     source: str  # "log", "metric", "trace", "summary"
@@ -52,6 +54,7 @@ class CompressedChunk:
 @dataclass
 class CompressionStats:
     """Estatísticas da compressão."""
+
     original_tokens: int
     compressed_tokens: int
     chunks_kept: int
@@ -95,9 +98,21 @@ class ContextCompressor:
 
         # Thresholds por nível de compressão
         self._thresholds = {
-            "minimal": {"min_priority": Priority.NOISE, "max_similar": 10, "summary_ratio": 0.8},
-            "balanced": {"min_priority": Priority.CONTEXT, "max_similar": 10, "summary_ratio": 0.5},
-            "aggressive": {"min_priority": Priority.IMPORTANT, "max_similar": 4, "summary_ratio": 0.3},
+            "minimal": {
+                "min_priority": Priority.NOISE,
+                "max_similar": 10,
+                "summary_ratio": 0.8,
+            },
+            "balanced": {
+                "min_priority": Priority.CONTEXT,
+                "max_similar": 10,
+                "summary_ratio": 0.5,
+            },
+            "aggressive": {
+                "min_priority": Priority.IMPORTANT,
+                "max_similar": 4,
+                "summary_ratio": 0.3,
+            },
         }
 
     def compress(self, report) -> tuple[str, CompressionStats]:
@@ -136,7 +151,9 @@ class ContextCompressor:
         # Gera texto final
         compressed_text = self._render(final_chunks, report)
         stats.compressed_tokens = self._estimate_tokens(compressed_text)
-        stats.compression_ratio = 1 - (stats.compressed_tokens / max(stats.original_tokens, 1))
+        stats.compression_ratio = 1 - (
+            stats.compressed_tokens / max(stats.original_tokens, 1)
+        )
 
         return compressed_text, stats
 
@@ -187,40 +204,47 @@ class ContextCompressor:
         for tpl in report.log_templates:
             priority = self._classify_log_priority(tpl)
             text = self._format_log_chunk(tpl)
-            chunks.append(CompressedChunk(
-                text=text,
-                priority=priority,
-                source="log",
-                tokens_estimate=self._estimate_tokens(text),
-                service=", ".join(sorted(tpl.services)),
-                relevance_score=tpl.relevance_score,
-            ))
+            chunks.append(
+                CompressedChunk(
+                    text=text,
+                    priority=priority,
+                    source="log",
+                    tokens_estimate=self._estimate_tokens(text),
+                    service=", ".join(sorted(tpl.services)),
+                    relevance_score=tpl.relevance_score,
+                )
+            )
 
         # Metric anomalies
         for anomaly in report.metric_anomalies:
             priority = self._classify_metric_priority(anomaly)
             text = self._format_metric_chunk(anomaly)
-            chunks.append(CompressedChunk(
-                text=text,
-                priority=priority,
-                source="metric",
-                tokens_estimate=self._estimate_tokens(text),
-                service=anomaly.service,
-                relevance_score=anomaly.deviation_sigma,
-            ))
+            chunks.append(
+                CompressedChunk(
+                    text=text,
+                    priority=priority,
+                    source="metric",
+                    tokens_estimate=self._estimate_tokens(text),
+                    service=anomaly.service,
+                    relevance_score=anomaly.deviation_sigma,
+                )
+            )
 
         # Slow traces
         for trace in report.slow_traces:
             priority = self._classify_trace_priority(trace)
             text = self._format_trace_chunk(trace)
-            chunks.append(CompressedChunk(
-                text=text,
-                priority=priority,
-                source="trace",
-                tokens_estimate=self._estimate_tokens(text),
-                service=trace.bottleneck_service,
-                relevance_score=trace.total_duration_ms / max(trace.normal_duration_ms, 1),
-            ))
+            chunks.append(
+                CompressedChunk(
+                    text=text,
+                    priority=priority,
+                    source="trace",
+                    tokens_estimate=self._estimate_tokens(text),
+                    service=trace.bottleneck_service,
+                    relevance_score=trace.total_duration_ms
+                    / max(trace.normal_duration_ms, 1),
+                )
+            )
 
         return chunks
 
@@ -268,9 +292,16 @@ class ContextCompressor:
 
         # Padrões críticos
         critical_patterns = [
-            r"\[error\]", r"\[fatal\]", r"crash", r"panic", r"oom",
-            r"exhausted", r"circuit.?breaker", r"sigma\s*[>≥]\s*[5-9]",
-            r"bottleneck", r"root.?cause",
+            r"\[error\]",
+            r"\[fatal\]",
+            r"crash",
+            r"panic",
+            r"oom",
+            r"exhausted",
+            r"circuit.?breaker",
+            r"sigma\s*[>≥]\s*[5-9]",
+            r"bottleneck",
+            r"root.?cause",
         ]
         for pat in critical_patterns:
             if re.search(pat, line_lower):
@@ -278,8 +309,13 @@ class ContextCompressor:
 
         # Padrões importantes
         important_patterns = [
-            r"\[warn\]", r"timeout", r"slow", r"spike", r"anomal",
-            r"sigma\s*[>≥]\s*[3-4]", r"degraded",
+            r"\[warn\]",
+            r"timeout",
+            r"slow",
+            r"spike",
+            r"anomal",
+            r"sigma\s*[>≥]\s*[3-4]",
+            r"degraded",
         ]
         for pat in important_patterns:
             if re.search(pat, line_lower):
@@ -293,7 +329,9 @@ class ContextCompressor:
 
     # --- Fase 2: Compressão ---
 
-    def _apply_compression(self, chunks: list[CompressedChunk]) -> list[CompressedChunk]:
+    def _apply_compression(
+        self, chunks: list[CompressedChunk]
+    ) -> list[CompressedChunk]:
         """Aplica compressão baseada nas prioridades."""
         threshold = self._thresholds[self.compression_level]
         min_priority = threshold["min_priority"]
@@ -337,7 +375,9 @@ class ContextCompressor:
         result = []
         for key, group in groups.items():
             # Ordena por relevância (maior primeiro)
-            group.sort(key=lambda c: (c.priority.value, c.relevance_score), reverse=True)
+            group.sort(
+                key=lambda c: (c.priority.value, c.relevance_score), reverse=True
+            )
             # Mantém até max_similar
             result.extend(group[:max_similar])
 
@@ -351,7 +391,7 @@ class ContextCompressor:
         result = []
         for line in lines:
             # Normaliza para comparação
-            normalized = re.sub(r'\d+', 'N', line.strip().lower())
+            normalized = re.sub(r"\d+", "N", line.strip().lower())
             if normalized not in seen:
                 seen.add(normalized)
                 result.append(line)
@@ -431,7 +471,7 @@ class ContextCompressor:
         template = tpl.template
         truncated = template[:35]
         suffix = "…" if len(template) > 35 else ""
-        return f"\"{truncated}{suffix}\""
+        return f'"{truncated}{suffix}"'
 
     def _format_metric_chunk(self, anomaly) -> str:
         anomaly_type = {

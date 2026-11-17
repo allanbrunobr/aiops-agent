@@ -24,9 +24,12 @@ async def handle_false_positive_side_effects(
 
     try:
         from interfaces.http.app import knowledge_store as _ks
+
         if _ks is not None:
             pattern_id = _mark_knowledge_pattern_negative(
-                incident, _ks, correlation_id,
+                incident,
+                _ks,
+                correlation_id,
             )
     except Exception:
         log.warning("false_positive_side_effect_error", exc_info=True)
@@ -60,7 +63,11 @@ def _mark_knowledge_pattern_negative(
 
     # Fallback: busca por service + root_cause a partir do diagnóstico
     if pattern is None and incident.diagnosis:
-        service = incident.alert.affected_services[0] if incident.alert.affected_services else None
+        service = (
+            incident.alert.affected_services[0]
+            if incident.alert.affected_services
+            else None
+        )
         root_cause = incident.diagnosis.get("root_cause")
         if service and root_cause:
             pattern = knowledge_store.find_by_service_and_cause(service, root_cause)

@@ -26,11 +26,17 @@ class DetectionAgent:
     def detect(self, report) -> dict:
         """Analisa o relatório agregado e decide se há incidente."""
         # Conta errors
-        error_templates = [t for t in report.log_templates if t.level in ("ERROR", "FATAL")]
+        error_templates = [
+            t for t in report.log_templates if t.level in ("ERROR", "FATAL")
+        ]
         total_errors = sum(t.count for t in error_templates)
 
         # Verifica anomalias de métricas
-        high_sigma_anomalies = [a for a in report.metric_anomalies if a.deviation_sigma >= self.sigma_threshold]
+        high_sigma_anomalies = [
+            a
+            for a in report.metric_anomalies
+            if a.deviation_sigma >= self.sigma_threshold
+        ]
 
         # Verifica traces lentos
         slow_traces = report.slow_traces
@@ -38,9 +44,13 @@ class DetectionAgent:
         # Heurística de detecção
         signals = []
         if total_errors >= self.error_threshold:
-            signals.append(f"{total_errors} errors across {len(error_templates)} patterns")
+            signals.append(
+                f"{total_errors} errors across {len(error_templates)} patterns"
+            )
         if high_sigma_anomalies:
-            signals.append(f"{len(high_sigma_anomalies)} metric anomalies (>{self.sigma_threshold}sigma)")
+            signals.append(
+                f"{len(high_sigma_anomalies)} metric anomalies (>{self.sigma_threshold}sigma)"
+            )
         if slow_traces:
             signals.append(f"{len(slow_traces)} slow trace patterns")
 

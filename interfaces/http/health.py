@@ -71,29 +71,34 @@ async def readiness(request: Request) -> ReadinessResponse:
     # Webhook só entra como saudável se o processo montou a rota.
     # create_app não monta o webhook; dizer "accepting requests" era falso.
     webhook_mounted = any(
-        "webhook" in (getattr(route, "path", "") or "")
-        for route in request.app.routes
+        "webhook" in (getattr(route, "path", "") or "") for route in request.app.routes
     )
-    components.append(ComponentStatus(
-        name="webhook",
-        healthy=webhook_mounted,
-        detail="accepting requests" if webhook_mounted else "not mounted",
-    ))
+    components.append(
+        ComponentStatus(
+            name="webhook",
+            healthy=webhook_mounted,
+            detail="accepting requests" if webhook_mounted else "not mounted",
+        )
+    )
 
     # Verifica disponibilidade de componentes via app.state
     store = getattr(request.app.state, "store", None)
-    components.append(ComponentStatus(
-        name="store",
-        healthy=store is not None,
-        detail="in-memory" if store else "not configured",
-    ))
+    components.append(
+        ComponentStatus(
+            name="store",
+            healthy=store is not None,
+            detail="in-memory" if store else "not configured",
+        )
+    )
 
     creds = getattr(request.app.state, "credentials", None)
-    components.append(ComponentStatus(
-        name="credentials",
-        healthy=creds is not None,
-        detail="env-provider" if creds else "not configured",
-    ))
+    components.append(
+        ComponentStatus(
+            name="credentials",
+            healthy=creds is not None,
+            detail="env-provider" if creds else "not configured",
+        )
+    )
 
     # Pipeline runner (adicionado pela Story 2.6)
     pipeline_runner = getattr(request.app.state, "pipeline_runner", None)
@@ -102,11 +107,13 @@ async def readiness(request: Request) -> ReadinessResponse:
     if pipeline_runner is not None:
         active_pipelines = pipeline_runner.active_count
         queued_alerts = pipeline_runner.queued_count
-        components.append(ComponentStatus(
-            name="pipeline_runner",
-            healthy=True,
-            detail=f"{active_pipelines} active, {queued_alerts} queued",
-        ))
+        components.append(
+            ComponentStatus(
+                name="pipeline_runner",
+                healthy=True,
+                detail=f"{active_pipelines} active, {queued_alerts} queued",
+            )
+        )
 
     # Determina status geral
     all_healthy = all(c.healthy for c in components)

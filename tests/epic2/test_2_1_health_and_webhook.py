@@ -1,4 +1,5 @@
 """Testes para Story 2.1: FastAPI Webhook Server com Health Endpoints."""
+
 from __future__ import annotations
 
 import pytest
@@ -53,6 +54,7 @@ async def test_health_ready_includes_required_components(app):
 async def test_health_fast_response(app):
     """Story 2.1 AC3: health endpoint responde em < 10ms."""
     import time
+
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -77,7 +79,7 @@ async def test_composition_root_wires_store(app):
         store_component = next(c for c in data["components"] if c["name"] == "store")
         assert store_component["healthy"] is True
 
-        creds_component = next(c for c in data["components"] if c["name"] == "credentials")
+        creds_component = next(
+            c for c in data["components"] if c["name"] == "credentials"
+        )
         assert creds_component["healthy"] is True
-
-

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 Analisador de demonstração: executa o pipeline preditivo sobre os dados
 recebidos de um tick e retorna sinais, score de risco e PredictionReport.
@@ -8,17 +9,23 @@ adaptada para operar sobre snapshots incrementais do corpus.
 """
 
 from data.models import LogEntry, MetricPoint, Span
-from pipeline.log_predictor import analyze_log_signals, analyze_log_signals_windowed, LogBurstSignal
+from pipeline.log_predictor import (
+    LogBurstSignal,
+    analyze_log_signals,
+    analyze_log_signals_windowed,
+)
 from pipeline.metric_predictor import compute_ewma_slope
-from pipeline.risk_scorer import compute_risk_score, get_event_level, MetricTrendSignal
+from pipeline.risk_scorer import MetricTrendSignal, compute_risk_score, get_event_level
 from pipeline.risk_tracker import RiskTracker
-from pipeline.trace_predictor import analyze_trace_signals, LatencyDriftSignal
+from pipeline.trace_predictor import LatencyDriftSignal, analyze_trace_signals
 
 
 class DemoAnalyzer:
     """Executa análise preditiva incremental sobre o buffer de eventos do tick."""
 
-    def __init__(self, enable_prediction: bool = True, ewma_threshold: float = 0.90) -> None:
+    def __init__(
+        self, enable_prediction: bool = True, ewma_threshold: float = 0.90
+    ) -> None:
         # Se False, usa apenas desvios 3-sigma sem sinais preditivos
         self.enable_prediction = enable_prediction
         # Limiar para cálculo de ETA (ex: 7200.0 para memory_used_mb, 0.90 para métricas normalizadas)
@@ -44,9 +51,7 @@ class DemoAnalyzer:
 
         # Métricas resumidas (último valor de cada nome)
         metrics_summary: dict[str, float] = {
-            name: pts[-1].value
-            for name, pts in metrics_by_name.items()
-            if pts
+            name: pts[-1].value for name, pts in metrics_by_name.items() if pts
         }
 
         if not self.enable_prediction:
@@ -75,6 +80,7 @@ class DemoAnalyzer:
         log_signal: LogBurstSignal | None = None
         if log_entries:
             from datetime import timedelta as _td
+
             first_ts = min(e.timestamp for e in log_entries)
             last_ts = max(e.timestamp for e in log_entries)
             span_s = (last_ts - first_ts).total_seconds()
@@ -128,7 +134,9 @@ class DemoAnalyzer:
             "metric_anomaly": metric_signal is not None and metric_signal.slope > 0.1,
             "log_burst_detected": log_signal.burst_detected if log_signal else False,
             "novel_templates": list(log_signal.novel_templates) if log_signal else [],
-            "latency_drift_detected": latency_signal.drift_detected if latency_signal else False,
+            "latency_drift_detected": latency_signal.drift_detected
+            if latency_signal
+            else False,
             "p95_ratio": latency_signal.p95_ratio if latency_signal else 1.0,
             "p99_ratio": latency_signal.p99_ratio if latency_signal else 1.0,
             "slope_ms_per_min": (metric_signal.slope * 60.0) if metric_signal else 0.0,
@@ -141,7 +149,9 @@ class DemoAnalyzer:
                 "event_level": event_level,
                 "risk_score": risk_score,
                 "eta_minutes": metric_signal.eta_minutes if metric_signal else None,
-                "signals_fired": [k for k, v in signals.items() if v and k != "novel_templates"],
+                "signals_fired": [
+                    k for k, v in signals.items() if v and k != "novel_templates"
+                ],
                 "matched_history": [],
             }
 
@@ -152,7 +162,9 @@ class DemoAnalyzer:
             "metrics": metrics_summary,
         }
 
-    def _compute_3sigma_risk(self, metrics_by_name: dict[str, list[MetricPoint]]) -> float:
+    def _compute_3sigma_risk(
+        self, metrics_by_name: dict[str, list[MetricPoint]]
+    ) -> float:
         """Calcula score de risco simplificado usando apenas desvio 3-sigma.
 
         Usado no modo enable_prediction=False (painel Traditional).
@@ -165,7 +177,7 @@ class DemoAnalyzer:
             n = len(values)
             mean = sum(values) / n
             variance = sum((v - mean) ** 2 for v in values) / n
-            stddev = variance ** 0.5
+            stddev = variance**0.5
             if stddev < 1e-9:
                 continue
             last_val = values[-1]

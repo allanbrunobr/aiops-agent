@@ -23,7 +23,9 @@ class RAGRetrievalScenario:
 
     name = "rag_retrieval_accuracy"
 
-    def execute(self, knowledge_store: object, incident_store: object, temp_dir: str) -> CheckResult:
+    def execute(
+        self, knowledge_store: object, incident_store: object, temp_dir: str
+    ) -> CheckResult:
         """Executa validação de retrieval RAG."""
         from rag.indexer import ObservabilityIndexer
 
@@ -55,8 +57,8 @@ class RAGRetrievalScenario:
         texts = [p.to_embedding_text() for p in patterns]
 
         try:
-            import numpy as np
             import faiss
+            import numpy as np
 
             indexer._load_model()
             embeddings = indexer.model.encode(texts, normalize_embeddings=True)

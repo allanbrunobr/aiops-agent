@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 Servidor FastAPI para o módulo de demonstração AIOps.
 
@@ -27,16 +28,24 @@ from typing import Any
 # Solução: remove 'interfaces/demo' do sys.path e insere a raiz do projeto na frente.
 _PROJECT_ROOT = str(Path(__file__).parent.parent.parent.resolve())
 _DEMO_DIR = str(Path(__file__).parent.resolve())
-sys.path[:] = [_PROJECT_ROOT] + [p for p in sys.path if Path(p).resolve() != Path(_DEMO_DIR).resolve() and p != ""]
+sys.path[:] = [_PROJECT_ROOT] + [
+    p for p in sys.path if Path(p).resolve() != Path(_DEMO_DIR).resolve() and p != ""
+]
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, Response
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 
 from interfaces.demo.engine import ScenarioEngine
 from interfaces.demo.narratives import get_narrative
-from interfaces.demo.scenarios import DemoScenarioConfig, SCENARIOS, get_scenarios_list
+from interfaces.demo.scenarios import SCENARIOS, DemoScenarioConfig, get_scenarios_list
 
 logger = logging.getLogger("interfaces.demo.server")
 
@@ -55,6 +64,7 @@ from core.lifecycle import LifecycleEvent
 try:
     from adapters.credentials import EnvCredentialProvider
     from interfaces.http.notifications.slack import SlackNotifier
+
     _slack_token = os.environ.get("SLACK_BOT_TOKEN")
     _slack_channel = os.environ.get("SLACK_CHANNEL", "#aiops-alerts")
     if _slack_token:
@@ -82,13 +92,16 @@ _tick_task: asyncio.Task | None = None
 _ws_connections: list[WebSocket] = []
 _current_corpus_name: str = "payment-pool-exhaustion"
 _slack_fired: set[str] = set()  # fases já notificadas no Slack (evita spam)
-_slack_warning_wall_time: float = 0.0  # timestamp wall-clock do último prediction.warning
+_slack_warning_wall_time: float = (
+    0.0  # timestamp wall-clock do último prediction.warning
+)
 _incident_start_wall_time: float = 0.0  # wall-clock quando incidente atingiu CRITICAL
 
 
 # ------------------------------------------------------------------ #
 # Endpoints de controle                                               #
 # ------------------------------------------------------------------ #
+
 
 @app.get("/demo/", response_class=HTMLResponse)
 async def serve_index() -> HTMLResponse:
@@ -189,12 +202,14 @@ async def get_status() -> JSONResponse:
     """Retorna estado atual do cenário."""
     if _engine is None:
         return JSONResponse(content={"phase": "IDLE", "scenario": None})
-    return JSONResponse(content={
-        "phase": _engine.phase.value,
-        "scenario": _engine.scenario_name,
-        "is_running": _engine.is_running,
-        "comparison_active": _engine.comparison_active,
-    })
+    return JSONResponse(
+        content={
+            "phase": _engine.phase.value,
+            "scenario": _engine.scenario_name,
+            "is_running": _engine.is_running,
+            "comparison_active": _engine.comparison_active,
+        }
+    )
 
 
 @app.patch("/demo/speed")
@@ -218,7 +233,9 @@ async def enable_comparison() -> JSONResponse:
         return JSONResponse(status_code=400, content={"error": "Nenhum cenário ativo."})
     scenario_meta = SCENARIOS.get(_current_corpus_name)
     if not scenario_meta:
-        return JSONResponse(status_code=400, content={"error": "Corpus não encontrado."})
+        return JSONResponse(
+            status_code=400, content={"error": "Corpus não encontrado."}
+        )
     corpus = scenario_meta["corpus_builder"]()
     _engine.enable_comparison(corpus)
     return JSONResponse(content={"status": "comparison_enabled"})
@@ -240,12 +257,15 @@ async def get_postmortem() -> Response:
     """
     if _engine is None or _engine.last_postmortem is None:
         return Response(status_code=204)
-    return PlainTextResponse(content=_engine.last_postmortem, media_type="text/markdown")
+    return PlainTextResponse(
+        content=_engine.last_postmortem, media_type="text/markdown"
+    )
 
 
 # ------------------------------------------------------------------ #
 # WebSocket                                                           #
 # ------------------------------------------------------------------ #
+
 
 @app.websocket("/demo/ws")
 async def websocket_endpoint(ws: WebSocket) -> None:
@@ -307,43 +327,66 @@ async def _tick_loop() -> None:
 
 async def _maybe_notify_slack(frame: Any) -> None:
     """Envia notificação Slack quando a fase muda para WARNING, ALERT ou RESOLVED."""
+    # Sem `global`, a atribuição no branch prediction.critical torna a variável
+    # local em toda a função e o branch resolved lê antes de atribuir (UnboundLocalError).
+    global _incident_start_wall_time
     if _slack is None or _engine is None:
         return
 
     from datetime import datetime, timezone
+
     now = datetime.now(timezone.utc)
     scenario = _engine.scenario_name
-    risk = frame.risk_score if hasattr(frame, "risk_score") else frame.get("risk_score", 0)
-    prediction = frame.prediction if hasattr(frame, "prediction") else frame.get("prediction")
-    event_level = prediction.get("event_level") if isinstance(prediction, dict) else None
+    risk = (
+        frame.risk_score if hasattr(frame, "risk_score") else frame.get("risk_score", 0)
+    )
+    prediction = (
+        frame.prediction if hasattr(frame, "prediction") else frame.get("prediction")
+    )
+    event_level = (
+        prediction.get("event_level") if isinstance(prediction, dict) else None
+    )
     eta = prediction.get("eta_minutes") if isinstance(prediction, dict) else None
-    signals = prediction.get("signals_fired", []) if isinstance(prediction, dict) else []
+    signals = (
+        prediction.get("signals_fired", []) if isinstance(prediction, dict) else []
+    )
 
     # ------------------------------------------------------------------ #
     # incident.resolved — avaliado PRIMEIRO, antes de qualquer guard      #
     # (quando risk < 30, prediction=None e o guard antigo bloqueava aqui) #
     # ------------------------------------------------------------------ #
-    if ("critical" in _slack_fired and "resolved" not in _slack_fired
-            and risk < 15.0 and not event_level):
+    if (
+        "critical" in _slack_fired
+        and "resolved" not in _slack_fired
+        and risk < 15.0
+        and not event_level
+    ):
         _slack_fired.add("resolved")
         duration_min = (
             (now.timestamp() - _incident_start_wall_time) / 60.0
-            if _incident_start_wall_time else None
+            if _incident_start_wall_time
+            else None
         )
         event = LifecycleEvent(
             event_type="incident.resolved",
             node_name=None,
             correlation_id=f"demo-{scenario}",
             timestamp=now,
-            data={"risk_score": risk, "scenario": scenario,
-                  "incident_duration_minutes": duration_min,
-                  "fix_detected": "Sinais normalizaram — pool despressurizado"},
+            data={
+                "risk_score": risk,
+                "scenario": scenario,
+                "incident_duration_minutes": duration_min,
+                "fix_detected": "Sinais normalizaram — pool despressurizado",
+            },
         )
         try:
             await _slack.on_event(event)
-            logger.info("Slack: incident.resolved enviado — cenário %s, risk=%.0f, duração=%s",
-                        scenario, risk,
-                        f"{duration_min:.1f}min" if duration_min else "?")
+            logger.info(
+                "Slack: incident.resolved enviado — cenário %s, risk=%.0f, duração=%s",
+                scenario,
+                risk,
+                f"{duration_min:.1f}min" if duration_min else "?",
+            )
         except Exception as exc:
             logger.warning("Slack notification falhou: %s", exc)
         return
@@ -378,7 +421,7 @@ async def _maybe_notify_slack(frame: Any) -> None:
             ),
             "payment-pool-recovery": (
                 "Aumentar max_connections para 500 permanentemente no ConfigMap:\n"
-                "kubectl patch cm payment-config --patch '{\"data\":{\"DB_POOL_MAX\":\"500\"}}'"
+                'kubectl patch cm payment-config --patch \'{"data":{"DB_POOL_MAX":"500"}}\''
             ),
             "memory-leak": (
                 "Reiniciar payment-svc e aplicar patch de hotfix para liberar referência estática:\n"
@@ -390,7 +433,9 @@ async def _maybe_notify_slack(frame: Any) -> None:
             ),
         }
         _diag_root_cause = _root_cause_map.get(scenario, "Causa raiz não determinada.")
-        _diag_proposed_fix = _proposed_fix_map.get(scenario, "Aguardando análise manual.")
+        _diag_proposed_fix = _proposed_fix_map.get(
+            scenario, "Aguardando análise manual."
+        )
         _diag_event = LifecycleEvent(
             event_type="diagnosis.completed",
             node_name=None,
@@ -424,14 +469,23 @@ async def _maybe_notify_slack(frame: Any) -> None:
             node_name=None,
             correlation_id=f"demo-{scenario}",
             timestamp=now,
-            data={"event_level": "prediction.warning", "risk_score": risk,
-                  "eta_minutes": eta, "signals": signals, "matched_history": [],
-                  "scenario": scenario},
+            data={
+                "event_level": "prediction.warning",
+                "risk_score": risk,
+                "eta_minutes": eta,
+                "signals": signals,
+                "matched_history": [],
+                "scenario": scenario,
+            },
         )
         try:
             await _slack.on_event(event)
-            logger.info("Slack: prediction.warning enviado — cenário %s, risk=%.0f, eta=%s",
-                        scenario, risk, f"{eta:.1f}min" if eta else "?")
+            logger.info(
+                "Slack: prediction.warning enviado — cenário %s, risk=%.0f, eta=%s",
+                scenario,
+                risk,
+                f"{eta:.1f}min" if eta else "?",
+            )
         except Exception as exc:
             logger.warning("Slack notification falhou: %s", exc)
 
@@ -443,19 +497,31 @@ async def _maybe_notify_slack(frame: Any) -> None:
             node_name=None,
             correlation_id=f"demo-{scenario}",
             timestamp=now,
-            data={"event_level": "prediction.alert", "risk_score": risk,
-                  "eta_minutes": eta, "signals": signals, "matched_history": [],
-                  "scenario": scenario},
+            data={
+                "event_level": "prediction.alert",
+                "risk_score": risk,
+                "eta_minutes": eta,
+                "signals": signals,
+                "matched_history": [],
+                "scenario": scenario,
+            },
         )
         try:
             await _slack.on_event(event)
-            logger.info("Slack: prediction.alert enviado — cenário %s, risk=%.0f",
-                        scenario, risk)
+            logger.info(
+                "Slack: prediction.alert enviado — cenário %s, risk=%.0f",
+                scenario,
+                risk,
+            )
         except Exception as exc:
             logger.warning("Slack notification falhou: %s", exc)
 
     # Dispara prediction.critical quando risk >= 80 (incidente iminente)
-    if event_level == "prediction.alert" and risk >= 80.0 and "critical" not in _slack_fired:
+    if (
+        event_level == "prediction.alert"
+        and risk >= 80.0
+        and "critical" not in _slack_fired
+    ):
         _slack_fired.add("critical")
         _incident_start_wall_time = now.timestamp()
         event = LifecycleEvent(
@@ -463,28 +529,40 @@ async def _maybe_notify_slack(frame: Any) -> None:
             node_name=None,
             correlation_id=f"demo-{scenario}",
             timestamp=now,
-            data={"event_level": "prediction.critical", "risk_score": risk,
-                  "eta_minutes": eta, "signals": signals, "matched_history": [],
-                  "scenario": scenario},
+            data={
+                "event_level": "prediction.critical",
+                "risk_score": risk,
+                "eta_minutes": eta,
+                "signals": signals,
+                "matched_history": [],
+                "scenario": scenario,
+            },
         )
         try:
             await _slack.on_event(event)
-            logger.info("Slack: prediction.critical enviado — cenário %s, risk=%.0f",
-                        scenario, risk)
+            logger.info(
+                "Slack: prediction.critical enviado — cenário %s, risk=%.0f",
+                scenario,
+                risk,
+            )
         except Exception as exc:
             logger.warning("Slack notification falhou: %s", exc)
-
 
 
 # ------------------------------------------------------------------ #
 # Entry point                                                         #
 # ------------------------------------------------------------------ #
 
+
 def main() -> None:
     """Ponto de entrada para execução direta via CLI."""
     parser = argparse.ArgumentParser(description="AIOps Demo Server")
-    parser.add_argument("--port", type=int, default=47891, help="Porta HTTP (padrão: 47891)")
-    parser.add_argument("--host", default="127.0.0.1", help="Host de escuta (padrão: localhost)")
+    parser.add_argument(
+        "--port", type=int, default=47891, help="Porta HTTP (padrão: 47891)"
+    )
+    parser.add_argument(
+        "--host", default="127.0.0.1", help="Host de escuta (padrão: localhost)"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)

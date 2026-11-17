@@ -6,6 +6,7 @@ and three connectors implementing their respective ABCs:
 - DatabricksMetricsSource (MetricsSource) — billing/usage metrics
 - DatabricksTraceSource (TraceSource) — query history traces
 """
+
 from __future__ import annotations
 
 import os
@@ -13,7 +14,6 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from tools.interfaces import LogSource, MetricsSource, TraceSource
-
 
 # Mapeamento padrao de colunas do system.access.audit para LogEntry
 DEFAULT_COLUMN_MAPPING = {
@@ -65,10 +65,7 @@ class DatabricksConnectorError(Exception):
 
     def __str__(self) -> str:
         """Representacao textual do erro."""
-        return (
-            f"[{self.error_type}] {self.service} at {self.timestamp}: "
-            f"{self.details}"
-        )
+        return f"[{self.error_type}] {self.service} at {self.timestamp}: {self.details}"
 
 
 class DatabricksConnection:
@@ -94,9 +91,7 @@ class DatabricksConnection:
         """
         self.host = host or os.environ.get("DATABRICKS_HOST")
         self.token = token or os.environ.get("DATABRICKS_TOKEN")
-        self.warehouse_id = warehouse_id or os.environ.get(
-            "DATABRICKS_WAREHOUSE_ID"
-        )
+        self.warehouse_id = warehouse_id or os.environ.get("DATABRICKS_WAREHOUSE_ID")
         self.timeout_seconds = timeout_seconds
         self._client = None
         self._validate_config()
@@ -116,10 +111,7 @@ class DatabricksConnection:
                 service=self.__class__.__name__,
                 error_type="config",
                 timestamp=datetime.now().isoformat(),
-                details=(
-                    "Missing required configuration: "
-                    + ", ".join(missing)
-                ),
+                details=("Missing required configuration: " + ", ".join(missing)),
             )
 
     def _get_client(self):
@@ -157,19 +149,14 @@ class DatabricksConnection:
                         service=self.__class__.__name__,
                         error_type="query",
                         timestamp=datetime.now().isoformat(),
-                        details=(
-                            f"Query failed with state {state_value}: "
-                            f"{error_msg}"
-                        ),
+                        details=(f"Query failed with state {state_value}: {error_msg}"),
                     )
 
             # Extrai resultados do response
             if not response.manifest or not response.result:
                 return []
 
-            columns = [
-                col.name for col in response.manifest.schema.columns
-            ]
+            columns = [col.name for col in response.manifest.schema.columns]
             rows = []
             if response.result.data_array:
                 for row_data in response.result.data_array:
@@ -194,14 +181,10 @@ class DatabricksConnection:
         error_msg = str(error).lower()
 
         # Timeout / conexao
-        if any(
-            kw in error_type_name
-            for kw in ("timeout", "connection", "network")
-        ):
+        if any(kw in error_type_name for kw in ("timeout", "connection", "network")):
             return "timeout"
         if any(
-            kw in error_msg
-            for kw in ("timeout", "timed out", "connection refused")
+            kw in error_msg for kw in ("timeout", "timed out", "connection refused")
         ):
             return "timeout"
 
@@ -214,8 +197,12 @@ class DatabricksConnection:
         if any(
             kw in error_msg
             for kw in (
-                "401", "403", "unauthorized", "forbidden",
-                "authentication", "permission denied",
+                "401",
+                "403",
+                "unauthorized",
+                "forbidden",
+                "authentication",
+                "permission denied",
             )
         ):
             return "auth"
@@ -274,26 +261,16 @@ class DatabricksLogSource(DatabricksConnection, LogSource):
             where_clauses = []
             if query:
                 safe_query = query.replace("'", "''")
-                where_clauses.append(
-                    f"CAST({msg_col} AS STRING) LIKE '%{safe_query}%'"
-                )
+                where_clauses.append(f"CAST({msg_col} AS STRING) LIKE '%{safe_query}%'")
             if service:
                 safe_svc = service.replace("'", "''")
                 where_clauses.append(f"{svc_col} = '{safe_svc}'")
             if start:
-                where_clauses.append(
-                    f"{ts_col} >= '{start.isoformat()}'"
-                )
+                where_clauses.append(f"{ts_col} >= '{start.isoformat()}'")
             if end:
-                where_clauses.append(
-                    f"{ts_col} <= '{end.isoformat()}'"
-                )
+                where_clauses.append(f"{ts_col} <= '{end.isoformat()}'")
 
-            where_sql = (
-                "WHERE " + " AND ".join(where_clauses)
-                if where_clauses
-                else ""
-            )
+            where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
             sql = (
                 f"SELECT * FROM {self.table} "
@@ -348,9 +325,7 @@ class DatabricksLogSource(DatabricksConnection, LogSource):
 
         return self._map_rows(rows, include_service=False)
 
-    def _map_rows(
-        self, rows: list[dict], *, include_service: bool
-    ) -> list[dict]:
+    def _map_rows(self, rows: list[dict], *, include_service: bool) -> list[dict]:
         """Converte linhas do Databricks para o formato LogEntry dict.
 
         Aplica o column_mapping configurado para mapear colunas
@@ -412,9 +387,7 @@ class DatabricksMetricsSource(DatabricksConnection, MetricsSource):
         """
         super().__init__(host, token, warehouse_id, timeout_seconds)
         self.table = table
-        self.column_mapping = (
-            column_mapping or DEFAULT_METRICS_COLUMN_MAPPING.copy()
-        )
+        self.column_mapping = column_mapping or DEFAULT_METRICS_COLUMN_MAPPING.copy()
         self.alerts_table = alerts_table
         self.alerts_column_mapping = (
             alerts_column_mapping or DEFAULT_ALERTS_COLUMN_MAPPING.copy()
@@ -441,7 +414,6 @@ class DatabricksMetricsSource(DatabricksConnection, MetricsSource):
             ts_col = self.column_mapping["timestamp"]
             svc_col = self.column_mapping["service"]
             metric_col = self.column_mapping["metric_name"]
-            val_col = self.column_mapping["value"]
 
             safe_promql = promql.replace("'", "''")
 
@@ -543,12 +515,14 @@ class DatabricksMetricsSource(DatabricksConnection, MetricsSource):
             except (ValueError, TypeError):
                 value = 0.0
 
-            results.append({
-                "timestamp": ts_value,
-                "service": str(row.get(svc_col, "unknown")),
-                "metric": str(row.get(metric_col, "")),
-                "value": value,
-            })
+            results.append(
+                {
+                    "timestamp": ts_value,
+                    "service": str(row.get(svc_col, "unknown")),
+                    "metric": str(row.get(metric_col, "")),
+                    "value": value,
+                }
+            )
 
         return results
 
@@ -564,11 +538,13 @@ class DatabricksMetricsSource(DatabricksConnection, MetricsSource):
         severity_col = self.alerts_column_mapping["severity"]
 
         for row in rows:
-            results.append({
-                "alert": str(row.get(alert_col, "")),
-                "service": str(row.get(svc_col, "unknown")),
-                "severity": str(row.get(severity_col, "unknown")),
-            })
+            results.append(
+                {
+                    "alert": str(row.get(alert_col, "")),
+                    "service": str(row.get(svc_col, "unknown")),
+                    "severity": str(row.get(severity_col, "unknown")),
+                }
+            )
 
         return results
 
@@ -597,9 +573,7 @@ class DatabricksTraceSource(DatabricksConnection, TraceSource):
         """
         super().__init__(host, token, warehouse_id, timeout_seconds)
         self.table = table
-        self.column_mapping = (
-            column_mapping or DEFAULT_TRACES_COLUMN_MAPPING.copy()
-        )
+        self.column_mapping = column_mapping or DEFAULT_TRACES_COLUMN_MAPPING.copy()
 
     # --- TraceSource ABC implementation ---
 
@@ -627,17 +601,11 @@ class DatabricksTraceSource(DatabricksConnection, TraceSource):
             where_clauses = [f"{svc_col} = '{safe_svc}'"]
 
             if min_duration_ms is not None:
-                where_clauses.append(
-                    f"{duration_col} >= {min_duration_ms}"
-                )
+                where_clauses.append(f"{duration_col} >= {min_duration_ms}")
             if start:
-                where_clauses.append(
-                    f"{start_col} >= '{start.isoformat()}'"
-                )
+                where_clauses.append(f"{start_col} >= '{start.isoformat()}'")
             if end:
-                where_clauses.append(
-                    f"{start_col} <= '{end.isoformat()}'"
-                )
+                where_clauses.append(f"{start_col} <= '{end.isoformat()}'")
 
             where_sql = "WHERE " + " AND ".join(where_clauses)
 
@@ -674,11 +642,7 @@ class DatabricksTraceSource(DatabricksConnection, TraceSource):
 
             safe_tid = trace_id.replace("'", "''")
 
-            sql = (
-                f"SELECT * FROM {self.table} "
-                f"WHERE {tid_col} = '{safe_tid}' "
-                f"LIMIT 1"
-            )
+            sql = f"SELECT * FROM {self.table} WHERE {tid_col} = '{safe_tid}' LIMIT 1"
 
             rows = self._execute_query(sql)
         except DatabricksConnectorError:
@@ -729,13 +693,15 @@ class DatabricksTraceSource(DatabricksConnection, TraceSource):
             except (ValueError, TypeError):
                 duration = 0.0
 
-            results.append({
-                "trace_id": str(row.get(tid_col, "")),
-                "service": str(row.get(svc_col, "unknown")),
-                "operation": str(row.get(op_col, "")),
-                "duration_ms": duration,
-                "status": str(row.get(status_col, "unknown")),
-                "attributes": {},
-            })
+            results.append(
+                {
+                    "trace_id": str(row.get(tid_col, "")),
+                    "service": str(row.get(svc_col, "unknown")),
+                    "operation": str(row.get(op_col, "")),
+                    "duration_ms": duration,
+                    "status": str(row.get(status_col, "unknown")),
+                    "attributes": {},
+                }
+            )
 
         return results

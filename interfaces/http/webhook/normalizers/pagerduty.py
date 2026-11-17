@@ -122,7 +122,9 @@ class PagerDutyNormalizer(AlertNormalizer):
 
         # Servico
         service_info = data.get("service", {})
-        service = service_info.get("summary") if isinstance(service_info, dict) else None
+        service = (
+            service_info.get("summary") if isinstance(service_info, dict) else None
+        )
 
         # Tipo do alerta
         alert_type = event.get("event_type", "incident.triggered")

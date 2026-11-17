@@ -2,7 +2,8 @@
 # scripts/ci-local.sh — replica os jobs do GitHub Actions localmente.
 #
 # Uso:
-#   scripts/ci-local.sh                 # roda os 3 jobs (unit, integration, rust)
+#   scripts/ci-local.sh                 # roda os 4 jobs (lint, unit, integration, rust)
+#   scripts/ci-local.sh lint            # só lint & type-check (ruff + mypy)
 #   scripts/ci-local.sh unit            # só unit-tests
 #   scripts/ci-local.sh integration     # só integration & snapshot
 #   scripts/ci-local.sh rust            # só rust-build & PyO3
@@ -44,6 +45,7 @@ UNIT_DEPS=(
   "slack-sdk>=3.27.0"
   "aiohttp>=3.9.0"
   "mcp>=1.0.0,<2.0.0"
+  "pytest-cov>=7.1.0"
 )
 
 require() {
@@ -62,13 +64,25 @@ mkvenv() {
   pip install --quiet --upgrade pip
 }
 
+run_lint() {
+  echo ">>> Job: lint"
+  require "$PYTHON"
+  mkvenv "$VENV_BASE-lint"
+  pip install --quiet "ruff>=0.17.5" "mypy>=2.4.1"
+  cd "$ROOT"
+  ruff check .
+  ruff format --check .
+  mypy domain application core
+  deactivate
+}
+
 run_unit() {
   echo ">>> Job: unit-tests"
   require "$PYTHON"
   mkvenv "$VENV_BASE-unit"
   pip install --quiet "${UNIT_DEPS[@]}"
   cd "$ROOT"
-  pytest tests/ -m unit --ignore=tests/rust -v
+  pytest tests/ -m unit --ignore=tests/rust -v --cov --cov-report=term-missing --cov-report=xml:coverage.xml
   deactivate
 }
 
@@ -98,16 +112,17 @@ run_rust() {
 }
 
 case "$JOB" in
+  lint)        run_lint ;;
   unit)        run_unit ;;
   integration) run_integration ;;
   rust)        run_rust ;;
-  all)         run_unit; run_integration; run_rust ;;
+  all)         run_lint; run_unit; run_integration; run_rust ;;
   -h|--help)
-    sed -n '2,16p' "$0"
+    sed -n '2,17p' "$0"
     exit 0
     ;;
   *)
-    echo "Uso: $0 [unit|integration|rust|all]" >&2
+    echo "Uso: $0 [lint|unit|integration|rust|all]" >&2
     exit 2
     ;;
 esac

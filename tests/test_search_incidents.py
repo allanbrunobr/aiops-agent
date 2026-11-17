@@ -147,7 +147,7 @@ class TestHandleSearchIncidents:
             retriever=MockRetriever(),
             sanitizer=MockSanitizer(),
         )
-        data = json.loads(result_json)
+        json.loads(result_json)
         # Sanitizer foi chamado
         assert len(sanitized_calls) > 0
 

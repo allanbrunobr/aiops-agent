@@ -3,21 +3,21 @@
 Orquestra a execucao de BlueprintNodes em sequencia,
 aplicando regras de on_failure (ABORT, SKIP, FALLBACK).
 """
+
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field as dc_field
+from dataclasses import dataclass
 from typing import Any
 
-from core.logging import get_logger
-from domain.incident_state import IncidentState
 from blueprint.nodes import (
-    BlueprintNode,
     NodeResult,
     NodeType,
     OnFailure,
     PipelineDefinition,
 )
+from core.logging import get_logger
+from domain.incident_state import IncidentState
 
 log = get_logger("blueprint.engine")
 
@@ -40,7 +40,9 @@ class PipelineRunContext:
 class BlueprintEngine:
     """Engine que executa PipelineDefinitions."""
 
-    def __init__(self, config: Any = None, store: Any = None, creds: Any = None) -> None:
+    def __init__(
+        self, config: Any = None, store: Any = None, creds: Any = None
+    ) -> None:
         self.config = config
         self.store = store
         self.creds = creds
@@ -49,7 +51,9 @@ class BlueprintEngine:
     def increment_llm_calls(self, ctx: PipelineRunContext, count: int = 1) -> None:
         """Incrementa contador de chamadas LLM e levanta excecao se limite excedido."""
         ctx.llm_calls += count
-        max_calls = getattr(getattr(self.config, "blueprint", None), "max_llm_calls", 15)
+        max_calls = getattr(
+            getattr(self.config, "blueprint", None), "max_llm_calls", 15
+        )
         if ctx.llm_calls > max_calls:
             raise LLMCallLimitExceeded(
                 f"LLM call limit exceeded: {ctx.llm_calls} > {max_calls}"
@@ -78,7 +82,9 @@ class BlueprintEngine:
         self.results = []
 
         pipeline_start = time.monotonic()
-        timeout_s = getattr(getattr(self.config, "blueprint", None), "pipeline_timeout_seconds", None)
+        timeout_s = getattr(
+            getattr(self.config, "blueprint", None), "pipeline_timeout_seconds", None
+        )
 
         for _node_idx, node in enumerate(pipeline.nodes):
             if (
@@ -88,11 +94,14 @@ class BlueprintEngine:
             ):
                 raise PipelineAborted("timeout")
 
-
             start = time.monotonic()
             try:
                 # Se agentic + no_llm, usa fallback diretamente
-                if node.node_type == NodeType.AGENTIC and state.no_llm and node.fallback:
+                if (
+                    node.node_type == NodeType.AGENTIC
+                    and state.no_llm
+                    and node.fallback
+                ):
                     log.info("node.using_fallback", node_id=node.id, reason="no_llm")
                     state = node.fallback(state)
                     result = NodeResult(
@@ -126,12 +135,14 @@ class BlueprintEngine:
                 )
 
                 if node.on_failure == OnFailure.ABORT:
-                    self.results.append(NodeResult(
-                        node_id=node.id,
-                        success=False,
-                        duration_ms=duration,
-                        error=str(exc),
-                    ))
+                    self.results.append(
+                        NodeResult(
+                            node_id=node.id,
+                            success=False,
+                            duration_ms=duration,
+                            error=str(exc),
+                        )
+                    )
                     raise PipelineAborted(
                         f"Node '{node.id}' failed and on_failure=ABORT: {exc}"
                     ) from exc
@@ -139,31 +150,37 @@ class BlueprintEngine:
                 elif node.on_failure == OnFailure.FALLBACK and node.fallback:
                     try:
                         state = node.fallback(state)
-                        self.results.append(NodeResult(
-                            node_id=node.id,
-                            success=True,
-                            duration_ms=(time.monotonic() - start) * 1000,
-                            used_fallback=True,
-                        ))
+                        self.results.append(
+                            NodeResult(
+                                node_id=node.id,
+                                success=True,
+                                duration_ms=(time.monotonic() - start) * 1000,
+                                used_fallback=True,
+                            )
+                        )
                         log.info("node.fallback_succeeded", node_id=node.id)
                     except Exception as fb_exc:
-                        self.results.append(NodeResult(
-                            node_id=node.id,
-                            success=False,
-                            duration_ms=(time.monotonic() - start) * 1000,
-                            error=f"Fallback also failed: {fb_exc}",
-                        ))
+                        self.results.append(
+                            NodeResult(
+                                node_id=node.id,
+                                success=False,
+                                duration_ms=(time.monotonic() - start) * 1000,
+                                error=f"Fallback also failed: {fb_exc}",
+                            )
+                        )
                         raise PipelineAborted(
                             f"Node '{node.id}' fallback also failed: {fb_exc}"
                         ) from fb_exc
 
                 elif node.on_failure == OnFailure.SKIP:
-                    self.results.append(NodeResult(
-                        node_id=node.id,
-                        success=False,
-                        duration_ms=duration,
-                        error=str(exc),
-                    ))
+                    self.results.append(
+                        NodeResult(
+                            node_id=node.id,
+                            success=False,
+                            duration_ms=duration,
+                            error=str(exc),
+                        )
+                    )
                     log.info("node.skipped", node_id=node.id)
                     continue
 

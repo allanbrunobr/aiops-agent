@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 Testes de simulação completos para os 4 cenários demo do AIOps Agent.
 
@@ -15,8 +16,7 @@ Cenários cobertos:
 Usar: python -m pytest tests/test_recovery_simulation.py -v -s
 """
 
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 from unittest.mock import patch
 
@@ -25,21 +25,22 @@ import pytest
 from interfaces.demo.engine import ScenarioEngine
 from interfaces.demo.scenarios import (
     DemoScenarioConfig,
+    build_memory_leak_corpus,
     build_payment_pool_corpus,
     build_payment_pool_recovery_corpus,
-    build_memory_leak_corpus,
     build_unknown_fault_corpus,
 )
 from interfaces.demo.schemas import DemoPhase, TickFrame
-
 
 # ---------------------------------------------------------------------------
 # Estruturas de dados para coleta de métricas por tick
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class TickSample:
     """Amostra coletada por tick durante a simulação."""
+
     tick: int
     risk_score: float
     phase: str
@@ -54,6 +55,7 @@ class TickSample:
 @dataclass
 class PhaseTransitionRecord:
     """Registro de transição de fase detectada pelo teste."""
+
     from_phase: str
     to_phase: str
     tick: int
@@ -64,6 +66,7 @@ class PhaseTransitionRecord:
 @dataclass
 class SignalDeactivation:
     """Registro de quando um sinal foi visto como False pela última vez."""
+
     signal_name: str
     last_false_tick: int
     last_false_sim_minutes: float
@@ -73,9 +76,11 @@ class SignalDeactivation:
 # Invariantes a verificar
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class InvariantResult:
     """Resultado de um invariante verificado."""
+
     name: str
     passed: bool
     detail: str
@@ -84,6 +89,7 @@ class InvariantResult:
 # ---------------------------------------------------------------------------
 # Teste principal
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.slow
 @pytest.mark.integration
@@ -144,13 +150,15 @@ def test_payment_pool_recovery_full_simulation() -> None:
 
             # Detecta transicoes de fase
             if sample.phase != prev_phase:
-                phase_transitions.append(PhaseTransitionRecord(
-                    from_phase=prev_phase,
-                    to_phase=sample.phase,
-                    tick=tick,
-                    sim_minutes=sample.elapsed_sim_minutes,
-                    risk_score=sample.risk_score,
-                ))
+                phase_transitions.append(
+                    PhaseTransitionRecord(
+                        from_phase=prev_phase,
+                        to_phase=sample.phase,
+                        tick=tick,
+                        sim_minutes=sample.elapsed_sim_minutes,
+                        risk_score=sample.risk_score,
+                    )
+                )
                 prev_phase = sample.phase
 
             # Registra ultima vez que sinais foram False (para verificar desativacao)
@@ -200,84 +208,104 @@ def test_payment_pool_recovery_full_simulation() -> None:
     degrading_min = phase_sim_min("DEGRADING")
     if degrading_min is not None:
         passed = degrading_min < 15.0
-        invariants.append(InvariantResult(
-            name="A1: DEGRADING antes de 15 min simulados",
-            passed=passed,
-            detail=f"Chegou a DEGRADING em {degrading_min:.1f} min simulados"
-            if passed else
-            f"FALHA: DEGRADING so em {degrading_min:.1f} min (esperado < 15 min)",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A1: DEGRADING antes de 15 min simulados",
+                passed=passed,
+                detail=f"Chegou a DEGRADING em {degrading_min:.1f} min simulados"
+                if passed
+                else f"FALHA: DEGRADING so em {degrading_min:.1f} min (esperado < 15 min)",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A1: DEGRADING antes de 15 min simulados",
-            passed=False,
-            detail="FALHA: fase DEGRADING nunca atingida",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A1: DEGRADING antes de 15 min simulados",
+                passed=False,
+                detail="FALHA: fase DEGRADING nunca atingida",
+            )
+        )
 
     # A2: WARNING antes de 20 min simulados
     warning_min = phase_sim_min("WARNING")
     if warning_min is not None:
         passed = warning_min < 20.0
-        invariants.append(InvariantResult(
-            name="A2: WARNING antes de 20 min simulados",
-            passed=passed,
-            detail=f"Chegou a WARNING em {warning_min:.1f} min simulados"
-            if passed else
-            f"FALHA: WARNING so em {warning_min:.1f} min (esperado < 20 min)",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A2: WARNING antes de 20 min simulados",
+                passed=passed,
+                detail=f"Chegou a WARNING em {warning_min:.1f} min simulados"
+                if passed
+                else f"FALHA: WARNING so em {warning_min:.1f} min (esperado < 20 min)",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A2: WARNING antes de 20 min simulados",
-            passed=False,
-            detail="FALHA: fase WARNING nunca atingida",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A2: WARNING antes de 20 min simulados",
+                passed=False,
+                detail="FALHA: fase WARNING nunca atingida",
+            )
+        )
 
     # A3: ALERT antes de 22 min simulados
     alert_min = phase_sim_min("ALERT")
     if alert_min is not None:
         passed = alert_min < 22.0
-        invariants.append(InvariantResult(
-            name="A3: ALERT antes de 22 min simulados",
-            passed=passed,
-            detail=f"Chegou a ALERT em {alert_min:.1f} min simulados"
-            if passed else
-            f"FALHA: ALERT so em {alert_min:.1f} min (esperado < 22 min)",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A3: ALERT antes de 22 min simulados",
+                passed=passed,
+                detail=f"Chegou a ALERT em {alert_min:.1f} min simulados"
+                if passed
+                else f"FALHA: ALERT so em {alert_min:.1f} min (esperado < 22 min)",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A3: ALERT antes de 22 min simulados",
-            passed=False,
-            detail="FALHA: fase ALERT nunca atingida",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A3: ALERT antes de 22 min simulados",
+                passed=False,
+                detail="FALHA: fase ALERT nunca atingida",
+            )
+        )
 
     # A4: INCIDENT atingido
     incident_min = phase_sim_min("INCIDENT")
     if incident_min is not None:
-        invariants.append(InvariantResult(
-            name="A4: INCIDENT atingido",
-            passed=True,
-            detail=f"Chegou a INCIDENT em {incident_min:.1f} min simulados",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A4: INCIDENT atingido",
+                passed=True,
+                detail=f"Chegou a INCIDENT em {incident_min:.1f} min simulados",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A4: INCIDENT atingido",
-            passed=False,
-            detail="FALHA: fase INCIDENT nunca atingida",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A4: INCIDENT atingido",
+                passed=False,
+                detail="FALHA: fase INCIDENT nunca atingida",
+            )
+        )
 
     # A5: RESOLVED atingido
     if resolved_tick is not None:
-        invariants.append(InvariantResult(
-            name="A5: RESOLVED atingido",
-            passed=True,
-            detail=f"Chegou a RESOLVED em {resolved_sim_minutes:.1f} min simulados (tick {resolved_tick})",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A5: RESOLVED atingido",
+                passed=True,
+                detail=f"Chegou a RESOLVED em {resolved_sim_minutes:.1f} min simulados (tick {resolved_tick})",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A5: RESOLVED atingido",
-            passed=False,
-            detail="FALHA: fase RESOLVED nunca atingida dentro de 600 ticks",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A5: RESOLVED atingido",
+                passed=False,
+                detail="FALHA: fase RESOLVED nunca atingida dentro de 600 ticks",
+            )
+        )
 
     # --- B. Risk score no RESOLVED ---
 
@@ -285,40 +313,50 @@ def test_payment_pool_recovery_full_simulation() -> None:
     if resolved_risk is not None:
         natural_recovery = resolved_risk < 15.0
         if natural_recovery:
-            b1_detail = f"Risk Score: {resolved_risk:.1f} -- recuperacao natural, nao fallback"
+            b1_detail = (
+                f"Risk Score: {resolved_risk:.1f} -- recuperacao natural, nao fallback"
+            )
         else:
             b1_detail = (
                 f"FALHA: RESOLVED disparou via fallback com risk={resolved_risk:.1f} "
                 f"(esperado < 15.0 para recuperacao natural)"
             )
-        invariants.append(InvariantResult(
-            name="B1: risk < 15 no RESOLVED (recuperacao natural)",
-            passed=natural_recovery,
-            detail=b1_detail,
-        ))
+        invariants.append(
+            InvariantResult(
+                name="B1: risk < 15 no RESOLVED (recuperacao natural)",
+                passed=natural_recovery,
+                detail=b1_detail,
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="B1: risk < 15 no RESOLVED (recuperacao natural)",
-            passed=False,
-            detail="FALHA: RESOLVED nunca atingido, invariante nao verificavel",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="B1: risk < 15 no RESOLVED (recuperacao natural)",
+                passed=False,
+                detail="FALHA: RESOLVED nunca atingido, invariante nao verificavel",
+            )
+        )
 
     # B2: risk nao deve ser >= 90 no RESOLVED
     if resolved_risk is not None:
         passed = resolved_risk < 90.0
-        invariants.append(InvariantResult(
-            name="B2: risk < 90 no RESOLVED",
-            passed=passed,
-            detail=f"Risk Score no RESOLVED: {resolved_risk:.1f}"
-            if passed else
-            f"FALHA: risk={resolved_risk:.1f} >= 90 no momento do RESOLVED",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="B2: risk < 90 no RESOLVED",
+                passed=passed,
+                detail=f"Risk Score no RESOLVED: {resolved_risk:.1f}"
+                if passed
+                else f"FALHA: risk={resolved_risk:.1f} >= 90 no momento do RESOLVED",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="B2: risk < 90 no RESOLVED",
-            passed=False,
-            detail="FALHA: RESOLVED nunca atingido",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="B2: risk < 90 no RESOLVED",
+                passed=False,
+                detail="FALHA: RESOLVED nunca atingido",
+            )
+        )
 
     # --- C. Desativacao de sinais durante recovery ---
     FIX_SIM_MINUTE = 25.0  # minuto simulado em que o fix foi aplicado no corpus
@@ -335,26 +373,36 @@ def test_payment_pool_recovery_full_simulation() -> None:
             c1_detail = f"latency_drift_detected desativado @ sim {last_min:.1f} min"
         else:
             # Verifica se nunca foi True (sinal nunca disparou)
-            any_true = any(s.signals.get("latency_drift_detected", False) for s in samples)
+            any_true = any(
+                s.signals.get("latency_drift_detected", False) for s in samples
+            )
             if not any_true:
-                c1_detail = "AVISO: latency_drift_detected nunca foi True durante a simulacao"
-                deactivated_after_fix = False  # sinal nunca disparou, invariante nao aplicavel
+                c1_detail = (
+                    "AVISO: latency_drift_detected nunca foi True durante a simulacao"
+                )
+                deactivated_after_fix = (
+                    False  # sinal nunca disparou, invariante nao aplicavel
+                )
             else:
                 c1_detail = (
                     f"FALHA: latency_drift_detected ultimo False em {last_min:.1f} min "
                     f"(esperado >= 28 min para confirmar desativacao durante recovery)"
                 )
-        invariants.append(InvariantResult(
-            name="C1: latency_drift_detected desativado apos min 28 simulado",
-            passed=deactivated_after_fix,
-            detail=c1_detail,
-        ))
+        invariants.append(
+            InvariantResult(
+                name="C1: latency_drift_detected desativado apos min 28 simulado",
+                passed=deactivated_after_fix,
+                detail=c1_detail,
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="C1: latency_drift_detected desativado apos min 28 simulado",
-            passed=False,
-            detail="FALHA: latency_drift_detected nunca registrado como False",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="C1: latency_drift_detected desativado apos min 28 simulado",
+                passed=False,
+                detail="FALHA: latency_drift_detected nunca registrado como False",
+            )
+        )
 
     # C2: log_burst_detected se torna False apos min 30 sim
     burst_deactivated = signal_last_false.get("log_burst_detected")
@@ -364,26 +412,34 @@ def test_payment_pool_recovery_full_simulation() -> None:
         if deactivated_after_fix:
             c2_detail = f"log_burst_detected desativado @ sim {last_min_b:.1f} min"
         else:
-            any_true_b = any(s.signals.get("log_burst_detected", False) for s in samples)
+            any_true_b = any(
+                s.signals.get("log_burst_detected", False) for s in samples
+            )
             if not any_true_b:
-                c2_detail = "AVISO: log_burst_detected nunca foi True durante a simulacao"
+                c2_detail = (
+                    "AVISO: log_burst_detected nunca foi True durante a simulacao"
+                )
                 deactivated_after_fix = False
             else:
                 c2_detail = (
                     f"FALHA: log_burst_detected ultimo False em {last_min_b:.1f} min "
                     f"(esperado >= 30 min para confirmar desativacao durante recovery)"
                 )
-        invariants.append(InvariantResult(
-            name="C2: log_burst_detected desativado apos min 30 simulado",
-            passed=deactivated_after_fix,
-            detail=c2_detail,
-        ))
+        invariants.append(
+            InvariantResult(
+                name="C2: log_burst_detected desativado apos min 30 simulado",
+                passed=deactivated_after_fix,
+                detail=c2_detail,
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="C2: log_burst_detected desativado apos min 30 simulado",
-            passed=False,
-            detail="FALHA: log_burst_detected nunca registrado como False",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="C2: log_burst_detected desativado apos min 30 simulado",
+                passed=False,
+                detail="FALHA: log_burst_detected nunca registrado como False",
+            )
+        )
 
     # --- D. Timing do fallback ---
 
@@ -405,17 +461,21 @@ def test_payment_pool_recovery_full_simulation() -> None:
                     f"mas risk={resolved_risk:.1f} < 15 -- recuperacao natural aceitavel)"
                 )
                 not_premature = True  # recovery rapido e natural tambem e valido
-        invariants.append(InvariantResult(
-            name="D1: RESOLVED nao ocorre antes do minuto 30 (ou e natural)",
-            passed=not_premature,
-            detail=d1_detail,
-        ))
+        invariants.append(
+            InvariantResult(
+                name="D1: RESOLVED nao ocorre antes do minuto 30 (ou e natural)",
+                passed=not_premature,
+                detail=d1_detail,
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="D1: RESOLVED nao ocorre antes do minuto 30 (ou e natural)",
-            passed=False,
-            detail="FALHA: RESOLVED nunca atingido",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="D1: RESOLVED nao ocorre antes do minuto 30 (ou e natural)",
+                passed=False,
+                detail="FALHA: RESOLVED nunca atingido",
+            )
+        )
 
     # -------------------------------------------------------------------
     # Impressao do relatorio completo
@@ -433,7 +493,6 @@ def test_payment_pool_recovery_full_simulation() -> None:
 
     # --- Progressao de fases ---
     print("--- Progressao de Fases ---")
-    phase_order = ["PLAYING", "DEGRADING", "WARNING", "ALERT", "INCIDENT", "RESOLVED"]
     thresholds = {
         "DEGRADING": 15.0,
         "WARNING": 20.0,
@@ -460,7 +519,9 @@ def test_payment_pool_recovery_full_simulation() -> None:
     print("--- Risk Score no RESOLVED ---")
     if resolved_risk is not None:
         if resolved_risk < 15.0:
-            print(f"  Risk Score: {resolved_risk:.1f}  OK (recuperacao natural, nao fallback)")
+            print(
+                f"  Risk Score: {resolved_risk:.1f}  OK (recuperacao natural, nao fallback)"
+            )
         else:
             print(
                 f"  Risk Score: {resolved_risk:.1f}  FALHA: RESOLVED via fallback "
@@ -521,7 +582,9 @@ def test_payment_pool_recovery_full_simulation() -> None:
     if passed_count == total_count:
         print(f"PASSOU: {passed_count}/{total_count} invariantes OK")
     else:
-        print(f"FALHOU: {total_count - passed_count}/{total_count} invariantes -- ver detalhes acima")
+        print(
+            f"FALHOU: {total_count - passed_count}/{total_count} invariantes -- ver detalhes acima"
+        )
     print("=" * 60)
 
     # -------------------------------------------------------------------
@@ -530,21 +593,20 @@ def test_payment_pool_recovery_full_simulation() -> None:
     failed = [inv for inv in invariants if not inv.passed]
     if failed:
         failure_lines = "\n".join(
-            f"  [{i+1}] {inv.name}: {inv.detail}"
-            for i, inv in enumerate(failed)
+            f"  [{i + 1}] {inv.name}: {inv.detail}" for i, inv in enumerate(failed)
         )
-        pytest.fail(
-            f"{len(failed)} invariante(s) falharam:\n{failure_lines}"
-        )
+        pytest.fail(f"{len(failed)} invariante(s) falharam:\n{failure_lines}")
 
 
 # ---------------------------------------------------------------------------
 # Helper compartilhado: executa simulação tick-a-tick e retorna métricas
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class SimulationResult:
     """Resultado completo de uma simulação tick-a-tick."""
+
     samples: list[TickSample]
     phase_transitions: list[PhaseTransitionRecord]
     signal_last_false: dict[str, tuple[int, float]]
@@ -608,13 +670,15 @@ def _run_scenario_simulation(
             samples.append(sample)
 
             if sample.phase != prev_phase:
-                phase_transitions.append(PhaseTransitionRecord(
-                    from_phase=prev_phase,
-                    to_phase=sample.phase,
-                    tick=tick,
-                    sim_minutes=sample.elapsed_sim_minutes,
-                    risk_score=sample.risk_score,
-                ))
+                phase_transitions.append(
+                    PhaseTransitionRecord(
+                        from_phase=prev_phase,
+                        to_phase=sample.phase,
+                        tick=tick,
+                        sim_minutes=sample.elapsed_sim_minutes,
+                        risk_score=sample.risk_score,
+                    )
+                )
                 prev_phase = sample.phase
 
             for sig_name in tracked_signals:
@@ -665,7 +729,9 @@ def _print_simulation_report(
 ) -> None:
     """Imprime relatório padronizado de simulação."""
     total_ticks = len(result.samples)
-    total_sim_minutes = result.samples[-1].elapsed_sim_minutes if result.samples else 0.0
+    total_sim_minutes = (
+        result.samples[-1].elapsed_sim_minutes if result.samples else 0.0
+    )
 
     print()
     print("=" * 60)
@@ -694,7 +760,9 @@ def _print_simulation_report(
 
     print("--- Risk Score no RESOLVED ---")
     if result.resolved_risk is not None:
-        print(f"  Risk Score: {result.resolved_risk:.1f}  @ sim {result.resolved_sim_minutes:.1f} min")
+        print(
+            f"  Risk Score: {result.resolved_risk:.1f}  @ sim {result.resolved_sim_minutes:.1f} min"
+        )
     else:
         print("  RESOLVED nunca atingido")
     print()
@@ -708,7 +776,9 @@ def _print_simulation_report(
                 if last_min_r >= expected_after:
                     print(f"  {sig_name}: ultimo False @ sim {last_min_r:.1f} min  OK")
                 else:
-                    any_true_s = any(s.signals.get(sig_name, False) for s in result.samples)
+                    any_true_s = any(
+                        s.signals.get(sig_name, False) for s in result.samples
+                    )
                     if not any_true_s:
                         print(f"  {sig_name}: nunca foi True  AVISO")
                     else:
@@ -722,7 +792,9 @@ def _print_simulation_report(
 
     print("--- Risk Score Trajectory (a cada 30 ticks) ---")
     trajectory = [s for i, s in enumerate(result.samples) if i % 30 == 0]
-    if result.samples and (not trajectory or trajectory[-1].tick != result.samples[-1].tick):
+    if result.samples and (
+        not trajectory or trajectory[-1].tick != result.samples[-1].tick
+    ):
         trajectory.append(result.samples[-1])
     for s in trajectory:
         print(
@@ -752,14 +824,15 @@ def _assert_invariants(invariants: list[InvariantResult]) -> None:
     if passed_count == total_count:
         print(f"PASSOU: {passed_count}/{total_count} invariantes OK")
     else:
-        print(f"FALHOU: {total_count - passed_count}/{total_count} invariantes -- ver detalhes acima")
+        print(
+            f"FALHOU: {total_count - passed_count}/{total_count} invariantes -- ver detalhes acima"
+        )
     print("=" * 60)
 
     failed = [inv for inv in invariants if not inv.passed]
     if failed:
         failure_lines = "\n".join(
-            f"  [{i+1}] {inv.name}: {inv.detail}"
-            for i, inv in enumerate(failed)
+            f"  [{i + 1}] {inv.name}: {inv.detail}" for i, inv in enumerate(failed)
         )
         pytest.fail(f"{len(failed)} invariante(s) falharam:\n{failure_lines}")
 
@@ -767,6 +840,7 @@ def _assert_invariants(invariants: list[InvariantResult]) -> None:
 # ---------------------------------------------------------------------------
 # Teste 2: payment-pool-exhaustion (sem recovery)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.slow
 @pytest.mark.integration
@@ -817,116 +891,147 @@ def test_payment_pool_exhaustion_full_simulation() -> None:
     degrading_min = _phase_sim_min(result.phase_transitions, "DEGRADING")
     if degrading_min is not None:
         passed = degrading_min < 15.0
-        invariants.append(InvariantResult(
-            name="A1: DEGRADING antes de 15 min simulados",
-            passed=passed,
-            detail=f"Chegou a DEGRADING em {degrading_min:.1f} min"
-            if passed else f"FALHA: DEGRADING em {degrading_min:.1f} min (esperado < 15)",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A1: DEGRADING antes de 15 min simulados",
+                passed=passed,
+                detail=f"Chegou a DEGRADING em {degrading_min:.1f} min"
+                if passed
+                else f"FALHA: DEGRADING em {degrading_min:.1f} min (esperado < 15)",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A1: DEGRADING antes de 15 min simulados",
-            passed=False,
-            detail="FALHA: fase DEGRADING nunca atingida",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A1: DEGRADING antes de 15 min simulados",
+                passed=False,
+                detail="FALHA: fase DEGRADING nunca atingida",
+            )
+        )
 
     # A2: WARNING antes de 22 min simulados
     warning_min = _phase_sim_min(result.phase_transitions, "WARNING")
     if warning_min is not None:
         passed = warning_min < 22.0
-        invariants.append(InvariantResult(
-            name="A2: WARNING antes de 22 min simulados",
-            passed=passed,
-            detail=f"Chegou a WARNING em {warning_min:.1f} min"
-            if passed else f"FALHA: WARNING em {warning_min:.1f} min (esperado < 22)",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A2: WARNING antes de 22 min simulados",
+                passed=passed,
+                detail=f"Chegou a WARNING em {warning_min:.1f} min"
+                if passed
+                else f"FALHA: WARNING em {warning_min:.1f} min (esperado < 22)",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A2: WARNING antes de 22 min simulados",
-            passed=False,
-            detail="FALHA: fase WARNING nunca atingida",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A2: WARNING antes de 22 min simulados",
+                passed=False,
+                detail="FALHA: fase WARNING nunca atingida",
+            )
+        )
 
     # A3: ALERT antes de 26 min simulados
     alert_min = _phase_sim_min(result.phase_transitions, "ALERT")
     if alert_min is not None:
         passed = alert_min < 26.0
-        invariants.append(InvariantResult(
-            name="A3: ALERT antes de 26 min simulados",
-            passed=passed,
-            detail=f"Chegou a ALERT em {alert_min:.1f} min"
-            if passed else f"FALHA: ALERT em {alert_min:.1f} min (esperado < 26)",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A3: ALERT antes de 26 min simulados",
+                passed=passed,
+                detail=f"Chegou a ALERT em {alert_min:.1f} min"
+                if passed
+                else f"FALHA: ALERT em {alert_min:.1f} min (esperado < 26)",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A3: ALERT antes de 26 min simulados",
-            passed=False,
-            detail="FALHA: fase ALERT nunca atingida",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A3: ALERT antes de 26 min simulados",
+                passed=False,
+                detail="FALHA: fase ALERT nunca atingida",
+            )
+        )
 
     # A4: INCIDENT atingido
     incident_min = _phase_sim_min(result.phase_transitions, "INCIDENT")
     if incident_min is not None:
-        invariants.append(InvariantResult(
-            name="A4: INCIDENT atingido",
-            passed=True,
-            detail=f"Chegou a INCIDENT em {incident_min:.1f} min",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A4: INCIDENT atingido",
+                passed=True,
+                detail=f"Chegou a INCIDENT em {incident_min:.1f} min",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A4: INCIDENT atingido",
-            passed=False,
-            detail="FALHA: fase INCIDENT nunca atingida",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A4: INCIDENT atingido",
+                passed=False,
+                detail="FALHA: fase INCIDENT nunca atingida",
+            )
+        )
 
     # A5: RESOLVED atingido
     if result.resolved_tick is not None:
-        invariants.append(InvariantResult(
-            name="A5: RESOLVED atingido",
-            passed=True,
-            detail=f"Chegou a RESOLVED em {result.resolved_sim_minutes:.1f} min (tick {result.resolved_tick})",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A5: RESOLVED atingido",
+                passed=True,
+                detail=f"Chegou a RESOLVED em {result.resolved_sim_minutes:.1f} min (tick {result.resolved_tick})",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A5: RESOLVED atingido",
-            passed=False,
-            detail="FALHA: RESOLVED nunca atingido dentro de 900 ticks",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A5: RESOLVED atingido",
+                passed=False,
+                detail="FALHA: RESOLVED nunca atingido dentro de 900 ticks",
+            )
+        )
 
     # B1: risk >= 15 no RESOLVED (fallback esperado — sem recovery natural)
     if result.resolved_risk is not None:
         is_fallback = result.resolved_risk >= 15.0
-        invariants.append(InvariantResult(
-            name="B1: RESOLVED e via fallback (risk >= 15)",
-            passed=is_fallback,
-            detail=f"Risk={result.resolved_risk:.1f} -- fallback correto (sem fix operacional)"
-            if is_fallback else
-            f"AVISO: risk={result.resolved_risk:.1f} < 15 -- RESOLVED pareceu recovery natural, "
-            f"inesperado para cenario sem fix",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="B1: RESOLVED e via fallback (risk >= 15)",
+                passed=is_fallback,
+                detail=f"Risk={result.resolved_risk:.1f} -- fallback correto (sem fix operacional)"
+                if is_fallback
+                else f"AVISO: risk={result.resolved_risk:.1f} < 15 -- RESOLVED pareceu recovery natural, "
+                f"inesperado para cenario sem fix",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="B1: RESOLVED e via fallback (risk >= 15)",
-            passed=False,
-            detail="FALHA: RESOLVED nunca atingido",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="B1: RESOLVED e via fallback (risk >= 15)",
+                passed=False,
+                detail="FALHA: RESOLVED nunca atingido",
+            )
+        )
 
     # D1: RESOLVED nao ocorre antes de min 25 simulados (corpus ainda carregando)
     if result.resolved_sim_minutes is not None:
         not_premature = result.resolved_sim_minutes >= 25.0
-        invariants.append(InvariantResult(
-            name="D1: RESOLVED nao ocorre antes de min 25 simulados",
-            passed=not_premature,
-            detail=f"RESOLVED em {result.resolved_sim_minutes:.1f} min (>= 25, correto)"
-            if not_premature else
-            f"FALHA: fallback prematuro -- RESOLVED em {result.resolved_sim_minutes:.1f} min",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="D1: RESOLVED nao ocorre antes de min 25 simulados",
+                passed=not_premature,
+                detail=f"RESOLVED em {result.resolved_sim_minutes:.1f} min (>= 25, correto)"
+                if not_premature
+                else f"FALHA: fallback prematuro -- RESOLVED em {result.resolved_sim_minutes:.1f} min",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="D1: RESOLVED nao ocorre antes de min 25 simulados",
-            passed=False,
-            detail="FALHA: RESOLVED nunca atingido",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="D1: RESOLVED nao ocorre antes de min 25 simulados",
+                passed=False,
+                detail="FALHA: RESOLVED nunca atingido",
+            )
+        )
 
     _assert_invariants(invariants)
 
@@ -934,6 +1039,7 @@ def test_payment_pool_exhaustion_full_simulation() -> None:
 # ---------------------------------------------------------------------------
 # Teste 3: memory-leak (JVM heap leak gradual)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.slow
 @pytest.mark.integration
@@ -1003,100 +1109,127 @@ def test_memory_leak_full_simulation() -> None:
     degrading_min = _phase_sim_min(result.phase_transitions, "DEGRADING")
     if degrading_min is not None:
         passed = degrading_min < 5.0
-        invariants.append(InvariantResult(
-            name="A1: DEGRADING antes de 5 min simulados",
-            passed=passed,
-            detail=f"Chegou a DEGRADING em {degrading_min:.1f} min (EWMA detecta cedo)"
-            if passed else f"FALHA: DEGRADING em {degrading_min:.1f} min (esperado < 5)",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A1: DEGRADING antes de 5 min simulados",
+                passed=passed,
+                detail=f"Chegou a DEGRADING em {degrading_min:.1f} min (EWMA detecta cedo)"
+                if passed
+                else f"FALHA: DEGRADING em {degrading_min:.1f} min (esperado < 5)",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A1: DEGRADING antes de 5 min simulados",
-            passed=False,
-            detail="FALHA: fase DEGRADING nunca atingida",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A1: DEGRADING antes de 5 min simulados",
+                passed=False,
+                detail="FALHA: fase DEGRADING nunca atingida",
+            )
+        )
 
     # A2: WARNING antes de 5 min simulados
     warning_min = _phase_sim_min(result.phase_transitions, "WARNING")
     if warning_min is not None:
         passed = warning_min < 5.0
-        invariants.append(InvariantResult(
-            name="A2: WARNING antes de 5 min simulados",
-            passed=passed,
-            detail=f"Chegou a WARNING em {warning_min:.1f} min"
-            if passed else f"FALHA: WARNING em {warning_min:.1f} min (esperado < 5)",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A2: WARNING antes de 5 min simulados",
+                passed=passed,
+                detail=f"Chegou a WARNING em {warning_min:.1f} min"
+                if passed
+                else f"FALHA: WARNING em {warning_min:.1f} min (esperado < 5)",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A2: WARNING antes de 5 min simulados",
-            passed=False,
-            detail="FALHA: fase WARNING nunca atingida",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A2: WARNING antes de 5 min simulados",
+                passed=False,
+                detail="FALHA: fase WARNING nunca atingida",
+            )
+        )
 
     # A3: ALERT antes de 5 min simulados
     alert_min = _phase_sim_min(result.phase_transitions, "ALERT")
     if alert_min is not None:
         passed = alert_min < 5.0
-        invariants.append(InvariantResult(
-            name="A3: ALERT antes de 5 min simulados",
-            passed=passed,
-            detail=f"Chegou a ALERT em {alert_min:.1f} min"
-            if passed else f"FALHA: ALERT em {alert_min:.1f} min (esperado < 5)",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A3: ALERT antes de 5 min simulados",
+                passed=passed,
+                detail=f"Chegou a ALERT em {alert_min:.1f} min"
+                if passed
+                else f"FALHA: ALERT em {alert_min:.1f} min (esperado < 5)",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A3: ALERT antes de 5 min simulados",
-            passed=False,
-            detail="FALHA: fase ALERT nunca atingida",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A3: ALERT antes de 5 min simulados",
+                passed=False,
+                detail="FALHA: fase ALERT nunca atingida",
+            )
+        )
 
     # A4: INCIDENT atingido
     incident_min = _phase_sim_min(result.phase_transitions, "INCIDENT")
     if incident_min is not None:
-        invariants.append(InvariantResult(
-            name="A4: INCIDENT atingido",
-            passed=True,
-            detail=f"Chegou a INCIDENT em {incident_min:.1f} min",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A4: INCIDENT atingido",
+                passed=True,
+                detail=f"Chegou a INCIDENT em {incident_min:.1f} min",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A4: INCIDENT atingido",
-            passed=False,
-            detail="FALHA: fase INCIDENT nunca atingida",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A4: INCIDENT atingido",
+                passed=False,
+                detail="FALHA: fase INCIDENT nunca atingida",
+            )
+        )
 
     # A5: RESOLVED atingido
     if result.resolved_tick is not None:
-        invariants.append(InvariantResult(
-            name="A5: RESOLVED atingido",
-            passed=True,
-            detail=f"Chegou a RESOLVED em {result.resolved_sim_minutes:.1f} min (tick {result.resolved_tick})",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A5: RESOLVED atingido",
+                passed=True,
+                detail=f"Chegou a RESOLVED em {result.resolved_sim_minutes:.1f} min (tick {result.resolved_tick})",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A5: RESOLVED atingido",
-            passed=False,
-            detail="FALHA: RESOLVED nunca atingido dentro de 600 ticks",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A5: RESOLVED atingido",
+                passed=False,
+                detail="FALHA: RESOLVED nunca atingido dentro de 600 ticks",
+            )
+        )
 
     # B_leak: metric_anomaly (EWMA) dispara antes do min 5 simulado (preditivo)
     # Nota informativa: 3-sigma detectaria ~min 15. EWMA detecta < min 5.
     if metric_anomaly_first_true_min is not None:
         ewma_early = metric_anomaly_first_true_min < 5.0
-        invariants.append(InvariantResult(
-            name="B_leak: metric_anomaly (EWMA) dispara antes de min 5 simulado",
-            passed=ewma_early,
-            detail=f"metric_anomaly=True @ sim {metric_anomaly_first_true_min:.2f} min "
-            f"(preditivo -- 3-sigma detectaria ~min 15)"
-            if ewma_early else
-            f"FALHA: metric_anomaly so em {metric_anomaly_first_true_min:.2f} min (esperado < 5)",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="B_leak: metric_anomaly (EWMA) dispara antes de min 5 simulado",
+                passed=ewma_early,
+                detail=f"metric_anomaly=True @ sim {metric_anomaly_first_true_min:.2f} min "
+                f"(preditivo -- 3-sigma detectaria ~min 15)"
+                if ewma_early
+                else f"FALHA: metric_anomaly so em {metric_anomaly_first_true_min:.2f} min (esperado < 5)",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="B_leak: metric_anomaly (EWMA) dispara antes de min 5 simulado",
-            passed=False,
-            detail="FALHA: metric_anomaly nunca True durante a simulacao",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="B_leak: metric_anomaly (EWMA) dispara antes de min 5 simulado",
+                passed=False,
+                detail="FALHA: metric_anomaly nunca True durante a simulacao",
+            )
+        )
 
     _assert_invariants(invariants)
 
@@ -1104,6 +1237,7 @@ def test_memory_leak_full_simulation() -> None:
 # ---------------------------------------------------------------------------
 # Teste 4: unknown-fault (falha com novel templates)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.slow
 @pytest.mark.integration
@@ -1166,7 +1300,9 @@ def test_unknown_fault_full_simulation() -> None:
             f"novel_templates primeiro nao-vazio @ sim {novel_first_min:.1f} min"
             if novel_first_min is not None
             else "novel_templates: nunca nao-vazio",
-            f"Ultimos novel_templates vistos: {last_novel[:2]}" if last_novel else "nenhum",
+            f"Ultimos novel_templates vistos: {last_novel[:2]}"
+            if last_novel
+            else "nenhum",
             "Nota: risk capeado em ~66 -- nao atinge ALERT (80) com corpus de 40 min.",
             "ALERT/INCIDENT/RESOLVED nao atingidos e comportamento esperado para este corpus.",
         ],
@@ -1181,99 +1317,123 @@ def test_unknown_fault_full_simulation() -> None:
     degrading_min = _phase_sim_min(result.phase_transitions, "DEGRADING")
     if degrading_min is not None:
         passed = degrading_min < 12.0
-        invariants.append(InvariantResult(
-            name="A1: DEGRADING antes de 12 min simulados",
-            passed=passed,
-            detail=f"Chegou a DEGRADING em {degrading_min:.1f} min (novel templates disparam cedo)"
-            if passed else f"FALHA: DEGRADING em {degrading_min:.1f} min (esperado < 12)",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A1: DEGRADING antes de 12 min simulados",
+                passed=passed,
+                detail=f"Chegou a DEGRADING em {degrading_min:.1f} min (novel templates disparam cedo)"
+                if passed
+                else f"FALHA: DEGRADING em {degrading_min:.1f} min (esperado < 12)",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A1: DEGRADING antes de 12 min simulados",
-            passed=False,
-            detail="FALHA: fase DEGRADING nunca atingida",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A1: DEGRADING antes de 12 min simulados",
+                passed=False,
+                detail="FALHA: fase DEGRADING nunca atingida",
+            )
+        )
 
     # A2: WARNING atingido antes de 20 min simulados
     warning_min = _phase_sim_min(result.phase_transitions, "WARNING")
     if warning_min is not None:
         passed = warning_min < 20.0
-        invariants.append(InvariantResult(
-            name="A2: WARNING antes de 20 min simulados",
-            passed=passed,
-            detail=f"Chegou a WARNING em {warning_min:.1f} min"
-            if passed else f"FALHA: WARNING em {warning_min:.1f} min (esperado < 20)",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A2: WARNING antes de 20 min simulados",
+                passed=passed,
+                detail=f"Chegou a WARNING em {warning_min:.1f} min"
+                if passed
+                else f"FALHA: WARNING em {warning_min:.1f} min (esperado < 20)",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="A2: WARNING antes de 20 min simulados",
-            passed=False,
-            detail="FALHA: fase WARNING nunca atingida",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A2: WARNING antes de 20 min simulados",
+                passed=False,
+                detail="FALHA: fase WARNING nunca atingida",
+            )
+        )
 
     # A3 (informativo): ALERT — nao obrigatorio, risk max ~66 com corpus de 40 min
     alert_min = _phase_sim_min(result.phase_transitions, "ALERT")
     if alert_min is not None:
-        invariants.append(InvariantResult(
-            name="A3 (informativo): ALERT atingido",
-            passed=True,
-            detail=f"Chegou a ALERT em {alert_min:.1f} min",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A3 (informativo): ALERT atingido",
+                passed=True,
+                detail=f"Chegou a ALERT em {alert_min:.1f} min",
+            )
+        )
     else:
         # Nao e falha obrigatoria: risk capeado em ~66 com este corpus
-        invariants.append(InvariantResult(
-            name="A3 (informativo): ALERT atingido",
-            passed=True,  # informativo, nao obrigatorio
-            detail="ALERT nao atingido -- comportamento esperado (risk max ~66, limiar ALERT=80)",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="A3 (informativo): ALERT atingido",
+                passed=True,  # informativo, nao obrigatorio
+                detail="ALERT nao atingido -- comportamento esperado (risk max ~66, limiar ALERT=80)",
+            )
+        )
 
     # A4 (informativo): INCIDENT — nao obrigatorio
     incident_min = _phase_sim_min(result.phase_transitions, "INCIDENT")
-    invariants.append(InvariantResult(
-        name="A4 (informativo): INCIDENT atingido",
-        passed=True,  # informativo, nao obrigatorio
-        detail=f"Chegou a INCIDENT em {incident_min:.1f} min"
-        if incident_min is not None
-        else "INCIDENT nao atingido -- esperado (requer ALERT primeiro, risk max ~66)",
-    ))
+    invariants.append(
+        InvariantResult(
+            name="A4 (informativo): INCIDENT atingido",
+            passed=True,  # informativo, nao obrigatorio
+            detail=f"Chegou a INCIDENT em {incident_min:.1f} min"
+            if incident_min is not None
+            else "INCIDENT nao atingido -- esperado (requer ALERT primeiro, risk max ~66)",
+        )
+    )
 
     # A5 (informativo): RESOLVED — nao obrigatorio para este corpus
-    invariants.append(InvariantResult(
-        name="A5 (informativo): RESOLVED atingido",
-        passed=True,  # informativo, nao obrigatorio
-        detail=f"Chegou a RESOLVED em {result.resolved_sim_minutes:.1f} min"
-        if result.resolved_tick is not None
-        else "RESOLVED nao atingido -- esperado (corpus esgota no min 40, risk nao decai)",
-    ))
+    invariants.append(
+        InvariantResult(
+            name="A5 (informativo): RESOLVED atingido",
+            passed=True,  # informativo, nao obrigatorio
+            detail=f"Chegou a RESOLVED em {result.resolved_sim_minutes:.1f} min"
+            if result.resolved_tick is not None
+            else "RESOLVED nao atingido -- esperado (corpus esgota no min 40, risk nao decai)",
+        )
+    )
 
     # C_novel: novel_templates nao-vazio em algum tick apos min 5 simulado
     if novel_first_min is not None:
         early_enough = novel_first_min <= 12.0
-        invariants.append(InvariantResult(
-            name="C_novel: novel_templates nao-vazio antes de min 12 simulado",
-            passed=early_enough,
-            detail=f"novel_templates primeiro nao-vazio @ sim {novel_first_min:.1f} min"
-            if early_enough else
-            f"FALHA: novel_templates so detectado @ sim {novel_first_min:.1f} min (esperado <= 12)",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="C_novel: novel_templates nao-vazio antes de min 12 simulado",
+                passed=early_enough,
+                detail=f"novel_templates primeiro nao-vazio @ sim {novel_first_min:.1f} min"
+                if early_enough
+                else f"FALHA: novel_templates so detectado @ sim {novel_first_min:.1f} min (esperado <= 12)",
+            )
+        )
     else:
-        invariants.append(InvariantResult(
-            name="C_novel: novel_templates nao-vazio antes de min 12 simulado",
-            passed=False,
-            detail="FALHA: novel_templates nunca nao-vazio durante a simulacao",
-        ))
+        invariants.append(
+            InvariantResult(
+                name="C_novel: novel_templates nao-vazio antes de min 12 simulado",
+                passed=False,
+                detail="FALHA: novel_templates nunca nao-vazio durante a simulacao",
+            )
+        )
 
     # C_latency: latency_drift_detected True apos min 10 simulado
     latency_true_after_10 = any(
         s.signals.get("latency_drift_detected", False) and s.elapsed_sim_minutes >= 10.0
         for s in result.samples
     )
-    invariants.append(InvariantResult(
-        name="C_latency: latency_drift_detected True apos min 10 simulado",
-        passed=latency_true_after_10,
-        detail="latency_drift_detected True confirmado apos min 10 (spikes de latencia)"
-        if latency_true_after_10 else
-        "FALHA: latency_drift_detected nao foi True apos min 10",
-    ))
+    invariants.append(
+        InvariantResult(
+            name="C_latency: latency_drift_detected True apos min 10 simulado",
+            passed=latency_true_after_10,
+            detail="latency_drift_detected True confirmado apos min 10 (spikes de latencia)"
+            if latency_true_after_10
+            else "FALHA: latency_drift_detected nao foi True apos min 10",
+        )
+    )
 
     _assert_invariants(invariants)

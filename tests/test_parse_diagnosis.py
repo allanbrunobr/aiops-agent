@@ -7,10 +7,10 @@ Valida parsing de saída LLM com tags <DIAGNOSIS>:
 - String vazia (sem tags)
 - JSON com múltiplos affected_services
 """
+
 from __future__ import annotations
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Casos parametrizados
@@ -50,7 +50,11 @@ _MISSING_ROOT_CAUSE = (
 
 _NON_JSON_FALLBACK = (
     "<DIAGNOSIS>this is not valid JSON at all</DIAGNOSIS>",
-    {"root_cause": "this is not valid JSON at all", "confidence": "medium", "evidence": []},
+    {
+        "root_cause": "this is not valid JSON at all",
+        "confidence": "medium",
+        "evidence": [],
+    },
 )
 
 _EMPTY_STRING = (
@@ -87,6 +91,7 @@ _PARSE_CASES = [
 # ---------------------------------------------------------------------------
 # Testes
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 @pytest.mark.parametrize("text,expected", _PARSE_CASES)

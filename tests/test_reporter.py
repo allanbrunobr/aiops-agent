@@ -26,9 +26,9 @@ from application.ports.reporter import (
     ITERATION_STARTED,
     LLM_CALL_FAILED,
     MITIGATION_PROPOSED,
+    TNR_VERIFIED,
     NullReporter,
     Reporter,
-    TNR_VERIFIED,
 )
 
 
@@ -106,10 +106,12 @@ def test_mitigator_emits_tnr_verified():
     from safety.tnr import TNRSafetyGuard
 
     reporter = FakeReporter()
-    mitigation = MitigationAgent(reporter=reporter).propose({
-        "root_cause": "memory leak",
-        "affected_services": ["api-server"],
-    })
+    mitigation = MitigationAgent(reporter=reporter).propose(
+        {
+            "root_cause": "memory leak",
+            "affected_services": ["api-server"],
+        }
+    )
     reporter.events.clear()  # foca o teste no evento TNR
     MitigationAgent(reporter=reporter).verify_with_tnr(mitigation, TNRSafetyGuard())
 

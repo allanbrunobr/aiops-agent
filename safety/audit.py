@@ -17,13 +17,13 @@ class SafetyAuditEvent:
     Nunca truncado ou amostrado — 100% das decisões são registradas (NFR21).
     """
 
-    layer_name: str              # "sanitizer", "pre_validator", "tnr", "version_validator"
+    layer_name: str  # "sanitizer", "pre_validator", "tnr", "version_validator"
     correlation_id: str
-    verdict: str                 # "pass", "block", "rollback", "error"
-    rationale: str               # Motivo legível da decisão
-    input_summary: str           # Resumo da entrada avaliada
-    output_summary: str          # Resumo da saída/resultado
-    triggered_rule: str | None = None   # Regra que causou block (None se pass)
+    verdict: str  # "pass", "block", "rollback", "error"
+    rationale: str  # Motivo legível da decisão
+    input_summary: str  # Resumo da entrada avaliada
+    output_summary: str  # Resumo da saída/resultado
+    triggered_rule: str | None = None  # Regra que causou block (None se pass)
     timestamp: datetime = field(default_factory=datetime.utcnow)
     duration_ms: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)

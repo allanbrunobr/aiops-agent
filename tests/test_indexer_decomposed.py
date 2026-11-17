@@ -12,7 +12,6 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Fixtures auxiliares — objetos mínimos que imitam os tipos do pipeline
 # ---------------------------------------------------------------------------
@@ -59,9 +58,14 @@ def indexer():
     """Retorna ObservabilityIndexerWithHistory com _load_model e model mockados."""
     # Mock de faiss e sentence_transformers para não exigir instalação pesada
     fake_model = MagicMock()
-    fake_model.encode.return_value = np.random.default_rng(42).random((3, 384)).astype(np.float32)
+    fake_model.encode.return_value = (
+        np.random.default_rng(42).random((3, 384)).astype(np.float32)
+    )
 
-    with patch("rag.indexer._model_cache", {}), patch("rag.indexer._embedding_cache", {}):
+    with (
+        patch("rag.indexer._model_cache", {}),
+        patch("rag.indexer._embedding_cache", {}),
+    ):
         from rag.indexer import ObservabilityIndexerWithHistory
 
         obj = ObservabilityIndexerWithHistory.__new__(ObservabilityIndexerWithHistory)
@@ -175,6 +179,7 @@ class TestEmbedarEIndexar:
     def test_lista_vazia_retorna_zero_e_index_none(self, indexer):
         """Lista vazia deve retornar 0 e deixar self.index como None."""
         import sys
+
         fake_faiss = MagicMock()
         with patch.dict(sys.modules, {"faiss": fake_faiss}):
             result = indexer._embedar_e_indexar([])
@@ -184,6 +189,7 @@ class TestEmbedarEIndexar:
     def test_retorna_numero_de_chunks(self, indexer):
         """Deve retornar o número exato de chunks indexados."""
         import sys
+
         from rag.indexer import IndexedChunk
 
         chunks = [
@@ -191,7 +197,9 @@ class TestEmbedarEIndexar:
             IndexedChunk(text="log entry B", source="log", metadata={}),
             IndexedChunk(text="metric X", source="metric", metadata={}),
         ]
-        indexer.model.encode.return_value = np.random.default_rng(0).random((3, 384)).astype(np.float32)
+        indexer.model.encode.return_value = (
+            np.random.default_rng(0).random((3, 384)).astype(np.float32)
+        )
 
         fake_faiss = MagicMock()
         fake_index = MagicMock()
@@ -204,13 +212,16 @@ class TestEmbedarEIndexar:
     def test_deduplicacao_textos_identicos(self, indexer):
         """Textos idênticos devem ser embedados uma única vez."""
         import sys
+
         from rag.indexer import IndexedChunk
 
         chunks = [
             IndexedChunk(text="mesmo texto", source="log", metadata={}),
             IndexedChunk(text="mesmo texto", source="log", metadata={}),
         ]
-        indexer.model.encode.return_value = np.random.default_rng(1).random((1, 384)).astype(np.float32)
+        indexer.model.encode.return_value = (
+            np.random.default_rng(1).random((1, 384)).astype(np.float32)
+        )
 
         fake_faiss = MagicMock()
         fake_index = MagicMock()

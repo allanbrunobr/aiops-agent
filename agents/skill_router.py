@@ -9,8 +9,6 @@ Fluxo:
 
 from __future__ import annotations
 
-import uuid
-
 from rag.memory import DiagnosticSkill, IncidentMemoryDB
 
 # Prompt genérico — mesmo do SYSTEM_PROMPT do DiagnosisAgent.
@@ -121,7 +119,11 @@ class SkillRouter:
                 name="unknown-fault-diagnosis",
                 scenario_pattern=".*",
                 system_prompt=_DEFAULT_SYSTEM_PROMPT,
-                priority_tools=["classify_fault_type", "correlate_signals", "search_similar"],
+                priority_tools=[
+                    "classify_fault_type",
+                    "correlate_signals",
+                    "search_similar",
+                ],
                 utility_score=0.3,
             ),
         ]

@@ -11,7 +11,7 @@ import json
 import os
 import sqlite3
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -19,7 +19,7 @@ class IncidentRecord:
     """Registro de um incidente diagnosticado."""
 
     incident_id: str
-    timestamp: str          # ISO 8601
+    timestamp: str  # ISO 8601
     scenario: str
     root_cause: str
     affected_services: list[str]
@@ -85,16 +85,16 @@ class DiagnosticSkill:
 
     skill_id: str
     name: str
-    scenario_pattern: str          # ex: "connection pool|pool exhausted"
-    system_prompt: str             # prompt especializado para este tipo de incidente
-    priority_tools: list[str]      # ex: ["correlate_signals", "query_metrics"]
-    utility_score: float = 0.5    # 0.0–1.0, começa neutro
+    scenario_pattern: str  # ex: "connection pool|pool exhausted"
+    system_prompt: str  # prompt especializado para este tipo de incidente
+    priority_tools: list[str]  # ex: ["correlate_signals", "query_metrics"]
+    utility_score: float = 0.5  # 0.0–1.0, começa neutro
     total_uses: int = 0
     success_count: int = 0
-    last_reflection: str = ""     # lição mais recente gerada pelo LLM
+    last_reflection: str = ""  # lição mais recente gerada pelo LLM
     version: int = 1
-    created_at: str = ""          # ISO 8601
-    updated_at: str = ""          # ISO 8601
+    created_at: str = ""  # ISO 8601
+    updated_at: str = ""  # ISO 8601
 
 
 @dataclass
@@ -109,7 +109,7 @@ class SkillOutcome:
     reflection_lesson: str
     tools_used: list[str]
     iteration_count: int
-    timestamp: str                 # ISO 8601
+    timestamp: str  # ISO 8601
 
 
 _DDL_SKILLS = """
@@ -178,7 +178,9 @@ class IncidentMemoryDB:
             db_path: Caminho para o arquivo SQLite. Criado automaticamente.
         """
         self.db_path = db_path
-        os.makedirs(os.path.dirname(db_path) if os.path.dirname(db_path) else ".", exist_ok=True)
+        os.makedirs(
+            os.path.dirname(db_path) if os.path.dirname(db_path) else ".", exist_ok=True
+        )
         with self._connect() as conn:
             conn.executescript(_DDL)
             conn.executescript(_DDL_SKILLS)
@@ -525,11 +527,16 @@ class IncidentMemoryDB:
                 intersection = query_names & stored_names
                 similarity = len(intersection) / len(union) if union else 0.0
 
-                scored.append((similarity, {
-                    "incident_id": row["incident_id"],
-                    "similarity_score": round(similarity, 3),
-                    "outcome": f"pre_incident risk={row['risk_score']:.1f}",
-                }))
+                scored.append(
+                    (
+                        similarity,
+                        {
+                            "incident_id": row["incident_id"],
+                            "similarity_score": round(similarity, 3),
+                            "outcome": f"pre_incident risk={row['risk_score']:.1f}",
+                        },
+                    )
+                )
 
             scored.sort(key=lambda x: x[0], reverse=True)
             return [d for _, d in scored[:top_k]]

@@ -13,9 +13,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from safety.pre_validator import PreExecutionValidator, SafetyCheckResult
-    from safety.tnr import TNRSafetyGuard, TNRReport
-    from safety.version_validator import RemediationValidation, VersionValidator
+    from safety.pre_validator import PreExecutionValidator
+    from safety.tnr import TNRSafetyGuard
+    from safety.version_validator import VersionValidator
 
 
 @dataclass
@@ -71,18 +71,21 @@ class SafetyOrchestrator:
 
         if pre_validator is None:
             from safety.pre_validator import PreExecutionValidator
+
             self._pre_validator: PreExecutionValidator = PreExecutionValidator()
         else:
             self._pre_validator = pre_validator
 
         if tnr is None:
             from safety.tnr import TNRSafetyGuard
+
             self._tnr: TNRSafetyGuard = TNRSafetyGuard()
         else:
             self._tnr = tnr
 
         if version_validator is None:
             from safety.version_validator import VersionValidator
+
             self._version_validator: VersionValidator = VersionValidator()
         else:
             self._version_validator = version_validator
@@ -144,8 +147,9 @@ class SafetyOrchestrator:
         # Camada 3: TNR — verificação de regressão de saúde (simulada)
         tnr_passed = True
         try:
-            from safety.tnr import HealthSnapshot, TNRResult
             from datetime import datetime
+
+            from safety.tnr import HealthSnapshot, TNRResult
 
             now = datetime.now()
             baseline = HealthSnapshot(

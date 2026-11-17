@@ -18,7 +18,6 @@ Especificação completa em:
 from dataclasses import dataclass
 from typing import Mapping
 
-
 # ------------------------------------------------------------------ #
 # Dataclasses                                                         #
 # ------------------------------------------------------------------ #
@@ -28,12 +27,12 @@ from typing import Mapping
 class SlackMockMessage:
     """Conteúdo visual de um card no painel de mock do Slack."""
 
-    channel: str           # ex: "#payments-incidents"
-    author: str            # ex: "AIOps Bot"
-    title: str             # ex: "[WARNING] Predição de incidente"
-    body: str              # texto principal (markdown leve)
-    severity: str          # "warning" | "critical" | "info" | "success"
-    timestamp_label: str   # ex: "+18 min" (sim time)
+    channel: str  # ex: "#payments-incidents"
+    author: str  # ex: "AIOps Bot"
+    title: str  # ex: "[WARNING] Predição de incidente"
+    body: str  # texto principal (markdown leve)
+    severity: str  # "warning" | "critical" | "info" | "success"
+    timestamp_label: str  # ex: "+18 min" (sim time)
 
 
 @dataclass(frozen=True)
@@ -42,8 +41,8 @@ class PhaseNarrative:
 
     timeline_label: str
     business_impact_per_min: int
-    impact_color: str                       # "green" | "amber" | "red"
-    hero_text: str | None                   # None = não exibir hero bar
+    impact_color: str  # "green" | "amber" | "red"
+    hero_text: str | None  # None = não exibir hero bar
     hero_lead_time_seconds: int | None
     slack_message: SlackMockMessage | None  # None = fase não dispara Slack
 

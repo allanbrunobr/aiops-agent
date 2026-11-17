@@ -87,6 +87,13 @@ def test_narrative_endpoint_warning_slack_message_shape(client: TestClient) -> N
     warning = response.json()["phases"]["WARNING"]
     msg = warning.get("slack_message")
     assert msg is not None, "WARNING deve disparar mensagem Slack"
-    expected_keys = {"channel", "author", "title", "body", "severity", "timestamp_label"}
+    expected_keys = {
+        "channel",
+        "author",
+        "title",
+        "body",
+        "severity",
+        "timestamp_label",
+    }
     assert expected_keys <= set(msg.keys())
     assert msg["severity"] == "warning"

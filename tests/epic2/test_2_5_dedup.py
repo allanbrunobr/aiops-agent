@@ -1,4 +1,5 @@
 """Testes para Story 2.5: Alert Deduplication."""
+
 from __future__ import annotations
 
 import time

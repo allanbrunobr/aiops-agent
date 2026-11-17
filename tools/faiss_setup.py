@@ -20,7 +20,10 @@ def setup_faiss_index(config: object = None) -> object:
         ObservabilityIndexer configurado, ou None se indisponível.
     """
     try:
-        from rag.indexer import ObservabilityIndexer  # lazy import — sentence-transformers pesado
+        from rag.indexer import (
+            ObservabilityIndexer,  # lazy import — sentence-transformers pesado
+        )
+
         return ObservabilityIndexer()
     except ImportError:
         return None

@@ -31,7 +31,9 @@ class ThresholdsConfig(BaseModel):
     baseline_ratio: float = 0.5
     percentile_threshold: float = 95.0
     max_hops: int = 3
-    regression_threshold: float = -5.0  # STRATUS paper — do NOT change without justification
+    regression_threshold: float = (
+        -5.0
+    )  # STRATUS paper — do NOT change without justification
     error_threshold: int = 50
     detection_sigma_threshold: float = 3.0
 
@@ -48,7 +50,9 @@ class ThresholdsConfig(BaseModel):
     def must_be_non_positive(cls, v: float) -> float:
         """regression_threshold deve ser <= 0 (design STRATUS paper)."""
         if v > 0:
-            raise ValueError(f"regression_threshold must be <= 0 (STRATUS design), got {v}")
+            raise ValueError(
+                f"regression_threshold must be <= 0 (STRATUS design), got {v}"
+            )
         return v
 
 
@@ -67,8 +71,8 @@ class BlueprintConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     enabled: bool = True
-    pipeline_timeout_seconds: int = 90   # NFR1 — timeout global do pipeline
-    max_llm_calls: int = 15             # NFR6 — limite de chamadas LLM por run
+    pipeline_timeout_seconds: int = 90  # NFR1 — timeout global do pipeline
+    max_llm_calls: int = 15  # NFR6 — limite de chamadas LLM por run
 
 
 class WebhookConfig(BaseModel):
@@ -150,8 +154,8 @@ class TrustedIssuerConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    issuer: str           # URL base do IdP (ex: "https://idp.partnera.example.com")
-    audience: str         # aud esperado nos tokens deste IdP
+    issuer: str  # URL base do IdP (ex: "https://idp.partnera.example.com")
+    audience: str  # aud esperado nos tokens deste IdP
     scope_claim: str = "scope"  # nome do claim que contém os scopes
 
 
@@ -169,9 +173,9 @@ class OAuthConfig(BaseModel):
     allowed_clients: list[OAuthClientConfig] = []
 
     # Phase 2 — RS256 assimétrico
-    private_key_path: str = ""   # caminho para chave privada RSA PEM
-    public_key_path: str = ""    # caminho para chave pública RSA PEM
-    kid: str = "aiops-rs256-1"   # key ID para o JWK
+    private_key_path: str = ""  # caminho para chave privada RSA PEM
+    public_key_path: str = ""  # caminho para chave pública RSA PEM
+    kid: str = "aiops-rs256-1"  # key ID para o JWK
 
     # Phase 2 — OIDC Federation
     trusted_issuers: list[TrustedIssuerConfig] = []
@@ -201,7 +205,11 @@ class McpConfig(BaseModel):
     enabled: bool = False
     transport: str = "sse"
     sse_port: int = 3001
-    enabled_tools: list[str] = ["diagnose_incident", "validate_action", "search_incidents"]
+    enabled_tools: list[str] = [
+        "diagnose_incident",
+        "validate_action",
+        "search_incidents",
+    ]
     auth_method: str = "header"  # "header" | "oauth21" | "federated" | "none"
     oauth: OAuthConfig = OAuthConfig()
     rate_limits: McpRateLimitsConfig = McpRateLimitsConfig()
@@ -293,20 +301,24 @@ def load_config(
         if effective_path is not None:
             path = Path(effective_path)
             if not path.exists():
-                print(f"Error: Config file not found: {effective_path}", file=sys.stderr)
+                print(
+                    f"Error: Config file not found: {effective_path}", file=sys.stderr
+                )
                 raise SystemExit(1)
             # Cria subclasse com yaml_file apontando para o arquivo customizado
             CustomConfig = type(
                 "CustomConfig",
                 (AppConfig,),
-                {"model_config": SettingsConfigDict(
-                    yaml_file=str(path),
-                    yaml_file_encoding="utf-8",
-                    env_nested_delimiter="__",
-                    env_prefix="AIOPS_",
-                    frozen=True,
-                    extra="ignore",
-                )},
+                {
+                    "model_config": SettingsConfigDict(
+                        yaml_file=str(path),
+                        yaml_file_encoding="utf-8",
+                        env_nested_delimiter="__",
+                        env_prefix="AIOPS_",
+                        frozen=True,
+                        extra="ignore",
+                    )
+                },
             )
             return CustomConfig()
         return AppConfig()

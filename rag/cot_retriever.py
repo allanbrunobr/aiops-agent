@@ -7,7 +7,7 @@ query expansion progressiva durante a investigação de incidentes.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from rag.retriever import ObservabilityRetriever, SearchResult
 
@@ -86,8 +86,16 @@ class CoTObservabilityRetriever(ObservabilityRetriever):
     def _extract_entities(self, query: str) -> list[str]:
         """Extrai nomes de serviços e palavras-chave de métricas da query."""
         _metric_kws = {
-            "connection_pool", "latency", "error_rate", "memory", "cpu",
-            "throughput", "timeout", "heap", "gc", "connections",
+            "connection_pool",
+            "latency",
+            "error_rate",
+            "memory",
+            "cpu",
+            "throughput",
+            "timeout",
+            "heap",
+            "gc",
+            "connections",
         }
         entities: list[str] = []
         for word in query.split():

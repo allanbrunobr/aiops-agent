@@ -1,6 +1,7 @@
 """
 Testes unitários para pipeline/trace_predictor.py.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -119,8 +120,13 @@ def test_analyze_no_drift_flat_spans():
 def test_analyze_ignores_child_spans():
     """Spans filhos devem ser ignorados; só spans raiz são considerados."""
     # 10 root spans com 100ms + 10 child spans com 9999ms
-    root_spans = [_make_span(100.0, parent_span_id=None, offset_secs=i) for i in range(10)]
-    child_spans = [_make_span(9999.0, parent_span_id="parent", offset_secs=i + 100) for i in range(10)]
+    root_spans = [
+        _make_span(100.0, parent_span_id=None, offset_secs=i) for i in range(10)
+    ]
+    child_spans = [
+        _make_span(9999.0, parent_span_id="parent", offset_secs=i + 100)
+        for i in range(10)
+    ]
     signal = analyze_trace_signals(root_spans + child_spans)
     # Apenas root spans são usados — latência uniforme, sem drift
     assert signal.drift_detected is False

@@ -8,6 +8,7 @@ MetricSeries e MitigationAction.
 ATENÇÃO: Adicionar ou remover campos é uma breaking change — todos os
 consumidores dependem da forma exata destes contratos.
 """
+
 from __future__ import annotations
 
 import datetime
@@ -17,6 +18,7 @@ from dataclasses import dataclass, field
 @dataclass
 class LogEntry:
     """Entrada de log com timestamp, nível, serviço e mensagem."""
+
     timestamp: datetime.datetime
     level: str
     service: str
@@ -30,6 +32,7 @@ class LogEntry:
 @dataclass
 class MetricPoint:
     """Ponto individual de uma série temporal de métrica."""
+
     timestamp: datetime.datetime
     service: str
     metric_name: str
@@ -39,6 +42,7 @@ class MetricPoint:
 @dataclass
 class Span:
     """Span de um trace distribuído."""
+
     trace_id: str
     span_id: str
     parent_span_id: str | None
@@ -53,6 +57,7 @@ class Span:
 @dataclass
 class SimulatedIncident:
     """Container com todos os dados do incidente simulado."""
+
     logs: list[LogEntry]
     metrics: list[MetricPoint]
     traces: list[Span]
@@ -70,6 +75,7 @@ class SimulatedIncident:
 @dataclass
 class PredictionReport:
     """Relatório preditivo com score de risco e eventos de lifecycle."""
+
     risk_score: float
     eta_minutes: float | None
     signals: list
@@ -80,6 +86,7 @@ class PredictionReport:
 @dataclass
 class MetricSeries:
     """Série temporal de uma métrica com suporte a projeção de limiar."""
+
     service: str
     metric_name: str
     points: list[MetricPoint]
@@ -94,6 +101,7 @@ class MitigationAction:
     Wire format preservado por `dataclasses.asdict()` — campos seguem ordem
     de declaração e são serializados como dict simples nos snapshots.
     """
+
     description: str
     command: str
     risk_level: str

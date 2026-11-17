@@ -35,7 +35,9 @@ class KnowledgeStore:
         )
 
     def find_by_service_and_cause(
-        self, service: str, root_cause: str,
+        self,
+        service: str,
+        root_cause: str,
     ) -> KnowledgePattern | None:
         """Busca padrão existente com mesmo serviço e causa raiz."""
         for p in self._patterns:

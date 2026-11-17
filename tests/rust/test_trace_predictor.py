@@ -15,7 +15,6 @@ pytest.importorskip("_aiops_rust")
 
 from pipeline.trace_predictor import _percentile, detect_latency_drift
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -180,7 +179,7 @@ class TestPercentileBenchmark:
         )
 
         assert speedup >= 3.0, (
-            f"Rust ({rust_time*1000:.3f}ms) deveria ser >= 3x mais rápido que Python "
-            f"({python_time*1000:.3f}ms), mas speedup foi apenas {speedup:.1f}x. "
+            f"Rust ({rust_time * 1000:.3f}ms) deveria ser >= 3x mais rápido que Python "
+            f"({python_time * 1000:.3f}ms), mas speedup foi apenas {speedup:.1f}x. "
             "Compile com --release para o benchmark oficial."
         )

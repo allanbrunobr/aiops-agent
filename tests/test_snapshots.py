@@ -7,6 +7,7 @@ Nas subsequentes, compara output contra snapshots armazenados.
 Qualquer mudança no pipeline que altere output causa FAIL com diff legível.
 Use --snapshot-update para regenerar snapshots após mudanças intencionais.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -103,7 +104,10 @@ class TestPipelineResultSnapshots:
         snapshot_manager.assert_match(pipeline_result, "full_pipeline_result")
 
     def test_postmortem_structure_snapshot(
-        self, pipeline_result, simulated_incident, snapshot_manager,
+        self,
+        pipeline_result,
+        simulated_incident,
+        snapshot_manager,
     ):
         """Verifica que estrutura do postmortem é determinística.
 
@@ -112,13 +116,14 @@ class TestPipelineResultSnapshots:
         Timestamps dinâmicos (datetime.now()) são normalizados antes da comparação.
         """
         import io
-        from contextlib import redirect_stdout, redirect_stderr
+        from contextlib import redirect_stderr, redirect_stdout
 
         from main import step_postmortem
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             postmortem_path, _ = step_postmortem(
-                pipeline_result, simulated_incident,
+                pipeline_result,
+                simulated_incident,
             )
 
         # Lê o postmortem gerado e limpa o arquivo temporário

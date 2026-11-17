@@ -9,13 +9,15 @@ Baseado no paper OpsAgent (Nankai University, Oct 2025):
 
 from __future__ import annotations
 
-import numpy as np
-from dataclasses import dataclass
-from datetime import datetime, timedelta
 from collections import defaultdict
+from dataclasses import dataclass
+from datetime import datetime
+
+import numpy as np
 
 try:
     import _aiops_rust as _rust
+
     _RUST_AVAILABLE = True
 except ImportError:
     _rust = None
@@ -25,6 +27,7 @@ except ImportError:
 @dataclass
 class SlowCallPath:
     """Um call path lento extraído dos traces."""
+
     trace_id: str
     path: list[str]  # ["gateway", "payment-svc", "postgres"]
     operations: list[str]
@@ -101,17 +104,19 @@ class TraceFilter:
             if path:
                 # Encontra bottleneck (span mais lento)
                 bottleneck = max(trace_spans, key=lambda s: s.duration_ms)
-                slow_paths.append(SlowCallPath(
-                    trace_id=trace_id,
-                    path=[s.service for s in trace_spans[:self.max_hops]],
-                    operations=[s.operation for s in trace_spans[:self.max_hops]],
-                    total_duration_ms=duration,
-                    bottleneck_service=bottleneck.service,
-                    bottleneck_duration_ms=bottleneck.duration_ms,
-                    normal_duration_ms=round(baseline_mean, 1),
-                    timestamp=trace_spans[0].start_time,
-                    attributes=bottleneck.attributes,
-                ))
+                slow_paths.append(
+                    SlowCallPath(
+                        trace_id=trace_id,
+                        path=[s.service for s in trace_spans[: self.max_hops]],
+                        operations=[s.operation for s in trace_spans[: self.max_hops]],
+                        total_duration_ms=duration,
+                        bottleneck_service=bottleneck.service,
+                        bottleneck_duration_ms=bottleneck.duration_ms,
+                        normal_duration_ms=round(baseline_mean, 1),
+                        timestamp=trace_spans[0].start_time,
+                        attributes=bottleneck.attributes,
+                    )
+                )
 
         # Deduplica por padrão de path (mantém o mais lento de cada padrão)
         return self._deduplicate_paths(slow_paths)
@@ -129,7 +134,7 @@ class TraceFilter:
         # DFS from root
         roots = children.get(None, [])
         if not roots:
-            return spans[:self.max_hops]
+            return spans[: self.max_hops]
 
         path = []
         current = [roots[0]]
@@ -157,7 +162,11 @@ class TraceFilter:
         lines = [f"## Traces Lentos (>{self.percentile_threshold}th percentile)\n"]
         for p in slow_paths:
             path_str = " → ".join(p.path)
-            attrs = ", ".join(f"{k}={v}" for k, v in p.attributes.items()) if p.attributes else "none"
+            attrs = (
+                ", ".join(f"{k}={v}" for k, v in p.attributes.items())
+                if p.attributes
+                else "none"
+            )
             lines.append(
                 f"- {path_str}: {p.total_duration_ms:.0f}ms "
                 f"(normal: {p.normal_duration_ms:.0f}ms) "

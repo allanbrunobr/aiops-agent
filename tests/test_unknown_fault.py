@@ -11,18 +11,18 @@ Valida:
 
 Use --snapshot-update para regenerar snapshots após mudanças intencionais.
 """
+
 from __future__ import annotations
 
 import datetime
 import io
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 
 import pytest
 
 # Garante registro de todos os cenários no registry antes dos testes.
 import data.sample_incident  # noqa: F401
-
-from data.models import LogEntry, MetricPoint, Span, SimulatedIncident
+from data.models import LogEntry, MetricPoint, SimulatedIncident, Span
 from data.registry import get_scenario, list_scenarios
 
 
@@ -85,7 +85,9 @@ class TestUnknownFaultContract:
         fn = get_scenario("unknown-fault")
         inc = fn(seed=42)
         services = set(log.service for log in inc.logs)
-        assert len(services) >= 3, f"Esperado >=3 serviços, encontrado {len(services)}: {services}"
+        assert len(services) >= 3, (
+            f"Esperado >=3 serviços, encontrado {len(services)}: {services}"
+        )
 
     def test_unknown_fault_root_cause_is_non_standard(self) -> None:
         """actual_root_cause NÃO deve conter keywords de padrões conhecidos."""
@@ -103,9 +105,15 @@ class TestUnknownFaultContract:
         inc = fn(seed=42)
 
         expected_fields = {
-            "logs", "metrics", "traces",
-            "deploy_time", "spike_start", "detection_time", "fix_time",
-            "actual_root_cause", "actual_fix",
+            "logs",
+            "metrics",
+            "traces",
+            "deploy_time",
+            "spike_start",
+            "detection_time",
+            "fix_time",
+            "actual_root_cause",
+            "actual_fix",
         }
         actual_fields = set(inc.__dataclass_fields__.keys())
         assert actual_fields == expected_fields
@@ -133,9 +141,13 @@ class TestUnknownFaultContract:
         inc = fn(seed=42)
 
         heuristic_keywords = [
-            "connection pool", "pool exhausted",
-            "memory", "oom", "heap",
-            "timed out", "timeout",
+            "connection pool",
+            "pool exhausted",
+            "memory",
+            "oom",
+            "heap",
+            "timed out",
+            "timeout",
         ]
         for log in inc.logs:
             msg_lower = log.message.lower()
@@ -152,24 +164,28 @@ class TestHeuristicDiagnosisConfidence:
 
     def _run_heuristic(self, scenario_name: str) -> dict:
         """Helper: executa pipeline até diagnóstico heurístico e retorna dict."""
-        from data.registry import get_scenario
-        from pipeline.telemetry_sanitizer import TelemetrySanitizer
-        from pipeline.aggregator import Aggregator
         from agents.diagnoser import DiagnosisAgent
+        from data.registry import get_scenario
+        from pipeline.aggregator import Aggregator
+        from pipeline.telemetry_sanitizer import TelemetrySanitizer
 
         incident = get_scenario(scenario_name)(seed=42)
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             sanitizer = TelemetrySanitizer(strict_mode=False)
             s_logs, s_metrics, s_traces, _ = sanitizer.sanitize_all(
-                incident.logs, incident.metrics, incident.traces,
+                incident.logs,
+                incident.metrics,
+                incident.traces,
             )
             incident.logs = s_logs
             incident.metrics = s_metrics
             incident.traces = s_traces
 
             aggregator = Aggregator()
-            report = aggregator.process(incident.logs, incident.metrics, incident.traces)
+            report = aggregator.process(
+                incident.logs, incident.metrics, incident.traces
+            )
 
             diagnoser = DiagnosisAgent(max_iterations=1)
             return diagnoser._heuristic_diagnosis(report)
@@ -205,7 +221,13 @@ class TestHeuristicDiagnosisConfidence:
 
     def test_diagnosis_dict_shape_preserved(self) -> None:
         """Diagnóstico deve conter as chaves do contrato independente do cenário."""
-        expected_keys = {"root_cause", "evidence", "affected_services", "confidence", "timeline"}
+        expected_keys = {
+            "root_cause",
+            "evidence",
+            "affected_services",
+            "confidence",
+            "timeline",
+        }
         for scenario in ["payment-pool-exhaustion", "memory-leak", "unknown-fault"]:
             diagnosis = self._run_heuristic(scenario)
             assert expected_keys <= set(diagnosis.keys()), (
@@ -220,11 +242,13 @@ class TestMitigatorUnknownPattern:
     def test_unknown_pattern_exists(self) -> None:
         """REMEDIATION_PATTERNS deve conter entrada 'unknown'."""
         from agents.mitigator import REMEDIATION_PATTERNS
+
         assert "unknown" in REMEDIATION_PATTERNS
 
     def test_unknown_pattern_has_required_keys(self) -> None:
         """Entrada 'unknown' deve ter action, command, risk e rollback."""
         from agents.mitigator import REMEDIATION_PATTERNS
+
         pattern = REMEDIATION_PATTERNS["unknown"]
         assert "action" in pattern
         assert "command" in pattern
@@ -234,6 +258,7 @@ class TestMitigatorUnknownPattern:
     def test_unknown_pattern_is_low_risk(self) -> None:
         """Padrão 'unknown' deve ser LOW risk (diagnóstico, não ação destrutiva)."""
         from agents.mitigator import REMEDIATION_PATTERNS
+
         assert REMEDIATION_PATTERNS["unknown"]["risk"] == "LOW"
 
     def test_propose_uses_unknown_for_low_confidence(self) -> None:
@@ -301,22 +326,30 @@ class TestMitigatorUnknownPattern:
 class TestUnknownFaultPipeline:
     """Testes de integração do pipeline completo com unknown-fault (AC: #4, #5)."""
 
-    def test_pipeline_completes_successfully(self, unknown_fault_pipeline_result) -> None:
+    def test_pipeline_completes_successfully(
+        self, unknown_fault_pipeline_result
+    ) -> None:
         """Pipeline completo deve concluir sem erros para unknown-fault."""
         result = unknown_fault_pipeline_result
         assert result.get("success") is True, f"Pipeline falhou: {result}"
 
-    def test_pipeline_diagnosis_is_low_confidence(self, unknown_fault_pipeline_result) -> None:
+    def test_pipeline_diagnosis_is_low_confidence(
+        self, unknown_fault_pipeline_result
+    ) -> None:
         """Diagnóstico do pipeline unknown-fault deve ter confidence='low'."""
         diagnosis = unknown_fault_pipeline_result["stages"]["diagnosis"]
         assert diagnosis["confidence"] == "low"
 
-    def test_pipeline_mitigation_pattern_is_unknown(self, unknown_fault_pipeline_result) -> None:
+    def test_pipeline_mitigation_pattern_is_unknown(
+        self, unknown_fault_pipeline_result
+    ) -> None:
         """Mitigação do pipeline unknown-fault deve usar padrão 'unknown'."""
         mitigation = unknown_fault_pipeline_result["stages"]["mitigation"]
         assert mitigation["pattern_matched"] == "unknown"
 
-    def test_pipeline_state_transitions_normal(self, unknown_fault_pipeline_result) -> None:
+    def test_pipeline_state_transitions_normal(
+        self, unknown_fault_pipeline_result
+    ) -> None:
         """State machine deve seguir transições normais (AC: #4)."""
         timeline = unknown_fault_pipeline_result.get("timeline", [])
         states_visited = [t["to"] for t in timeline]
@@ -327,7 +360,9 @@ class TestUnknownFaultPipeline:
         assert "VERIFYING" in states_visited
         assert "RESOLVED" in states_visited
 
-    def test_pipeline_has_safety_validation(self, unknown_fault_pipeline_result) -> None:
+    def test_pipeline_has_safety_validation(
+        self, unknown_fault_pipeline_result
+    ) -> None:
         """Pipeline deve incluir safety validation mesmo para unknown-fault."""
         stages = unknown_fault_pipeline_result["stages"]
         assert "safety_validation" in stages
@@ -344,21 +379,28 @@ class TestUnknownFaultPipelineSnapshots:
     """
 
     def test_unknown_fault_diagnosis_snapshot(
-        self, unknown_fault_pipeline_result, snapshot_manager,
+        self,
+        unknown_fault_pipeline_result,
+        snapshot_manager,
     ) -> None:
         """Verifica que diagnóstico heurístico do unknown-fault é determinístico."""
         diagnosis = unknown_fault_pipeline_result["stages"]["diagnosis"]
         snapshot_manager.assert_match(diagnosis, "unknown_fault_diagnosis")
 
     def test_unknown_fault_mitigation_snapshot(
-        self, unknown_fault_pipeline_result, snapshot_manager,
+        self,
+        unknown_fault_pipeline_result,
+        snapshot_manager,
     ) -> None:
         """Verifica que ação de mitigação proposta para unknown-fault é determinística."""
         mitigation = unknown_fault_pipeline_result["stages"]["mitigation"]
         snapshot_manager.assert_match(mitigation, "unknown_fault_mitigation")
 
     def test_unknown_fault_postmortem_structure_snapshot(
-        self, unknown_fault_pipeline_result, unknown_fault_incident, snapshot_manager,
+        self,
+        unknown_fault_pipeline_result,
+        unknown_fault_incident,
+        snapshot_manager,
     ) -> None:
         """Verifica que estrutura do postmortem para unknown-fault é determinística (AC #3).
 
@@ -369,10 +411,13 @@ class TestUnknownFaultPipelineSnapshots:
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             postmortem_path, _ = step_postmortem(
-                unknown_fault_pipeline_result, unknown_fault_incident,
+                unknown_fault_pipeline_result,
+                unknown_fault_incident,
             )
 
         postmortem_text = postmortem_path.read_text(encoding="utf-8")
         postmortem_path.unlink(missing_ok=True)
 
-        snapshot_manager.assert_text_match(postmortem_text, "unknown_fault_postmortem_structure")
+        snapshot_manager.assert_text_match(
+            postmortem_text, "unknown_fault_postmortem_structure"
+        )

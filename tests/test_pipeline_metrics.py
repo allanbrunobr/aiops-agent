@@ -5,20 +5,18 @@ Testes para Story 3.5: Pipeline Processing Metrics.
 Cobre PipelineMetricsCollector e endpoint GET /api/v1/metrics/pipeline.
 """
 
-import asyncio
 import datetime
 
 import pytest
-import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
 from core.lifecycle import LifecycleEvent
+from interfaces.http.api.metrics import get_metrics_collector, router
 from interfaces.http.metrics.pipeline import PipelineMetricsCollector, _percentile
-from interfaces.http.api.metrics import router, get_metrics_collector
-from fastapi import FastAPI
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def _make_event(
     event_type: str,
@@ -48,6 +46,7 @@ def _make_app(collector: PipelineMetricsCollector) -> FastAPI:
 
 # ── _percentile ───────────────────────────────────────────────────────────────
 
+
 def test_percentile_single_value():
     """Percentil de lista com 1 elemento retorna esse elemento."""
     assert _percentile([100], 50) == 100.0
@@ -72,6 +71,7 @@ def test_percentile_p90_sorted():
 
 # ── PipelineMetricsCollector ──────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_on_event_pipeline_started_creates_record():
     """pipeline.started deve criar registro no collector."""
@@ -90,11 +90,14 @@ async def test_on_event_pipeline_completed_updates_status():
     collector = PipelineMetricsCollector()
 
     await collector.on_event(_make_event("pipeline.started", "corr-001"))
-    await collector.on_event(_make_event(
-        "pipeline.completed", "corr-001",
-        data={"total_duration_ms": 500},
-        offset_seconds=1,
-    ))
+    await collector.on_event(
+        _make_event(
+            "pipeline.completed",
+            "corr-001",
+            data={"total_duration_ms": 500},
+            offset_seconds=1,
+        )
+    )
 
     counts = collector.get_pipeline_counts()
     assert counts["completed"] == 1
@@ -110,11 +113,14 @@ async def test_on_event_pipeline_failed_updates_status():
     collector = PipelineMetricsCollector()
 
     await collector.on_event(_make_event("pipeline.started", "corr-err"))
-    await collector.on_event(_make_event(
-        "pipeline.failed", "corr-err",
-        data={"total_duration_ms": 200},
-        offset_seconds=1,
-    ))
+    await collector.on_event(
+        _make_event(
+            "pipeline.failed",
+            "corr-err",
+            data={"total_duration_ms": 200},
+            offset_seconds=1,
+        )
+    )
 
     counts = collector.get_pipeline_counts()
     assert counts["failed"] == 1
@@ -127,17 +133,23 @@ async def test_on_event_node_completed_records_stage_duration():
     collector = PipelineMetricsCollector()
 
     await collector.on_event(_make_event("pipeline.started", "corr-001"))
-    await collector.on_event(_make_event(
-        "node.completed", "corr-001",
-        node_name="aggregator",
-        data={"duration_ms": 150},
-        offset_seconds=1,
-    ))
-    await collector.on_event(_make_event(
-        "pipeline.completed", "corr-001",
-        data={"total_duration_ms": 300},
-        offset_seconds=2,
-    ))
+    await collector.on_event(
+        _make_event(
+            "node.completed",
+            "corr-001",
+            node_name="aggregator",
+            data={"duration_ms": 150},
+            offset_seconds=1,
+        )
+    )
+    await collector.on_event(
+        _make_event(
+            "pipeline.completed",
+            "corr-001",
+            data={"total_duration_ms": 300},
+            offset_seconds=2,
+        )
+    )
 
     stage_durations = collector.get_stage_durations()
     assert "aggregator" in stage_durations
@@ -161,17 +173,20 @@ async def test_get_last_alert_at_updates_on_pipeline_started():
     assert collector.get_last_alert_at() is None
 
     ts = datetime.datetime(2026, 3, 4, 14, 0, 0)
-    await collector.on_event(LifecycleEvent(
-        event_type="pipeline.started",
-        node_name=None,
-        correlation_id="corr-ts",
-        timestamp=ts,
-    ))
+    await collector.on_event(
+        LifecycleEvent(
+            event_type="pipeline.started",
+            node_name=None,
+            correlation_id="corr-ts",
+            timestamp=ts,
+        )
+    )
 
     assert collector.get_last_alert_at() == ts
 
 
 # ── GET /api/v1/metrics/pipeline ──────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_get_pipeline_metrics_endpoint():
@@ -180,13 +195,18 @@ async def test_get_pipeline_metrics_endpoint():
 
     # Simula um pipeline completo
     await collector.on_event(_make_event("pipeline.started", "corr-001"))
-    await collector.on_event(_make_event(
-        "pipeline.completed", "corr-001",
-        data={"total_duration_ms": 1000},
-    ))
+    await collector.on_event(
+        _make_event(
+            "pipeline.completed",
+            "corr-001",
+            data={"total_duration_ms": 1000},
+        )
+    )
 
     app = _make_app(collector)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         resp = await client.get("/api/v1/metrics/pipeline")
 
     assert resp.status_code == 200

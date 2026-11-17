@@ -4,6 +4,7 @@ Valida o fluxo completo: --tracker flag, instanciacao via registry,
 criacao de incidente, anexacao de postmortem, e tratamento de erros.
 Todos os testes mockam o JiraIncidentTracker sem fazer chamadas reais.
 """
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -16,13 +17,13 @@ from main import (
     _attach_postmortem_to_tracker,
     _resolve_tracker,
     build_arg_parser,
+    print_summary,
     step_postmortem,
     step_tracking,
-    print_summary,
 )
 
-
 # --- Fixtures ---
+
 
 @pytest.fixture
 def sample_result():
@@ -58,11 +59,36 @@ def sample_result():
             },
         },
         "timeline": [
-            {"time": "14:19:00", "from": "IDLE", "to": "DETECTING", "reason": "Anomalies detected"},
-            {"time": "14:19:01", "from": "DETECTING", "to": "DIAGNOSING", "reason": "Incident confirmed"},
-            {"time": "14:19:05", "from": "DIAGNOSING", "to": "MITIGATING", "reason": "Root cause found"},
-            {"time": "14:19:06", "from": "MITIGATING", "to": "VERIFYING", "reason": "Action applied"},
-            {"time": "14:19:07", "from": "VERIFYING", "to": "RESOLVED", "reason": "Health improved"},
+            {
+                "time": "14:19:00",
+                "from": "IDLE",
+                "to": "DETECTING",
+                "reason": "Anomalies detected",
+            },
+            {
+                "time": "14:19:01",
+                "from": "DETECTING",
+                "to": "DIAGNOSING",
+                "reason": "Incident confirmed",
+            },
+            {
+                "time": "14:19:05",
+                "from": "DIAGNOSING",
+                "to": "MITIGATING",
+                "reason": "Root cause found",
+            },
+            {
+                "time": "14:19:06",
+                "from": "MITIGATING",
+                "to": "VERIFYING",
+                "reason": "Action applied",
+            },
+            {
+                "time": "14:19:07",
+                "from": "VERIFYING",
+                "to": "RESOLVED",
+                "reason": "Health improved",
+            },
         ],
     }
 
@@ -74,10 +100,18 @@ def sample_incident():
 
     @dataclass
     class FakeIncident:
-        deploy_time: datetime = field(default_factory=lambda: datetime(2026, 3, 6, 14, 19, 0))
-        spike_start: datetime = field(default_factory=lambda: datetime(2026, 3, 6, 14, 23, 0))
-        detection_time: datetime = field(default_factory=lambda: datetime(2026, 3, 6, 14, 25, 0))
-        fix_time: datetime = field(default_factory=lambda: datetime(2026, 3, 6, 14, 28, 0))
+        deploy_time: datetime = field(
+            default_factory=lambda: datetime(2026, 3, 6, 14, 19, 0)
+        )
+        spike_start: datetime = field(
+            default_factory=lambda: datetime(2026, 3, 6, 14, 23, 0)
+        )
+        detection_time: datetime = field(
+            default_factory=lambda: datetime(2026, 3, 6, 14, 25, 0)
+        )
+        fix_time: datetime = field(
+            default_factory=lambda: datetime(2026, 3, 6, 14, 28, 0)
+        )
 
     return FakeIncident()
 
@@ -94,6 +128,7 @@ def mock_orchestrator():
 
 
 # --- CLI Parser Tests ---
+
 
 class TestCliParser:
     """Testes do argumento --tracker no CLI."""
@@ -146,6 +181,7 @@ class TestCliParser:
 
 # --- Tracker Registry Tests ---
 
+
 class TestTrackerRegistry:
     """Testes do registry e factory de trackers."""
 
@@ -166,15 +202,19 @@ class TestTrackerRegistry:
         result = _resolve_tracker("pagerduty")
         assert result is None
 
-    @patch.dict("os.environ", {
-        "JIRA_URL": "https://test.atlassian.net",
-        "JIRA_PROJECT_KEY": "OPS",
-        "JIRA_EMAIL": "test@example.com",
-        "JIRA_API_TOKEN": "test-token-123",
-    })
+    @patch.dict(
+        "os.environ",
+        {
+            "JIRA_URL": "https://test.atlassian.net",
+            "JIRA_PROJECT_KEY": "OPS",
+            "JIRA_EMAIL": "test@example.com",
+            "JIRA_API_TOKEN": "test-token-123",
+        },
+    )
     def test_resolve_jira_returns_tracker(self):
         """_resolve_tracker('jira') retorna JiraIncidentTracker quando env vars presentes."""
         from tools.jira_tracker import JiraIncidentTracker
+
         tracker = _resolve_tracker("jira")
         assert isinstance(tracker, JiraIncidentTracker)
         assert tracker.url == "https://test.atlassian.net"
@@ -187,6 +227,7 @@ class TestTrackerRegistry:
 
 
 # --- Step Tracking Tests ---
+
 
 class TestStepTracking:
     """Testes do step_tracking() — criacao de incidente no tracker."""
@@ -243,6 +284,7 @@ class TestStepTracking:
 
 # --- Postmortem Attachment Tests ---
 
+
 class TestPostmortemAttachment:
     """Testes do _attach_postmortem_to_tracker()."""
 
@@ -298,6 +340,7 @@ class TestPostmortemAttachment:
 
 # --- Postmortem Markdown Tracking Section Tests ---
 
+
 class TestPostmortemTrackingSection:
     """Testes da secao ## Incident Tracking no postmortem markdown."""
 
@@ -306,7 +349,8 @@ class TestPostmortemTrackingSection:
     ):
         """Postmortem markdown inclui ## Incident Tracking quando tracker_issue_key presente."""
         md_path, _ = step_postmortem(
-            sample_result, sample_incident,
+            sample_result,
+            sample_incident,
             output_dir=str(tmp_path),
             output_format="markdown",
             tracker_url="https://test.atlassian.net",
@@ -323,7 +367,8 @@ class TestPostmortemTrackingSection:
     ):
         """Postmortem markdown NAO inclui ## Incident Tracking sem tracker."""
         md_path, _ = step_postmortem(
-            sample_result, sample_incident,
+            sample_result,
+            sample_incident,
             output_dir=str(tmp_path),
             output_format="markdown",
         )
@@ -341,7 +386,8 @@ class TestPostmortemTrackingSection:
         }
 
         _, json_path = step_postmortem(
-            sample_result, sample_incident,
+            sample_result,
+            sample_incident,
             output_dir=str(tmp_path),
             output_format="json",
             tracker_url="https://test.atlassian.net",
@@ -349,6 +395,7 @@ class TestPostmortemTrackingSection:
         )
 
         import json
+
         data = json.loads(json_path.read_text())
         assert "tracking" in data
         assert data["tracking"]["issue_key"] == "OPS-123"
@@ -358,22 +405,27 @@ class TestPostmortemTrackingSection:
     ):
         """JSON output NAO inclui 'tracking' quando nao ha tracker."""
         _, json_path = step_postmortem(
-            sample_result, sample_incident,
+            sample_result,
+            sample_incident,
             output_dir=str(tmp_path),
             output_format="json",
         )
 
         import json
+
         data = json.loads(json_path.read_text())
         assert "tracking" not in data
 
 
 # --- Print Summary Tests ---
 
+
 class TestPrintSummaryTracker:
     """Testes de tracker_info no print_summary()."""
 
-    def test_summary_includes_tracker_row(self, sample_result, mock_orchestrator, capsys):
+    def test_summary_includes_tracker_row(
+        self, sample_result, mock_orchestrator, capsys
+    ):
         """print_summary inclui linha de Tracking quando tracker_info presente."""
         tracker_info = {"issue_key": "OPS-123", "url": "https://test.atlassian.net"}
 
@@ -382,7 +434,9 @@ class TestPrintSummaryTracker:
         output = capsys.readouterr().out
         assert "OPS-123" in output
 
-    def test_summary_shows_skipped_on_tracker_failure(self, sample_result, mock_orchestrator, capsys):
+    def test_summary_shows_skipped_on_tracker_failure(
+        self, sample_result, mock_orchestrator, capsys
+    ):
         """print_summary mostra 'skipped' quando tracker falhou."""
         tracker_info = {"issue_key": None, "url": None}
 
@@ -391,7 +445,9 @@ class TestPrintSummaryTracker:
         output = capsys.readouterr().out
         assert "skipped" in output
 
-    def test_summary_no_tracker_row_when_none(self, sample_result, mock_orchestrator, capsys):
+    def test_summary_no_tracker_row_when_none(
+        self, sample_result, mock_orchestrator, capsys
+    ):
         """print_summary nao inclui linha de Tracking quando tracker_info e None."""
         print_summary(sample_result, tracker_info=None)
 

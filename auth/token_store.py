@@ -3,6 +3,7 @@
 O Protocol permite substituir InMemoryTokenStore por RedisTokenStore em
 produção sem alterar o código do servidor.
 """
+
 from __future__ import annotations
 
 import time

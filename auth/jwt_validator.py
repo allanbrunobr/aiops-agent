@@ -3,6 +3,7 @@
 Usa PyJWT com algoritmo HS256 por padrão (adequado para servidor único).
 Para produção multi-instância, migrar para RS256 + chaves assimétricas.
 """
+
 from __future__ import annotations
 
 import time
@@ -30,7 +31,7 @@ def _reject_short_hmac_key(secret: str, algorithm: str) -> None:
 class TokenClaims:
     """Claims extraídas de um JWT validado."""
 
-    sub: str                   # agent-id (ex: "assistant-agent")
+    sub: str  # agent-id (ex: "assistant-agent")
     scopes: list[str] = field(default_factory=list)
     exp: int = 0
 

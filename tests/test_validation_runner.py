@@ -5,12 +5,11 @@ Testes para Story 4.6: Bundled Test Scenarios.
 Cobre ValidationRunner, ScenarioResult, ValidationReport.
 """
 
-import pytest
 
-from validation.runner import ValidationRunner, ScenarioResult, ValidationReport
-
+from validation.runner import ScenarioResult, ValidationRunner
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 class _PassingScenario:
     """Cenário de validação que sempre passa."""
@@ -57,6 +56,7 @@ class _ErrorScenario:
 
 
 # ── ValidationRunner ──────────────────────────────────────────────────────────
+
 
 def test_runner_no_scenarios():
     """Runner sem cenários deve retornar relatório vazio."""

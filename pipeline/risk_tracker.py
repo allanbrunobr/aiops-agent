@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 Rastreador de risco com estado persistente para monitoramento contínuo em produção.
 
@@ -67,7 +68,8 @@ class RiskTracker:
 
         self._smoothed_risk = min(
             100.0,
-            self._smoothing_alpha * adjusted + (1.0 - self._smoothing_alpha) * self._smoothed_risk,
+            self._smoothing_alpha * adjusted
+            + (1.0 - self._smoothing_alpha) * self._smoothed_risk,
         )
 
         # Dead zone: sistema saudável (sem histórico de degradação e score baixo)

@@ -9,22 +9,22 @@ Cobre:
 
 from __future__ import annotations
 
-import pytest
-
 from rag.cot_retriever import CoTObservabilityRetriever, SearchContext
 from rag.query_expansion import QueryExpander
 
-
 # ── Fake helpers (sem FAISS / ML) ─────────────────────────────────────────────
+
 
 class _FakeIndexer:
     """Indexer fake sem FAISS — search() retorna [] imediatamente."""
+
     index = None
     model = None
 
 
 class _FakeChunk:
     """Chunk fake para SearchResult."""
+
     def __init__(self, text: str, source: str = "log"):
         self.text = text
         self.source = source
@@ -33,12 +33,14 @@ class _FakeChunk:
 
 class _FakeSearchResult:
     """SearchResult fake sem dependência FAISS."""
+
     def __init__(self, text: str, score: float = 0.9):
         self.chunk = _FakeChunk(text)
         self.score = score
 
 
 # ── Story 9.1: Search Context Tracking ────────────────────────────────────────
+
 
 class TestResetContext:
     """AC 9.1.1 — reset_context limpa histórico e reinicia contador."""
@@ -156,6 +158,7 @@ class TestHistoryPersistenceWithoutReset:
 
 # ── Story 9.2: Query Expansion and Follow-Up Suggestions ──────────────────────
 
+
 class TestQueryExpansion:
     """AC 9.2.1 — expand_query prefixa contexto de exclusão de entidades."""
 
@@ -187,7 +190,10 @@ class TestQueryExpansion:
         expanded = expander.expand_query("payment-svc timeout", [prev_ctx])
 
         assert expanded.startswith("payment-svc timeout")
-        assert "(excluding already investigated: payment-svc, metric:connection_pool)" in expanded
+        assert (
+            "(excluding already investigated: payment-svc, metric:connection_pool)"
+            in expanded
+        )
 
     def test_no_expansion_on_empty_history(self):
         expander = QueryExpander()
@@ -240,7 +246,11 @@ class TestGenerateFollowUpQuery:
         ctx = SearchContext(
             iteration=1,
             query="q",
-            results=[_FakeSearchResult("connection pool exhausted — max 10 connections reached")],
+            results=[
+                _FakeSearchResult(
+                    "connection pool exhausted — max 10 connections reached"
+                )
+            ],
             entities=[],
         )
         suggestion = expander._generate_follow_up_query(ctx)
@@ -251,7 +261,9 @@ class TestGenerateFollowUpQuery:
         ctx = SearchContext(
             iteration=1,
             query="q",
-            results=[_FakeSearchResult("heap memory usage at 98% — possible memory leak")],
+            results=[
+                _FakeSearchResult("heap memory usage at 98% — possible memory leak")
+            ],
             entities=[],
         )
         suggestion = expander._generate_follow_up_query(ctx)
@@ -291,6 +303,7 @@ class TestGenerateFollowUpQuery:
 
 
 # ── Story 9.3: Integration with DiagnosisAgent ────────────────────────────────
+
 
 class _FakeRetriever:
     """ObservabilityRetriever fake para testes de DiagnosisAgent."""
@@ -333,10 +346,12 @@ class TestDiagnoseResetsContext:
 
         # diagnose() sem LLM — vai usar heurística
         import io
-        from contextlib import redirect_stdout, redirect_stderr
         import random
+        from contextlib import redirect_stderr, redirect_stdout
+
         from data.sample_incident import create_incident
         from pipeline.aggregator import Aggregator
+
         random.seed(42)
         incident = create_incident()
         aggregator = Aggregator()
@@ -353,8 +368,10 @@ class TestExecuteToolSearchSimilarWithCoT:
 
     def _make_report(self):
         import random
+
         from data.sample_incident import create_incident
         from pipeline.aggregator import Aggregator
+
         random.seed(42)
         incident = create_incident()
         return Aggregator().process(incident.logs, incident.metrics, incident.traces)
@@ -368,8 +385,11 @@ class TestExecuteToolSearchSimilarWithCoT:
 
         import io
         from contextlib import redirect_stdout
+
         with redirect_stdout(io.StringIO()):
-            result = agent._execute_tool("search_similar", {"query": "payment-svc timeout"}, report, retriever)
+            agent._execute_tool(
+                "search_similar", {"query": "payment-svc timeout"}, report, retriever
+            )
 
         # search_with_cot foi chamado
         assert retriever.current_iteration == 1
@@ -382,7 +402,9 @@ class TestExecuteToolSearchSimilarWithCoT:
         retriever = _FakeRetriever()
         report = self._make_report()
 
-        result = agent._execute_tool("search_similar", {"query": "payment-svc"}, report, retriever)
+        result = agent._execute_tool(
+            "search_similar", {"query": "payment-svc"}, report, retriever
+        )
 
         assert retriever.search_calls == ["payment-svc"]
         assert result == "formatted results"
@@ -399,7 +421,9 @@ class TestExecuteToolSearchSimilarWithCoT:
         retriever = _BrokenCoTRetriever(_FakeIndexer())
         report = self._make_report()
 
-        result = agent._execute_tool("search_similar", {"query": "q"}, report, retriever)
+        result = agent._execute_tool(
+            "search_similar", {"query": "q"}, report, retriever
+        )
 
         assert result == "RAG search error — using baseline"
 
@@ -414,10 +438,15 @@ class TestExecuteToolSearchSimilarWithCoT:
         # Primeira busca popula histórico com entidades
         import io
         from contextlib import redirect_stdout
+
         with redirect_stdout(io.StringIO()):
-            agent._execute_tool("search_similar", {"query": "payment-svc timeout"}, report, retriever)
+            agent._execute_tool(
+                "search_similar", {"query": "payment-svc timeout"}, report, retriever
+            )
             # Segunda busca deve ter expansão
-            result = agent._execute_tool("search_similar", {"query": "payment-svc error"}, report, retriever)
+            result = agent._execute_tool(
+                "search_similar", {"query": "payment-svc error"}, report, retriever
+            )
 
         # Expansão deve estar no output
         assert "[Query expanded to:" in result

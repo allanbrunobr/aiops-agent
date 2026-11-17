@@ -4,6 +4,7 @@ ASGITransport nao executa o lifespan do FastAPI automaticamente.
 Os fixtures abaixo inicializam o app.state manualmente para testes
 que dependem de store, credentials, dedup e pipeline_runner.
 """
+
 from __future__ import annotations
 
 import time
@@ -43,9 +44,9 @@ def app():
     Inicializa app.state manualmente porque ASGITransport nao
     executa o lifespan. Registra normalizers se necessario.
     """
+    from adapters.credentials import EnvCredentialProvider
     from adapters.persistence.in_memory_store import InMemoryStore
     from config.loader import load_config
-    from adapters.credentials import EnvCredentialProvider
     from interfaces.http.app import create_app
     from interfaces.http.health import set_start_time
     from interfaces.http.webhook.dedup import DedupStore

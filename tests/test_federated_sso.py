@@ -21,9 +21,9 @@ Cenários:
   - Cache JWKS: segundo request não re-busca JWKS
   - Múltiplos issuers: dois IdPs confiáveis independentes
 """
+
 from __future__ import annotations
 
-import json
 import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -36,8 +36,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from auth.keys import generate_rsa_keypair, public_key_to_jwk
-from auth.oidc_validator import OIDCValidator, TrustedIssuerConfig
-
+from auth.oidc_validator import TrustedIssuerConfig
 
 # ---------------------------------------------------------------------------
 # Constantes e fixtures de módulo (geração RSA é lenta — roda uma vez)
@@ -73,6 +72,7 @@ def partnerb_jwks(partnerb_keypair: tuple[str, str]) -> dict:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_token(
     private_pem: str,
@@ -144,6 +144,7 @@ def _mock_idp_error_client(status_code: int = 500) -> MagicMock:
 # Factory de app com auth_method="federated"
 # ---------------------------------------------------------------------------
 
+
 class _MockMcpConfig:
     """McpConfig mínimo para mount_sse() com auth_method=federated."""
 
@@ -185,6 +186,7 @@ def _make_federated_app(
 
     with patch("interfaces.mcp.sse.create_server", return_value=mock_mcp_server):
         from interfaces.mcp.sse import mount_sse
+
         mount_sse(app, config=config)
 
     return app
@@ -193,6 +195,7 @@ def _make_federated_app(
 # ---------------------------------------------------------------------------
 # 1. Rejeições — retornam 401 antes de chegar ao SSE stream
 # ---------------------------------------------------------------------------
+
 
 class TestFederatedAuthRejections:
     """Token inválido ou ausente deve ser barrado antes do SSE stream."""
@@ -221,9 +224,7 @@ class TestFederatedAuthRejections:
         priv, _ = partnera_keypair
         token = _make_token(priv, iss="https://evil.attacker.com")
         with TestClient(self._app, raise_server_exceptions=False) as client:
-            resp = client.get(
-                "/mcp/sse", headers={"Authorization": f"Bearer {token}"}
-            )
+            resp = client.get("/mcp/sse", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 401
         body = resp.json()
         assert body["error"] in ("invalid_token", "unauthorized")
@@ -291,6 +292,7 @@ class TestFederatedAuthRejections:
 # 2. IdP indisponível — deve retornar 503
 # ---------------------------------------------------------------------------
 
+
 class TestFederatedIdPUnavailable:
     """Quando o IdP externo está fora do ar, retorna 503."""
 
@@ -340,6 +342,7 @@ class TestFederatedIdPUnavailable:
 # 3. Sucesso — token válido chega ao SSE stream
 # ---------------------------------------------------------------------------
 
+
 class TestFederatedAuthSuccess:
     """Token RS256 válido de issuer confiável deve chegar ao SSE stream."""
 
@@ -383,7 +386,9 @@ class TestFederatedAuthSuccess:
         captured: list[str] = []
 
         @asynccontextmanager
-        async def _capture_context(*_args: object, **_kw: object) -> AsyncIterator[tuple]:
+        async def _capture_context(
+            *_args: object, **_kw: object
+        ) -> AsyncIterator[tuple]:
             captured.append(_current_client_id.get())
             yield (AsyncMock(), AsyncMock())
 
@@ -414,7 +419,9 @@ class TestFederatedAuthSuccess:
         captured: list[list[str]] = []
 
         @asynccontextmanager
-        async def _capture_scopes(*_args: object, **_kw: object) -> AsyncIterator[tuple]:
+        async def _capture_scopes(
+            *_args: object, **_kw: object
+        ) -> AsyncIterator[tuple]:
             captured.append(list(_current_scopes.get()))
             yield (AsyncMock(), AsyncMock())
 
@@ -435,6 +442,7 @@ class TestFederatedAuthSuccess:
 # ---------------------------------------------------------------------------
 # 4. Cache JWKS — segundo request não refaz discovery
 # ---------------------------------------------------------------------------
+
 
 class TestFederatedJwksCache:
     """JWKS deve ser cacheado entre requests ao mesmo issuer."""
@@ -477,6 +485,7 @@ class TestFederatedJwksCache:
 # 5. Múltiplos issuers — PartnerA e PartnerB independentes
 # ---------------------------------------------------------------------------
 
+
 class TestFederatedMultipleIssuers:
     """Dois IdPs confiáveis devem funcionar de forma independente."""
 
@@ -512,9 +521,7 @@ class TestFederatedMultipleIssuers:
         self, partnerb_keypair: tuple[str, str], partnerb_jwks: dict
     ) -> None:
         priv, _ = partnerb_keypair
-        token = _make_token(
-            priv, iss=_ISSUER_PARTNERB, kid="partnerb-key-1"
-        )
+        token = _make_token(priv, iss=_ISSUER_PARTNERB, kid="partnerb-key-1")
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERB), partnerb_jwks)
 
         with patch("interfaces.mcp.sse._sse_transport") as mock_transport:

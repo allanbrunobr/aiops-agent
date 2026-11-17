@@ -14,13 +14,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from rag.retriever import ObservabilityRetriever, SearchResult
 from rag.indexer import IndexedChunk
-
+from rag.retriever import ObservabilityRetriever, SearchResult
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_fake_indexer(n_results: int = 5, source: str = "log") -> object:
     """Cria um indexer falso que simula resultados FAISS sem ML real."""
@@ -35,6 +35,7 @@ def _make_fake_indexer(n_results: int = 5, source: str = "log") -> object:
 
     mock_model = MagicMock()
     import numpy as np
+
     mock_model.encode.return_value = np.array([[0.1] * 128], dtype=np.float32)
 
     mock_index = MagicMock()
@@ -227,6 +228,7 @@ service_criticality_map:
     def test_service_criticality_map_from_config_wires_to_reranker(self, tmp_path):
         """Mapa de criticidade do config deve ser passado ao DomainReranker."""
         import yaml
+
         from rag.reranker import DomainReranker
 
         config_content = """
@@ -249,12 +251,15 @@ service_criticality_map:
     def test_project_config_yaml_has_expected_services(self):
         """config.yaml do projeto deve conter os serviços críticos esperados."""
         import os
+
         import yaml
 
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         config_path = os.path.join(project_root, "config.yaml")
 
-        assert os.path.isfile(config_path), "config.yaml deve existir na raiz do projeto"
+        assert os.path.isfile(config_path), (
+            "config.yaml deve existir na raiz do projeto"
+        )
 
         with open(config_path) as f:
             config = yaml.safe_load(f)
@@ -299,7 +304,7 @@ class TestRetrieverRerankerIntegration:
 
         # Simula resultados FAISS (score bruto baixo para payment-svc intencional)
         results = [
-            SearchResult(chunk=chunk_low, score=0.8),   # FAISS diz low é melhor
+            SearchResult(chunk=chunk_low, score=0.8),  # FAISS diz low é melhor
             SearchResult(chunk=chunk_high, score=0.6),  # mas reranker deve inverter
         ]
 

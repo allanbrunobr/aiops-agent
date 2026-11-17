@@ -8,6 +8,7 @@ processa volumes variados de logs (100, 1_000, 10_000). Cobre:
   - Modo dry_run, ausencia de token, fallback apos retries esgotados
   - Consistencia estrutural dos blocos entre escalas diferentes
 """
+
 from __future__ import annotations
 
 import json
@@ -19,12 +20,12 @@ import pytest
 from slack_sdk.errors import SlackApiError
 
 from core.lifecycle import LifecycleEvent
-from interfaces.http.notifications.slack import SlackNotifier, _NODE_LABELS
-
+from interfaces.http.notifications.slack import _NODE_LABELS, SlackNotifier
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_mock_client() -> AsyncMock:
     """Cria cliente Slack mockado com respostas padrao."""
@@ -88,7 +89,11 @@ def _generate_report(log_count: int):
 
     Retorna (report, compressed_text, stats) para uso nos testes.
     """
-    from infra.benchmark_compression import generate_logs, generate_metrics, generate_traces
+    from infra.benchmark_compression import (
+        generate_logs,
+        generate_metrics,
+        generate_traces,
+    )
     from pipeline.aggregator import Aggregator
     from pipeline.context_compressor import ContextCompressor
 
@@ -108,6 +113,7 @@ ALL_NODES = list(_NODE_LABELS.keys())
 # ---------------------------------------------------------------------------
 # Fixtures com cache por escala — evita reprocessar logs em cada teste
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def report_100():
@@ -130,6 +136,7 @@ def report_10k():
 # ---------------------------------------------------------------------------
 # 1-3. Mensagem inicial postada para cada escala
 # ---------------------------------------------------------------------------
+
 
 class TestInitialMessagePosted:
     """Verifica que chat_postMessage e chamado exatamente 1x para cada escala."""
@@ -213,6 +220,7 @@ class TestInitialMessagePosted:
 # 4. Node updates para todas as escalas (parametrizado)
 # ---------------------------------------------------------------------------
 
+
 class TestNodeUpdatesForAllScales:
     """Verifica que chat_update e chamado para cada node.completed em cada escala."""
 
@@ -257,6 +265,7 @@ class TestNodeUpdatesForAllScales:
 # 5. Mensagem final contem severity (via blocos iniciais onde severity aparece)
 # ---------------------------------------------------------------------------
 
+
 class TestFinalMessageContainsSeverity:
     """Verifica que severity do report aparece nos blocos Slack.
 
@@ -294,10 +303,16 @@ class TestFinalMessageContainsSeverity:
         notifier = _make_notifier(mock_client)
 
         # Pipeline started — severity nos blocos iniciais
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": "Test incident", "severity": severity, "service": "payment-svc"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={
+                    "title": "Test incident",
+                    "severity": severity,
+                    "service": "payment-svc",
+                },
+            )
+        )
 
         initial_blocks = mock_client.chat_postMessage.call_args.kwargs["blocks"]
         initial_text = str(initial_blocks)
@@ -330,6 +345,7 @@ class TestFinalMessageContainsSeverity:
 # 6. Mensagem final contem root_cause
 # ---------------------------------------------------------------------------
 
+
 class TestFinalMessageContainsRootCause:
     """Verifica que blocos finais contem root_cause."""
 
@@ -340,24 +356,28 @@ class TestFinalMessageContainsRootCause:
         mock_client = _make_mock_client()
         notifier = _make_notifier(mock_client)
 
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": "Test", "severity": "HIGH", "service": "payment-svc"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={"title": "Test", "severity": "HIGH", "service": "payment-svc"},
+            )
+        )
 
         root_cause = "Database connection pool exhausted due to leaked connections"
-        await notifier.on_event(_make_event(
-            "pipeline.completed",
-            data={
-                "root_cause": root_cause,
-                "confidence": 0.88,
-                "evidence": ["Pool saturation at 200/200"],
-                "proposed_fix": "Restart payment-svc pods",
-                "risk_level": "high",
-                "blast_radius": "payment-svc",
-                "total_duration_ms": 8000,
-            },
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.completed",
+                data={
+                    "root_cause": root_cause,
+                    "confidence": 0.88,
+                    "evidence": ["Pool saturation at 200/200"],
+                    "proposed_fix": "Restart payment-svc pods",
+                    "risk_level": "high",
+                    "blast_radius": "payment-svc",
+                    "total_duration_ms": 8000,
+                },
+            )
+        )
 
         mock_client.chat_update.assert_called_once()
         blocks = mock_client.chat_update.call_args.kwargs["blocks"]
@@ -371,24 +391,28 @@ class TestFinalMessageContainsRootCause:
         mock_client = _make_mock_client()
         notifier = _make_notifier(mock_client)
 
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": "Test", "severity": "MEDIUM", "service": "auth-svc"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={"title": "Test", "severity": "MEDIUM", "service": "auth-svc"},
+            )
+        )
 
         proposed_fix = "kubectl rollout restart deployment/auth-svc -n production"
-        await notifier.on_event(_make_event(
-            "pipeline.completed",
-            data={
-                "root_cause": "Memory leak in auth handler",
-                "confidence": 0.75,
-                "evidence": [],
-                "proposed_fix": proposed_fix,
-                "risk_level": "medium",
-                "blast_radius": "auth-svc",
-                "total_duration_ms": 3500,
-            },
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.completed",
+                data={
+                    "root_cause": "Memory leak in auth handler",
+                    "confidence": 0.75,
+                    "evidence": [],
+                    "proposed_fix": proposed_fix,
+                    "risk_level": "medium",
+                    "blast_radius": "auth-svc",
+                    "total_duration_ms": 3500,
+                },
+            )
+        )
 
         blocks = mock_client.chat_update.call_args.kwargs["blocks"]
         full_text = str(blocks)
@@ -401,23 +425,27 @@ class TestFinalMessageContainsRootCause:
         mock_client = _make_mock_client()
         notifier = _make_notifier(mock_client)
 
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": "Test", "severity": "CRITICAL", "service": "svc"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={"title": "Test", "severity": "CRITICAL", "service": "svc"},
+            )
+        )
 
-        await notifier.on_event(_make_event(
-            "pipeline.completed",
-            data={
-                "root_cause": "Cascading failure",
-                "confidence": 0.92,
-                "evidence": ["Spike A", "Spike B"],
-                "proposed_fix": "Scale up",
-                "risk_level": "critical",
-                "blast_radius": "all services",
-                "total_duration_ms": 12000,
-            },
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.completed",
+                data={
+                    "root_cause": "Cascading failure",
+                    "confidence": 0.92,
+                    "evidence": ["Spike A", "Spike B"],
+                    "proposed_fix": "Scale up",
+                    "risk_level": "critical",
+                    "blast_radius": "all services",
+                    "total_duration_ms": 12000,
+                },
+            )
+        )
 
         blocks = mock_client.chat_update.call_args.kwargs["blocks"]
         full_text = str(blocks)
@@ -430,6 +458,7 @@ class TestFinalMessageContainsRootCause:
 # ---------------------------------------------------------------------------
 # 7. Slack nao chamado sem token
 # ---------------------------------------------------------------------------
+
 
 class TestSlackNotCalledWithoutToken:
     """Verifica que sem SLACK_BOT_TOKEN nenhuma chamada API acontece."""
@@ -452,20 +481,26 @@ class TestSlackNotCalledWithoutToken:
         notifier._fallback_dir = Path("output")
 
         # Simula ciclo completo: started -> nodes -> completed
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": "Test", "severity": "HIGH", "service": "svc"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={"title": "Test", "severity": "HIGH", "service": "svc"},
+            )
+        )
         for node in ALL_NODES:
-            await notifier.on_event(_make_event(
-                "node.completed",
-                node_name=node,
-                data={"duration_ms": 100},
-            ))
-        await notifier.on_event(_make_event(
-            "pipeline.completed",
-            data={"root_cause": "Test", "confidence": 0.9},
-        ))
+            await notifier.on_event(
+                _make_event(
+                    "node.completed",
+                    node_name=node,
+                    data={"duration_ms": 100},
+                )
+            )
+        await notifier.on_event(
+            _make_event(
+                "pipeline.completed",
+                data={"root_cause": "Test", "confidence": 0.9},
+            )
+        )
 
         # Nenhum ts registrado (nenhuma chamada API feita)
         assert len(notifier._message_ts) == 0
@@ -474,6 +509,7 @@ class TestSlackNotCalledWithoutToken:
 # ---------------------------------------------------------------------------
 # 8. Dry run: zero chamadas API, estado interno correto
 # ---------------------------------------------------------------------------
+
 
 class TestDryRunZeroApiCalls:
     """Verifica que dry_run=True nao faz chamadas API mas mantem estado."""
@@ -488,30 +524,36 @@ class TestDryRunZeroApiCalls:
         cid = "inc-scale-test-001"
 
         # Pipeline started
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": "Test", "severity": "HIGH", "service": "svc"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={"title": "Test", "severity": "HIGH", "service": "svc"},
+            )
+        )
 
         # Verifica que ts de dry-run foi registrado
         assert notifier._message_ts[cid] == "dry-run"
 
         # Simula todos os nodes
         for node in ALL_NODES:
-            await notifier.on_event(_make_event(
-                "node.completed",
-                node_name=node,
-                data={"duration_ms": 50},
-            ))
+            await notifier.on_event(
+                _make_event(
+                    "node.completed",
+                    node_name=node,
+                    data={"duration_ms": 50},
+                )
+            )
 
         # Verifica que nodes foram rastreados internamente
         assert len(notifier._completed_nodes[cid]) == len(ALL_NODES)
 
         # Pipeline completed
-        await notifier.on_event(_make_event(
-            "pipeline.completed",
-            data={"root_cause": "Test cause", "confidence": 0.9},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.completed",
+                data={"root_cause": "Test cause", "confidence": 0.9},
+            )
+        )
 
         # Zero chamadas API — mock_client nunca foi tocado
         mock_client.chat_postMessage.assert_not_called()
@@ -525,6 +567,7 @@ class TestDryRunZeroApiCalls:
 # ---------------------------------------------------------------------------
 # 9. Fallback escrito quando todos os retries falham
 # ---------------------------------------------------------------------------
+
 
 class TestFallbackOnRetryExhaustion:
     """Verifica que JSON fallback e criado quando todos os retries falham."""
@@ -544,10 +587,16 @@ class TestFallbackOnRetryExhaustion:
         )
 
         # Envia mensagem inicial (funciona pois chat_postMessage nao falha)
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": "Test", "severity": "CRITICAL", "service": "payment-svc"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={
+                    "title": "Test",
+                    "severity": "CRITICAL",
+                    "service": "payment-svc",
+                },
+            )
+        )
 
         postmortem_data = {
             "root_cause": "Connection pool exhausted",
@@ -559,10 +608,12 @@ class TestFallbackOnRetryExhaustion:
         }
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
-            await notifier.on_event(_make_event(
-                "pipeline.completed",
-                data=postmortem_data,
-            ))
+            await notifier.on_event(
+                _make_event(
+                    "pipeline.completed",
+                    data=postmortem_data,
+                )
+            )
 
         # Verifica que fallback JSON foi criado
         fallback_files = list(tmp_path.glob("fallback_*.json"))
@@ -579,6 +630,7 @@ class TestFallbackOnRetryExhaustion:
 # ---------------------------------------------------------------------------
 # 10. Consistencia estrutural dos blocos entre escalas
 # ---------------------------------------------------------------------------
+
 
 class TestScaleConsistencySlackBlocks:
     """Verifica que blocos finais para 100 vs 10K logs tem mesma estrutura."""
@@ -604,14 +656,16 @@ class TestScaleConsistencySlackBlocks:
             mock_client = _make_mock_client()
             notifier = _make_notifier(mock_client)
 
-            await notifier.on_event(_make_event(
-                "pipeline.started",
-                data={
-                    "title": "Test",
-                    "severity": report.severity,
-                    "service": "payment-svc",
-                },
-            ))
+            await notifier.on_event(
+                _make_event(
+                    "pipeline.started",
+                    data={
+                        "title": "Test",
+                        "severity": report.severity,
+                        "service": "payment-svc",
+                    },
+                )
+            )
 
             await notifier.on_event(_make_event("pipeline.completed", data=final_data))
 
@@ -624,7 +678,9 @@ class TestScaleConsistencySlackBlocks:
 
     @pytest.mark.unit
     @pytest.mark.asyncio
-    async def test_initial_blocks_consistent_across_scales(self, report_100, report_10k):
+    async def test_initial_blocks_consistent_across_scales(
+        self, report_100, report_10k
+    ):
         """Blocos iniciais para 100 e 10K logs tem mesma estrutura."""
         initial_block_types_per_scale = []
 
@@ -633,14 +689,16 @@ class TestScaleConsistencySlackBlocks:
             mock_client = _make_mock_client()
             notifier = _make_notifier(mock_client)
 
-            await notifier.on_event(_make_event(
-                "pipeline.started",
-                data={
-                    "title": "Test",
-                    "severity": report.severity,
-                    "service": "payment-svc",
-                },
-            ))
+            await notifier.on_event(
+                _make_event(
+                    "pipeline.started",
+                    data={
+                        "title": "Test",
+                        "severity": report.severity,
+                        "service": "payment-svc",
+                    },
+                )
+            )
 
             blocks = mock_client.chat_postMessage.call_args.kwargs["blocks"]
             block_types = [b["type"] for b in blocks]
@@ -652,6 +710,7 @@ class TestScaleConsistencySlackBlocks:
 # ---------------------------------------------------------------------------
 # Teste parametrizado completo: ciclo end-to-end por escala
 # ---------------------------------------------------------------------------
+
 
 class TestFullCyclePerScale:
     """Ciclo completo de eventos Slack parametrizado por escala de logs."""
@@ -666,14 +725,16 @@ class TestFullCyclePerScale:
         cid = "inc-scale-test-001"
 
         # 1. Pipeline started
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={
-                "title": "Payment service incident",
-                "severity": "HIGH",
-                "service": "payment-svc",
-            },
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={
+                    "title": "Payment service incident",
+                    "severity": "HIGH",
+                    "service": "payment-svc",
+                },
+            )
+        )
 
         # Verifica chat_postMessage chamado 1x
         assert mock_client.chat_postMessage.call_count == 1
@@ -681,28 +742,32 @@ class TestFullCyclePerScale:
 
         # 2. Todos os 11 nodes completados
         for node_name in ALL_NODES:
-            await notifier.on_event(_make_event(
-                "node.completed",
-                node_name=node_name,
-                data={"duration_ms": 100 + log_count // 100},
-            ))
+            await notifier.on_event(
+                _make_event(
+                    "node.completed",
+                    node_name=node_name,
+                    data={"duration_ms": 100 + log_count // 100},
+                )
+            )
 
         # Verifica chat_update chamado 11 vezes (1 por node)
         assert mock_client.chat_update.call_count == len(ALL_NODES)
 
         # 3. Pipeline completed
-        await notifier.on_event(_make_event(
-            "pipeline.completed",
-            data={
-                "root_cause": "Connection pool exhausted in payment-svc",
-                "confidence": 0.92,
-                "evidence": ["Error spike detected", "Pool metrics at 200/200"],
-                "proposed_fix": "kubectl scale deployment payment-svc --replicas=5",
-                "risk_level": "medium",
-                "blast_radius": "payment-svc only",
-                "total_duration_ms": 5000 + log_count,
-            },
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.completed",
+                data={
+                    "root_cause": "Connection pool exhausted in payment-svc",
+                    "confidence": 0.92,
+                    "evidence": ["Error spike detected", "Pool metrics at 200/200"],
+                    "proposed_fix": "kubectl scale deployment payment-svc --replicas=5",
+                    "risk_level": "medium",
+                    "blast_radius": "payment-svc only",
+                    "total_duration_ms": 5000 + log_count,
+                },
+            )
+        )
 
         # chat_update chamado mais 1x para mensagem final (total: 11 + 1 = 12)
         assert mock_client.chat_update.call_count == len(ALL_NODES) + 1
@@ -719,19 +784,23 @@ class TestFullCyclePerScale:
         mock_client = _make_mock_client()
         notifier = _make_notifier(mock_client)
 
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": "Test", "severity": "HIGH", "service": "svc"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={"title": "Test", "severity": "HIGH", "service": "svc"},
+            )
+        )
 
         # Completa 3 nodes
         completed = ALL_NODES[:3]
         for node_name in completed:
-            await notifier.on_event(_make_event(
-                "node.completed",
-                node_name=node_name,
-                data={"duration_ms": 200},
-            ))
+            await notifier.on_event(
+                _make_event(
+                    "node.completed",
+                    node_name=node_name,
+                    data={"duration_ms": 200},
+                )
+            )
 
         # Verifica ultimo chat_update contem checkmarks
         last_call = mock_client.chat_update.call_args_list[-1]
@@ -747,6 +816,7 @@ class TestFullCyclePerScale:
 # ---------------------------------------------------------------------------
 # Testes com pipeline real (integration) para validar severity
 # ---------------------------------------------------------------------------
+
 
 class TestSeverityFromRealPipeline:
     """Verifica severities reais gerados pelo pipeline para cada escala."""
@@ -790,6 +860,7 @@ class TestSeverityFromRealPipeline:
 # Testes de borda e resiliencia
 # ---------------------------------------------------------------------------
 
+
 class TestEdgeCases:
     """Testes de borda para cenarios incomuns no fluxo Slack."""
 
@@ -801,11 +872,13 @@ class TestEdgeCases:
         notifier = _make_notifier(mock_client)
 
         # Envia node.completed sem ter enviado pipeline.started
-        await notifier.on_event(_make_event(
-            "node.completed",
-            node_name="log_parser",
-            data={"duration_ms": 100},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "node.completed",
+                node_name="log_parser",
+                data={"duration_ms": 100},
+            )
+        )
 
         # Nenhuma chamada API feita (sem ts registrado)
         mock_client.chat_update.assert_not_called()
@@ -817,13 +890,15 @@ class TestEdgeCases:
         mock_client = _make_mock_client()
         notifier = _make_notifier(mock_client)
 
-        await notifier.on_event(_make_event(
-            "pipeline.completed",
-            data={
-                "root_cause": "Orphan completion",
-                "confidence": 0.5,
-            },
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.completed",
+                data={
+                    "root_cause": "Orphan completion",
+                    "confidence": 0.5,
+                },
+            )
+        )
 
         # Sem ts registrado, usa chat_postMessage como fallback
         mock_client.chat_postMessage.assert_called_once()
@@ -839,34 +914,42 @@ class TestEdgeCases:
         cid_b = "inc-pipeline-B"
 
         # Pipeline A started
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            correlation_id=cid_a,
-            data={"title": "Pipeline A", "severity": "HIGH", "service": "svc-a"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                correlation_id=cid_a,
+                data={"title": "Pipeline A", "severity": "HIGH", "service": "svc-a"},
+            )
+        )
 
         # Pipeline B started
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            correlation_id=cid_b,
-            data={"title": "Pipeline B", "severity": "LOW", "service": "svc-b"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                correlation_id=cid_b,
+                data={"title": "Pipeline B", "severity": "LOW", "service": "svc-b"},
+            )
+        )
 
         # Node do pipeline A
-        await notifier.on_event(_make_event(
-            "node.completed",
-            correlation_id=cid_a,
-            node_name="log_parser",
-            data={"duration_ms": 100},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "node.completed",
+                correlation_id=cid_a,
+                node_name="log_parser",
+                data={"duration_ms": 100},
+            )
+        )
 
         # Node do pipeline B
-        await notifier.on_event(_make_event(
-            "node.completed",
-            correlation_id=cid_b,
-            node_name="metric_filter",
-            data={"duration_ms": 200},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "node.completed",
+                correlation_id=cid_b,
+                node_name="metric_filter",
+                data={"duration_ms": 200},
+            )
+        )
 
         # Verifica rastreamento independente
         assert "log_parser" in notifier._completed_nodes[cid_a]
@@ -881,10 +964,16 @@ class TestEdgeCases:
         mock_client = _make_mock_client()
         notifier = _make_notifier(mock_client)
 
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": "Test incident", "severity": "CRITICAL", "service": "api-gw"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={
+                    "title": "Test incident",
+                    "severity": "CRITICAL",
+                    "service": "api-gw",
+                },
+            )
+        )
 
         blocks = mock_client.chat_postMessage.call_args.kwargs["blocks"]
         block_types = [b["type"] for b in blocks]
@@ -897,15 +986,19 @@ class TestEdgeCases:
         mock_client = _make_mock_client()
         notifier = _make_notifier(mock_client)
 
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": "Will fail", "severity": "HIGH", "service": "svc"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={"title": "Will fail", "severity": "HIGH", "service": "svc"},
+            )
+        )
 
-        await notifier.on_event(_make_event(
-            "pipeline.failed",
-            data={"error": "LLM timeout after 30s"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.failed",
+                data={"error": "LLM timeout after 30s"},
+            )
+        )
 
         # chat_update chamado com blocos de falha
         mock_client.chat_update.assert_called_once()
@@ -920,24 +1013,31 @@ class TestEdgeCases:
         """Channel ID resolvido do response de chat_postMessage e usado em updates."""
         mock_client = _make_mock_client()
         # chat_postMessage retorna channel ID resolvido
-        mock_client.chat_postMessage.return_value = {"ts": "100.200", "channel": "C_RESOLVED"}
+        mock_client.chat_postMessage.return_value = {
+            "ts": "100.200",
+            "channel": "C_RESOLVED",
+        }
         notifier = _make_notifier(mock_client)
 
         cid = "inc-scale-test-001"
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": "Test", "severity": "HIGH", "service": "svc"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={"title": "Test", "severity": "HIGH", "service": "svc"},
+            )
+        )
 
         # Channel ID deve ter sido armazenado
         assert notifier._channel_ids[cid] == "C_RESOLVED"
 
         # Node update deve usar channel ID resolvido
-        await notifier.on_event(_make_event(
-            "node.completed",
-            node_name="log_parser",
-            data={"duration_ms": 100},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "node.completed",
+                node_name="log_parser",
+                data={"duration_ms": 100},
+            )
+        )
 
         update_kwargs = mock_client.chat_update.call_args.kwargs
         assert update_kwargs["channel"] == "C_RESOLVED"

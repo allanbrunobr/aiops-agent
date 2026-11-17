@@ -13,10 +13,10 @@ import pytest
 
 from rag.reranker import DomainReranker, RankSignals
 
-
 # ---------------------------------------------------------------------------
 # Helpers para criar SearchResult e IndexedChunk falsos
 # ---------------------------------------------------------------------------
+
 
 def _make_chunk(
     source: str = "log",
@@ -157,6 +157,7 @@ class TestFuseScores:
     def test_weights_sum_to_one(self):
         """Os pesos definidos em _WEIGHTS devem somar 1.0."""
         from rag.reranker import _WEIGHTS
+
         total = sum(_WEIGHTS.values())
         assert total == pytest.approx(1.0, abs=1e-9)
 
@@ -296,7 +297,9 @@ class TestRerank:
             score=0.8,
         )
 
-        output = reranker.rerank([weak, strong], query="error investigation", top_k=10, use_tier2=False)
+        output = reranker.rerank(
+            [weak, strong], query="error investigation", top_k=10, use_tier2=False
+        )
         assert len(output) == 2
         # O resultado forte deve aparecer primeiro
         assert output[0].chunk.metadata["service"] == "payment-svc"
@@ -322,16 +325,22 @@ class TestRerank:
             text="payment connection error",
         )
 
-        output = reranker.rerank([debug_result, payment_result], query="incident", top_k=10)
+        output = reranker.rerank(
+            [debug_result, payment_result], query="incident", top_k=10
+        )
         assert output[0].chunk.metadata["service"] == "payment-svc"
 
     def test_use_tier2_false_returns_tier1_order(self):
         """use_tier2=False deve retornar ordenação Tier 1, sem cross-encoder."""
         criticality_map = {"payment-svc": 1.0}
-        reranker = DomainReranker(service_criticality_map=criticality_map, use_cross_encoder=False)
+        reranker = DomainReranker(
+            service_criticality_map=criticality_map, use_cross_encoder=False
+        )
 
         results = [
-            _make_result(level="ERROR", service="payment-svc", deviation=5.0, score=0.9),
+            _make_result(
+                level="ERROR", service="payment-svc", deviation=5.0, score=0.9
+            ),
             _make_result(level="INFO", service="unknown-svc", deviation=0.1, score=0.3),
         ]
         output = reranker.rerank(results, query="test", top_k=10, use_tier2=False)
@@ -369,6 +378,7 @@ class TestCrossEncoderTier2:
     def test_cross_encoder_import_failure_disables_tier2(self):
         """Falha no import do sentence_transformers deve deixar use_cross_encoder=False."""
         import builtins
+
         original_import = builtins.__import__
 
         def mock_import(name, *args, **kwargs):
@@ -405,7 +415,9 @@ class TestCrossEncoderTier2:
         results = []
         for i in range(12):
             level = "ERROR" if i < 6 else "INFO"
-            results.append(_make_result(level=level, deviation=float(i), score=float(i) / 12))
+            results.append(
+                _make_result(level=level, deviation=float(i), score=float(i) / 12)
+            )
 
         mock_ce = MagicMock()
         # Retorna scores para os 6 candidatos top-half (12 // 2 = 6)
@@ -464,7 +476,9 @@ class TestCrossEncoderTier2:
         # r2: 0.6×0.6 + 0.4×0.0 = 0.36
         # r4: tier1=0.2 (bottom_half não alterado)
         scores = [s for _, s in blended]
-        assert scores == sorted(scores, reverse=True), "Scores devem estar em ordem decrescente"
+        assert scores == sorted(scores, reverse=True), (
+            "Scores devem estar em ordem decrescente"
+        )
 
         # Verifica a fórmula para os itens do top_half (os que foram processados pelo CE)
         # Encontra r1 e r2 na lista ordenada pelos scores esperados

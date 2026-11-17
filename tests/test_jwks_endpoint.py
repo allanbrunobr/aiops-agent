@@ -8,11 +8,10 @@ Cobertura:
   - GET /.well-known/oauth-authorization-server: jwks_uri ausente/presente
   - issue_token + validate_token com RS256 via PyJWT
 """
+
 from __future__ import annotations
 
 import base64
-import json
-import tempfile
 import time
 from pathlib import Path
 
@@ -22,10 +21,10 @@ from fastapi.testclient import TestClient
 
 from auth.keys import generate_rsa_keypair, load_or_generate_keypair, public_key_to_jwk
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def rsa_keypair() -> tuple[str, str]:
@@ -52,6 +51,7 @@ def jwk_dict(public_pem: str) -> dict:
 # Testes: auth/keys.py
 # ---------------------------------------------------------------------------
 
+
 class TestGenerateRsaKeypair:
     """Testes para generate_rsa_keypair()."""
 
@@ -71,7 +71,11 @@ class TestGenerateRsaKeypair:
     @pytest.mark.unit
     def test_pair_is_consistent(self, private_pem: str, public_pem: str) -> None:
         """Verifica que a chave privada e pública formam um par consistente."""
-        from cryptography.hazmat.primitives.serialization import load_pem_private_key, load_pem_public_key
+        from cryptography.hazmat.primitives.serialization import (
+            load_pem_private_key,
+            load_pem_public_key,
+        )
+
         priv = load_pem_private_key(private_pem.encode(), password=None)
         pub = load_pem_public_key(public_pem.encode())
         assert priv.public_key().public_numbers() == pub.public_numbers()  # type: ignore[attr-defined]
@@ -169,16 +173,20 @@ class TestLoadOrGenerateKeypair:
 # Testes: JWKS endpoint e discovery
 # ---------------------------------------------------------------------------
 
+
 class TestJwksEndpoint:
     """Testes para GET /.well-known/jwks.json no auth/server.py."""
 
     @pytest.mark.unit
     def test_returns_empty_keys_without_rsa(self) -> None:
-        from interfaces.http.app import create_app
         from config.loader import AppConfig
+        from interfaces.http.app import create_app
 
         config = AppConfig(
-            mcp={"enabled": False, "oauth": {"jwt_secret": "test-secret-abc123-padding-32bx!"}},
+            mcp={
+                "enabled": False,
+                "oauth": {"jwt_secret": "test-secret-abc123-padding-32bx!"},
+            },
         )
         app = create_app(config=config)
         with TestClient(app) as client:
@@ -197,8 +205,8 @@ class TestJwksEndpoint:
         priv_path.write_text(private_pem)
         pub_path.write_text(public_pem)
 
-        from interfaces.http.app import create_app
         from config.loader import AppConfig
+        from interfaces.http.app import create_app
 
         config = AppConfig(
             mcp={
@@ -230,11 +238,14 @@ class TestDiscoveryWithJwksUri:
 
     @pytest.mark.unit
     def test_discovery_without_rsa_has_no_jwks_uri(self) -> None:
-        from interfaces.http.app import create_app
         from config.loader import AppConfig
+        from interfaces.http.app import create_app
 
         config = AppConfig(
-            mcp={"enabled": False, "oauth": {"jwt_secret": "no-rsa-secret-padding-to-32bytes"}},
+            mcp={
+                "enabled": False,
+                "oauth": {"jwt_secret": "no-rsa-secret-padding-to-32bytes"},
+            },
         )
         app = create_app(config=config)
         with TestClient(app) as client:
@@ -252,8 +263,8 @@ class TestDiscoveryWithJwksUri:
         priv_path.write_text(private_pem)
         pub_path.write_text(public_pem)
 
-        from interfaces.http.app import create_app
         from config.loader import AppConfig
+        from interfaces.http.app import create_app
 
         config = AppConfig(
             mcp={
@@ -280,13 +291,12 @@ class TestDiscoveryWithJwksUri:
 # Testes: issue_token e validate_token com RS256
 # ---------------------------------------------------------------------------
 
+
 class TestRS256TokenFlow:
     """Testes para emissão e validação de tokens RS256 via auth/jwt_validator.py."""
 
     @pytest.mark.unit
-    def test_issue_and_validate_rs256(
-        self, private_pem: str, public_pem: str
-    ) -> None:
+    def test_issue_and_validate_rs256(self, private_pem: str, public_pem: str) -> None:
         from auth.jwt_validator import issue_token, validate_token
 
         token = issue_token(
@@ -301,9 +311,7 @@ class TestRS256TokenFlow:
         assert "aiops:diagnose" in claims.scopes
 
     @pytest.mark.unit
-    def test_rs256_token_rejected_with_wrong_public_key(
-        self, private_pem: str
-    ) -> None:
+    def test_rs256_token_rejected_with_wrong_public_key(self, private_pem: str) -> None:
         from auth.jwt_validator import issue_token
 
         token = issue_token(

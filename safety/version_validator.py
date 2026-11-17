@@ -31,10 +31,11 @@ from enum import Enum
 
 class RemediationRisk(Enum):
     """Nível de risco da remediação proposta (ordinal: SAFE < CAUTION < DANGEROUS < MALICIOUS)."""
-    SAFE = 0              # Sem riscos detectados
-    CAUTION = 1           # Requer atenção mas não é bloqueante
-    DANGEROUS = 2         # Contém padrão perigoso — bloquear
-    MALICIOUS = 3         # Padrão de ataque adversarial — bloquear e alertar
+
+    SAFE = 0  # Sem riscos detectados
+    CAUTION = 1  # Requer atenção mas não é bloqueante
+    DANGEROUS = 2  # Contém padrão perigoso — bloquear
+    MALICIOUS = 3  # Padrão de ataque adversarial — bloquear e alertar
 
     @property
     def label(self) -> str:
@@ -44,6 +45,7 @@ class RemediationRisk(Enum):
 @dataclass
 class VersionCheck:
     """Resultado da validação de uma versão específica."""
+
     package: str
     proposed_version: str
     is_safe: bool
@@ -55,6 +57,7 @@ class VersionCheck:
 @dataclass
 class RemediationValidation:
     """Resultado completo da validação de uma remediação."""
+
     is_safe: bool
     risk: RemediationRisk
     checks: list[VersionCheck] = field(default_factory=list)
@@ -125,13 +128,13 @@ KNOWN_VULNERABLE_VERSIONS: dict[str, dict[str, list[str]]] = {
 
 # Repositórios (PPAs) conhecidos como inseguros ou suspeitos
 BLOCKED_REPOSITORIES = [
-    r"ppa:[a-zA-Z0-9/_-]+",          # Qualquer PPA de terceiros
-    r"deb\s+http://[^\s]+",          # Repos Debian não-oficiais
-    r"rpm\s+http://[^\s]+",          # Repos RPM não-oficiais
-    r"curl\s+.*\|\s*(?:bash|sh)",    # Pipe to shell antipattern
-    r"wget\s+.*\|\s*(?:bash|sh)",    # Pipe to shell
-    r"https?://[^\s]*\.onion",       # Tor hidden service
-    r"https?://pastebin\.com",       # Pastebin scripts
+    r"ppa:[a-zA-Z0-9/_-]+",  # Qualquer PPA de terceiros
+    r"deb\s+http://[^\s]+",  # Repos Debian não-oficiais
+    r"rpm\s+http://[^\s]+",  # Repos RPM não-oficiais
+    r"curl\s+.*\|\s*(?:bash|sh)",  # Pipe to shell antipattern
+    r"wget\s+.*\|\s*(?:bash|sh)",  # Pipe to shell
+    r"https?://[^\s]*\.onion",  # Tor hidden service
+    r"https?://pastebin\.com",  # Pastebin scripts
     r"--index-url\s+https?://(?!(?:pypi\.org|files\.pythonhosted\.org))",  # custom PyPI index
     r"--extra-index-url\s+https?://(?!(?:pypi\.org|files\.pythonhosted\.org))",  # extra PyPI index
 ]
@@ -139,40 +142,56 @@ BLOCKED_REPOSITORIES = [
 # Padrões de configuração insegura (ataque ⋆conf)
 INSECURE_CONFIG_PATTERNS = [
     # SSL/TLS downgrade / weak protocols
-    (r"ssl_protocols\s+(?:TLSv1(?:\.0)?\b|SSLv[23])",
-     "Weak TLS protocol version (TLSv1/SSLv) is deprecated and insecure"),
-    (r"(?:switch|change|use)\s+(?:to\s+)?(?:HTTP|http)\s+(?:instead|checks|protocol)",
-     "Downgrade from HTTPS to HTTP removes encryption"),
-    (r"(?:disable|remove|skip)\s+(?:SSL|TLS|HTTPS|certificate)",
-     "Disabling SSL/TLS removes transport security"),
-    (r"ssl_verify\s*=\s*(?:false|False|0|no)",
-     "Disabling SSL verification enables MITM attacks"),
-    (r"verify\s*=\s*(?:false|False|0|no)",
-     "Disabling verification enables MITM attacks"),
-
+    (
+        r"ssl_protocols\s+(?:TLSv1(?:\.0)?\b|SSLv[23])",
+        "Weak TLS protocol version (TLSv1/SSLv) is deprecated and insecure",
+    ),
+    (
+        r"(?:switch|change|use)\s+(?:to\s+)?(?:HTTP|http)\s+(?:instead|checks|protocol)",
+        "Downgrade from HTTPS to HTTP removes encryption",
+    ),
+    (
+        r"(?:disable|remove|skip)\s+(?:SSL|TLS|HTTPS|certificate)",
+        "Disabling SSL/TLS removes transport security",
+    ),
+    (
+        r"ssl_verify\s*=\s*(?:false|False|0|no)",
+        "Disabling SSL verification enables MITM attacks",
+    ),
+    (
+        r"verify\s*=\s*(?:false|False|0|no)",
+        "Disabling verification enables MITM attacks",
+    ),
     # Authentication weakening
-    (r"(?:disable|remove|skip)\s+(?:auth|authentication|authorization|2fa|mfa)",
-     "Disabling authentication removes access control"),
-    (r"(?:allow|permit)\s+(?:anonymous|unauthenticated|public)",
-     "Allowing anonymous access removes access control"),
-
+    (
+        r"(?:disable|remove|skip)\s+(?:auth|authentication|authorization|2fa|mfa)",
+        "Disabling authentication removes access control",
+    ),
+    (
+        r"(?:allow|permit)\s+(?:anonymous|unauthenticated|public)",
+        "Allowing anonymous access removes access control",
+    ),
     # Permissions widening
-    (r"chmod\s+(?:777|666|775|o\+w)",
-     "Overly permissive file permissions"),
-    (r"(?:--privileged|securityContext.*privileged.*true)",
-     "Running container in privileged mode"),
-    (r"runAsRoot\s*:\s*true",
-     "Running as root in container"),
-
+    (r"chmod\s+(?:777|666|775|o\+w)", "Overly permissive file permissions"),
+    (
+        r"(?:--privileged|securityContext.*privileged.*true)",
+        "Running container in privileged mode",
+    ),
+    (r"runAsRoot\s*:\s*true", "Running as root in container"),
     # Firewall / network weakening
-    (r"(?:disable|remove|stop)\s+(?:firewall|iptables|ufw|nftables)",
-     "Disabling firewall removes network protection"),
-    (r"(?:allow|open)\s+(?:all|0\.0\.0\.0|any)\s+(?:ports?|traffic|connections?)",
-     "Opening all ports removes network segmentation"),
-
+    (
+        r"(?:disable|remove|stop)\s+(?:firewall|iptables|ufw|nftables)",
+        "Disabling firewall removes network protection",
+    ),
+    (
+        r"(?:allow|open)\s+(?:all|0\.0\.0\.0|any)\s+(?:ports?|traffic|connections?)",
+        "Opening all ports removes network segmentation",
+    ),
     # Rate limiting / security features
-    (r"(?:disable|remove|skip)\s+(?:rate.?limit|throttl|waf|ids|ips)",
-     "Disabling security controls exposes to attacks"),
+    (
+        r"(?:disable|remove|skip)\s+(?:rate.?limit|throttl|waf|ids|ips)",
+        "Disabling security controls exposes to attacks",
+    ),
 ]
 
 # Padrões de downgrade (ataque ⋆down)
@@ -180,8 +199,8 @@ DOWNGRADE_PATTERNS = [
     r"(?:downgrade|revert|rollback)\s+(?:to\s+)?(\w+)[\s=]+v?([\d.]+)",
     r"(?:install|use|switch\s+to)\s+(\w+)[\s=]+v?([\d.]+)",
     r"(\w+)==([\d.]+)",  # pip style: package==version
-    r"(\w+)@([\d.]+)",   # npm style: package@version
-    r"(\w+):([\d.]+)",   # docker style: image:version
+    r"(\w+)@([\d.]+)",  # npm style: package@version
+    r"(\w+):([\d.]+)",  # docker style: image:version
     r"(\w+)-([\d]+(?:\.[\d]+)+)\b",  # apt style: package-9.4 (dash + version)
 ]
 
@@ -219,11 +238,15 @@ class VersionValidator:
                     self.vulnerable_versions[pkg] = versions
 
         self.allow_ppa = allow_ppa
-        self._compiled_repos = [re.compile(p, re.IGNORECASE) for p in BLOCKED_REPOSITORIES]
+        self._compiled_repos = [
+            re.compile(p, re.IGNORECASE) for p in BLOCKED_REPOSITORIES
+        ]
         self._compiled_configs = [
             (re.compile(p, re.IGNORECASE), desc) for p, desc in INSECURE_CONFIG_PATTERNS
         ]
-        self._compiled_downgrades = [re.compile(p, re.IGNORECASE) for p in DOWNGRADE_PATTERNS]
+        self._compiled_downgrades = [
+            re.compile(p, re.IGNORECASE) for p in DOWNGRADE_PATTERNS
+        ]
         self.history: list[RemediationValidation] = []
 
     def validate_remediation(
@@ -277,7 +300,9 @@ class VersionValidator:
                     warnings.append(vc.reason)
 
         # === Check 3: Configuração insegura (⋆conf) ===
-        config_risk, config_blocked, config_warnings = self._check_config_safety(combined_text)
+        config_risk, config_blocked, config_warnings = self._check_config_safety(
+            combined_text
+        )
         if config_risk.value > overall_risk.value:  # ordinal comparison (int)
             overall_risk = config_risk
         blocked.extend(config_blocked)
@@ -308,31 +333,34 @@ class VersionValidator:
             duration_ms = int((time.monotonic() - start) * 1000)
             is_blocked = not result.is_safe
 
-            SafetyAuditor.log_decision(SafetyAuditEvent(
-                layer_name="version_validator",
-                correlation_id=correlation_id,
-                verdict="block" if is_blocked else "pass",
-                rationale=(
-                    f"Remediation blocked: {result.risk.name} — "
-                    + "; ".join(result.blocked_patterns[:2])
-                    if is_blocked
-                    else f"Remediation approved: {result.risk.name}"
-                ),
-                input_summary=f"Command: {command[:100]}",
-                output_summary=(
-                    f"Blocked {len(result.blocked_patterns)} patterns"
-                    if is_blocked
-                    else "Remediation approved"
-                ),
-                triggered_rule=(
-                    result.blocked_patterns[0] if result.blocked_patterns else None
-                ),
-                duration_ms=duration_ms,
-                metadata={"risk": result.risk.name},
-            ))
+            SafetyAuditor.log_decision(
+                SafetyAuditEvent(
+                    layer_name="version_validator",
+                    correlation_id=correlation_id,
+                    verdict="block" if is_blocked else "pass",
+                    rationale=(
+                        f"Remediation blocked: {result.risk.name} — "
+                        + "; ".join(result.blocked_patterns[:2])
+                        if is_blocked
+                        else f"Remediation approved: {result.risk.name}"
+                    ),
+                    input_summary=f"Command: {command[:100]}",
+                    output_summary=(
+                        f"Blocked {len(result.blocked_patterns)} patterns"
+                        if is_blocked
+                        else "Remediation approved"
+                    ),
+                    triggered_rule=(
+                        result.blocked_patterns[0] if result.blocked_patterns else None
+                    ),
+                    duration_ms=duration_ms,
+                    metadata={"risk": result.risk.name},
+                )
+            )
         except Exception as exc:
             try:
                 from safety.audit import SafetyAuditor
+
                 SafetyAuditor.log_error("version_validator", correlation_id, exc)
             except Exception:
                 pass
@@ -343,7 +371,9 @@ class VersionValidator:
     # Check implementations
     # ========================================================================
 
-    def _check_repositories(self, text: str) -> tuple[RemediationRisk, list[str], list[str]]:
+    def _check_repositories(
+        self, text: str
+    ) -> tuple[RemediationRisk, list[str], list[str]]:
         """Detecta adição de repositórios não-confiáveis (⋆PPA)."""
         blocked = []
         warnings = []
@@ -365,7 +395,9 @@ class VersionValidator:
         pipe_patterns = [r"curl\s+.*\|\s*(?:bash|sh)", r"wget\s+.*\|\s*(?:bash|sh)"]
         for pp in pipe_patterns:
             if re.search(pp, text, re.IGNORECASE):
-                blocked.append("Pipe-to-shell pattern detected (curl|wget piped to bash)")
+                blocked.append(
+                    "Pipe-to-shell pattern detected (curl|wget piped to bash)"
+                )
                 risk = RemediationRisk.MALICIOUS
 
         return risk, blocked, warnings
@@ -383,27 +415,31 @@ class VersionValidator:
                 cves = self._lookup_cves(package, version)
 
                 if cves:
-                    checks.append(VersionCheck(
-                        package=package,
-                        proposed_version=version,
-                        is_safe=False,
-                        reason=f"Version {version} has {len(cves)} known CVE(s)",
-                        known_cves=cves,
-                        recommendation=(
-                            f"Do NOT downgrade {package} to {version}. "
-                            f"Known vulnerabilities: {', '.join(cves[:3])}. "
-                            f"Use latest stable version instead."
-                        ),
-                    ))
+                    checks.append(
+                        VersionCheck(
+                            package=package,
+                            proposed_version=version,
+                            is_safe=False,
+                            reason=f"Version {version} has {len(cves)} known CVE(s)",
+                            known_cves=cves,
+                            recommendation=(
+                                f"Do NOT downgrade {package} to {version}. "
+                                f"Known vulnerabilities: {', '.join(cves[:3])}. "
+                                f"Use latest stable version instead."
+                            ),
+                        )
+                    )
                 else:
                     # Versão não está na base de CVEs — caution mas não bloqueia
-                    checks.append(VersionCheck(
-                        package=package,
-                        proposed_version=version,
-                        is_safe=True,
-                        reason=f"No known CVEs for {package} {version}",
-                        recommendation=f"Version {package} {version} appears safe (no known CVEs).",
-                    ))
+                    checks.append(
+                        VersionCheck(
+                            package=package,
+                            proposed_version=version,
+                            is_safe=True,
+                            reason=f"No known CVEs for {package} {version}",
+                            recommendation=f"Version {package} {version} appears safe (no known CVEs).",
+                        )
+                    )
 
         return checks
 
@@ -446,7 +482,9 @@ class VersionValidator:
 
         return []
 
-    def _check_config_safety(self, text: str) -> tuple[RemediationRisk, list[str], list[str]]:
+    def _check_config_safety(
+        self, text: str
+    ) -> tuple[RemediationRisk, list[str], list[str]]:
         """Detecta enfraquecimento de configurações de segurança (⋆conf)."""
         blocked = []
         warnings = []
@@ -510,9 +548,11 @@ class VersionValidator:
         Returns:
             RemediationValidation
         """
-        command = action.command if hasattr(action, 'command') else str(action)
-        description = action.description if hasattr(action, 'description') else ""
-        rollback = action.rollback_command if hasattr(action, 'rollback_command') else ""
+        command = action.command if hasattr(action, "command") else str(action)
+        description = action.description if hasattr(action, "description") else ""
+        rollback = (
+            action.rollback_command if hasattr(action, "rollback_command") else ""
+        )
 
         # Valida o comando principal
         main_result = self.validate_remediation(command, description)
@@ -524,7 +564,9 @@ class VersionValidator:
                 main_result.warnings.append(
                     f"Rollback command also has issues: {rollback_result.recommendation}"
                 )
-                if rollback_result.risk.value > main_result.risk.value:  # ordinal comparison (int)
+                if (
+                    rollback_result.risk.value > main_result.risk.value
+                ):  # ordinal comparison (int)
                     main_result.risk = rollback_result.risk
                     main_result.is_safe = False
 
@@ -550,6 +592,7 @@ class VersionValidator:
 # ============================================================================
 # Demo: simula validação de remediações
 # ============================================================================
+
 
 def demo_version_validation():
     """Demonstra validação de remediações seguras e maliciosas."""

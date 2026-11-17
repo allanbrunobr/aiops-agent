@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
 
 from adapters.llm.anthropic_client import create_anthropic_llm_client
 from application.ports.llm_client import LLMClient
@@ -23,11 +22,11 @@ from application.ports.reporter import (
     DIAGNOSIS_STARTED,
     ITERATION_STARTED,
     LLM_CALL_FAILED,
-    NullReporter,
-    Reporter,
     THOUGHT_OBSERVED,
     TOOL_CALLED,
     TOOL_OBSERVED,
+    NullReporter,
+    Reporter,
 )
 from config.loader import LLMConfig as _LLMConfig
 
@@ -114,6 +113,7 @@ class DiagnosisAgent:
         # Reinicia contexto CoT no início de cada diagnóstico
         try:
             from rag.cot_retriever import CoTObservabilityRetriever
+
             if isinstance(retriever, CoTObservabilityRetriever):
                 retriever.reset_context()
         except ImportError:
@@ -143,12 +143,15 @@ class DiagnosisAgent:
 
         # ReAct loop
         messages = [
-            {"role": "user", "content": (
-                f"Analyze this production incident and find the root cause.\n\n"
-                f"{initial_context}\n\n"
-                f"Use the tools available to investigate further. "
-                f"Think step by step and provide your diagnosis."
-            )}
+            {
+                "role": "user",
+                "content": (
+                    f"Analyze this production incident and find the root cause.\n\n"
+                    f"{initial_context}\n\n"
+                    f"Use the tools available to investigate further. "
+                    f"Think step by step and provide your diagnosis."
+                ),
+            }
         ]
 
         diagnosis = None
@@ -185,7 +188,18 @@ class DiagnosisAgent:
                 for line in assistant_text.split("\n"):
                     line = line.strip()
                     if line:
-                        if any(line.startswith(p) for p in ["Thought:", "Let me", "I need", "Looking", "The", "Based", "This"]):
+                        if any(
+                            line.startswith(p)
+                            for p in [
+                                "Thought:",
+                                "Let me",
+                                "I need",
+                                "Looking",
+                                "The",
+                                "Based",
+                                "This",
+                            ]
+                        ):
                             self.reporter.emit(THOUGHT_OBSERVED, text=line[:120])
                         break
 
@@ -206,24 +220,35 @@ class DiagnosisAgent:
                     args_str = json.dumps(tool_input, ensure_ascii=False)[:80]
                     self.reporter.emit(TOOL_CALLED, tool_name=tool_name, args=args_str)
 
-                    result = self._execute_tool(tool_name, tool_input, report, retriever)
+                    result = self._execute_tool(
+                        tool_name, tool_input, report, retriever
+                    )
                     self.tools_used.append(tool_name)
-                    self.reporter.emit(TOOL_OBSERVED, tool_name=tool_name, result=result[:100])
+                    self.reporter.emit(
+                        TOOL_OBSERVED, tool_name=tool_name, result=result[:100]
+                    )
 
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": tc.id,
-                        "content": result,
-                    })
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tc.id,
+                            "content": result,
+                        }
+                    )
 
                 messages.append({"role": "user", "content": tool_results})
             elif not diagnosis:
                 # Sem tool calls e sem diagnóstico — pede para concluir
                 messages.append({"role": "assistant", "content": assistant_text})
-                messages.append({"role": "user", "content": (
-                    "Please provide your final diagnosis now. "
-                    "Wrap it in <DIAGNOSIS> tags as instructed."
-                )})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Please provide your final diagnosis now. "
+                            "Wrap it in <DIAGNOSIS> tags as instructed."
+                        ),
+                    }
+                )
 
         if not diagnosis:
             diagnosis = self._heuristic_diagnosis(report)
@@ -262,8 +287,14 @@ class DiagnosisAgent:
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "service": {"type": "string", "description": "Service name (e.g., 'payment-svc')"},
-                        "keyword": {"type": "string", "description": "Keyword to search for in log messages"},
+                        "service": {
+                            "type": "string",
+                            "description": "Service name (e.g., 'payment-svc')",
+                        },
+                        "keyword": {
+                            "type": "string",
+                            "description": "Keyword to search for in log messages",
+                        },
                     },
                     "required": ["service", "keyword"],
                 },
@@ -275,7 +306,10 @@ class DiagnosisAgent:
                     "type": "object",
                     "properties": {
                         "service": {"type": "string", "description": "Service name"},
-                        "metric_name": {"type": "string", "description": "Metric name (e.g., 'cpu_usage', 'latency', 'error_rate', 'connection_pool')"},
+                        "metric_name": {
+                            "type": "string",
+                            "description": "Metric name (e.g., 'cpu_usage', 'latency', 'error_rate', 'connection_pool')",
+                        },
                     },
                     "required": ["service"],
                 },
@@ -297,7 +331,10 @@ class DiagnosisAgent:
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "query": {"type": "string", "description": "Natural language search query"},
+                        "query": {
+                            "type": "string",
+                            "description": "Natural language search query",
+                        },
                     },
                     "required": ["query"],
                 },
@@ -313,8 +350,15 @@ class DiagnosisAgent:
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "service": {"type": "string", "description": "Service to correlate signals for"},
-                        "time_window_minutes": {"type": "integer", "description": "Time window in minutes (default: 5)", "default": 5},
+                        "service": {
+                            "type": "string",
+                            "description": "Service to correlate signals for",
+                        },
+                        "time_window_minutes": {
+                            "type": "integer",
+                            "description": "Time window in minutes (default: 5)",
+                            "default": 5,
+                        },
                     },
                     "required": ["service"],
                 },
@@ -349,7 +393,10 @@ class DiagnosisAgent:
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "service": {"type": "string", "description": "Primary affected service"},
+                        "service": {
+                            "type": "string",
+                            "description": "Primary affected service",
+                        },
                     },
                     "required": ["service"],
                 },
@@ -364,11 +411,13 @@ class DiagnosisAgent:
                 keyword = tool_input.get("keyword", "")
                 matches = []
                 for tpl in report.log_templates:
-                    if (service.lower() in ",".join(tpl.services).lower() and
-                            keyword.lower() in tpl.template.lower()):
+                    if (
+                        service.lower() in ",".join(tpl.services).lower()
+                        and keyword.lower() in tpl.template.lower()
+                    ):
                         svcs = ", ".join(sorted(tpl.services))
                         matches.append(
-                            f"[{tpl.level}][{svcs}] \"{tpl.template}\" x{tpl.count} "
+                            f'[{tpl.level}][{svcs}] "{tpl.template}" x{tpl.count} '
                             f"({tpl.first_seen.strftime('%H:%M:%S')}→{tpl.last_seen.strftime('%H:%M:%S')})"
                         )
                 if not matches:
@@ -395,9 +444,16 @@ class DiagnosisAgent:
                 service = tool_input.get("service", "")
                 matches = []
                 for t in report.slow_traces:
-                    if service.lower() in t.bottleneck_service.lower() or service.lower() in " ".join(t.path).lower():
+                    if (
+                        service.lower() in t.bottleneck_service.lower()
+                        or service.lower() in " ".join(t.path).lower()
+                    ):
                         path_str = " → ".join(t.path)
-                        attrs = ", ".join(f"{k}={v}" for k, v in t.attributes.items()) if t.attributes else ""
+                        attrs = (
+                            ", ".join(f"{k}={v}" for k, v in t.attributes.items())
+                            if t.attributes
+                            else ""
+                        )
                         matches.append(
                             f"{path_str}: {t.total_duration_ms:.0f}ms (normal: {t.normal_duration_ms:.0f}ms) "
                             f"bottleneck={t.bottleneck_service} | {attrs}"
@@ -411,6 +467,7 @@ class DiagnosisAgent:
                 if retriever:
                     try:
                         from rag.cot_retriever import CoTObservabilityRetriever
+
                         if isinstance(retriever, CoTObservabilityRetriever):
                             results = retriever.search_with_cot(query, top_k=5)
                             formatted = retriever.format_results(results)
@@ -469,15 +526,17 @@ class DiagnosisAgent:
             response = client.create_message(
                 model=self.model,
                 max_tokens=512,
-                messages=[{
-                    "role": "user",
-                    "content": REFLECT_PROMPT.format(
-                        diagnosis=json.dumps(diagnosis, default=str)[:500],
-                        tnr_result=tnr_result,
-                        tools_used=tools_used,
-                        iterations=self.iteration_count,
-                    ),
-                }],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": REFLECT_PROMPT.format(
+                            diagnosis=json.dumps(diagnosis, default=str)[:500],
+                            tnr_result=tnr_result,
+                            tools_used=tools_used,
+                            iterations=self.iteration_count,
+                        ),
+                    }
+                ],
             )
             return json.loads(response.content[0].text)
         except Exception:
@@ -495,7 +554,7 @@ class DiagnosisAgent:
         if start == -1 or end == -1:
             return None
 
-        json_str = text[start + len("<DIAGNOSIS>"):end].strip()
+        json_str = text[start + len("<DIAGNOSIS>") : end].strip()
         try:
             return json.loads(json_str)
         except json.JSONDecodeError:
@@ -516,23 +575,28 @@ class DiagnosisAgent:
 
         # 1. Find all signals for this service
         service_logs = [
-            tpl for tpl in report.log_templates
-            if service in ",".join(tpl.services).lower() and tpl.level in ("ERROR", "FATAL", "WARN")
+            tpl
+            for tpl in report.log_templates
+            if service in ",".join(tpl.services).lower()
+            and tpl.level in ("ERROR", "FATAL", "WARN")
         ]
         service_metrics = [
-            a for a in report.metric_anomalies
-            if service in a.service.lower()
+            a for a in report.metric_anomalies if service in a.service.lower()
         ]
         service_traces = [
-            t for t in report.slow_traces
-            if service in t.bottleneck_service.lower() or service in " ".join(t.path).lower()
+            t
+            for t in report.slow_traces
+            if service in t.bottleneck_service.lower()
+            or service in " ".join(t.path).lower()
         ]
 
         if not service_logs and not service_metrics and not service_traces:
             return f"No signals found for service '{service}'"
 
         # 2. Temporal correlation: find overlapping time windows
-        correlations.append(f"=== Signal Correlation for '{service}' (window: {window_min}min) ===\n")
+        correlations.append(
+            f"=== Signal Correlation for '{service}' (window: {window_min}min) ===\n"
+        )
 
         # Log-Metric correlation
         for a in service_metrics:
@@ -542,7 +606,7 @@ class DiagnosisAgent:
                     delta = abs((a.timestamp - tpl.first_seen).total_seconds())
                     if delta <= window_min * 60:
                         correlated_logs.append(
-                            f"  [{tpl.level}] \"{tpl.template}\" (x{tpl.count}, "
+                            f'  [{tpl.level}] "{tpl.template}" (x{tpl.count}, '
                             f"delta={delta:.0f}s from metric anomaly)"
                         )
             if correlated_logs:
@@ -578,7 +642,9 @@ class DiagnosisAgent:
         for a in report.metric_anomalies:
             all_services.add(a.service)
 
-        other_services = all_services - {s for s in all_services if service in s.lower()}
+        other_services = all_services - {
+            s for s in all_services if service in s.lower()
+        }
         if other_services:
             correlations.append(
                 f"\nCROSS-SERVICE: Other services with anomalies in same window: "
@@ -613,25 +679,33 @@ class DiagnosisAgent:
                 continue
             svcs = ", ".join(sorted(tpl.services))
             if tpl.first_seen:
-                events.append((
-                    tpl.first_seen,
-                    f"[LOG][{tpl.level}][{svcs}] \"{tpl.template}\" (first of {tpl.count})"
-                ))
+                events.append(
+                    (
+                        tpl.first_seen,
+                        f'[LOG][{tpl.level}][{svcs}] "{tpl.template}" (first of {tpl.count})',
+                    )
+                )
             if tpl.last_seen and tpl.last_seen != tpl.first_seen:
-                events.append((
-                    tpl.last_seen,
-                    f"[LOG][{tpl.level}][{svcs}] \"{tpl.template}\" (last occurrence)"
-                ))
+                events.append(
+                    (
+                        tpl.last_seen,
+                        f'[LOG][{tpl.level}][{svcs}] "{tpl.template}" (last occurrence)',
+                    )
+                )
 
         # Collect events from metrics
         for a in report.metric_anomalies:
-            if filter_services and not any(fs in a.service.lower() for fs in filter_services):
+            if filter_services and not any(
+                fs in a.service.lower() for fs in filter_services
+            ):
                 continue
-            events.append((
-                a.timestamp,
-                f"[METRIC][{a.service}] {a.metric_name} {a.anomaly_type}: "
-                f"{a.value} ({a.deviation_sigma}σ deviation)"
-            ))
+            events.append(
+                (
+                    a.timestamp,
+                    f"[METRIC][{a.service}] {a.metric_name} {a.anomaly_type}: "
+                    f"{a.value} ({a.deviation_sigma}σ deviation)",
+                )
+            )
 
         # Collect events from traces
         for t in report.slow_traces:
@@ -641,11 +715,13 @@ class DiagnosisAgent:
             ):
                 continue
             path_str = " → ".join(t.path)
-            events.append((
-                t.timestamp,
-                f"[TRACE] {path_str}: {t.total_duration_ms:.0f}ms "
-                f"(bottleneck: {t.bottleneck_service})"
-            ))
+            events.append(
+                (
+                    t.timestamp,
+                    f"[TRACE] {path_str}: {t.total_duration_ms:.0f}ms "
+                    f"(bottleneck: {t.bottleneck_service})",
+                )
+            )
 
         if not events:
             return "No events found for the specified services."
@@ -667,7 +743,7 @@ class DiagnosisAgent:
 
         # Add time span
         total_span = (events[-1][0] - events[0][0]).total_seconds()
-        lines.append(f"\nTotal span: {total_span:.0f}s ({total_span/60:.1f} min)")
+        lines.append(f"\nTotal span: {total_span:.0f}s ({total_span / 60:.1f} min)")
         lines.append(f"Events: {len(events)}")
 
         return "\n".join(lines)
@@ -695,25 +771,49 @@ class DiagnosisAgent:
                 continue
             tpl_lower = tpl.template.lower()
 
-            if any(kw in tpl_lower for kw in ["config", "configuration", "setting", "parameter"]):
+            if any(
+                kw in tpl_lower
+                for kw in ["config", "configuration", "setting", "parameter"]
+            ):
                 fault_scores["config_change"] += 3.0
-                evidence["config_change"].append(f"Log: \"{tpl.template}\" (x{tpl.count})")
+                evidence["config_change"].append(
+                    f'Log: "{tpl.template}" (x{tpl.count})'
+                )
 
-            if any(kw in tpl_lower for kw in ["pool", "exhausted", "oom", "memory", "limit"]):
+            if any(
+                kw in tpl_lower
+                for kw in ["pool", "exhausted", "oom", "memory", "limit"]
+            ):
                 fault_scores["resource_exhaustion"] += 3.0
-                evidence["resource_exhaustion"].append(f"Log: \"{tpl.template}\" (x{tpl.count})")
+                evidence["resource_exhaustion"].append(
+                    f'Log: "{tpl.template}" (x{tpl.count})'
+                )
 
-            if any(kw in tpl_lower for kw in ["connection refused", "unavailable", "unreachable", "dns"]):
+            if any(
+                kw in tpl_lower
+                for kw in ["connection refused", "unavailable", "unreachable", "dns"]
+            ):
                 fault_scores["dependency_failure"] += 3.0
-                evidence["dependency_failure"].append(f"Log: \"{tpl.template}\" (x{tpl.count})")
+                evidence["dependency_failure"].append(
+                    f'Log: "{tpl.template}" (x{tpl.count})'
+                )
 
-            if any(kw in tpl_lower for kw in ["timeout", "slow", "latency", "deadline"]):
+            if any(
+                kw in tpl_lower for kw in ["timeout", "slow", "latency", "deadline"]
+            ):
                 fault_scores["performance_degradation"] += 2.0
-                evidence["performance_degradation"].append(f"Log: \"{tpl.template}\" (x{tpl.count})")
+                evidence["performance_degradation"].append(
+                    f'Log: "{tpl.template}" (x{tpl.count})'
+                )
 
-            if any(kw in tpl_lower for kw in ["deploy", "version", "rollout", "upgrade", "restart"]):
+            if any(
+                kw in tpl_lower
+                for kw in ["deploy", "version", "rollout", "upgrade", "restart"]
+            ):
                 fault_scores["deployment_issue"] += 3.0
-                evidence["deployment_issue"].append(f"Log: \"{tpl.template}\" (x{tpl.count})")
+                evidence["deployment_issue"].append(
+                    f'Log: "{tpl.template}" (x{tpl.count})'
+                )
 
         # Analyze metrics
         for a in report.metric_anomalies:
@@ -754,7 +854,9 @@ class DiagnosisAgent:
         # Rank and format
         ranked = sorted(fault_scores.items(), key=lambda x: x[1], reverse=True)
 
-        lines = [f"=== Fault Type Classification for '{service or 'all services'}' ===\n"]
+        lines = [
+            f"=== Fault Type Classification for '{service or 'all services'}' ===\n"
+        ]
         for fault_type, score in ranked:
             if score > 0:
                 bar = "█" * min(int(score), 20)
@@ -764,7 +866,9 @@ class DiagnosisAgent:
 
         if ranked[0][1] > 0:
             lines.append(f"\nMost likely fault type: {ranked[0][0].upper()}")
-            lines.append(f"Confidence: {'high' if ranked[0][1] > ranked[1][1] * 2 else 'medium'}")
+            lines.append(
+                f"Confidence: {'high' if ranked[0][1] > ranked[1][1] * 2 else 'medium'}"
+            )
 
         return "\n".join(lines)
 
@@ -777,13 +881,18 @@ class DiagnosisAgent:
                 for svc in tpl.services:
                     service_errors[svc] = service_errors.get(svc, 0) + tpl.count
 
-        primary_service = max(service_errors, key=lambda k: service_errors.get(k, 0)) if service_errors else "unknown"
+        primary_service = (
+            max(service_errors, key=lambda k: service_errors.get(k, 0))
+            if service_errors
+            else "unknown"
+        )
 
         # Extrai versão do deploy dos templates de log
         import re as _re
+
         deployed_version = None
         for tpl in report.log_templates:
-            m = _re.search(r'image=\S+:(v[\d.]+)', tpl.template)
+            m = _re.search(r"image=\S+:(v[\d.]+)", tpl.template)
             if m:
                 deployed_version = m.group(1)
                 break
@@ -809,11 +918,18 @@ class DiagnosisAgent:
                 known_pattern_matched = True
             elif "deploy" in tpl_lower or "config" in tpl_lower:
                 evidence.append(f"Config change: {tpl.template}")
-            if "serial" in tpl_lower or "schema" in tpl_lower or "corrupt" in tpl_lower or "codec" in tpl_lower:
+            if (
+                "serial" in tpl_lower
+                or "schema" in tpl_lower
+                or "corrupt" in tpl_lower
+                or "codec" in tpl_lower
+            ):
                 serialization_signals.append(tpl.template)
 
         for a in report.metric_anomalies:
-            evidence.append(f"Metric anomaly: {a.service}/{a.metric_name} = {a.value} ({a.deviation_sigma}sigma)")
+            evidence.append(
+                f"Metric anomaly: {a.service}/{a.metric_name} = {a.value} ({a.deviation_sigma}sigma)"
+            )
 
         # Ordena affected_services com primary_service primeiro
         affected = list(report.affected_services)

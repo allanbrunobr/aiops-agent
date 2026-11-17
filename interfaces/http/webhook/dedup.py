@@ -79,14 +79,15 @@ class DedupStore:
             return
 
         expired_keys = [
-            k for k, (_, expires_at) in self._store.items()
-            if now > expires_at
+            k for k, (_, expires_at) in self._store.items() if now > expires_at
         ]
         for k in expired_keys:
             del self._store[k]
 
         if expired_keys:
-            log.debug("dedup.cleanup", removed=len(expired_keys), remaining=len(self._store))
+            log.debug(
+                "dedup.cleanup", removed=len(expired_keys), remaining=len(self._store)
+            )
 
         self._last_cleanup = now
 

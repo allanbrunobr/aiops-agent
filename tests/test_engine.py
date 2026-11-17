@@ -8,7 +8,14 @@ from datetime import datetime, timezone
 
 import pytest
 
-from blueprint.engine import BlueprintEngine, LLMCallLimitExceeded, PipelineAborted, PipelineRunContext
+from adapters.credentials import EnvCredentialProvider
+from adapters.persistence.in_memory_store import InMemoryStore
+from blueprint.engine import (
+    BlueprintEngine,
+    LLMCallLimitExceeded,
+    PipelineAborted,
+    PipelineRunContext,
+)
 from blueprint.nodes import (
     BlueprintNode,
     NodeType,
@@ -16,8 +23,6 @@ from blueprint.nodes import (
     PipelineDefinition,
 )
 from config.loader import AppConfig
-from adapters.persistence.in_memory_store import InMemoryStore
-from adapters.credentials import EnvCredentialProvider
 from core.logging import configure_logging
 from domain.alert import NormalizedAlert
 from domain.incident_state import IncidentState
@@ -304,7 +309,13 @@ class TestPipelineTimeout:
     def test_timeout_aborts(self):
         """Pipeline que excede timeout deve abortar."""
         # Timeout de 0 segundos para forcar abort
-        engine = _make_engine(blueprint={"enabled": True, "pipeline_timeout_seconds": 0, "max_llm_calls": 15})
+        engine = _make_engine(
+            blueprint={
+                "enabled": True,
+                "pipeline_timeout_seconds": 0,
+                "max_llm_calls": 15,
+            }
+        )
         state = _make_state()
 
         def slow_node(s):
@@ -329,7 +340,13 @@ class TestLLMCallLimit:
 
     def test_exceeding_limit_raises(self):
         """Exceder limite de chamadas LLM deve gerar excecao."""
-        engine = _make_engine(blueprint={"enabled": True, "pipeline_timeout_seconds": 90, "max_llm_calls": 2})
+        engine = _make_engine(
+            blueprint={
+                "enabled": True,
+                "pipeline_timeout_seconds": 90,
+                "max_llm_calls": 2,
+            }
+        )
         ctx = PipelineRunContext()
 
         engine.increment_llm_calls(ctx, 1)
@@ -339,7 +356,13 @@ class TestLLMCallLimit:
 
     def test_within_limit_ok(self):
         """Chamadas dentro do limite nao devem gerar excecao."""
-        engine = _make_engine(blueprint={"enabled": True, "pipeline_timeout_seconds": 90, "max_llm_calls": 15})
+        engine = _make_engine(
+            blueprint={
+                "enabled": True,
+                "pipeline_timeout_seconds": 90,
+                "max_llm_calls": 15,
+            }
+        )
         ctx = PipelineRunContext()
 
         for _ in range(15):

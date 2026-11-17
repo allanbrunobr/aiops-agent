@@ -9,7 +9,6 @@ Exemplo: python scripts/new_scenario.py redis-timeout
 
 import argparse
 import os
-import sys
 import textwrap
 
 
@@ -89,6 +88,7 @@ def _generate_scenario_file(name: str, snake: str) -> str:
 def _generate_golden_file(name: str) -> str:
     """Gera conteúdo do golden file."""
     import json
+
     golden = {
         "scenario_name": name,
         "scenario_seed": 42,
@@ -97,17 +97,17 @@ def _generate_golden_file(name: str) -> str:
             "correlated_signals": {
                 "error_logs": True,
                 "metric_anomalies": True,
-                "slow_traces": True
+                "slow_traces": True,
             },
-            "min_signals_required": 2
+            "min_signals_required": 2,
         },
         "expected_diagnosis": {
             "affected_services": ["TODO-service"],
             "root_cause_contains": "TODO-root-cause-keyword",
-            "severity": "high"
+            "severity": "high",
         },
         "expected_affected_services": ["TODO-service"],
-        "validation_mode": "no-llm"
+        "validation_mode": "no-llm",
     }
     return json.dumps(golden, indent=2)
 

@@ -8,11 +8,12 @@ Valida:
 - main() retorna exit code 2 em caso de regressão TNR (AC #3)
 - main() retorna exit code 3 quando safety requer aprovação humana (AC #4)
 """
+
 from __future__ import annotations
 
 import io
-from contextlib import redirect_stdout, redirect_stderr
-from unittest.mock import patch, MagicMock
+from contextlib import redirect_stderr, redirect_stdout
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -23,7 +24,7 @@ class TestExitCodeConstants:
 
     def test_exit_code_constants_defined(self) -> None:
         """Constantes de exit code devem ter valores corretos."""
-        from main import EXIT_SUCCESS, EXIT_ERROR, EXIT_REGRESSION, EXIT_APPROVAL_NEEDED
+        from main import EXIT_APPROVAL_NEEDED, EXIT_ERROR, EXIT_REGRESSION, EXIT_SUCCESS
 
         assert EXIT_SUCCESS == 0
         assert EXIT_ERROR == 1
@@ -32,7 +33,13 @@ class TestExitCodeConstants:
 
     def test_exit_code_labels_defined(self) -> None:
         """EXIT_CODE_LABELS deve mapear todos os exit codes."""
-        from main import EXIT_CODE_LABELS, EXIT_SUCCESS, EXIT_ERROR, EXIT_REGRESSION, EXIT_APPROVAL_NEEDED
+        from main import (
+            EXIT_APPROVAL_NEEDED,
+            EXIT_CODE_LABELS,
+            EXIT_ERROR,
+            EXIT_REGRESSION,
+            EXIT_SUCCESS,
+        )
 
         assert EXIT_CODE_LABELS[EXIT_SUCCESS] == "resolved"
         assert EXIT_CODE_LABELS[EXIT_ERROR] == "error"
@@ -64,7 +71,7 @@ class TestMainExitCodes:
 
     def test_main_returns_zero_on_success(self) -> None:
         """main() deve retornar 0 quando pipeline completa com sucesso."""
-        from main import main, EXIT_SUCCESS
+        from main import EXIT_SUCCESS, main
 
         test_args = ["main.py", "--no-llm", "--no-rag"]
 
@@ -73,10 +80,19 @@ class TestMainExitCodes:
             "success": True,
             "stages": {
                 "detection": {"is_incident": True, "severity": "HIGH", "signals": []},
-                "diagnosis": {"root_cause": "test", "evidence": [], "affected_services": ["svc"],
-                              "confidence": "high", "timeline": []},
+                "diagnosis": {
+                    "root_cause": "test",
+                    "evidence": [],
+                    "affected_services": ["svc"],
+                    "confidence": "high",
+                    "timeline": [],
+                },
                 "mitigation": {"pattern_matched": "test", "action": None},
-                "verification": {"result": "success", "health_delta": 10.0, "message": "ok"},
+                "verification": {
+                    "result": "success",
+                    "health_delta": 10.0,
+                    "message": "ok",
+                },
                 "safety_validation": {"is_safe": True, "requires_human": False},
                 "remediation_validation": {"is_safe": True},
             },
@@ -111,17 +127,35 @@ class TestMainExitCodes:
         mock_incident = MagicMock()
         mock_incident.deploy_time = MagicMock()
         mock_incident.fix_time = MagicMock()
-        mock_incident.fix_time.__sub__ = MagicMock(return_value=MagicMock(total_seconds=MagicMock(return_value=600)))
+        mock_incident.fix_time.__sub__ = MagicMock(
+            return_value=MagicMock(total_seconds=MagicMock(return_value=600))
+        )
 
         with (
             patch("sys.argv", test_args),
             patch("main.load_dotenv"),
             patch("main.print_banner"),
-            patch("main.step_generate_data", return_value=(mock_incident, "test-scenario")),
-            patch("main.step_sanitize", return_value=MagicMock(threat_detected=False, total_entries=100)),
+            patch(
+                "main.step_generate_data", return_value=(mock_incident, "test-scenario")
+            ),
+            patch(
+                "main.step_sanitize",
+                return_value=MagicMock(threat_detected=False, total_entries=100),
+            ),
             patch("main.step_pipeline", return_value=MagicMock()),
-            patch("main.step_compression", return_value=(MagicMock(), "text", MagicMock(
-                compression_ratio=0.5, critical_preserved=100, chunks_kept=5, chunks_removed=3))),
+            patch(
+                "main.step_compression",
+                return_value=(
+                    MagicMock(),
+                    "text",
+                    MagicMock(
+                        compression_ratio=0.5,
+                        critical_preserved=100,
+                        chunks_kept=5,
+                        chunks_removed=3,
+                    ),
+                ),
+            ),
             patch("main.step_agents", return_value=mock_result),
             patch("main.step_safety_validation", return_value=mock_safety),
             patch("main.step_remediation_validation", return_value=mock_remediation),
@@ -135,7 +169,7 @@ class TestMainExitCodes:
 
     def test_main_returns_one_on_exception(self) -> None:
         """main() deve retornar 1 quando exceção não-tratada ocorre."""
-        from main import main, EXIT_ERROR
+        from main import EXIT_ERROR, main
 
         test_args = ["main.py", "--no-llm", "--no-rag"]
 
@@ -153,7 +187,7 @@ class TestMainExitCodes:
 
     def test_main_returns_two_on_regression(self) -> None:
         """main() deve retornar 2 quando TNR detecta regressão."""
-        from main import main, EXIT_REGRESSION
+        from main import EXIT_REGRESSION, main
 
         test_args = ["main.py", "--no-llm", "--no-rag"]
 
@@ -161,11 +195,19 @@ class TestMainExitCodes:
             "success": False,
             "stages": {
                 "detection": {"is_incident": True, "severity": "HIGH", "signals": []},
-                "diagnosis": {"root_cause": "test", "evidence": [], "affected_services": ["svc"],
-                              "confidence": "high", "timeline": []},
+                "diagnosis": {
+                    "root_cause": "test",
+                    "evidence": [],
+                    "affected_services": ["svc"],
+                    "confidence": "high",
+                    "timeline": [],
+                },
                 "mitigation": {"pattern_matched": "test", "action": None},
-                "verification": {"result": "regression", "health_delta": -15.0,
-                                 "message": "REGRESSION: health dropped"},
+                "verification": {
+                    "result": "regression",
+                    "health_delta": -15.0,
+                    "message": "REGRESSION: health dropped",
+                },
                 "safety_validation": {"is_safe": True, "requires_human": False},
                 "remediation_validation": {"is_safe": True},
                 "rollback": {"message": "Rollback executado"},
@@ -201,17 +243,35 @@ class TestMainExitCodes:
         mock_incident = MagicMock()
         mock_incident.deploy_time = MagicMock()
         mock_incident.fix_time = MagicMock()
-        mock_incident.fix_time.__sub__ = MagicMock(return_value=MagicMock(total_seconds=MagicMock(return_value=600)))
+        mock_incident.fix_time.__sub__ = MagicMock(
+            return_value=MagicMock(total_seconds=MagicMock(return_value=600))
+        )
 
         with (
             patch("sys.argv", test_args),
             patch("main.load_dotenv"),
             patch("main.print_banner"),
-            patch("main.step_generate_data", return_value=(mock_incident, "test-scenario")),
-            patch("main.step_sanitize", return_value=MagicMock(threat_detected=False, total_entries=100)),
+            patch(
+                "main.step_generate_data", return_value=(mock_incident, "test-scenario")
+            ),
+            patch(
+                "main.step_sanitize",
+                return_value=MagicMock(threat_detected=False, total_entries=100),
+            ),
             patch("main.step_pipeline", return_value=MagicMock()),
-            patch("main.step_compression", return_value=(MagicMock(), "text", MagicMock(
-                compression_ratio=0.5, critical_preserved=100, chunks_kept=5, chunks_removed=3))),
+            patch(
+                "main.step_compression",
+                return_value=(
+                    MagicMock(),
+                    "text",
+                    MagicMock(
+                        compression_ratio=0.5,
+                        critical_preserved=100,
+                        chunks_kept=5,
+                        chunks_removed=3,
+                    ),
+                ),
+            ),
             patch("main.step_agents", return_value=mock_result),
             patch("main.step_safety_validation", return_value=mock_safety),
             patch("main.step_remediation_validation", return_value=mock_remediation),
@@ -225,7 +285,7 @@ class TestMainExitCodes:
 
     def test_main_returns_three_on_approval_needed(self) -> None:
         """main() deve retornar 3 quando safety requer aprovação humana."""
-        from main import main, EXIT_APPROVAL_NEEDED
+        from main import EXIT_APPROVAL_NEEDED, main
 
         test_args = ["main.py", "--no-llm", "--no-rag"]
 
@@ -233,10 +293,19 @@ class TestMainExitCodes:
             "success": True,
             "stages": {
                 "detection": {"is_incident": True, "severity": "HIGH", "signals": []},
-                "diagnosis": {"root_cause": "test", "evidence": [], "affected_services": ["svc"],
-                              "confidence": "high", "timeline": []},
+                "diagnosis": {
+                    "root_cause": "test",
+                    "evidence": [],
+                    "affected_services": ["svc"],
+                    "confidence": "high",
+                    "timeline": [],
+                },
                 "mitigation": {"pattern_matched": "test", "action": None},
-                "verification": {"result": "success", "health_delta": 10.0, "message": "ok"},
+                "verification": {
+                    "result": "success",
+                    "health_delta": 10.0,
+                    "message": "ok",
+                },
                 "safety_validation": {"is_safe": False, "requires_human": True},
                 "remediation_validation": {"is_safe": True},
             },
@@ -271,17 +340,35 @@ class TestMainExitCodes:
         mock_incident = MagicMock()
         mock_incident.deploy_time = MagicMock()
         mock_incident.fix_time = MagicMock()
-        mock_incident.fix_time.__sub__ = MagicMock(return_value=MagicMock(total_seconds=MagicMock(return_value=600)))
+        mock_incident.fix_time.__sub__ = MagicMock(
+            return_value=MagicMock(total_seconds=MagicMock(return_value=600))
+        )
 
         with (
             patch("sys.argv", test_args),
             patch("main.load_dotenv"),
             patch("main.print_banner"),
-            patch("main.step_generate_data", return_value=(mock_incident, "test-scenario")),
-            patch("main.step_sanitize", return_value=MagicMock(threat_detected=False, total_entries=100)),
+            patch(
+                "main.step_generate_data", return_value=(mock_incident, "test-scenario")
+            ),
+            patch(
+                "main.step_sanitize",
+                return_value=MagicMock(threat_detected=False, total_entries=100),
+            ),
             patch("main.step_pipeline", return_value=MagicMock()),
-            patch("main.step_compression", return_value=(MagicMock(), "text", MagicMock(
-                compression_ratio=0.5, critical_preserved=100, chunks_kept=5, chunks_removed=3))),
+            patch(
+                "main.step_compression",
+                return_value=(
+                    MagicMock(),
+                    "text",
+                    MagicMock(
+                        compression_ratio=0.5,
+                        critical_preserved=100,
+                        chunks_kept=5,
+                        chunks_removed=3,
+                    ),
+                ),
+            ),
             patch("main.step_agents", return_value=mock_result),
             patch("main.step_safety_validation", return_value=mock_safety),
             patch("main.step_remediation_validation", return_value=mock_remediation),
@@ -295,7 +382,7 @@ class TestMainExitCodes:
 
     def test_regression_takes_precedence_over_approval(self) -> None:
         """Regressão (exit 2) deve ter prioridade sobre approval-needed (exit 3)."""
-        from main import main, EXIT_REGRESSION
+        from main import EXIT_REGRESSION, main
 
         test_args = ["main.py", "--no-llm", "--no-rag"]
 
@@ -303,11 +390,19 @@ class TestMainExitCodes:
             "success": False,
             "stages": {
                 "detection": {"is_incident": True, "severity": "HIGH", "signals": []},
-                "diagnosis": {"root_cause": "test", "evidence": [], "affected_services": ["svc"],
-                              "confidence": "high", "timeline": []},
+                "diagnosis": {
+                    "root_cause": "test",
+                    "evidence": [],
+                    "affected_services": ["svc"],
+                    "confidence": "high",
+                    "timeline": [],
+                },
                 "mitigation": {"pattern_matched": "test", "action": None},
-                "verification": {"result": "regression", "health_delta": -15.0,
-                                 "message": "REGRESSION detected"},
+                "verification": {
+                    "result": "regression",
+                    "health_delta": -15.0,
+                    "message": "REGRESSION detected",
+                },
                 "safety_validation": {"is_safe": False, "requires_human": True},
                 "remediation_validation": {"is_safe": True},
                 "rollback": {"message": "Rollback executado"},
@@ -343,17 +438,35 @@ class TestMainExitCodes:
         mock_incident = MagicMock()
         mock_incident.deploy_time = MagicMock()
         mock_incident.fix_time = MagicMock()
-        mock_incident.fix_time.__sub__ = MagicMock(return_value=MagicMock(total_seconds=MagicMock(return_value=600)))
+        mock_incident.fix_time.__sub__ = MagicMock(
+            return_value=MagicMock(total_seconds=MagicMock(return_value=600))
+        )
 
         with (
             patch("sys.argv", test_args),
             patch("main.load_dotenv"),
             patch("main.print_banner"),
-            patch("main.step_generate_data", return_value=(mock_incident, "test-scenario")),
-            patch("main.step_sanitize", return_value=MagicMock(threat_detected=False, total_entries=100)),
+            patch(
+                "main.step_generate_data", return_value=(mock_incident, "test-scenario")
+            ),
+            patch(
+                "main.step_sanitize",
+                return_value=MagicMock(threat_detected=False, total_entries=100),
+            ),
             patch("main.step_pipeline", return_value=MagicMock()),
-            patch("main.step_compression", return_value=(MagicMock(), "text", MagicMock(
-                compression_ratio=0.5, critical_preserved=100, chunks_kept=5, chunks_removed=3))),
+            patch(
+                "main.step_compression",
+                return_value=(
+                    MagicMock(),
+                    "text",
+                    MagicMock(
+                        compression_ratio=0.5,
+                        critical_preserved=100,
+                        chunks_kept=5,
+                        chunks_removed=3,
+                    ),
+                ),
+            ),
             patch("main.step_agents", return_value=mock_result),
             patch("main.step_safety_validation", return_value=mock_safety),
             patch("main.step_remediation_validation", return_value=mock_remediation),
@@ -377,7 +490,7 @@ class TestExitCodeIntegration:
         porque o PreExecutionValidator classifica a ação como MEDIUM risk
         e requires_human=True. Isso é comportamento correto.
         """
-        from main import main, EXIT_APPROVAL_NEEDED
+        from main import EXIT_APPROVAL_NEEDED, main
 
         test_args = ["main.py", "--no-llm", "--no-rag"]
 

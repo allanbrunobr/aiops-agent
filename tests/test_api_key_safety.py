@@ -8,16 +8,16 @@ Valida:
 - Missing API key produz fallback limpo sem stack trace (AC #5)
 - Mensagens de erro do diagnoser não expõem nomes de env vars (AC #3)
 """
+
 from __future__ import annotations
 
 import inspect
 import io
 import os
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 
 import pytest
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Task 4.2-4.5: Unit tests for sanitization utilities (AC #1, #3)
@@ -109,6 +109,7 @@ class TestContainsApiKeyPattern:
 # Task 4.6: Pipeline output scan (AC #2)
 # ──────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.integration
 class TestPipelineOutputNoApiKeys:
     """Testes de integração: output do pipeline não contém API keys."""
@@ -120,18 +121,20 @@ class TestPipelineOutputNoApiKeys:
         stdout_buf = io.StringIO()
         stderr_buf = io.StringIO()
 
-        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": FAKE_ANTHROPIC_KEY}), \
-             patch("sys.argv", ["main.py", "--no-llm", "--no-rag"]), \
-             redirect_stdout(stdout_buf), \
-             redirect_stderr(stderr_buf):
+        with (
+            patch.dict(os.environ, {"ANTHROPIC_API_KEY": FAKE_ANTHROPIC_KEY}),
+            patch("sys.argv", ["main.py", "--no-llm", "--no-rag"]),
+            redirect_stdout(stdout_buf),
+            redirect_stderr(stderr_buf),
+        ):
             main()
 
         all_output = stdout_buf.getvalue() + stderr_buf.getvalue()
         assert not _contains_api_key_pattern(all_output), (
-            f"Output do pipeline contém padrão de API key!"
+            "Output do pipeline contém padrão de API key!"
         )
         assert FAKE_ANTHROPIC_KEY not in all_output, (
-            f"Output do pipeline contém a fake API key literal!"
+            "Output do pipeline contém a fake API key literal!"
         )
 
 
@@ -139,13 +142,16 @@ class TestPipelineOutputNoApiKeys:
 # Task 4.7-4.8: Postmortem audit (AC #2, #4)
 # ──────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.integration
 class TestPostmortemNoApiKeys:
     """Testes de integração: postmortem não contém API keys."""
 
-    def test_postmortem_contains_no_api_keys(self, pipeline_result, simulated_incident) -> None:
+    def test_postmortem_contains_no_api_keys(
+        self, pipeline_result, simulated_incident
+    ) -> None:
         """Postmortem gerado NÃO deve conter padrões de API key."""
-        from main import step_postmortem, _contains_api_key_pattern
+        from main import _contains_api_key_pattern, step_postmortem
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             path, _ = step_postmortem(pipeline_result, simulated_incident)
@@ -173,6 +179,7 @@ class TestPostmortemNoApiKeys:
 # Task 4.9: Missing API key fallback (AC #5)
 # ──────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.integration
 class TestMissingApiKeyFallback:
     """Testes de integração: missing API key produz fallback limpo."""
@@ -185,11 +192,15 @@ class TestMissingApiKeyFallback:
         stderr_buf = io.StringIO()
 
         # Garante que ANTHROPIC_API_KEY NÃO está definida
-        env_without_key = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
-        with patch.dict(os.environ, env_without_key, clear=True), \
-             patch("sys.argv", ["main.py", "--no-llm", "--no-rag"]), \
-             redirect_stdout(stdout_buf), \
-             redirect_stderr(stderr_buf):
+        env_without_key = {
+            k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"
+        }
+        with (
+            patch.dict(os.environ, env_without_key, clear=True),
+            patch("sys.argv", ["main.py", "--no-llm", "--no-rag"]),
+            redirect_stdout(stdout_buf),
+            redirect_stderr(stderr_buf),
+        ):
             exit_code = main()
 
         all_output = stdout_buf.getvalue() + stderr_buf.getvalue()
@@ -211,6 +222,7 @@ class TestMissingApiKeyFallback:
 # Task 4.10: Diagnoser error message audit (AC #3)
 # ──────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.unit
 class TestDiagnoserErrorMessages:
     """Testes unitários: mensagens de erro do diagnoser não expõem env vars."""
@@ -222,7 +234,9 @@ class TestDiagnoserErrorMessages:
         agent = DiagnosisAgent(max_iterations=1)
 
         # Garante que ANTHROPIC_API_KEY NÃO está definida
-        env_without_key = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
+        env_without_key = {
+            k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"
+        }
         with patch.dict(os.environ, env_without_key, clear=True):
             with pytest.raises(ValueError) as exc_info:
                 agent._get_client()
@@ -231,6 +245,6 @@ class TestDiagnoserErrorMessages:
         assert "ANTHROPIC_API_KEY" not in error_msg, (
             f"ValueError expõe nome de env var: '{error_msg}'"
         )
-        assert "api key" in error_msg.lower() or "not configured" in error_msg.lower(), (
-            f"ValueError deve mencionar 'API key' genericamente: '{error_msg}'"
-        )
+        assert (
+            "api key" in error_msg.lower() or "not configured" in error_msg.lower()
+        ), f"ValueError deve mencionar 'API key' genericamente: '{error_msg}'"

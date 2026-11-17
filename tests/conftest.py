@@ -4,6 +4,7 @@ Fixtures compartilhadas para o test suite do AIOps Agent.
 Fornece dados simulados com seed-42 e helpers para rodar o pipeline
 em modo --no-llm --no-rag sem efeitos colaterais de ML.
 """
+
 from __future__ import annotations
 
 # Deve estar no conftest top-level para pytest 9.x (não-top-level não é suportado)
@@ -12,7 +13,7 @@ pytest_plugins = ("anyio",)
 import io
 import random
 import sys
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 
 import pytest
 
@@ -49,6 +50,7 @@ def simulated_incident():
     """
     random.seed(42)
     from data.sample_incident import create_incident
+
     return create_incident()
 
 
@@ -59,6 +61,7 @@ def no_llm_args():
     Nota: Preparado para stories futuras (1.2+). Não consumido em Story 1.1.
     """
     import argparse
+
     return argparse.Namespace(no_llm=True, no_rag=True, compact=False, scenario=None)
 
 
@@ -72,14 +75,14 @@ def _run_pipeline(incident, scenario_name: str | None = None):
         incident: SimulatedIncident com dados do cenário.
         scenario_name: Nome do cenário para incluir no result dict.
     """
-    from pipeline.telemetry_sanitizer import TelemetrySanitizer
-    from pipeline.aggregator import Aggregator
-    from pipeline.context_compressor import ContextCompressor
     from agents.detector import DetectionAgent
     from agents.diagnoser import DiagnosisAgent
     from agents.mitigator import MitigationAgent
-    from safety.tnr import TNRSafetyGuard
+    from pipeline.aggregator import Aggregator
+    from pipeline.context_compressor import ContextCompressor
+    from pipeline.telemetry_sanitizer import TelemetrySanitizer
     from safety.pre_validator import PreExecutionValidator
+    from safety.tnr import TNRSafetyGuard
     from safety.version_validator import VersionValidator
 
     # Suprime output do rich.Console durante execução do pipeline.
@@ -87,7 +90,9 @@ def _run_pipeline(incident, scenario_name: str | None = None):
         # 1b. Sanitização (modifica incident in-place)
         sanitizer = TelemetrySanitizer(strict_mode=False)
         s_logs, s_metrics, s_traces, _san_report = sanitizer.sanitize_all(
-            incident.logs, incident.metrics, incident.traces,
+            incident.logs,
+            incident.metrics,
+            incident.traces,
         )
         incident.logs = s_logs
         incident.metrics = s_metrics
@@ -108,11 +113,18 @@ def _run_pipeline(incident, scenario_name: str | None = None):
         tnr_guard = TNRSafetyGuard()
 
         from datetime import datetime as _dt
+
         timeline: list[dict] = []
 
         def _rec(frm: str, to: str, reason: str) -> None:
-            timeline.append({"time": _dt.now().strftime("%H:%M:%S"),
-                             "from": frm, "to": to, "reason": reason})
+            timeline.append(
+                {
+                    "time": _dt.now().strftime("%H:%M:%S"),
+                    "from": frm,
+                    "to": to,
+                    "reason": reason,
+                }
+            )
 
         result: dict = {"success": False, "stages": {}}
         _rec("IDLE", "DETECTING", "Analisando dados de observabilidade...")
@@ -135,10 +147,18 @@ def _run_pipeline(incident, scenario_name: str | None = None):
                     "message": tnr_check.message,
                 }
                 if tnr_check.result.value != "regression":
-                    _rec("VERIFYING", "RESOLVED", f"Incidente resolvido: {tnr_check.message}")
+                    _rec(
+                        "VERIFYING",
+                        "RESOLVED",
+                        f"Incidente resolvido: {tnr_check.message}",
+                    )
                     result["success"] = True
                 else:
-                    _rec("VERIFYING", "ROLLBACK", f"Regressão detectada: {tnr_check.message}")
+                    _rec(
+                        "VERIFYING",
+                        "ROLLBACK",
+                        f"Regressão detectada: {tnr_check.message}",
+                    )
             else:
                 _rec("DIAGNOSING", "FAILED", "Não foi possível identificar root cause")
         else:
@@ -198,8 +218,9 @@ def memory_leak_incident():
     Scope 'class' para compartilhar o mesmo incidente entre testes da classe.
     Importa sample_incident para garantir que todos os cenários estão registrados.
     """
-    from data.sample_incident import create_incident  # noqa: F401 — Registra todos os cenários.
     from data.registry import get_scenario
+    from data.sample_incident import create_incident  # noqa: F401 — Registra todos os cenários.
+
     return get_scenario("memory-leak")(seed=42)
 
 
@@ -219,8 +240,9 @@ def unknown_fault_incident():
     Scope 'class' para compartilhar o mesmo incidente entre testes da classe.
     Importa sample_incident para garantir que todos os cenários estão registrados.
     """
-    from data.sample_incident import create_incident  # noqa: F401 — Registra todos os cenários.
     from data.registry import get_scenario
+    from data.sample_incident import create_incident  # noqa: F401 — Registra todos os cenários.
+
     return get_scenario("unknown-fault")(seed=42)
 
 
@@ -242,12 +264,14 @@ def snapshot_manager(request):
     """
     update = request.config.getoption("--snapshot-update", default=False)
     from tests.snapshot_utils import SnapshotManager
+
     return SnapshotManager(update=update)
 
 
 # ---------------------------------------------------------------------------
 # Fixtures para testes unitários de _tool_* do DiagnosisAgent (Story 2.2)
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def payload_correlate_signals():
@@ -271,6 +295,7 @@ def payload_classify_fault_type():
 def mock_aggregated_report_empty():
     """AggregatedReport mock com listas vazias para testes de tool methods."""
     from unittest.mock import MagicMock
+
     report = MagicMock()
     report.log_templates = []
     report.metric_anomalies = []
@@ -284,6 +309,7 @@ def mock_aggregated_report_with_data():
     """AggregatedReport mock com dados mínimos para testes de tool methods."""
     from datetime import datetime
     from unittest.mock import MagicMock
+
     from pipeline.log_parser import LogTemplate
     from pipeline.metric_filter import MetricAnomaly
     from pipeline.trace_filter import SlowCallPath
@@ -339,15 +365,17 @@ def aggregated_report(simulated_incident):
     IMPORTANTE: Não usar na mesma classe que pipeline_result — ambos
     sanitizam simulated_incident in-place, causando double-sanitization.
     """
-    from pipeline.telemetry_sanitizer import TelemetrySanitizer
     from pipeline.aggregator import Aggregator
+    from pipeline.telemetry_sanitizer import TelemetrySanitizer
 
     incident = simulated_incident
 
     with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
         sanitizer = TelemetrySanitizer(strict_mode=False)
         s_logs, s_metrics, s_traces, _ = sanitizer.sanitize_all(
-            incident.logs, incident.metrics, incident.traces,
+            incident.logs,
+            incident.metrics,
+            incident.traces,
         )
         incident.logs = s_logs
         incident.metrics = s_metrics
@@ -381,8 +409,8 @@ def scenario_pipeline_bundle(request):
     Parametrizado com scope='class' — roda pipeline uma vez por cenário
     por classe de testes. Retorna dict com scenario_name, result e incident.
     """
-    from data.sample_incident import create_incident  # noqa: F401
     from data.registry import get_scenario
+    from data.sample_incident import create_incident  # noqa: F401
 
     scenario_name = request.param
     incident = get_scenario(scenario_name)(seed=42)

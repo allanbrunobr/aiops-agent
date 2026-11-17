@@ -8,14 +8,15 @@ Cobre os três métodos TAMO-inspired:
 Cada método tem pelo menos 2 casos: resposta válida e resposta com args ausentes/malformados.
 Não requer ANTHROPIC_API_KEY — os métodos operam sobre AggregatedReport diretamente.
 """
+
 from __future__ import annotations
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # _tool_correlate_signals
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestToolCorrelateSignals:
@@ -75,6 +76,7 @@ class TestToolCorrelateSignals:
 # _tool_reconstruct_timeline
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestToolReconstructTimeline:
     """Testes para _tool_reconstruct_timeline."""
@@ -131,6 +133,7 @@ class TestToolReconstructTimeline:
 # ---------------------------------------------------------------------------
 # _tool_classify_fault_type
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestToolClassifyFaultType:

@@ -8,30 +8,33 @@ Valida:
   - GIL liberado: duas threads concorrentes executam em paralelo
   - Cenário golden (500 logs) produz os mesmos templates que o fallback Python
 """
+
 from __future__ import annotations
 
 import datetime
 import threading
-import sys
 
 import pytest
 
-
 # ── Fixtures ─────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="module")
 def sample_logs():
     """Retorna os 503 logs do incidente simulado com seed-42."""
     import random
+
     random.seed(42)
     from data.sample_incident import create_incident
+
     return create_incident().logs
 
 
 @pytest.fixture(scope="module")
 def rust_templates(sample_logs):
     """Executa parse via Rust e retorna templates."""
-    from pipeline.log_parser import LogParser, _RUST_AVAILABLE
+    from pipeline.log_parser import _RUST_AVAILABLE, LogParser
+
     if not _RUST_AVAILABLE:
         pytest.skip("_aiops_rust não disponível")
     parser = LogParser()
@@ -42,11 +45,13 @@ def rust_templates(sample_logs):
 def python_templates(sample_logs):
     """Executa parse via Python (fallback) e retorna templates."""
     from pipeline.log_parser import LogParser
+
     parser = LogParser()
     return parser._python_drain3_parse(list(sample_logs))
 
 
 # ── Testes de processamento sem amostragem ───────────────────────────────────
+
 
 @pytest.mark.unit
 def test_rust_processes_all_logs(sample_logs, rust_templates):
@@ -61,9 +66,10 @@ def test_rust_processes_all_logs(sample_logs, rust_templates):
 def test_no_sampling_cap_large_input():
     """Verifica que Rust processa mais de 500 logs sem amostragem."""
     import random
+
     random.seed(0)
     from data.models import LogEntry
-    from pipeline.log_parser import LogParser, _RUST_AVAILABLE
+    from pipeline.log_parser import _RUST_AVAILABLE, LogParser
 
     if not _RUST_AVAILABLE:
         pytest.skip("_aiops_rust não disponível")
@@ -82,6 +88,7 @@ def test_no_sampling_cap_large_input():
 
 
 # ── Testes de interface ───────────────────────────────────────────────────────
+
 
 @pytest.mark.unit
 def test_rust_template_interface(rust_templates):
@@ -106,19 +113,26 @@ def test_rust_template_interface(rust_templates):
 def test_rust_templates_sorted_by_relevance(rust_templates):
     """Verifica que templates são retornados ordenados por relevance_score decrescente."""
     scores = [t.relevance_score for t in rust_templates]
-    assert scores == sorted(scores, reverse=True), "Templates não estão em ordem decrescente de relevância"
+    assert scores == sorted(scores, reverse=True), (
+        "Templates não estão em ordem decrescente de relevância"
+    )
 
 
 @pytest.mark.unit
 def test_rust_error_templates_have_boost(rust_templates):
     """Verifica que templates ERROR/FATAL têm score maior que INFO equivalente."""
-    error_scores = [t.relevance_score for t in rust_templates if t.level in ("ERROR", "FATAL")]
+    error_scores = [
+        t.relevance_score for t in rust_templates if t.level in ("ERROR", "FATAL")
+    ]
     info_scores = [t.relevance_score for t in rust_templates if t.level == "INFO"]
     if error_scores and info_scores:
-        assert min(error_scores) > max(info_scores) or max(error_scores) > max(info_scores)
+        assert min(error_scores) > max(info_scores) or max(error_scores) > max(
+            info_scores
+        )
 
 
 # ── Teste de fallback ─────────────────────────────────────────────────────────
+
 
 @pytest.mark.unit
 def test_fallback_when_rust_unavailable(sample_logs, monkeypatch):
@@ -151,6 +165,7 @@ def test_fallback_returns_log_templates(sample_logs, monkeypatch):
 
 # ── Teste de concorrência / liberação do GIL ─────────────────────────────────
 
+
 @pytest.mark.unit
 def test_concurrent_parse_gil_release(sample_logs):
     """Verifica que duas threads podem chamar parse() simultaneamente.
@@ -158,7 +173,7 @@ def test_concurrent_parse_gil_release(sample_logs):
     O GIL deve ser liberado durante o processamento Drain3 em Rust,
     permitindo execução paralela real entre threads Python.
     """
-    from pipeline.log_parser import LogParser, _RUST_AVAILABLE
+    from pipeline.log_parser import _RUST_AVAILABLE, LogParser
 
     if not _RUST_AVAILABLE:
         pytest.skip("_aiops_rust não disponível")
@@ -189,6 +204,7 @@ def test_concurrent_parse_gil_release(sample_logs):
 
 
 # ── Teste de compatibilidade com cenário golden ───────────────────────────────
+
 
 @pytest.mark.unit
 def test_golden_scenario_template_fields_match(rust_templates, python_templates):
@@ -224,7 +240,9 @@ def test_golden_scenario_template_fields_match(rust_templates, python_templates)
 
 
 @pytest.mark.unit
-def test_golden_scenario_total_logs_match(rust_templates, python_templates, sample_logs):
+def test_golden_scenario_total_logs_match(
+    rust_templates, python_templates, sample_logs
+):
     """Verifica que Rust e Python processam o mesmo número total de logs."""
     rust_total = sum(t.count for t in rust_templates)
     python_total = sum(t.count for t in python_templates)

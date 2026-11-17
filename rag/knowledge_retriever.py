@@ -61,10 +61,12 @@ class KnowledgeRetriever:
                 pattern = self.patterns[idx]
                 if pattern.is_negative_example:
                     continue
-                results.append(KnowledgeSearchResult(
-                    pattern=pattern,
-                    similarity_score=float(dist),
-                ))
+                results.append(
+                    KnowledgeSearchResult(
+                        pattern=pattern,
+                        similarity_score=float(dist),
+                    )
+                )
                 if len(results) >= top_k:
                     break
 

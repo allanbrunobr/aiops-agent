@@ -7,6 +7,7 @@ legíveis (e.g., "payment-pool-exhaustion") às respectivas funções geradoras.
 
 Módulo stdlib-only — não importa dependências pesadas (torch, faiss, etc.).
 """
+
 from __future__ import annotations
 
 from typing import Callable
@@ -54,8 +55,7 @@ def get_scenario(name: str) -> ScenarioFn:
     if name not in _REGISTRY:
         available = ", ".join(sorted(_REGISTRY.keys())) or "(nenhum registrado)"
         raise KeyError(
-            f"Cenário '{name}' não encontrado. "
-            f"Cenários disponíveis: {available}"
+            f"Cenário '{name}' não encontrado. Cenários disponíveis: {available}"
         )
     return _REGISTRY[name]
 

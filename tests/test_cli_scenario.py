@@ -4,10 +4,11 @@ Testes unitários para seleção de cenário via CLI (--scenario flag).
 Valida parsing de argumentos, integração com step_generate_data(),
 e compatibilidade com demais flags (--no-llm, --no-rag).
 """
+
 from __future__ import annotations
 
 import io
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 
 import pytest
 
@@ -77,7 +78,9 @@ class TestArgparseScenarioFlag:
         from main import build_arg_parser
 
         parser = build_arg_parser()
-        args = parser.parse_args(["--scenario", "payment-pool-exhaustion", "--no-llm", "--no-rag"])
+        args = parser.parse_args(
+            ["--scenario", "payment-pool-exhaustion", "--no-llm", "--no-rag"]
+        )
         assert args.scenario == "payment-pool-exhaustion"
         assert args.no_llm is True
         assert args.no_rag is True
@@ -95,8 +98,10 @@ class TestStepGenerateDataScenarioSelection:
             incident, effective_scenario = step_generate_data()
 
         assert effective_scenario == "payment-pool-exhaustion"
-        assert "connection pool" in incident.actual_root_cause.lower() or \
-               "pool" in incident.actual_root_cause.lower()
+        assert (
+            "connection pool" in incident.actual_root_cause.lower()
+            or "pool" in incident.actual_root_cause.lower()
+        )
         assert len(incident.logs) > 0
         assert len(incident.metrics) > 0
         assert len(incident.traces) > 0
@@ -106,7 +111,9 @@ class TestStepGenerateDataScenarioSelection:
         from main import step_generate_data
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            incident, effective_scenario = step_generate_data(scenario_name="memory-leak")
+            incident, effective_scenario = step_generate_data(
+                scenario_name="memory-leak"
+            )
 
         assert effective_scenario == "memory-leak"
         assert "memory" in incident.actual_root_cause.lower()
@@ -128,8 +135,8 @@ class TestStepGenerateDataScenarioSelection:
 
     def test_step_generate_data_returns_tuple(self) -> None:
         """step_generate_data() deve retornar tupla (incident, scenario_name)."""
-        from main import step_generate_data
         from data.models import SimulatedIncident
+        from main import step_generate_data
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             result = step_generate_data()

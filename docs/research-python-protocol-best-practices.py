@@ -11,15 +11,13 @@ Check: mypy docs/research-python-protocol-best-practices.py --strict
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator, Sequence
+from dataclasses import dataclass
 from typing import (
     Any,
     Protocol,
     runtime_checkable,
 )
-from collections.abc import AsyncIterator, Sequence
-from dataclasses import dataclass
-import asyncio
-
 
 # =============================================================================
 # 1. BASIC PROTOCOL DEFINITION
@@ -31,6 +29,7 @@ import asyncio
 #
 # Import: from typing import Protocol, runtime_checkable
 # (NOT from typing_extensions -- these are stable in 3.12+)
+
 
 class Greeter(Protocol):
     """Minimal protocol -- just declare method signatures with `...` body."""
@@ -67,6 +66,7 @@ def use_greeter(g: Greeter) -> None:
 #   - As a substitute for static type checking (mypy/pyright are better)
 #   - When you need signature verification (it won't catch mismatches)
 
+
 @runtime_checkable
 class Closeable(Protocol):
     def close(self) -> None: ...
@@ -78,7 +78,9 @@ class FileWrapper:
 
 
 class FakeCloseable:
-    def close(self, force: bool) -> None:  # WRONG signature -- but isinstance won't catch it!
+    def close(
+        self, force: bool
+    ) -> None:  # WRONG signature -- but isinstance won't catch it!
         print("force closed")
 
 
@@ -87,7 +89,9 @@ def demo_runtime_checkable() -> None:
     fc = FakeCloseable()
 
     print(isinstance(fw, Closeable))  # True  -- correct
-    print(isinstance(fc, Closeable))  # True  -- MISLEADING! Signature mismatch not detected.
+    print(
+        isinstance(fc, Closeable)
+    )  # True  -- MISLEADING! Signature mismatch not detected.
 
     # Best practice: use isinstance at boundaries, rely on mypy for correctness
     assert isinstance(fw, Closeable), "Expected a Closeable"
@@ -137,6 +141,7 @@ def demo_runtime_checkable() -> None:
 #
 # PRACTICAL PATTERN:
 
+
 # Suppose you want a Protocol for "anything that can be serialized":
 class Serializable(Protocol):
     def model_dump(self) -> dict[str, Any]: ...
@@ -165,6 +170,7 @@ class Serializable(Protocol):
 # Rule 4: For optional params, match signatures exactly
 # Rule 5: Declare instance attributes at CLASS level, not in __init__
 
+
 class Repository(Protocol):
     """Well-typed Protocol with properties, methods, and class-level attributes."""
 
@@ -188,6 +194,7 @@ class Repository(Protocol):
 # This is fully supported. Just define async methods with `async def`.
 # A single Protocol can mix sync and async methods.
 
+
 class EventBus(Protocol):
     """Protocol mixing sync config with async operations."""
 
@@ -201,9 +208,11 @@ class EventBus(Protocol):
 # If you want SEPARATE sync and async variants of the same interface,
 # define two Protocols:
 
+
 class SyncStore(Protocol):
     def get(self, key: str) -> dict[str, Any] | None: ...
     def save(self, key: str, value: dict[str, Any]) -> None: ...
+
 
 class AsyncStore(Protocol):
     async def get(self, key: str) -> dict[str, Any] | None: ...
@@ -228,6 +237,7 @@ class AsyncStore(Protocol):
 # C) RUNTIME isinstance (only with @runtime_checkable):
 #    Checks attribute/method PRESENCE only. Use for smoke tests.
 
+
 # Approach B example -- explicit inheritance for verification:
 class MyStore(SyncStore):  # Inheriting from Protocol for documentation
     """mypy will error HERE if any method is missing or has wrong signature."""
@@ -244,10 +254,13 @@ class MyStore(SyncStore):  # Inheriting from Protocol for documentation
 class Describable(Protocol):
     def describe(self) -> str: ...
 
+
 def test_protocol_compliance() -> None:
     """Smoke test: verify structural match at runtime."""
     obj = MyConcreteClass()
-    assert isinstance(obj, Describable), f"{type(obj).__name__} does not implement Describable"
+    assert isinstance(obj, Describable), (
+        f"{type(obj).__name__} does not implement Describable"
+    )
 
 
 class MyConcreteClass:
@@ -307,6 +320,7 @@ class MyConcreteClass:
 # 9. PRACTICAL EXAMPLE: STATE STORE PROTOCOL
 # =============================================================================
 
+
 @runtime_checkable
 class StateStore(Protocol):
     """Protocol for a generic key-value state store.
@@ -333,6 +347,7 @@ class StateStore(Protocol):
 
 # --- Concrete implementation: In-Memory ---
 
+
 class InMemoryStateStore:
     """Simple dict-backed state store. Satisfies StateStore Protocol."""
 
@@ -354,6 +369,7 @@ class InMemoryStateStore:
 
 # --- Concrete implementation: Filesystem ---
 
+
 class FileStateStore:
     """JSON-file-backed state store. Satisfies StateStore Protocol."""
 
@@ -363,6 +379,7 @@ class FileStateStore:
     def get(self, key: str) -> dict[str, Any] | None:
         import json
         from pathlib import Path
+
         path = Path(self._base_dir) / f"{key}.json"
         if not path.exists():
             return None
@@ -371,22 +388,22 @@ class FileStateStore:
     def save(self, key: str, state: dict[str, Any]) -> None:
         import json
         from pathlib import Path
+
         path = Path(self._base_dir) / f"{key}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(state, indent=2))
 
     def list_keys(self, prefix: str = "") -> list[str]:
         from pathlib import Path
+
         base = Path(self._base_dir)
         if not base.exists():
             return []
-        return [
-            p.stem for p in base.glob("*.json")
-            if p.stem.startswith(prefix)
-        ]
+        return [p.stem for p in base.glob("*.json") if p.stem.startswith(prefix)]
 
     def delete(self, key: str) -> bool:
         from pathlib import Path
+
         path = Path(self._base_dir) / f"{key}.json"
         if path.exists():
             path.unlink()
@@ -397,6 +414,7 @@ class FileStateStore:
 # =============================================================================
 # 10. PRACTICAL EXAMPLE: CREDENTIAL PROVIDER PROTOCOL
 # =============================================================================
+
 
 @runtime_checkable
 class CredentialProvider(Protocol):
@@ -412,6 +430,7 @@ class CredentialProvider(Protocol):
 
 # --- Concrete implementation: Environment Variables ---
 
+
 class EnvCredentialProvider:
     """Reads credentials from environment variables."""
 
@@ -420,11 +439,13 @@ class EnvCredentialProvider:
 
     def get_credential(self, credential_name: str) -> str | None:
         import os
+
         env_key = f"{self._prefix}{credential_name}".upper()
         return os.environ.get(env_key)
 
 
 # --- Concrete implementation: Dictionary (for testing) ---
+
 
 class DictCredentialProvider:
     """In-memory credential store. Useful for tests."""
@@ -443,12 +464,14 @@ class DictCredentialProvider:
 # The natural way to use Protocols with DI in Python: accept Protocol types
 # as constructor parameters. No framework needed.
 
+
 @dataclass
 class IncidentManager:
     """Service that depends on abstractions (Protocols), not concretions.
 
     Constructor injection -- the simplest and most explicit DI pattern.
     """
+
     state_store: StateStore
     credential_provider: CredentialProvider
 
@@ -456,13 +479,16 @@ class IncidentManager:
         # Use credential to authenticate
         api_key = self.credential_provider.get_credential("PAGERDUTY_API_KEY")
         if not api_key:
-            print(f"[WARN] No API key found, skipping notification")
+            print("[WARN] No API key found, skipping notification")
 
         # Persist incident state
-        self.state_store.save(f"incident:{incident_id}", {
-            "status": "processing",
-            "data": data,
-        })
+        self.state_store.save(
+            f"incident:{incident_id}",
+            {
+                "status": "processing",
+                "data": data,
+            },
+        )
         print(f"[INFO] Incident {incident_id} saved to state store")
 
     def get_incident(self, incident_id: str) -> dict[str, Any] | None:
@@ -470,6 +496,7 @@ class IncidentManager:
 
 
 # --- Wiring it together ---
+
 
 def create_incident_manager_production() -> IncidentManager:
     """Production wiring -- real implementations."""
@@ -483,15 +510,18 @@ def create_incident_manager_testing() -> IncidentManager:
     """Test wiring -- in-memory fakes (NOT mocks)."""
     return IncidentManager(
         state_store=InMemoryStateStore(),
-        credential_provider=DictCredentialProvider({
-            "PAGERDUTY_API_KEY": "test-key-12345",
-        }),
+        credential_provider=DictCredentialProvider(
+            {
+                "PAGERDUTY_API_KEY": "test-key-12345",
+            }
+        ),
     )
 
 
 # =============================================================================
 # 12. ASYNC PROTOCOL EXAMPLE
 # =============================================================================
+
 
 class AsyncStateStore(Protocol):
     """Async variant of StateStore for use with asyncio."""
@@ -525,6 +555,7 @@ class InMemoryAsyncStateStore:
 # 13. VERIFICATION PATTERNS -- PUTTING IT ALL TOGETHER
 # =============================================================================
 
+
 def demo() -> None:
     """Run all examples to verify correctness."""
 
@@ -536,7 +567,9 @@ def demo() -> None:
 
     # --- StateStore with DI ---
     manager = create_incident_manager_testing()
-    manager.process_incident("INC-001", {"severity": "critical", "service": "payment-svc"})
+    manager.process_incident(
+        "INC-001", {"severity": "critical", "service": "payment-svc"}
+    )
     result = manager.get_incident("INC-001")
     print(f"Retrieved incident: {result}")
 
@@ -544,7 +577,9 @@ def demo() -> None:
     store = InMemoryStateStore()
     creds = DictCredentialProvider({"KEY": "val"})
     assert isinstance(store, StateStore), "InMemoryStateStore must satisfy StateStore"
-    assert isinstance(creds, CredentialProvider), "DictCredentialProvider must satisfy CredentialProvider"
+    assert isinstance(creds, CredentialProvider), (
+        "DictCredentialProvider must satisfy CredentialProvider"
+    )
 
     # --- Verify non-implementing class fails ---
     assert not isinstance("a string", StateStore), "str should not satisfy StateStore"

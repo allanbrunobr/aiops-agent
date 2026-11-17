@@ -71,9 +71,11 @@ def register_normalizer(source: str) -> Any:
     Returns:
         Decorator que registra e retorna a classe original.
     """
+
     def decorator(cls: type[AlertNormalizer]) -> type[AlertNormalizer]:
         """Registra a classe no registry e retorna a classe inalterada."""
         instance = cls()
         NormalizerRegistry.register(source, instance)
         return cls
+
     return decorator

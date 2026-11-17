@@ -2,10 +2,10 @@
 
 Cobre Stories 3.1 (Slack Bot API), 3.2 (Retry + Fallback) e 3.6 (Config YAML).
 """
+
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -13,15 +13,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from slack_sdk.errors import SlackApiError
 
+from adapters.credentials import EnvCredentialProvider
 from core.lifecycle import LifecycleEvent, LifecycleObserver
 from interfaces.http.notifications.fallback import LocalFallbackWriter
 from interfaces.http.notifications.slack import SlackNotifier
-from adapters.credentials import EnvCredentialProvider
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_event(
     event_type: str,
@@ -73,6 +73,7 @@ def _make_slack_error(code: str) -> SlackApiError:
 # Story 3.1 — Tests 8.1-8.7
 # ---------------------------------------------------------------------------
 
+
 class TestSlackNotifierInitialMessage:
     """8.1: SlackNotifier posta mensagem inicial no evento pipeline.started."""
 
@@ -84,7 +85,11 @@ class TestSlackNotifierInitialMessage:
 
         event = _make_event(
             "pipeline.started",
-            data={"title": "High error rate", "severity": "critical", "service": "payment-svc"},
+            data={
+                "title": "High error rate",
+                "severity": "critical",
+                "service": "payment-svc",
+            },
         )
         await notifier.on_event(event)
 
@@ -148,7 +153,9 @@ class TestSlackNotifierProgressUpdate:
         cid = "inc-20260308-test1234"
         await notifier.on_event(_make_event("pipeline.started"))
         await notifier.on_event(_make_event("node.completed", node_name="log_parser"))
-        await notifier.on_event(_make_event("node.completed", node_name="metric_filter"))
+        await notifier.on_event(
+            _make_event("node.completed", node_name="metric_filter")
+        )
 
         assert "log_parser" in notifier._completed_nodes[cid]
         assert "metric_filter" in notifier._completed_nodes[cid]
@@ -200,7 +207,9 @@ class TestSlackNotifierFinalMessage:
 
         cid = "inc-20260308-test1234"
         await notifier.on_event(_make_event("pipeline.started"))
-        await notifier.on_event(_make_event("pipeline.completed", data={"root_cause": "test"}))
+        await notifier.on_event(
+            _make_event("pipeline.completed", data={"root_cause": "test"})
+        )
 
         assert cid not in notifier._message_ts
         assert cid not in notifier._completed_nodes
@@ -212,7 +221,9 @@ class TestSlackApiFailureIsolation:
     @pytest.mark.asyncio
     async def test_slack_failure_does_not_raise(self):
         mock_client = AsyncMock()
-        mock_client.chat_postMessage.side_effect = _make_slack_error("channel_not_found")
+        mock_client.chat_postMessage.side_effect = _make_slack_error(
+            "channel_not_found"
+        )
         notifier = _make_notifier(mock_client, max_retries=1)
 
         event = _make_event("pipeline.started")
@@ -251,9 +262,7 @@ class TestSlackNotifierDisabledMode:
         from interfaces.http.app import create_engine
 
         config = AppConfig(
-            notifications=NotificationsConfig(
-                slack=SlackConfig(enabled=False)
-            )
+            notifications=NotificationsConfig(slack=SlackConfig(enabled=False))
         )
         engine = create_engine(config)
         assert len(engine._observers) == 0
@@ -282,10 +291,12 @@ class TestCredentialProvider:
 class TestObserverRegistration:
     """8.7: Observer registrado no BlueprintEngine."""
 
-    @pytest.mark.skip(reason="Aguarda Story 3.x: BlueprintEngine async com add_observer/add_node")
+    @pytest.mark.skip(
+        reason="Aguarda Story 3.x: BlueprintEngine async com add_observer/add_node"
+    )
     @pytest.mark.asyncio
     async def test_observer_receives_events(self):
-        from blueprint.engine import BlueprintEngine, BlueprintNode
+        from blueprint.engine import BlueprintEngine
 
         events_received = []
 
@@ -320,6 +331,7 @@ class TestObserverRegistration:
 # ---------------------------------------------------------------------------
 # Story 3.2 — Tests 5.1-5.7
 # ---------------------------------------------------------------------------
+
 
 class TestRetryLogic:
     """5.1-5.7: Logica de retry com backoff exponencial."""
@@ -359,16 +371,19 @@ class TestRetryLogic:
         mock_client = AsyncMock()
         mock_client.chat_postMessage.return_value = {"ts": "ts.init"}
         mock_client.chat_update.side_effect = _make_slack_error("channel_not_found")
-        notifier = _make_notifier(mock_client, max_retries=3, fallback_dir=str(tmp_path))
+        notifier = _make_notifier(
+            mock_client, max_retries=3, fallback_dir=str(tmp_path)
+        )
 
-        cid = "inc-20260308-test1234"
         await notifier.on_event(_make_event("pipeline.started"))
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
-            await notifier.on_event(_make_event(
-                "pipeline.completed",
-                data={"root_cause": "DB timeout"},
-            ))
+            await notifier.on_event(
+                _make_event(
+                    "pipeline.completed",
+                    data={"root_cause": "DB timeout"},
+                )
+            )
 
         fallback_files = list(tmp_path.glob("fallback_*.json"))
         assert len(fallback_files) == 1
@@ -379,7 +394,9 @@ class TestRetryLogic:
         mock_client = AsyncMock()
         mock_client.chat_postMessage.return_value = {"ts": "ts.init"}
         mock_client.chat_update.side_effect = _make_slack_error("channel_not_found")
-        notifier = _make_notifier(mock_client, max_retries=1, fallback_dir=str(tmp_path))
+        notifier = _make_notifier(
+            mock_client, max_retries=1, fallback_dir=str(tmp_path)
+        )
 
         postmortem_data = {
             "root_cause": "Connection pool exhausted",
@@ -390,7 +407,9 @@ class TestRetryLogic:
         await notifier.on_event(_make_event("pipeline.started"))
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
-            await notifier.on_event(_make_event("pipeline.completed", data=postmortem_data))
+            await notifier.on_event(
+                _make_event("pipeline.completed", data=postmortem_data)
+            )
 
         fallback_files = list(tmp_path.glob("fallback_*.json"))
         assert len(fallback_files) == 1
@@ -405,12 +424,16 @@ class TestRetryLogic:
         mock_client = AsyncMock()
         mock_client.chat_postMessage.return_value = {"ts": "ts.init"}
         mock_client.chat_update.side_effect = _make_slack_error("invalid_auth")
-        notifier = _make_notifier(mock_client, max_retries=3, fallback_dir=str(tmp_path))
+        notifier = _make_notifier(
+            mock_client, max_retries=3, fallback_dir=str(tmp_path)
+        )
 
         await notifier.on_event(_make_event("pipeline.started"))
 
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-            await notifier.on_event(_make_event("pipeline.completed", data={"root_cause": "test"}))
+            await notifier.on_event(
+                _make_event("pipeline.completed", data={"root_cause": "test"})
+            )
             mock_sleep.assert_not_called()  # Sem retry para erro de auth
 
         # chat_update chamado apenas 1 vez (sem retry)
@@ -439,6 +462,7 @@ class TestRetryLogic:
 # ---------------------------------------------------------------------------
 # Story 3.2 — LocalFallbackWriter
 # ---------------------------------------------------------------------------
+
 
 class TestLocalFallbackWriter:
     """Testes para LocalFallbackWriter."""
@@ -473,11 +497,13 @@ class TestLocalFallbackWriter:
 # Story 3.6 — Config YAML Tests (8.1-8.7)
 # ---------------------------------------------------------------------------
 
+
 class TestSlackConfig:
     """8.1: SlackConfig carrega do YAML com todos os campos."""
 
     def test_slack_config_defaults(self):
         from config.loader import SlackConfig
+
         config = SlackConfig()
         assert config.enabled is False
         assert config.max_retries == 3
@@ -488,19 +514,25 @@ class TestSlackConfig:
 
     def test_slack_enabled_requires_channel(self):
         from pydantic import ValidationError
+
         from config.loader import SlackConfig
+
         with pytest.raises(ValidationError, match="channel is required"):
             SlackConfig(enabled=True, channel="")
 
     def test_slack_negative_retries_rejected(self):
         from pydantic import ValidationError
+
         from config.loader import SlackConfig
+
         with pytest.raises(ValidationError, match="must be >= 0"):
             SlackConfig(max_retries=-1)
 
     def test_slack_zero_backoff_rejected(self):
         from pydantic import ValidationError
+
         from config.loader import SlackConfig
+
         with pytest.raises(ValidationError, match="must be > 0"):
             SlackConfig(initial_backoff_s=0.0)
 
@@ -510,13 +542,16 @@ class TestObservabilityConfig:
 
     def test_observability_config_defaults(self):
         from config.loader import ObservabilityConfig
+
         config = ObservabilityConfig()
         assert config.metric_retention_hours == 24
         assert config.accuracy_tracking_enabled is True
 
     def test_observability_invalid_retention(self):
         from pydantic import ValidationError
+
         from config.loader import ObservabilityConfig
+
         with pytest.raises(ValidationError, match="must be >= 1"):
             ObservabilityConfig(metric_retention_hours=0)
 
@@ -537,17 +572,21 @@ notifications:
         monkeypatch.setenv("AIOPS_NOTIFICATIONS__SLACK__CHANNEL", "C_FROM_ENV")
 
         from config.loader import load_config
+
         config = load_config(yaml_file=yaml_file)
         assert config.notifications.slack.channel == "C_FROM_ENV"
 
     def test_env_var_enables_slack(self, monkeypatch, tmp_path):
-        yaml_content = "notifications:\n  slack:\n    enabled: false\n    channel: C12345\n"
+        yaml_content = (
+            "notifications:\n  slack:\n    enabled: false\n    channel: C12345\n"
+        )
         yaml_file = tmp_path / "test_config.yaml"
         yaml_file.write_text(yaml_content)
 
         monkeypatch.setenv("AIOPS_NOTIFICATIONS__SLACK__ENABLED", "true")
 
         from config.loader import load_config
+
         config = load_config(yaml_file=yaml_file)
         assert config.notifications.slack.enabled is True
 
@@ -576,10 +615,13 @@ class TestDryRunMode:
         notifier._initial_backoff_s = 1.0
         notifier._backoff_multiplier = 2.0
         from pathlib import Path
+
         notifier._fallback_dir = Path("output")
 
         await notifier.on_event(_make_event("pipeline.started"))
-        await notifier.on_event(_make_event("pipeline.completed", data={"root_cause": "test"}))
+        await notifier.on_event(
+            _make_event("pipeline.completed", data={"root_cause": "test"})
+        )
 
         mock_client.chat_postMessage.assert_not_called()
         mock_client.chat_update.assert_not_called()
@@ -597,6 +639,7 @@ class TestDryRunMode:
         notifier._initial_backoff_s = 1.0
         notifier._backoff_multiplier = 2.0
         from pathlib import Path
+
         notifier._fallback_dir = Path("output")
 
         cid = "inc-20260308-test1234"
@@ -622,7 +665,10 @@ class TestDisabledNotifications:
 # BlueprintEngine observer tests
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skip(reason="Aguarda Story 3.x: BlueprintEngine async com add_observer/add_node/run(dict)")
+
+@pytest.mark.skip(
+    reason="Aguarda Story 3.x: BlueprintEngine async com add_observer/add_node/run(dict)"
+)
 class TestBlueprintEngineObserver:
     """Testes do mecanismo de observer do BlueprintEngine."""
 
@@ -732,6 +778,7 @@ class TestBlueprintEngineObserver:
 # ---------------------------------------------------------------------------
 # LifecycleObserver Protocol compliance
 # ---------------------------------------------------------------------------
+
 
 class TestLifecycleObserverProtocol:
     """Verifica que SlackNotifier satisfaz o protocolo LifecycleObserver."""

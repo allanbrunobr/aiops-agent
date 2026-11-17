@@ -5,12 +5,13 @@ Valida que o pipeline roda end-to-end em modo --no-llm --no-rag
 sem erros, produz todos os estágios esperados e gera output
 determinístico com seed-42.
 """
+
 from __future__ import annotations
 
 import io
 import random
 import sys
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 
 import pytest
 
@@ -51,7 +52,13 @@ class TestPipelineSmoke:
         assert diagnosis is not None
         assert isinstance(diagnosis, dict)
         # Heuristic diagnosis retorna estas chaves
-        expected_keys = {"root_cause", "evidence", "affected_services", "confidence", "timeline"}
+        expected_keys = {
+            "root_cause",
+            "evidence",
+            "affected_services",
+            "confidence",
+            "timeline",
+        }
         for key in expected_keys:
             assert key in diagnosis, f"Chave '{key}' ausente no diagnóstico"
 
@@ -104,27 +111,31 @@ class TestPipelineDeterminism:
         results = []
         for _ in range(2):
             random.seed(42)
-            from data.sample_incident import create_incident
-            from pipeline.telemetry_sanitizer import TelemetrySanitizer
-            from pipeline.aggregator import Aggregator
             from agents.detector import DetectionAgent
             from agents.diagnoser import DiagnosisAgent
             from agents.mitigator import MitigationAgent
-            from safety.tnr import TNRSafetyGuard
+            from data.sample_incident import create_incident
+            from pipeline.aggregator import Aggregator
+            from pipeline.telemetry_sanitizer import TelemetrySanitizer
             from safety.pre_validator import PreExecutionValidator
+            from safety.tnr import TNRSafetyGuard
             from safety.version_validator import VersionValidator
 
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 incident = create_incident()
                 sanitizer = TelemetrySanitizer(strict_mode=False)
                 s_logs, s_metrics, s_traces, _ = sanitizer.sanitize_all(
-                    incident.logs, incident.metrics, incident.traces,
+                    incident.logs,
+                    incident.metrics,
+                    incident.traces,
                 )
                 incident.logs = s_logs
                 incident.metrics = s_metrics
                 incident.traces = s_traces
                 aggregator = Aggregator()
-                report = aggregator.process(incident.logs, incident.metrics, incident.traces)
+                report = aggregator.process(
+                    incident.logs, incident.metrics, incident.traces
+                )
 
                 detector = DetectionAgent()
                 diagnoser = DiagnosisAgent(max_iterations=1)
@@ -132,11 +143,18 @@ class TestPipelineDeterminism:
                 tnr_guard = TNRSafetyGuard()
 
                 from datetime import datetime as _dt2
+
                 _tl: list[dict] = []
 
                 def _r(frm: str, to: str, reason: str) -> None:
-                    _tl.append({"time": _dt2.now().strftime("%H:%M:%S"),
-                                "from": frm, "to": to, "reason": reason})
+                    _tl.append(
+                        {
+                            "time": _dt2.now().strftime("%H:%M:%S"),
+                            "from": frm,
+                            "to": to,
+                            "reason": reason,
+                        }
+                    )
 
                 result: dict = {"success": False, "stages": {}}
                 _r("IDLE", "DETECTING", "Analisando dados de observabilidade...")
@@ -144,7 +162,11 @@ class TestPipelineDeterminism:
                 result["stages"]["detection"] = detection
                 if detection.get("is_incident"):
                     affected = ", ".join(detection.get("affected_services", []))
-                    _r("DETECTING", "DIAGNOSING", f"Investigando incidente em {affected}")
+                    _r(
+                        "DETECTING",
+                        "DIAGNOSING",
+                        f"Investigando incidente em {affected}",
+                    )
                     diagnosis = diagnoser.diagnose(report, None)
                     result["stages"]["diagnosis"] = diagnosis
                     if diagnosis.get("root_cause"):
@@ -159,12 +181,24 @@ class TestPipelineDeterminism:
                             "message": tnr_check.message,
                         }
                         if tnr_check.result.value != "regression":
-                            _r("VERIFYING", "RESOLVED", f"Incidente resolvido: {tnr_check.message}")
+                            _r(
+                                "VERIFYING",
+                                "RESOLVED",
+                                f"Incidente resolvido: {tnr_check.message}",
+                            )
                             result["success"] = True
                         else:
-                            _r("VERIFYING", "ROLLBACK", f"Regressão detectada: {tnr_check.message}")
+                            _r(
+                                "VERIFYING",
+                                "ROLLBACK",
+                                f"Regressão detectada: {tnr_check.message}",
+                            )
                     else:
-                        _r("DIAGNOSING", "FAILED", "Não foi possível identificar root cause")
+                        _r(
+                            "DIAGNOSING",
+                            "FAILED",
+                            "Não foi possível identificar root cause",
+                        )
                 else:
                     _r("DETECTING", "IDLE", "Nenhum incidente detectado")
                 result["timeline"] = _tl

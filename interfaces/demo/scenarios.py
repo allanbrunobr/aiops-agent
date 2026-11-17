@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 Corpora de cenários de demonstração: dados pré-gerados determinísticos
 para replay no motor de simulação.
@@ -14,7 +15,6 @@ from datetime import datetime, timedelta, timezone
 
 from data.models import LogEntry, MetricPoint, Span
 
-
 # Data base de simulação (UTC)
 _BASE_TIME = datetime(2026, 3, 20, 10, 0, 0, tzinfo=timezone.utc)
 
@@ -24,13 +24,16 @@ CorpusItem = tuple[datetime, LogEntry | MetricPoint | Span]
 @dataclass
 class DemoScenarioConfig:
     """Configuração do cenário de demonstração."""
+
     speed_factor: float = 4.0
     enable_prediction: bool = True
     enable_rag: bool = True
     enable_llm: bool = False
     risk_warning_threshold: float = 60.0
     risk_alert_threshold: float = 80.0
-    ewma_threshold: float = 0.90  # limiar para ETA; override por cenário (ex: 7200.0 para MB)
+    ewma_threshold: float = (
+        0.90  # limiar para ETA; override por cenário (ex: 7200.0 para MB)
+    )
 
 
 def build_payment_pool_corpus() -> list[CorpusItem]:
@@ -110,22 +113,43 @@ def build_payment_pool_corpus() -> list[CorpusItem]:
             noise = random.gauss(0, 0.008)
             frac = max(0.0, min(1.0, pool_frac + noise))
 
-            corpus.append((sub_ts, MetricPoint(
-                timestamp=sub_ts, service="db-pool",
-                metric_name="connection_pool_active", value=frac,
-            )))
+            corpus.append(
+                (
+                    sub_ts,
+                    MetricPoint(
+                        timestamp=sub_ts,
+                        service="db-pool",
+                        metric_name="connection_pool_active",
+                        value=frac,
+                    ),
+                )
+            )
 
             cpu = 0.22 + progress * 0.38 + random.gauss(0, 0.02)
-            corpus.append((sub_ts, MetricPoint(
-                timestamp=sub_ts, service="payment-service",
-                metric_name="cpu_usage", value=max(0.0, min(1.0, cpu)),
-            )))
+            corpus.append(
+                (
+                    sub_ts,
+                    MetricPoint(
+                        timestamp=sub_ts,
+                        service="payment-service",
+                        metric_name="cpu_usage",
+                        value=max(0.0, min(1.0, cpu)),
+                    ),
+                )
+            )
 
             mem = 0.38 + progress * 0.22 + random.gauss(0, 0.01)
-            corpus.append((sub_ts, MetricPoint(
-                timestamp=sub_ts, service="payment-service",
-                metric_name="memory_usage", value=max(0.0, min(1.0, mem)),
-            )))
+            corpus.append(
+                (
+                    sub_ts,
+                    MetricPoint(
+                        timestamp=sub_ts,
+                        service="payment-service",
+                        metric_name="memory_usage",
+                        value=max(0.0, min(1.0, mem)),
+                    ),
+                )
+            )
 
             # Latência não-linear: quadrática quando pool > 50% (fila de espera explode)
             if pool_frac <= 0.5:
@@ -136,14 +160,28 @@ def build_payment_pool_corpus() -> list[CorpusItem]:
             lat_p95 = max(50.0, lat_p95 + random.gauss(0, lat_p95 * 0.06))
             lat_p99 = max(60.0, lat_p95 * 1.45 + random.gauss(0, 25.0))
 
-            corpus.append((sub_ts, MetricPoint(
-                timestamp=sub_ts, service="api-gateway",
-                metric_name="latency_p95_ms", value=lat_p95,
-            )))
-            corpus.append((sub_ts, MetricPoint(
-                timestamp=sub_ts, service="api-gateway",
-                metric_name="latency_p99_ms", value=lat_p99,
-            )))
+            corpus.append(
+                (
+                    sub_ts,
+                    MetricPoint(
+                        timestamp=sub_ts,
+                        service="api-gateway",
+                        metric_name="latency_p95_ms",
+                        value=lat_p95,
+                    ),
+                )
+            )
+            corpus.append(
+                (
+                    sub_ts,
+                    MetricPoint(
+                        timestamp=sub_ts,
+                        service="api-gateway",
+                        metric_name="latency_p99_ms",
+                        value=lat_p99,
+                    ),
+                )
+            )
 
         # === Logs: volume escala com a fase de degradação ===
         if minute < 8:
@@ -198,9 +236,17 @@ def build_payment_pool_corpus() -> list[CorpusItem]:
                     level = "WARNING"
                     msg = f"Pool timeout crítico — {pool_active_count}/{MAX_POOL} conexões ativas"
 
-            corpus.append((log_ts, LogEntry(
-                timestamp=log_ts, level=level, service=svc, message=msg,
-            )))
+            corpus.append(
+                (
+                    log_ts,
+                    LogEntry(
+                        timestamp=log_ts,
+                        level=level,
+                        service=svc,
+                        message=msg,
+                    ),
+                )
+            )
 
         # === Spans: 2-4 por minuto com child spans (trace distribuído realista) ===
         n_spans = random.randint(2, 5 if minute >= 16 else 3)
@@ -212,7 +258,12 @@ def build_payment_pool_corpus() -> list[CorpusItem]:
             if pool_frac <= 0.5:
                 root_dur = BASE_LATENCY_MS + pool_frac * 400.0 + random.gauss(0, 15.0)
             else:
-                root_dur = BASE_LATENCY_MS + 200.0 + ((pool_frac - 0.5) ** 2) * 9000.0 + random.gauss(0, 60.0)
+                root_dur = (
+                    BASE_LATENCY_MS
+                    + 200.0
+                    + ((pool_frac - 0.5) ** 2) * 9000.0
+                    + random.gauss(0, 60.0)
+                )
             root_dur = max(10.0, root_dur)
 
             # Status muda para ERROR quando pool > 65% com probabilidade crescente
@@ -222,45 +273,62 @@ def build_payment_pool_corpus() -> list[CorpusItem]:
             trace_id = f"tr-{minute:04d}-{span_i}"
             root_id = f"sp-gw-{minute:04d}-{span_i}"
 
-            corpus.append((span_ts, Span(
-                trace_id=trace_id,
-                span_id=root_id,
-                parent_span_id=None,
-                service="api-gateway",
-                operation="POST /payment",
-                start_time=span_ts,
-                duration_ms=root_dur,
-                status=span_status,
-            )))
+            corpus.append(
+                (
+                    span_ts,
+                    Span(
+                        trace_id=trace_id,
+                        span_id=root_id,
+                        parent_span_id=None,
+                        service="api-gateway",
+                        operation="POST /payment",
+                        start_time=span_ts,
+                        duration_ms=root_dur,
+                        status=span_status,
+                    ),
+                )
+            )
 
             # Child: payment-service aguardando conexão do pool
             acquire_dur = max(5.0, root_dur * 0.88 + random.gauss(0, 10.0))
             pay_id = f"sp-pay-{minute:04d}-{span_i}"
-            corpus.append((span_ts, Span(
-                trace_id=trace_id,
-                span_id=pay_id,
-                parent_span_id=root_id,
-                service="payment-service",
-                operation="db.pool.acquire",
-                start_time=span_ts + timedelta(milliseconds=5),
-                duration_ms=acquire_dur,
-                status=span_status,
-            )))
+            corpus.append(
+                (
+                    span_ts,
+                    Span(
+                        trace_id=trace_id,
+                        span_id=pay_id,
+                        parent_span_id=root_id,
+                        service="payment-service",
+                        operation="db.pool.acquire",
+                        start_time=span_ts + timedelta(milliseconds=5),
+                        duration_ms=acquire_dur,
+                        status=span_status,
+                    ),
+                )
+            )
 
             # Grandchild: db-pool TCP connect — só aparece quando pool > 40%
             if pool_frac > 0.40:
                 tcp_dur = max(5.0, acquire_dur * 0.75 + random.gauss(0, 12.0))
-                db_status = "ERROR" if pool_frac > 0.70 and span_status == "ERROR" else "OK"
-                corpus.append((span_ts, Span(
-                    trace_id=trace_id,
-                    span_id=f"sp-db-{minute:04d}-{span_i}",
-                    parent_span_id=pay_id,
-                    service="db-pool",
-                    operation="tcp.connect",
-                    start_time=span_ts + timedelta(milliseconds=12),
-                    duration_ms=tcp_dur,
-                    status=db_status,
-                )))
+                db_status = (
+                    "ERROR" if pool_frac > 0.70 and span_status == "ERROR" else "OK"
+                )
+                corpus.append(
+                    (
+                        span_ts,
+                        Span(
+                            trace_id=trace_id,
+                            span_id=f"sp-db-{minute:04d}-{span_i}",
+                            parent_span_id=pay_id,
+                            service="db-pool",
+                            operation="tcp.connect",
+                            start_time=span_ts + timedelta(milliseconds=12),
+                            duration_ms=tcp_dur,
+                            status=db_status,
+                        ),
+                    )
+                )
 
     corpus.sort(key=lambda x: x[0])
     return corpus
@@ -283,13 +351,14 @@ def build_payment_pool_recovery_corpus() -> list[CorpusItem]:
     Usa random.seed(44) para reprodutibilidade.
     """
     import math as _math
+
     random.seed(44)
     corpus: list[CorpusItem] = []
 
-    MAX_POOL_BEFORE = 200   # max_connections antes do fix
-    MAX_POOL_AFTER  = 500   # max_connections após fix operacional
+    MAX_POOL_BEFORE = 200  # max_connections antes do fix
+    MAX_POOL_AFTER = 500  # max_connections após fix operacional
     BASE_LATENCY_MS = 80.0
-    FIX_MINUTE      = 25    # minuto em que ops aplica o fix
+    FIX_MINUTE = 25  # minuto em que ops aplica o fix
 
     _TEMPLATES_NORMAL = [
         "Conexão obtida do pool",
@@ -327,10 +396,12 @@ def build_payment_pool_recovery_corpus() -> list[CorpusItem]:
 
     for minute in range(40):
         ts = _BASE_TIME + timedelta(minutes=minute)
-        progress_deg = min(1.0, minute / 20.0)   # 0→1 nos primeiros 20 min
+        progress_deg = min(1.0, minute / 20.0)  # 0→1 nos primeiros 20 min
 
         recovering = minute >= FIX_MINUTE
-        recovery_progress = (minute - FIX_MINUTE) / (40 - FIX_MINUTE) if recovering else 0.0
+        recovery_progress = (
+            (minute - FIX_MINUTE) / (40 - FIX_MINUTE) if recovering else 0.0
+        )
 
         # === Pool active ===
         if not recovering:
@@ -342,7 +413,7 @@ def build_payment_pool_recovery_corpus() -> list[CorpusItem]:
             # O numerador (conexões ativas) cai gradualmente à medida que o backlog
             # de requests pendentes é processado. O denominador salta para 500,
             # então o ratio pool_frac cai imediatamente para ~0.33 e depois para ~0.18.
-            peak_active = 0.82 * MAX_POOL_BEFORE      # ~164 conexões no pico
+            peak_active = 0.82 * MAX_POOL_BEFORE  # ~164 conexões no pico
             active_now = peak_active * (1.0 - recovery_progress * 0.45)  # 164 → ~90
             pool_frac = max(0.05, active_now / MAX_POOL_AFTER + random.gauss(0, 0.005))
 
@@ -354,50 +425,93 @@ def build_payment_pool_recovery_corpus() -> list[CorpusItem]:
             noise = random.gauss(0, 0.008)
             frac = max(0.0, min(1.0, pool_frac + noise))
 
-            corpus.append((sub_ts, MetricPoint(
-                timestamp=sub_ts, service="db-pool",
-                metric_name="connection_pool_active", value=frac,
-            )))
+            corpus.append(
+                (
+                    sub_ts,
+                    MetricPoint(
+                        timestamp=sub_ts,
+                        service="db-pool",
+                        metric_name="connection_pool_active",
+                        value=frac,
+                    ),
+                )
+            )
 
             cpu_peak = 0.22 + progress_deg * 0.40
-            cpu = (cpu_peak * (1.0 - recovery_progress * 0.70)) if recovering else cpu_peak
+            cpu = (
+                (cpu_peak * (1.0 - recovery_progress * 0.70))
+                if recovering
+                else cpu_peak
+            )
             cpu += random.gauss(0, 0.02)
-            corpus.append((sub_ts, MetricPoint(
-                timestamp=sub_ts, service="payment-service",
-                metric_name="cpu_usage", value=max(0.0, min(1.0, cpu)),
-            )))
+            corpus.append(
+                (
+                    sub_ts,
+                    MetricPoint(
+                        timestamp=sub_ts,
+                        service="payment-service",
+                        metric_name="cpu_usage",
+                        value=max(0.0, min(1.0, cpu)),
+                    ),
+                )
+            )
 
             mem = 0.38 + progress_deg * 0.22
             if recovering:
-                mem *= (1.0 - recovery_progress * 0.30)
+                mem *= 1.0 - recovery_progress * 0.30
             mem += random.gauss(0, 0.01)
-            corpus.append((sub_ts, MetricPoint(
-                timestamp=sub_ts, service="payment-service",
-                metric_name="memory_usage", value=max(0.0, min(1.0, mem)),
-            )))
+            corpus.append(
+                (
+                    sub_ts,
+                    MetricPoint(
+                        timestamp=sub_ts,
+                        service="payment-service",
+                        metric_name="memory_usage",
+                        value=max(0.0, min(1.0, mem)),
+                    ),
+                )
+            )
 
             # Latência
             if not recovering:
                 if pool_frac <= 0.5:
                     lat_p95 = BASE_LATENCY_MS + pool_frac * 350.0
                 else:
-                    lat_p95 = BASE_LATENCY_MS + 175.0 + ((pool_frac - 0.5) ** 2) * 9000.0
+                    lat_p95 = (
+                        BASE_LATENCY_MS + 175.0 + ((pool_frac - 0.5) ** 2) * 9000.0
+                    )
             else:
                 # Recuperação: latência desce exponencialmente
                 peak_lat = BASE_LATENCY_MS + 175.0 + ((0.82 - 0.5) ** 2) * 9000.0
-                lat_p95 = BASE_LATENCY_MS + (peak_lat - BASE_LATENCY_MS) * _math.exp(-8.0 * recovery_progress)
+                lat_p95 = BASE_LATENCY_MS + (peak_lat - BASE_LATENCY_MS) * _math.exp(
+                    -8.0 * recovery_progress
+                )
 
             lat_p95 = max(50.0, lat_p95 + random.gauss(0, lat_p95 * 0.06))
             lat_p99 = max(60.0, lat_p95 * 1.45 + random.gauss(0, 25.0))
 
-            corpus.append((sub_ts, MetricPoint(
-                timestamp=sub_ts, service="api-gateway",
-                metric_name="latency_p95_ms", value=lat_p95,
-            )))
-            corpus.append((sub_ts, MetricPoint(
-                timestamp=sub_ts, service="api-gateway",
-                metric_name="latency_p99_ms", value=lat_p99,
-            )))
+            corpus.append(
+                (
+                    sub_ts,
+                    MetricPoint(
+                        timestamp=sub_ts,
+                        service="api-gateway",
+                        metric_name="latency_p95_ms",
+                        value=lat_p95,
+                    ),
+                )
+            )
+            corpus.append(
+                (
+                    sub_ts,
+                    MetricPoint(
+                        timestamp=sub_ts,
+                        service="api-gateway",
+                        metric_name="latency_p99_ms",
+                        value=lat_p99,
+                    ),
+                )
+            )
 
         # === Logs ===
         if not recovering:
@@ -413,7 +527,11 @@ def build_payment_pool_recovery_corpus() -> list[CorpusItem]:
             # Recovery: volume cai exponencialmente — o fix normaliza os logs rapidamente.
             # exp(-4 * p): p=0.2 → 18/min, p=0.4 → 11/min, p=0.67 → 7/min, p=1.0 → 4/min
             peak_n = 30
-            n_logs = max(3, int(peak_n * _math.exp(-4.0 * recovery_progress)) + random.randint(-1, 1))
+            n_logs = max(
+                3,
+                int(peak_n * _math.exp(-4.0 * recovery_progress))
+                + random.randint(-1, 1),
+            )
             phase = "recovery"
 
         for _ in range(n_logs):
@@ -425,14 +543,14 @@ def build_payment_pool_recovery_corpus() -> list[CorpusItem]:
             elif phase == "early":
                 if random.random() < 0.35:
                     level = "WARNING"
-                    msg = f"{random.choice(_TEMPLATES_DEGRADED[:4])} — pool={int(pool_frac*MAX_POOL_BEFORE)}/{MAX_POOL_BEFORE}"
+                    msg = f"{random.choice(_TEMPLATES_DEGRADED[:4])} — pool={int(pool_frac * MAX_POOL_BEFORE)}/{MAX_POOL_BEFORE}"
                 else:
                     level, msg = "INFO", random.choice(_TEMPLATES_NORMAL)
             elif phase == "active":
                 r = random.random()
                 if r < 0.55:
                     level = "WARNING"
-                    msg = f"{random.choice(_TEMPLATES_DEGRADED[:4])} — pool={int(pool_frac*MAX_POOL_BEFORE)}/{MAX_POOL_BEFORE}"
+                    msg = f"{random.choice(_TEMPLATES_DEGRADED[:4])} — pool={int(pool_frac * MAX_POOL_BEFORE)}/{MAX_POOL_BEFORE}"
                 elif r < 0.80:
                     level, msg = "ERROR", random.choice(_TEMPLATES_DEGRADED[4:])
                 else:
@@ -442,7 +560,7 @@ def build_payment_pool_recovery_corpus() -> list[CorpusItem]:
                     level, msg = "ERROR", random.choice(_TEMPLATES_INCIDENT)
                 else:
                     level = "WARNING"
-                    msg = f"Pool timeout crítico — {int(pool_frac*MAX_POOL_BEFORE)}/{MAX_POOL_BEFORE}"
+                    msg = f"Pool timeout crítico — {int(pool_frac * MAX_POOL_BEFORE)}/{MAX_POOL_BEFORE}"
             else:  # recovery
                 r = random.random()
                 if r < 0.85:
@@ -450,9 +568,17 @@ def build_payment_pool_recovery_corpus() -> list[CorpusItem]:
                 else:
                     level, msg = "WARNING", "Pool ainda normalizando — monitorando"
 
-            corpus.append((log_ts, LogEntry(
-                timestamp=log_ts, level=level, service=svc, message=msg,
-            )))
+            corpus.append(
+                (
+                    log_ts,
+                    LogEntry(
+                        timestamp=log_ts,
+                        level=level,
+                        service=svc,
+                        message=msg,
+                    ),
+                )
+            )
 
         # === Spans ===
         n_spans = random.randint(2, 4)
@@ -461,13 +587,22 @@ def build_payment_pool_recovery_corpus() -> list[CorpusItem]:
 
             if not recovering:
                 if pool_frac <= 0.5:
-                    root_dur = BASE_LATENCY_MS + pool_frac * 400.0 + random.gauss(0, 15.0)
+                    root_dur = (
+                        BASE_LATENCY_MS + pool_frac * 400.0 + random.gauss(0, 15.0)
+                    )
                 else:
-                    root_dur = BASE_LATENCY_MS + 200.0 + ((pool_frac - 0.5) ** 2) * 9000.0 + random.gauss(0, 60.0)
+                    root_dur = (
+                        BASE_LATENCY_MS
+                        + 200.0
+                        + ((pool_frac - 0.5) ** 2) * 9000.0
+                        + random.gauss(0, 60.0)
+                    )
                 error_prob = max(0.0, (pool_frac - 0.65) * 3.0)
             else:
                 peak_dur = BASE_LATENCY_MS + 200.0 + ((0.82 - 0.5) ** 2) * 9000.0
-                root_dur = BASE_LATENCY_MS + (peak_dur - BASE_LATENCY_MS) * _math.exp(-8.0 * recovery_progress)
+                root_dur = BASE_LATENCY_MS + (peak_dur - BASE_LATENCY_MS) * _math.exp(
+                    -8.0 * recovery_progress
+                )
                 root_dur += random.gauss(0, 30.0)
                 error_prob = max(0.0, (1.0 - recovery_progress * 2.0) * 0.3)
 
@@ -476,32 +611,60 @@ def build_payment_pool_recovery_corpus() -> list[CorpusItem]:
             trace_id = f"tr-{minute:04d}-{span_i}"
             root_id = f"sp-gw-{minute:04d}-{span_i}"
 
-            corpus.append((span_ts, Span(
-                trace_id=trace_id, span_id=root_id, parent_span_id=None,
-                service="api-gateway", operation="POST /payment",
-                start_time=span_ts, duration_ms=root_dur, status=span_status,
-            )))
+            corpus.append(
+                (
+                    span_ts,
+                    Span(
+                        trace_id=trace_id,
+                        span_id=root_id,
+                        parent_span_id=None,
+                        service="api-gateway",
+                        operation="POST /payment",
+                        start_time=span_ts,
+                        duration_ms=root_dur,
+                        status=span_status,
+                    ),
+                )
+            )
 
             acquire_dur = max(5.0, root_dur * 0.88 + random.gauss(0, 10.0))
             pay_id = f"sp-pay-{minute:04d}-{span_i}"
-            corpus.append((span_ts, Span(
-                trace_id=trace_id, span_id=pay_id, parent_span_id=root_id,
-                service="payment-service", operation="db.pool.acquire",
-                start_time=span_ts + timedelta(milliseconds=5),
-                duration_ms=acquire_dur, status=span_status,
-            )))
+            corpus.append(
+                (
+                    span_ts,
+                    Span(
+                        trace_id=trace_id,
+                        span_id=pay_id,
+                        parent_span_id=root_id,
+                        service="payment-service",
+                        operation="db.pool.acquire",
+                        start_time=span_ts + timedelta(milliseconds=5),
+                        duration_ms=acquire_dur,
+                        status=span_status,
+                    ),
+                )
+            )
 
             if pool_frac > 0.40:
                 tcp_dur = max(5.0, acquire_dur * 0.75 + random.gauss(0, 12.0))
-                db_status = "ERROR" if pool_frac > 0.70 and span_status == "ERROR" else "OK"
-                corpus.append((span_ts, Span(
-                    trace_id=trace_id,
-                    span_id=f"sp-db-{minute:04d}-{span_i}",
-                    parent_span_id=pay_id,
-                    service="db-pool", operation="tcp.connect",
-                    start_time=span_ts + timedelta(milliseconds=12),
-                    duration_ms=tcp_dur, status=db_status,
-                )))
+                db_status = (
+                    "ERROR" if pool_frac > 0.70 and span_status == "ERROR" else "OK"
+                )
+                corpus.append(
+                    (
+                        span_ts,
+                        Span(
+                            trace_id=trace_id,
+                            span_id=f"sp-db-{minute:04d}-{span_i}",
+                            parent_span_id=pay_id,
+                            service="db-pool",
+                            operation="tcp.connect",
+                            start_time=span_ts + timedelta(milliseconds=12),
+                            duration_ms=tcp_dur,
+                            status=db_status,
+                        ),
+                    )
+                )
 
     corpus.sort(key=lambda x: x[0])
     return corpus
@@ -524,27 +687,48 @@ def build_memory_leak_corpus() -> list[CorpusItem]:
 
         # Memória sobe de 2048MB a 7987MB (leak linear)
         mem_mb = 2048.0 + progress * (7987.0 - 2048.0) + random.gauss(0, 8.0)
-        corpus.append((ts, MetricPoint(
-            timestamp=ts, service="jvm-service",
-            metric_name="memory_used_mb", value=max(0.0, mem_mb),
-        )))
+        corpus.append(
+            (
+                ts,
+                MetricPoint(
+                    timestamp=ts,
+                    service="jvm-service",
+                    metric_name="memory_used_mb",
+                    value=max(0.0, mem_mb),
+                ),
+            )
+        )
 
         # CPU normal (30-40%)
         cpu = 0.30 + random.gauss(0, 0.02) + (0.05 if minute > 45 else 0.0)
-        corpus.append((ts, MetricPoint(
-            timestamp=ts, service="jvm-service",
-            metric_name="cpu_usage", value=max(0.0, min(1.0, cpu)),
-        )))
+        corpus.append(
+            (
+                ts,
+                MetricPoint(
+                    timestamp=ts,
+                    service="jvm-service",
+                    metric_name="cpu_usage",
+                    value=max(0.0, min(1.0, cpu)),
+                ),
+            )
+        )
 
         # Latência levemente elevada a partir do minuto 20
         latency_p95 = 120.0
         if minute >= 20:
             latency_p95 = 120.0 + (minute - 20) * 8.0
         latency_p95 += random.gauss(0, 5.0)
-        corpus.append((ts, MetricPoint(
-            timestamp=ts, service="jvm-service",
-            metric_name="latency_p95_ms", value=max(100.0, latency_p95),
-        )))
+        corpus.append(
+            (
+                ts,
+                MetricPoint(
+                    timestamp=ts,
+                    service="jvm-service",
+                    metric_name="latency_p95_ms",
+                    value=max(100.0, latency_p95),
+                ),
+            )
+        )
 
         # GC logs — frequência aumenta com leak
         if minute < 10:
@@ -557,22 +741,35 @@ def build_memory_leak_corpus() -> list[CorpusItem]:
             level = "ERROR"
             msg = f"OutOfMemoryError risk: heap {int(mem_mb)}MB/{7987}MB — GC overhead {random.randint(80, 99)}%"
 
-        corpus.append((ts, LogEntry(
-            timestamp=ts, level=level, service="jvm-service", message=msg,
-        )))
+        corpus.append(
+            (
+                ts,
+                LogEntry(
+                    timestamp=ts,
+                    level=level,
+                    service="jvm-service",
+                    message=msg,
+                ),
+            )
+        )
 
         # Span
         span_dur = 80.0 + (20.0 if minute > 30 else 0.0) + random.gauss(0, 5.0)
-        corpus.append((ts, Span(
-            trace_id=f"ml-tr-{minute:04d}",
-            span_id=f"ml-sp-{minute:04d}",
-            parent_span_id=None,
-            service="jvm-service",
-            operation="GET /api/data",
-            start_time=ts,
-            duration_ms=max(10.0, span_dur),
-            status="OK",
-        )))
+        corpus.append(
+            (
+                ts,
+                Span(
+                    trace_id=f"ml-tr-{minute:04d}",
+                    span_id=f"ml-sp-{minute:04d}",
+                    parent_span_id=None,
+                    service="jvm-service",
+                    operation="GET /api/data",
+                    start_time=ts,
+                    duration_ms=max(10.0, span_dur),
+                    status="OK",
+                ),
+            )
+        )
 
     corpus.sort(key=lambda x: x[0])
     return corpus
@@ -607,28 +804,45 @@ def build_unknown_fault_corpus() -> list[CorpusItem]:
 
     for minute in range(duration_minutes):
         ts = _BASE_TIME + timedelta(minutes=minute)
-        progress = minute / (duration_minutes - 1)
 
         # CPU normal até falha
         cpu = 0.20 + random.gauss(0, 0.015)
         if minute >= 5:
             cpu += 0.10 + (minute - 5) * 0.005
-        corpus.append((ts, MetricPoint(
-            timestamp=ts, service="kernel-service",
-            metric_name="cpu_usage", value=max(0.0, min(1.0, cpu)),
-        )))
+        corpus.append(
+            (
+                ts,
+                MetricPoint(
+                    timestamp=ts,
+                    service="kernel-service",
+                    metric_name="cpu_usage",
+                    value=max(0.0, min(1.0, cpu)),
+                ),
+            )
+        )
 
         # Latência — spikes a partir do minuto 10
         if minute < 10:
             latency = 60.0 + random.gauss(0, 5.0)
         else:
-            spike = random.choice([200.0, 500.0, 1200.0, 2500.0]) if random.random() < 0.6 else 80.0
+            spike = (
+                random.choice([200.0, 500.0, 1200.0, 2500.0])
+                if random.random() < 0.6
+                else 80.0
+            )
             latency = spike + random.gauss(0, 10.0)
 
-        corpus.append((ts, MetricPoint(
-            timestamp=ts, service="kernel-service",
-            metric_name="latency_p95_ms", value=max(40.0, latency),
-        )))
+        corpus.append(
+            (
+                ts,
+                MetricPoint(
+                    timestamp=ts,
+                    service="kernel-service",
+                    metric_name="latency_p95_ms",
+                    value=max(40.0, latency),
+                ),
+            )
+        )
 
         # Logs: normais antes do minuto 5, novos templates depois
         if minute < 5:
@@ -639,7 +853,9 @@ def build_unknown_fault_corpus() -> list[CorpusItem]:
             # Começa misturando templates desconhecidos
             if random.random() < 0.5:
                 tpl = random.choice(novel_templates)
-                msg = tpl.format(addr=random.randint(0, 0xFFFFFFFF), n=random.randint(1000, 50000))
+                msg = tpl.format(
+                    addr=random.randint(0, 0xFFFFFFFF), n=random.randint(1000, 50000)
+                )
                 level = "WARNING"
             else:
                 tpl = random.choice(known_templates)
@@ -648,25 +864,48 @@ def build_unknown_fault_corpus() -> list[CorpusItem]:
         else:
             # Predominantemente templates novos + erros
             tpl = random.choice(novel_templates)
-            msg = tpl.format(addr=random.randint(0, 0xFFFFFFFF), n=random.randint(5000, 100000))
+            msg = tpl.format(
+                addr=random.randint(0, 0xFFFFFFFF), n=random.randint(5000, 100000)
+            )
             level = "ERROR"
 
-        corpus.append((ts, LogEntry(
-            timestamp=ts, level=level, service="kernel-service", message=msg,
-        )))
+        corpus.append(
+            (
+                ts,
+                LogEntry(
+                    timestamp=ts,
+                    level=level,
+                    service="kernel-service",
+                    message=msg,
+                ),
+            )
+        )
 
         # Spans — timeouts irregulares
-        dur = 60.0 if minute < 10 else (random.choice([500.0, 1500.0, 3000.0]) if random.random() < 0.5 else 100.0)
-        corpus.append((ts, Span(
-            trace_id=f"uf-tr-{minute:04d}",
-            span_id=f"uf-sp-{minute:04d}",
-            parent_span_id=None,
-            service="kernel-service",
-            operation="SYS /irq_handler",
-            start_time=ts,
-            duration_ms=max(10.0, dur + random.gauss(0, 5.0)),
-            status="OK" if minute < 10 else "ERROR",
-        )))
+        dur = (
+            60.0
+            if minute < 10
+            else (
+                random.choice([500.0, 1500.0, 3000.0])
+                if random.random() < 0.5
+                else 100.0
+            )
+        )
+        corpus.append(
+            (
+                ts,
+                Span(
+                    trace_id=f"uf-tr-{minute:04d}",
+                    span_id=f"uf-sp-{minute:04d}",
+                    parent_span_id=None,
+                    service="kernel-service",
+                    operation="SYS /irq_handler",
+                    start_time=ts,
+                    duration_ms=max(10.0, dur + random.gauss(0, 5.0)),
+                    status="OK" if minute < 10 else "ERROR",
+                ),
+            )
+        )
 
     corpus.sort(key=lambda x: x[0])
     return corpus

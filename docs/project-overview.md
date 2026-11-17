@@ -14,14 +14,14 @@ It demonstrates the full incident response pipeline in a single CLI application,
 
 | | |
 |---|---|
-| **Type** | Standalone CLI (Python 3.12) |
-| **Architecture** | Sequential pipeline + multi-agent state machine |
+| **Type** | CLI + HTTP/MCP/A2A/demo interfaces (Python 3.12+) |
+| **Architecture** | Hexagonal layers; dual engine (V0 `step_*` / V1 `BlueprintEngine`) + multi-agent state machine |
 | **LLM** | Anthropic Claude (claude-sonnet-4-20250514) |
 | **Data** | Simulated (deterministic with seed 42) |
 | **Papers** | 7 academic papers (2024-2025) |
-| **Files** | 15 source files, ~4,900 lines |
-| **Tests** | None (prototype) |
-| **Dependencies** | 9 (anthropic, drain3, sentence-transformers, faiss-cpu, torch, numpy, rich, python-dotenv, transformers) |
+| **Files** | 152 source files + 95 test files, ~57k lines Python |
+| **Tests** | ~1,370 tests (markers: unit / integration / snapshot / slow) |
+| **Dependencies** | 28 in `requirements.txt` (anthropic, drain3, sentence-transformers, faiss-cpu, torch, numpy, rich, python-dotenv, transformers, …) |
 
 ---
 
@@ -55,13 +55,25 @@ The agent processes this data and produces a diagnosis, mitigation proposal, and
 
 ```
 aiops-agent/
-├── main.py              # Entry point & pipeline orchestrator
+├── main.py              # CLI entry point (V0 step_* + V1 wiring)
+├── domain/              # Pure entities (stdlib dataclasses, no Pydantic)
+├── application/         # Use cases + ports (LLMClient, IncidentStore, Reporter)
+├── adapters/            # LLM / reporter / pipeline adapters
+├── blueprint/           # V1 engine, nodes and pipeline definitions
 ├── agents/              # Multi-agent decision layer
-├── pipeline/            # Data pre-processing
+├── pipeline/            # Data pre-processing (Python + optional Rust)
 ├── rag/                 # FAISS semantic search
 ├── safety/              # 4-layer safety mechanisms
-├── tools/               # ABC interfaces (MCP-ready)
+├── auth/                # OAuth 2.1 / PKCE / JWT / JWKS
+├── interfaces/          # HTTP, MCP, A2A, webhook, demo, CLI
+├── core/                # Logging, lifecycle, pipeline protocol
+├── app/                 # Composition root (builders)
+├── config/              # Config loader + defaults.yaml
+├── tools/               # External integrations (Databricks, Slack, Jira)
+├── rust/                # PyO3 extension (_aiops_rust, optional)
 ├── data/                # Simulated incident data
+├── infra/               # Docker/Grafana/webhook server provisioning
+├── validation/          # Knowledge/RAG validation scenarios
 ├── output/              # Generated postmortems
 └── docs/                # Project documentation
 ```

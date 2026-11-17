@@ -7,9 +7,6 @@ corretamente e que o limiar de risk_score < 30 é respeitado.
 
 from __future__ import annotations
 
-import os
-import tempfile
-
 import pytest
 
 from rag.memory import IncidentMemoryDB
@@ -31,6 +28,7 @@ def tmp_db(tmp_path):
 
 
 # ---- store_degradation_signature ----
+
 
 def test_store_stores_successfully(tmp_db):
     """Assinatura com risk_score >= 30 deve ser persistida sem erros."""
@@ -57,7 +55,9 @@ def test_store_skips_below_threshold(tmp_db):
 def test_store_at_boundary_threshold(tmp_db):
     """risk_score exatamente 30 deve ser armazenado (limiar inclusivo)."""
     signals = [_FakeSignal()]
-    tmp_db.store_degradation_signature(signals, risk_score=30.0, incident_id="inc-boundary")
+    tmp_db.store_degradation_signature(
+        signals, risk_score=30.0, incident_id="inc-boundary"
+    )
 
     results = tmp_db.query_similar_signatures(signals)
     ids = [r["incident_id"] for r in results]
@@ -92,6 +92,7 @@ def test_store_exception_propagates_to_pipeline_wrapper(tmp_db, monkeypatch):
     O pipeline (step_predict em main.py) é quem envolve a chamada em try/except.
     A própria função store não suprime erros de infraestrutura.
     """
+
     def _bad_connect():
         raise RuntimeError("simulated DB error")
 
@@ -99,11 +100,14 @@ def test_store_exception_propagates_to_pipeline_wrapper(tmp_db, monkeypatch):
 
     # Deve propagar — o wrapper do pipeline absorve
     with pytest.raises(RuntimeError, match="simulated DB error"):
-        tmp_db.store_degradation_signature([_FakeSignal()], risk_score=50.0, incident_id="inc-err")
+        tmp_db.store_degradation_signature(
+            [_FakeSignal()], risk_score=50.0, incident_id="inc-err"
+        )
 
 
 def test_pipeline_continues_on_rag_error(tmp_db, monkeypatch):
     """Simulação de erro RAG: store não deve interromper fluxo do pipeline."""
+
     def _raise(*args, **kwargs):
         raise OSError("disk full")
 
@@ -111,7 +115,9 @@ def test_pipeline_continues_on_rag_error(tmp_db, monkeypatch):
 
     raised = False
     try:
-        tmp_db.store_degradation_signature([_FakeSignal()], risk_score=70.0, incident_id="inc-x")
+        tmp_db.store_degradation_signature(
+            [_FakeSignal()], risk_score=70.0, incident_id="inc-x"
+        )
     except OSError:
         raised = True
 

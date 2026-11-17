@@ -83,22 +83,26 @@ class ValidationRunner:
                         temp_dir=tmpdir,
                     )
                     duration = (time.monotonic() - scenario_start) * 1000
-                    results.append(ScenarioResult(
-                        name=scenario.name,
-                        passed=result.passed,
-                        duration_ms=duration,
-                        details=result.details,
-                        expected=result.expected,
-                        actual=result.actual,
-                    ))
+                    results.append(
+                        ScenarioResult(
+                            name=scenario.name,
+                            passed=result.passed,
+                            duration_ms=duration,
+                            details=result.details,
+                            expected=result.expected,
+                            actual=result.actual,
+                        )
+                    )
                 except Exception as exc:
                     duration = (time.monotonic() - scenario_start) * 1000
-                    results.append(ScenarioResult(
-                        name=scenario.name,
-                        passed=False,
-                        duration_ms=duration,
-                        details=f"Exception: {exc}",
-                    ))
+                    results.append(
+                        ScenarioResult(
+                            name=scenario.name,
+                            passed=False,
+                            duration_ms=duration,
+                            details=f"Exception: {exc}",
+                        )
+                    )
                     logger.warning(
                         "validation.scenario_error",
                         extra={"scenario": scenario.name, "error": str(exc)},

@@ -7,6 +7,7 @@ get_trace, column mapping) e tratamento de erros estruturado via
 DatabricksConnectorError. Todos os testes usam mocks — nenhuma
 chamada real ao Databricks.
 """
+
 from __future__ import annotations
 
 import sys
@@ -16,7 +17,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tools.databricks_connector import (
-    DEFAULT_ALERTS_COLUMN_MAPPING,
     DEFAULT_COLUMN_MAPPING,
     DEFAULT_METRICS_COLUMN_MAPPING,
     DEFAULT_TRACES_COLUMN_MAPPING,
@@ -26,7 +26,6 @@ from tools.databricks_connector import (
     DatabricksMetricsSource,
     DatabricksTraceSource,
 )
-
 
 # --- Helpers ---
 
@@ -506,9 +505,7 @@ class TestErrorHandling:
     @pytest.mark.unit
     def test_error_classification_generic(self):
         """Excecao generica classifica como query error."""
-        result = DatabricksConnection._classify_error(
-            Exception("Something unexpected")
-        )
+        result = DatabricksConnection._classify_error(Exception("Something unexpected"))
         assert result == "query"
 
     @pytest.mark.unit
@@ -537,16 +534,11 @@ class TestLazyImport:
     def test_databricks_sdk_not_imported_at_module_level(self):
         """databricks.sdk nao e importado quando tools.databricks_connector e carregado."""
         # Recarregar para garantir estado limpo
-        # Verificar que nenhum modulo databricks.sdk.* esta carregado
-        # APOS importar nosso modulo
-        sdk_modules = [
-            m for m in sys.modules
-            if m.startswith("databricks.sdk")
-        ]
         # Pode ter sido importado por outro teste que chamou _get_client
         # O importante e que o import do modulo em si nao carrega o SDK
         # Testar via import fresco:
         import importlib
+
         # Limpar cache do SDK se existir
         sdk_keys = [k for k in sys.modules if k.startswith("databricks.sdk")]
         saved = {}
@@ -555,13 +547,9 @@ class TestLazyImport:
 
         try:
             # Re-importar nosso modulo
-            importlib.reload(
-                sys.modules["tools.databricks_connector"]
-            )
+            importlib.reload(sys.modules["tools.databricks_connector"])
             # Verificar que SDK nao foi carregado
-            sdk_after = [
-                m for m in sys.modules if m.startswith("databricks.sdk")
-            ]
+            sdk_after = [m for m in sys.modules if m.startswith("databricks.sdk")]
             assert len(sdk_after) == 0, (
                 f"databricks.sdk importado no nivel do modulo: {sdk_after}"
             )
@@ -826,8 +814,12 @@ class TestDatabricksMetricsSourceConstruction:
     @pytest.mark.unit
     def test_custom_column_mapping(self):
         """Column mapping customizado e respeitado."""
-        custom = {"timestamp": "ts", "service": "svc",
-                  "metric_name": "name", "value": "val"}
+        custom = {
+            "timestamp": "ts",
+            "service": "svc",
+            "metric_name": "name",
+            "value": "val",
+        }
         source = _make_metrics_source(column_mapping=custom)
         assert source.column_mapping == custom
 
@@ -851,8 +843,9 @@ class TestDatabricksMetricsSourceQuery:
     def test_query_happy_path_returns_correct_format(self):
         """query() retorna list[dict] com campos timestamp, service, metric, value."""
         source = _make_metrics_source()
-        with patch.object(source, "_execute_query",
-                          return_value=_sample_billing_rows()):
+        with patch.object(
+            source, "_execute_query", return_value=_sample_billing_rows()
+        ):
             results = source.query(
                 "COMPUTE", datetime(2026, 3, 4), datetime(2026, 3, 5)
             )
@@ -891,11 +884,9 @@ class TestDatabricksMetricsSourceQuery:
             captured_sql.append(sql)
             return []
 
-        with patch.object(source, "_execute_query",
-                          side_effect=mock_execute):
+        with patch.object(source, "_execute_query", side_effect=mock_execute):
             source.query(
-                "cpu", datetime(2026, 3, 4, 14, 0),
-                datetime(2026, 3, 4, 15, 0)
+                "cpu", datetime(2026, 3, 4, 14, 0), datetime(2026, 3, 4, 15, 0)
             )
 
         sql = captured_sql[0]
@@ -910,17 +901,16 @@ class TestDatabricksMetricsSourceQuery:
     def test_query_with_custom_column_mapping(self):
         """query() respeita column_mapping customizado."""
         custom_mapping = {
-            "timestamp": "ts", "service": "svc",
-            "metric_name": "name", "value": "val",
+            "timestamp": "ts",
+            "service": "svc",
+            "metric_name": "name",
+            "value": "val",
         }
         source = _make_metrics_source(column_mapping=custom_mapping)
-        rows = [{"ts": "2026-03-04", "svc": "web", "name": "rps",
-                 "val": "100.5"}]
+        rows = [{"ts": "2026-03-04", "svc": "web", "name": "rps", "val": "100.5"}]
 
         with patch.object(source, "_execute_query", return_value=rows):
-            results = source.query(
-                "rps", datetime(2026, 3, 4), datetime(2026, 3, 5)
-            )
+            results = source.query("rps", datetime(2026, 3, 4), datetime(2026, 3, 5))
 
         assert results[0]["timestamp"] == "2026-03-04"
         assert results[0]["service"] == "web"
@@ -943,13 +933,17 @@ class TestDatabricksMetricsSourceQuery:
     def test_query_value_conversion_handles_none(self):
         """query() converte None para 0.0 no campo value."""
         source = _make_metrics_source()
-        rows = [{"usage_date": "2026-03-04", "sku_name": "svc",
-                 "usage_unit": "DBU", "usage_quantity": None}]
+        rows = [
+            {
+                "usage_date": "2026-03-04",
+                "sku_name": "svc",
+                "usage_unit": "DBU",
+                "usage_quantity": None,
+            }
+        ]
 
         with patch.object(source, "_execute_query", return_value=rows):
-            results = source.query(
-                "svc", datetime(2026, 3, 4), datetime(2026, 3, 5)
-            )
+            results = source.query("svc", datetime(2026, 3, 4), datetime(2026, 3, 5))
 
         assert results[0]["value"] == 0.0
 
@@ -957,13 +951,17 @@ class TestDatabricksMetricsSourceQuery:
     def test_query_value_conversion_handles_invalid(self):
         """query() converte valor invalido para 0.0."""
         source = _make_metrics_source()
-        rows = [{"usage_date": "2026-03-04", "sku_name": "svc",
-                 "usage_unit": "DBU", "usage_quantity": "not_a_number"}]
+        rows = [
+            {
+                "usage_date": "2026-03-04",
+                "sku_name": "svc",
+                "usage_unit": "DBU",
+                "usage_quantity": "not_a_number",
+            }
+        ]
 
         with patch.object(source, "_execute_query", return_value=rows):
-            results = source.query(
-                "svc", datetime(2026, 3, 4), datetime(2026, 3, 5)
-            )
+            results = source.query("svc", datetime(2026, 3, 4), datetime(2026, 3, 5))
 
         assert results[0]["value"] == 0.0
 
@@ -991,8 +989,7 @@ class TestDatabricksMetricsSourceAlerts:
         """get_alerts() retorna list[dict] com campos alert, service, severity."""
         source = _make_metrics_source(alerts_table="custom.alerts")
 
-        with patch.object(source, "_execute_query",
-                          return_value=_sample_alerts_rows()):
+        with patch.object(source, "_execute_query", return_value=_sample_alerts_rows()):
             results = source.get_alerts()
 
         assert isinstance(results, list)
@@ -1025,8 +1022,7 @@ class TestDatabricksMetricsSourceAlerts:
             captured_sql.append(sql)
             return []
 
-        with patch.object(source, "_execute_query",
-                          side_effect=mock_execute):
+        with patch.object(source, "_execute_query", side_effect=mock_execute):
             source.get_alerts(active_only=True)
 
         assert "active" in captured_sql[0].lower()
@@ -1050,8 +1046,7 @@ class TestDatabricksMetricsSourceAlerts:
             captured_sql.append(sql)
             return []
 
-        with patch.object(source, "_execute_query",
-                          side_effect=mock_execute):
+        with patch.object(source, "_execute_query", side_effect=mock_execute):
             source.get_alerts(active_only=True)
 
         sql = captured_sql[0]
@@ -1068,8 +1063,7 @@ class TestDatabricksMetricsSourceAlerts:
             captured_sql.append(sql)
             return []
 
-        with patch.object(source, "_execute_query",
-                          side_effect=mock_execute):
+        with patch.object(source, "_execute_query", side_effect=mock_execute):
             source.get_alerts(active_only=False)
 
         sql = captured_sql[0]
@@ -1085,8 +1079,9 @@ class TestDatabricksMetricsSourceErrors:
         err_cls = _current_connector_error()
         source = _make_metrics_source()
 
-        with patch.object(source, "_execute_query",
-                          side_effect=TimeoutError("timed out")):
+        with patch.object(
+            source, "_execute_query", side_effect=TimeoutError("timed out")
+        ):
             with pytest.raises(err_cls) as exc_info:
                 source.query("test", datetime(2026, 3, 4), datetime(2026, 3, 5))
 
@@ -1098,8 +1093,9 @@ class TestDatabricksMetricsSourceErrors:
         err_cls = _current_connector_error()
         source = _make_metrics_source()
 
-        with patch.object(source, "_execute_query",
-                          side_effect=PermissionError("forbidden")):
+        with patch.object(
+            source, "_execute_query", side_effect=PermissionError("forbidden")
+        ):
             with pytest.raises(err_cls) as exc_info:
                 source.query("test", datetime(2026, 3, 4), datetime(2026, 3, 5))
 
@@ -1111,8 +1107,7 @@ class TestDatabricksMetricsSourceErrors:
         err_cls = _current_connector_error()
         source = _make_metrics_source()
 
-        with patch.object(source, "_execute_query",
-                          side_effect=RuntimeError("fail")):
+        with patch.object(source, "_execute_query", side_effect=RuntimeError("fail")):
             with pytest.raises(err_cls) as exc_info:
                 source.query("test", datetime(2026, 3, 4), datetime(2026, 3, 5))
 
@@ -1124,8 +1119,7 @@ class TestDatabricksMetricsSourceErrors:
         err_cls = _current_connector_error()
         source = _make_metrics_source(alerts_table="custom.alerts")
 
-        with patch.object(source, "_execute_query",
-                          side_effect=RuntimeError("fail")):
+        with patch.object(source, "_execute_query", side_effect=RuntimeError("fail")):
             with pytest.raises(err_cls) as exc_info:
                 source.get_alerts()
 
@@ -1137,12 +1131,13 @@ class TestDatabricksMetricsSourceErrors:
         err_cls = _current_connector_error()
         source = _make_metrics_source()
         original = err_cls(
-            service="test", error_type="query",
-            timestamp="2026-03-04", details="original error"
+            service="test",
+            error_type="query",
+            timestamp="2026-03-04",
+            details="original error",
         )
 
-        with patch.object(source, "_execute_query",
-                          side_effect=original):
+        with patch.object(source, "_execute_query", side_effect=original):
             with pytest.raises(err_cls) as exc_info:
                 source.query("test", datetime(2026, 3, 4), datetime(2026, 3, 5))
 
@@ -1184,8 +1179,14 @@ class TestDatabricksTraceSourceConstruction:
     @pytest.mark.unit
     def test_custom_column_mapping(self):
         """Column mapping customizado e respeitado."""
-        custom = {"trace_id": "id", "service": "svc", "operation": "op",
-                  "start_time": "ts", "duration_ms": "dur", "status": "st"}
+        custom = {
+            "trace_id": "id",
+            "service": "svc",
+            "operation": "op",
+            "start_time": "ts",
+            "duration_ms": "dur",
+            "status": "st",
+        }
         source = _make_trace_source(column_mapping=custom)
         assert source.column_mapping == custom
 
@@ -1198,8 +1199,9 @@ class TestDatabricksTraceSourceFindTraces:
         """find_traces() retorna list[dict] com campos esperados."""
         source = _make_trace_source()
 
-        with patch.object(source, "_execute_query",
-                          return_value=_sample_query_history_rows()):
+        with patch.object(
+            source, "_execute_query", return_value=_sample_query_history_rows()
+        ):
             results = source.find_traces("wh-prod-01")
 
         assert isinstance(results, list)
@@ -1238,8 +1240,7 @@ class TestDatabricksTraceSourceFindTraces:
             captured_sql.append(sql)
             return []
 
-        with patch.object(source, "_execute_query",
-                          side_effect=mock_execute):
+        with patch.object(source, "_execute_query", side_effect=mock_execute):
             source.find_traces(
                 service="wh-prod-01",
                 min_duration_ms=1000.0,
@@ -1266,8 +1267,7 @@ class TestDatabricksTraceSourceFindTraces:
             captured_sql.append(sql)
             return []
 
-        with patch.object(source, "_execute_query",
-                          side_effect=mock_execute):
+        with patch.object(source, "_execute_query", side_effect=mock_execute):
             source.find_traces("wh-prod-01")
 
         sql = captured_sql[0]
@@ -1288,9 +1288,16 @@ class TestDatabricksTraceSourceFindTraces:
     def test_find_traces_duration_conversion_handles_invalid(self):
         """find_traces() converte duracao invalida para 0.0."""
         source = _make_trace_source()
-        rows = [{"query_id": "q1", "warehouse_id": "wh",
-                 "statement_type": "SELECT", "query_start_time_ms": "2026-03-04",
-                 "duration": "not_a_number", "status": "OK"}]
+        rows = [
+            {
+                "query_id": "q1",
+                "warehouse_id": "wh",
+                "statement_type": "SELECT",
+                "query_start_time_ms": "2026-03-04",
+                "duration": "not_a_number",
+                "status": "OK",
+            }
+        ]
 
         with patch.object(source, "_execute_query", return_value=rows):
             results = source.find_traces("wh")
@@ -1300,11 +1307,25 @@ class TestDatabricksTraceSourceFindTraces:
     @pytest.mark.unit
     def test_find_traces_with_custom_column_mapping(self):
         """find_traces() respeita column_mapping customizado."""
-        custom = {"trace_id": "id", "service": "svc", "operation": "op",
-                  "start_time": "ts", "duration_ms": "dur", "status": "st"}
+        custom = {
+            "trace_id": "id",
+            "service": "svc",
+            "operation": "op",
+            "start_time": "ts",
+            "duration_ms": "dur",
+            "status": "st",
+        }
         source = _make_trace_source(column_mapping=custom)
-        rows = [{"id": "t1", "svc": "web", "op": "GET",
-                 "ts": "2026-03-04", "dur": "250", "st": "OK"}]
+        rows = [
+            {
+                "id": "t1",
+                "svc": "web",
+                "op": "GET",
+                "ts": "2026-03-04",
+                "dur": "250",
+                "st": "OK",
+            }
+        ]
 
         with patch.object(source, "_execute_query", return_value=rows):
             results = source.find_traces("web")
@@ -1369,8 +1390,7 @@ class TestDatabricksTraceSourceGetTrace:
             captured_sql.append(sql)
             return []
 
-        with patch.object(source, "_execute_query",
-                          side_effect=mock_execute):
+        with patch.object(source, "_execute_query", side_effect=mock_execute):
             source.get_trace("qry-001")
 
         sql = captured_sql[0]
@@ -1387,8 +1407,9 @@ class TestDatabricksTraceSourceErrors:
         err_cls = _current_connector_error()
         source = _make_trace_source()
 
-        with patch.object(source, "_execute_query",
-                          side_effect=TimeoutError("timed out")):
+        with patch.object(
+            source, "_execute_query", side_effect=TimeoutError("timed out")
+        ):
             with pytest.raises(err_cls) as exc_info:
                 source.find_traces("wh-prod-01")
 
@@ -1400,8 +1421,9 @@ class TestDatabricksTraceSourceErrors:
         err_cls = _current_connector_error()
         source = _make_trace_source()
 
-        with patch.object(source, "_execute_query",
-                          side_effect=PermissionError("forbidden")):
+        with patch.object(
+            source, "_execute_query", side_effect=PermissionError("forbidden")
+        ):
             with pytest.raises(err_cls) as exc_info:
                 source.find_traces("wh-prod-01")
 
@@ -1413,8 +1435,7 @@ class TestDatabricksTraceSourceErrors:
         err_cls = _current_connector_error()
         source = _make_trace_source()
 
-        with patch.object(source, "_execute_query",
-                          side_effect=RuntimeError("fail")):
+        with patch.object(source, "_execute_query", side_effect=RuntimeError("fail")):
             with pytest.raises(err_cls) as exc_info:
                 source.find_traces("wh-prod-01")
 
@@ -1426,8 +1447,7 @@ class TestDatabricksTraceSourceErrors:
         err_cls = _current_connector_error()
         source = _make_trace_source()
 
-        with patch.object(source, "_execute_query",
-                          side_effect=RuntimeError("fail")):
+        with patch.object(source, "_execute_query", side_effect=RuntimeError("fail")):
             with pytest.raises(err_cls) as exc_info:
                 source.get_trace("qry-001")
 
@@ -1439,12 +1459,13 @@ class TestDatabricksTraceSourceErrors:
         err_cls = _current_connector_error()
         source = _make_trace_source()
         original = err_cls(
-            service="test", error_type="query",
-            timestamp="2026-03-04", details="original error"
+            service="test",
+            error_type="query",
+            timestamp="2026-03-04",
+            details="original error",
         )
 
-        with patch.object(source, "_execute_query",
-                          side_effect=original):
+        with patch.object(source, "_execute_query", side_effect=original):
             with pytest.raises(err_cls) as exc_info:
                 source.find_traces("wh-prod-01")
 
@@ -1501,11 +1522,10 @@ class TestMetricsSourceCompliance:
         """query() retorna list[dict] conforme contrato ABC."""
         source = _make_metrics_source()
 
-        with patch.object(source, "_execute_query",
-                          return_value=_sample_billing_rows()):
-            results = source.query(
-                "test", datetime(2026, 3, 4), datetime(2026, 3, 5)
-            )
+        with patch.object(
+            source, "_execute_query", return_value=_sample_billing_rows()
+        ):
+            results = source.query("test", datetime(2026, 3, 4), datetime(2026, 3, 5))
 
         assert isinstance(results, list)
         for item in results:
@@ -1567,8 +1587,9 @@ class TestTraceSourceCompliance:
         """find_traces() retorna list[dict] conforme contrato ABC."""
         source = _make_trace_source()
 
-        with patch.object(source, "_execute_query",
-                          return_value=_sample_query_history_rows()):
+        with patch.object(
+            source, "_execute_query", return_value=_sample_query_history_rows()
+        ):
             results = source.find_traces("wh-prod-01")
 
         assert isinstance(results, list)

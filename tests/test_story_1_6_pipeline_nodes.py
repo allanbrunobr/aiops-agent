@@ -3,14 +3,14 @@
 Valida pipeline definition, ordem dos nodes, tipos, on_failure,
 e execucao dos adapters com dados simulados.
 """
+
 from __future__ import annotations
 
-import pytest
 from datetime import datetime, timezone
 
-from config.loader import AppConfig
-from blueprint.pipelines.incident_response import build_incident_response_pipeline
 from blueprint.nodes import NodeType, OnFailure
+from blueprint.pipelines.incident_response import build_incident_response_pipeline
+from config.loader import AppConfig
 
 
 def test_pipeline_has_correct_node_count():
@@ -26,8 +26,14 @@ def test_pipeline_node_order():
     pipeline = build_incident_response_pipeline(config)
     ids = [n.id for n in pipeline.nodes]
     assert ids == [
-        "sanitizer", "aggregator", "context_compressor", "diagnoser",
-        "version_validator", "pre_validator", "tnr", "postmortem",
+        "sanitizer",
+        "aggregator",
+        "context_compressor",
+        "diagnoser",
+        "version_validator",
+        "pre_validator",
+        "tnr",
+        "postmortem",
     ]
 
 
@@ -56,9 +62,9 @@ def test_agentic_nodes_have_fallback():
 def test_aggregator_adapter_produces_report():
     """Aggregator adapter deve produzir aggregated_report no estado."""
     from blueprint.adapters.pipeline_nodes import make_aggregator_node
+    from data.sample_incident import create_incident
     from domain.alert import NormalizedAlert
     from domain.incident_state import IncidentState
-    from data.sample_incident import create_incident
 
     config = AppConfig()
     adapter = make_aggregator_node(config)
@@ -70,7 +76,9 @@ def test_aggregator_adapter_produces_report():
         received_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         alert=NormalizedAlert(
-            source="test", source_id="t1", correlation_id="test-001",
+            source="test",
+            source_id="t1",
+            correlation_id="test-001",
             title="Test",
             description="Teste de pipeline node",
             severity="error",
@@ -96,10 +104,13 @@ def test_aggregator_adapter_produces_report():
 
 def test_diagnoser_fallback_produces_diagnosis():
     """Diagnoser fallback deve produzir diagnosis dict com shape correta."""
-    from blueprint.adapters.pipeline_nodes import make_aggregator_node, make_diagnoser_fallback
+    from blueprint.adapters.pipeline_nodes import (
+        make_aggregator_node,
+        make_diagnoser_fallback,
+    )
+    from data.sample_incident import create_incident
     from domain.alert import NormalizedAlert
     from domain.incident_state import IncidentState
-    from data.sample_incident import create_incident
 
     config = AppConfig()
     aggregator = make_aggregator_node(config)
@@ -112,7 +123,9 @@ def test_diagnoser_fallback_produces_diagnosis():
         received_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         alert=NormalizedAlert(
-            source="test", source_id="t2", correlation_id="test-002",
+            source="test",
+            source_id="t2",
+            correlation_id="test-002",
             title="Test",
             description="Teste de pipeline node",
             severity="error",
@@ -146,9 +159,9 @@ def test_diagnoser_fallback_produces_diagnosis():
 def test_full_pipeline_no_llm():
     """Pipeline completo em modo --no-llm deve produzir diagnosis e postmortem."""
     from blueprint.engine import BlueprintEngine
+    from data.sample_incident import create_incident
     from domain.alert import NormalizedAlert
     from domain.incident_state import IncidentState
-    from data.sample_incident import create_incident
 
     config = AppConfig()
     engine = BlueprintEngine(config)
@@ -161,7 +174,9 @@ def test_full_pipeline_no_llm():
         received_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         alert=NormalizedAlert(
-            source="test", source_id="t3", correlation_id="test-003",
+            source="test",
+            source_id="t3",
+            correlation_id="test-003",
             title="Test",
             description="Teste de pipeline node",
             severity="error",

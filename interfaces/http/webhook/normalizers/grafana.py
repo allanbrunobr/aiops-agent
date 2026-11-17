@@ -52,7 +52,9 @@ class GrafanaNormalizer(AlertNormalizer):
         """
         auth_header = headers.get("authorization", "")
         if not auth_header.startswith("Bearer "):
-            log.warning("grafana.auth_failed", reason="missing or invalid Authorization header")
+            log.warning(
+                "grafana.auth_failed", reason="missing or invalid Authorization header"
+            )
             return False
 
         received_token = auth_header[7:]  # Remove "Bearer "
@@ -103,7 +105,9 @@ class GrafanaNormalizer(AlertNormalizer):
         description = annotations.get("description") or annotations.get("summary", "")
         status = alert.get("status", "firing")
         severity_label = labels.get("severity", "")
-        severity = _SEVERITY_MAP.get(severity_label.lower(), _SEVERITY_MAP.get(status, "warning"))
+        severity = _SEVERITY_MAP.get(
+            severity_label.lower(), _SEVERITY_MAP.get(status, "warning")
+        )
 
         # Timestamp
         starts_at = alert.get("startsAt")

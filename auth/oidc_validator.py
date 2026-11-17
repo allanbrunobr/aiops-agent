@@ -11,10 +11,11 @@ Fluxo de validação:
   5. Valida assinatura RS256/ES256, exp, aud
   6. Mapeia claims para TokenClaims (sub, scopes, exp)
 """
+
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import httpx
 import jwt as pyjwt
@@ -27,8 +28,8 @@ from auth.jwt_validator import TokenClaims
 class TrustedIssuerConfig:
     """Configuração de um provedor de identidade externo confiável."""
 
-    issuer: str          # URL base do IdP (ex: "https://idp.partnera.example.com")
-    audience: str        # aud esperado nos tokens deste IdP
+    issuer: str  # URL base do IdP (ex: "https://idp.partnera.example.com")
+    audience: str  # aud esperado nos tokens deste IdP
     scope_claim: str = "scope"  # nome do claim que contém os scopes
 
 

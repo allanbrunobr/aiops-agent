@@ -5,8 +5,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
-_CANONICAL_SEVERITIES: frozenset[str] = frozenset({"critical", "error", "warning", "info"})
+_CANONICAL_SEVERITIES: frozenset[str] = frozenset(
+    {"critical", "error", "warning", "info"}
+)
 
 
 def normalize_severity(value: str) -> str:
@@ -90,4 +91,5 @@ class NormalizedAlertDTO(BaseModel):
     def to_domain(self):
         """Converte DTO em NormalizedAlert (dataclass de domínio)."""
         from domain.alert import NormalizedAlert
+
         return NormalizedAlert(**self.model_dump())

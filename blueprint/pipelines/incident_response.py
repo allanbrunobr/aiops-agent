@@ -5,29 +5,30 @@ com tipos explicitos e handlers de falha.
 
 Safety invariant: TODOS os 4 safety layers executam antes de qualquer action proposal.
 """
+
 from __future__ import annotations
 
-from config.loader import AppConfig
+from blueprint.adapters.pipeline_nodes import (
+    make_aggregator_node,
+    make_context_compressor_node,
+    make_diagnoser_fallback,
+    make_diagnoser_node,
+    make_postmortem_fallback,
+    make_postmortem_node,
+)
+from blueprint.adapters.safety_nodes import (
+    make_pre_validator_node,
+    make_sanitizer_node,
+    make_tnr_node,
+    make_version_validator_node,
+)
 from blueprint.nodes import (
     BlueprintNode,
     NodeType,
     OnFailure,
     PipelineDefinition,
 )
-from blueprint.adapters.pipeline_nodes import (
-    make_aggregator_node,
-    make_context_compressor_node,
-    make_diagnoser_node,
-    make_diagnoser_fallback,
-    make_postmortem_node,
-    make_postmortem_fallback,
-)
-from blueprint.adapters.safety_nodes import (
-    make_sanitizer_node,
-    make_pre_validator_node,
-    make_tnr_node,
-    make_version_validator_node,
-)
+from config.loader import AppConfig
 
 
 def build_incident_response_pipeline(config: AppConfig) -> PipelineDefinition:
@@ -64,7 +65,6 @@ def build_incident_response_pipeline(config: AppConfig) -> PipelineDefinition:
             on_failure=OnFailure.ABORT,
             description="AIOpsShield: sanitize telemetry against adversarial payloads",
         ),
-
         # === Deterministic Processing ===
         BlueprintNode(
             id="aggregator",
@@ -80,7 +80,6 @@ def build_incident_response_pipeline(config: AppConfig) -> PipelineDefinition:
             on_failure=OnFailure.SKIP,
             description="Acon+AOI context compression for LLM token optimization",
         ),
-
         # === Agentic Processing ===
         BlueprintNode(
             id="diagnoser",
@@ -90,7 +89,6 @@ def build_incident_response_pipeline(config: AppConfig) -> PipelineDefinition:
             fallback=make_diagnoser_fallback(config),
             description="ReAct loop with Claude for root cause analysis",
         ),
-
         # === Safety Layers 2-4: Post-diagnosis validation ===
         BlueprintNode(
             id="version_validator",
@@ -113,7 +111,6 @@ def build_incident_response_pipeline(config: AppConfig) -> PipelineDefinition:
             on_failure=OnFailure.ABORT,
             description="Transactional No-Regression health verification",
         ),
-
         # === Postmortem (after all safety checks) ===
         BlueprintNode(
             id="postmortem",

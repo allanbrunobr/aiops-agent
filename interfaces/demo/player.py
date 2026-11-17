@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 Player de cenário: avança o ponteiro de tempo simulado e fatia o corpus.
 
@@ -26,7 +27,9 @@ class ScenarioPlayer:
         self.speed_factor = speed_factor
 
         # Tempo de início simulado é o primeiro timestamp do corpus
-        self._sim_start: datetime = self._corpus[0][0] if self._corpus else datetime.utcnow()
+        self._sim_start: datetime = (
+            self._corpus[0][0] if self._corpus else datetime.utcnow()
+        )
         # sim_now aponta para o momento atual na simulação
         self._sim_now: datetime = self._sim_start
         # Índice do próximo evento ainda não entregue

@@ -19,7 +19,7 @@ class PipelineRecord:
     correlation_id: str
     started_at: datetime
     ended_at: datetime | None = None
-    status: str = "in_progress"          # "in_progress", "completed", "failed"
+    status: str = "in_progress"  # "in_progress", "completed", "failed"
     duration_ms: int | None = None
     stage_durations: dict[str, int] = field(default_factory=dict)
 
@@ -78,7 +78,8 @@ class PipelineMetricsCollector:
         """Calcula distribuição de latência (p50, p90, p99) em milissegundos."""
         self._prune_old_data()
         durations = sorted(
-            r.duration_ms for r in self._records.values()
+            r.duration_ms
+            for r in self._records.values()
             if r.status == "completed" and r.duration_ms is not None
         )
 
@@ -141,7 +142,8 @@ class PipelineMetricsCollector:
         """Remove registros mais antigos que o período de retenção."""
         cutoff = datetime.utcnow() - timedelta(hours=self._retention_hours)
         to_remove = [
-            cid for cid, r in self._records.items()
+            cid
+            for cid, r in self._records.items()
             if r.started_at < cutoff and r.status != "in_progress"
         ]
         for cid in to_remove:

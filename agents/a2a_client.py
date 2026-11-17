@@ -6,6 +6,7 @@ Implementa o protocolo A2A v0.3 (Linux Foundation):
 
 Requer httpx >= 0.27 para chamadas async.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -61,7 +62,9 @@ class A2AClient:
             response = await client.get(card_url, headers=self._auth_headers())
             response.raise_for_status()
             card: dict = response.json()
-            log.info("a2a.client.discovered", agent_url=agent_url, name=card.get("name"))
+            log.info(
+                "a2a.client.discovered", agent_url=agent_url, name=card.get("name")
+            )
             return card
 
     async def send_task(
@@ -122,9 +125,7 @@ class A2AClient:
 
         if "error" in body:
             err = body["error"]
-            raise ValueError(
-                f"A2A error {err.get('code')}: {err.get('message')}"
-            )
+            raise ValueError(f"A2A error {err.get('code')}: {err.get('message')}")
 
         result = body.get("result", {})
         log.info(

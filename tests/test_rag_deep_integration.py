@@ -8,23 +8,23 @@ EnrichmentNode / CotRetriever / DomainReranker.
 Evita imports pesados (torch, faiss, sentence_transformers) no topo.
 Usa mocks leves para simular FAISS e modelos de embedding.
 """
+
 from __future__ import annotations
 
-import json
 import datetime
+import json
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
 
-from rag.models import KnowledgePattern, KnowledgeSearchResult
-from rag.knowledge_store import KnowledgeStore
-from rag.knowledge_retriever import KnowledgeRetriever
-from rag.enrichment_node import RAGEnrichmentNode
 from rag.cot_retriever import CoTObservabilityRetriever, SearchContext
+from rag.enrichment_node import RAGEnrichmentNode
+from rag.knowledge_retriever import KnowledgeRetriever
+from rag.knowledge_store import KnowledgeStore
+from rag.models import KnowledgePattern, KnowledgeSearchResult
 from rag.query_expansion import QueryExpander
 from rag.reranker import DomainReranker, RankSignals
-
 
 # ── Helpers e Fakes ──────────────────────────────────────────────────────────
 
@@ -50,7 +50,8 @@ def _make_pattern(
         tags=tags or ["connection", "pool"],
         confidence=confidence,
         is_negative_example=is_negative,
-        created_at=created_at or datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        created_at=created_at
+        or datetime.datetime.now(datetime.timezone.utc).isoformat(),
     )
 
 
@@ -93,18 +94,21 @@ class _FakeIndexerComplete:
 
 class _FakeIndexerNoIndex:
     """Indexer sem indice FAISS."""
+
     index = None
     model = _MockModel()
 
 
 class _FakeIndexerNoModel:
     """Indexer com indice mas sem modelo."""
+
     index = object()
     model = None
 
 
 class _FakeIndexerNullBoth:
     """Indexer sem nenhum atributo index/model."""
+
     pass
 
 
@@ -133,6 +137,7 @@ class _FakeSearchResult:
 
 class _FakeObsIndexer:
     """ObservabilityIndexer fake — FAISS indisponivel."""
+
     index = None
     model = None
 
@@ -163,7 +168,9 @@ class TestKnowledgeRetrieverWithMocks:
     def test_no_attributes_returns_empty_gracefully(self):
         """Indexer sem atributos index/model retorna [] sem excecao."""
         patterns = [_make_pattern()]
-        retriever = KnowledgeRetriever(indexer=_FakeIndexerNullBoth(), patterns=patterns)
+        retriever = KnowledgeRetriever(
+            indexer=_FakeIndexerNullBoth(), patterns=patterns
+        )
         results = retriever.search_similar_incidents("any query")
         assert results == []
 
@@ -213,7 +220,9 @@ class TestKnowledgeRetrieverWithMocks:
     def test_top_k_limits_results(self):
         """top_k=2 com 5 padroes disponiveis retorna exatamente 2."""
         patterns = [
-            _make_pattern(pattern_id=f"p{i}", service=f"svc-{i}", root_cause=f"cause-{i}")
+            _make_pattern(
+                pattern_id=f"p{i}", service=f"svc-{i}", root_cause=f"cause-{i}"
+            )
             for i in range(5)
         ]
         distances = np.array([[0.99, 0.95, 0.90, 0.85, 0.80]], dtype=np.float32)
@@ -292,11 +301,13 @@ class TestKnowledgeStoreAtScale:
         """Adicionar 100 padroes e verificar que get_all_patterns() retorna 100."""
         store = KnowledgeStore(storage_path=str(tmp_path / "patterns.json"))
         for i in range(100):
-            store.add_pattern(_make_pattern(
-                pattern_id=f"pat-{i:03d}",
-                service=f"svc-{i % 10}",
-                root_cause=f"cause-{i}",
-            ))
+            store.add_pattern(
+                _make_pattern(
+                    pattern_id=f"pat-{i:03d}",
+                    service=f"svc-{i % 10}",
+                    root_cause=f"cause-{i}",
+                )
+            )
 
         all_patterns = store.get_all_patterns()
         assert len(all_patterns) == 100
@@ -336,15 +347,27 @@ class TestKnowledgeStoreAtScale:
         """find_by_service_and_cause() com multiplos servicos retorna o correto."""
         store = KnowledgeStore(storage_path=str(tmp_path / "patterns.json"))
 
-        store.add_pattern(_make_pattern(
-            pattern_id="p-payment", service="payment-svc", root_cause="pool exhausted",
-        ))
-        store.add_pattern(_make_pattern(
-            pattern_id="p-auth", service="auth-svc", root_cause="token expired",
-        ))
-        store.add_pattern(_make_pattern(
-            pattern_id="p-gateway", service="gateway-svc", root_cause="rate limit",
-        ))
+        store.add_pattern(
+            _make_pattern(
+                pattern_id="p-payment",
+                service="payment-svc",
+                root_cause="pool exhausted",
+            )
+        )
+        store.add_pattern(
+            _make_pattern(
+                pattern_id="p-auth",
+                service="auth-svc",
+                root_cause="token expired",
+            )
+        )
+        store.add_pattern(
+            _make_pattern(
+                pattern_id="p-gateway",
+                service="gateway-svc",
+                root_cause="rate limit",
+            )
+        )
 
         found = store.find_by_service_and_cause("auth-svc", "token expired")
         assert found is not None
@@ -571,7 +594,9 @@ class _MockKnowledgeRetriever:
         self.last_query: str | None = None
 
     def search_similar_incidents(
-        self, query: str, top_k: int = 5,
+        self,
+        query: str,
+        top_k: int = 5,
     ) -> list[KnowledgeSearchResult]:
         self.last_query = query
         if self._raises:
@@ -669,7 +694,11 @@ class TestEnrichmentNodePipeline:
         retriever = _MockKnowledgeRetriever(results=results)
         node = RAGEnrichmentNode(knowledge_retriever=retriever, top_k=5)
 
-        context = {"symptoms": ["err"], "affected_services": ["svc"], "error_summary": ""}
+        context = {
+            "symptoms": ["err"],
+            "affected_services": ["svc"],
+            "error_summary": "",
+        }
         result = node.execute(context)
 
         assert "cause-1" in result["rag_enrichment"]
@@ -702,11 +731,13 @@ class TestDomainRerankerIntegration:
             service_criticality_map={"payment-svc": 1.0, "logging-svc": 0.1},
         )
         r1 = _FakeSearchResult(
-            "payment error", score=0.5,
+            "payment error",
+            score=0.5,
             metadata={"service": "payment-svc", "level": "ERROR", "deviation": 8.0},
         )
         r2 = _FakeSearchResult(
-            "log rotation", score=0.9,
+            "log rotation",
+            score=0.9,
             metadata={"service": "logging-svc", "level": "INFO", "deviation": 0.5},
         )
 
@@ -726,8 +757,7 @@ class TestDomainRerankerIntegration:
         """Reranker retorna no maximo top_k resultados."""
         reranker = DomainReranker()
         results_in = [
-            _FakeSearchResult(f"result-{i}", score=0.5 + i * 0.05)
-            for i in range(10)
+            _FakeSearchResult(f"result-{i}", score=0.5 + i * 0.05) for i in range(10)
         ]
         results = reranker.rerank(results_in, query="test", top_k=3)
         assert len(results) == 3
@@ -794,7 +824,9 @@ class TestCoTRetrieverQueryExpanderPipeline:
         ]
         expanded = expander.expand_query("new query", history)
 
-        exclusion_part = expanded.split("excluding already investigated: ")[1].split(")")[0]
+        exclusion_part = expanded.split("excluding already investigated: ")[1].split(
+            ")"
+        )[0]
         entities_list = [e.strip() for e in exclusion_part.split(",")]
         assert len(entities_list) == len(set(entities_list))
 
@@ -865,7 +897,9 @@ class TestRankSignalsComputation:
     def test_compute_signals_service_default_criticality(self):
         """Servico desconhecido recebe criticidade default 0.5."""
         reranker = DomainReranker(service_criticality_map={"known-svc": 0.9})
-        result = _FakeSearchResult("test", score=0.5, metadata={"service": "unknown-svc"})
+        result = _FakeSearchResult(
+            "test", score=0.5, metadata={"service": "unknown-svc"}
+        )
         signals = reranker._compute_signals(result)
         assert signals.service_criticality == 0.5
 
@@ -873,7 +907,12 @@ class TestRankSignalsComputation:
         """Niveis de log sao mapeados corretamente para scores."""
         reranker = DomainReranker()
 
-        for level, expected in [("ERROR", 1.0), ("WARNING", 0.6), ("INFO", 0.3), ("DEBUG", 0.1)]:
+        for level, expected in [
+            ("ERROR", 1.0),
+            ("WARNING", 0.6),
+            ("INFO", 0.3),
+            ("DEBUG", 0.1),
+        ]:
             result = _FakeSearchResult("test", score=0.5, metadata={"level": level})
             signals = reranker._compute_signals(result)
             assert signals.log_level_score == expected, f"Falhou para nivel {level}"

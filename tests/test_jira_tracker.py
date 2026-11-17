@@ -4,6 +4,7 @@ Valida criação de issues, postmortem como comentário, tratamento
 de erros HTTP, validação de configuração e mapeamento de campos.
 Todos os testes mockam requests.post() — sem chamadas HTTP reais.
 """
+
 from __future__ import annotations
 
 import os
@@ -12,13 +13,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tools.jira_tracker import (
+    SEVERITY_PRIORITY_MAP,
     JiraIncidentTracker,
     JiraTrackerError,
-    SEVERITY_PRIORITY_MAP,
 )
 
-
 # --- Fixtures ---
+
 
 @pytest.fixture
 def jira_env(monkeypatch):
@@ -64,12 +65,16 @@ def mock_comment_ok():
 
 # --- TestValidateConfig ---
 
+
 class TestValidateConfig:
     """Testes para _validate_config()."""
 
     def test_raises_when_no_config(self):
         """Deve falhar listando todas as variáveis ausentes."""
-        env = {k: "" for k in ["JIRA_URL", "JIRA_PROJECT_KEY", "JIRA_EMAIL", "JIRA_API_TOKEN"]}
+        env = {
+            k: ""
+            for k in ["JIRA_URL", "JIRA_PROJECT_KEY", "JIRA_EMAIL", "JIRA_API_TOKEN"]
+        }
         with patch.dict(os.environ, env, clear=False):
             for key in ["JIRA_URL", "JIRA_PROJECT_KEY", "JIRA_EMAIL", "JIRA_API_TOKEN"]:
                 os.environ.pop(key, None)
@@ -133,6 +138,7 @@ class TestValidateConfig:
 
 # --- TestCreateIncident ---
 
+
 class TestCreateIncident:
     """Testes para create_incident()."""
 
@@ -154,7 +160,10 @@ class TestCreateIncident:
         fields = payload["fields"]
         assert fields["project"]["key"] == "OPS"
         assert fields["summary"] == "Connection pool exhaustion in payment-svc"
-        assert fields["description"] == "Root cause: config change reduced pool from 200 to 50"
+        assert (
+            fields["description"]
+            == "Root cause: config change reduced pool from 200 to 50"
+        )
         assert fields["labels"] == ["aiops-generated"]
         assert fields["issuetype"]["name"] == "Bug"
         assert fields["priority"]["name"] == "High"
@@ -204,6 +213,7 @@ class TestCreateIncident:
 
 # --- TestSeverityMapping ---
 
+
 class TestSeverityMapping:
     """Testes para mapeamento severity → Jira priority."""
 
@@ -236,7 +246,9 @@ class TestSeverityMapping:
         assert payload["fields"]["priority"]["name"] == "Low"
 
     @patch("requests.post")
-    def test_unknown_severity_defaults_to_medium(self, mock_post, tracker, mock_response_ok):
+    def test_unknown_severity_defaults_to_medium(
+        self, mock_post, tracker, mock_response_ok
+    ):
         mock_post.return_value = mock_response_ok
         tracker.create_incident("Test", "unknown-value", "desc")
         payload = mock_post.call_args.kwargs["json"]
@@ -252,10 +264,16 @@ class TestSeverityMapping:
     def test_severity_map_has_four_entries(self):
         """Mapa deve ter exatamente 4 entradas."""
         assert len(SEVERITY_PRIORITY_MAP) == 4
-        assert set(SEVERITY_PRIORITY_MAP.keys()) == {"critical", "high", "medium", "low"}
+        assert set(SEVERITY_PRIORITY_MAP.keys()) == {
+            "critical",
+            "high",
+            "medium",
+            "low",
+        }
 
 
 # --- TestCreatePostmortem ---
+
 
 class TestCreatePostmortem:
     """Testes para create_postmortem()."""
@@ -270,7 +288,10 @@ class TestCreatePostmortem:
             {"time": "14:23", "event": "Connection pool exhaustion"},
         ]
         root_cause = "Config change reduced connection pool from 200 to 50"
-        action_items = ["Add config validation to CI/CD", "Set up alerts for pool usage"]
+        action_items = [
+            "Add config validation to CI/CD",
+            "Set up alerts for pool usage",
+        ]
 
         tracker.create_postmortem("OPS-42", timeline, root_cause, action_items)
 
@@ -343,6 +364,7 @@ class TestCreatePostmortem:
 
 # --- TestErrorHandling ---
 
+
 class TestErrorHandling:
     """Testes para tratamento de erros HTTP."""
 
@@ -407,6 +429,7 @@ class TestErrorHandling:
     def test_connection_error_raises_network(self, mock_post, tracker):
         """ConnectionError deve gerar JiraTrackerError com error_type='network'."""
         import requests
+
         mock_post.side_effect = requests.ConnectionError("Connection refused")
 
         with pytest.raises(JiraTrackerError) as exc_info:
@@ -419,6 +442,7 @@ class TestErrorHandling:
     def test_timeout_raises_network(self, mock_post, tracker):
         """Timeout deve gerar JiraTrackerError com error_type='network'."""
         import requests
+
         mock_post.side_effect = requests.Timeout("Request timed out")
 
         with pytest.raises(JiraTrackerError) as exc_info:
@@ -459,6 +483,7 @@ class TestErrorHandling:
 
 # --- TestLazyImport ---
 
+
 class TestLazyImport:
     """Testes para verificar lazy-import de requests."""
 
@@ -483,14 +508,17 @@ class TestLazyImport:
 
 # --- TestJiraTrackerErrorDataclass ---
 
+
 class TestJiraTrackerErrorDataclass:
     """Testes para a dataclass JiraTrackerError."""
 
     def test_is_exception(self):
         """JiraTrackerError deve herdar de Exception."""
         error = JiraTrackerError(
-            service="test", error_type="test",
-            timestamp="2026-01-01", details="test error",
+            service="test",
+            error_type="test",
+            timestamp="2026-01-01",
+            details="test error",
         )
         assert isinstance(error, Exception)
 
@@ -502,13 +530,17 @@ class TestJiraTrackerErrorDataclass:
             timestamp="2026-03-07T10:00:00",
             details="Authentication failed",
         )
-        expected = "[auth] JiraIncidentTracker at 2026-03-07T10:00:00: Authentication failed"
+        expected = (
+            "[auth] JiraIncidentTracker at 2026-03-07T10:00:00: Authentication failed"
+        )
         assert str(error) == expected
 
     def test_exception_args(self):
         """args[0] deve conter details para compatibilidade com traceback."""
         error = JiraTrackerError(
-            service="test", error_type="test",
-            timestamp="2026-01-01", details="my error message",
+            service="test",
+            error_type="test",
+            timestamp="2026-01-01",
+            details="my error message",
         )
         assert error.args[0] == "my error message"

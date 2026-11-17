@@ -7,13 +7,12 @@ prediction.warning (risk < 60) e prediction.alert (risk >= 60).
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from interfaces.http.notifications.slack import SlackNotifier
 from interfaces.http.app import handle_prediction_event
+from interfaces.http.notifications.slack import SlackNotifier
 
 
 def _make_notifier(has_token: bool = True) -> SlackNotifier:
@@ -29,6 +28,7 @@ def _make_notifier(has_token: bool = True) -> SlackNotifier:
 
 
 # ---- _build_prediction_blocks ----
+
 
 def test_warning_level_header(tmp_path):
     """prediction.warning deve gerar header com emoji 📈 e risk score."""
@@ -82,14 +82,14 @@ def test_none_eta_shows_unknown():
 
     # Busca bloco de ETA
     eta_block = next(
-        b for b in blocks
-        if b.get("type") == "section" and "ETA" in b["text"]["text"]
+        b for b in blocks if b.get("type") == "section" and "ETA" in b["text"]["text"]
     )
     assert "Unknown" in eta_block["text"]["text"]
 
 
 def test_signals_listed_in_blocks():
     """Nomes dos sinais devem aparecer nos blocos."""
+
     class _FakeSignal:
         pass
 
@@ -104,7 +104,8 @@ def test_signals_listed_in_blocks():
 
     blocks = notifier._build_prediction_blocks(data)
     signals_block = next(
-        b for b in blocks
+        b
+        for b in blocks
         if b.get("type") == "section" and "Signals" in b["text"]["text"]
     )
     assert "_FakeSignal" in signals_block["text"]["text"]
@@ -123,7 +124,8 @@ def test_no_history_shows_fallback():
 
     blocks = notifier._build_prediction_blocks(data)
     history_block = next(
-        b for b in blocks
+        b
+        for b in blocks
         if b.get("type") == "section" and "Historical" in b["text"]["text"]
     )
     assert "No historical match" in history_block["text"]["text"]
@@ -138,19 +140,25 @@ def test_with_history_shows_incident_id():
         "eta_minutes": 3.0,
         "signals": [],
         "matched_history": [
-            {"incident_id": "inc-42", "similarity_score": 0.87, "outcome": "pre_incident risk=75.0"}
+            {
+                "incident_id": "inc-42",
+                "similarity_score": 0.87,
+                "outcome": "pre_incident risk=75.0",
+            }
         ],
     }
 
     blocks = notifier._build_prediction_blocks(data)
     history_block = next(
-        b for b in blocks
+        b
+        for b in blocks
         if b.get("type") == "section" and "Historical" in b["text"]["text"]
     )
     assert "inc-42" in history_block["text"]["text"]
 
 
 # ---- no Slack token ----
+
 
 @pytest.mark.asyncio
 async def test_no_token_no_exception():
@@ -172,6 +180,7 @@ async def test_no_token_no_exception():
 
 
 # ---- handle_prediction_event ----
+
 
 @pytest.mark.asyncio
 async def test_handle_warning_sends_message():

@@ -7,6 +7,7 @@ com on_failure=ABORT.
 INVARIANTE: Safety layers NUNCA dependem de LLM.
 INVARIANTE: Se safety falha, pipeline aborta.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -35,6 +36,7 @@ def make_sanitizer_node(config: AppConfig) -> Callable[[IncidentState], Incident
 
     INVARIANTE: Este node DEVE ser o primeiro no pipeline.
     """
+
     def execute(state: IncidentState) -> IncidentState:
         from pipeline.telemetry_sanitizer import TelemetrySanitizer
 
@@ -76,12 +78,15 @@ def make_sanitizer_node(config: AppConfig) -> Callable[[IncidentState], Incident
     return execute
 
 
-def make_version_validator_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]:
+def make_version_validator_node(
+    config: AppConfig,
+) -> Callable[[IncidentState], IncidentState]:
     """Cria adaptador para VersionValidator (Layer 4 — remediation safety).
 
     Valida que remediacoes propostas nao contem versoes com CVEs conhecidos
     ou padroes de ataque adversarial (downgrade, PPA, config weakening).
     """
+
     def execute(state: IncidentState) -> IncidentState:
         from safety.version_validator import VersionValidator
 
@@ -101,7 +106,9 @@ def make_version_validator_node(config: AppConfig) -> Callable[[IncidentState], 
         command = proposed_action.get("command", "")
         description = proposed_action.get("description", "")
 
-        result = validator.validate_remediation(command=command, description=description)
+        result = validator.validate_remediation(
+            command=command, description=description
+        )
 
         log.info(
             "safety.version_validator.completed",
@@ -112,7 +119,10 @@ def make_version_validator_node(config: AppConfig) -> Callable[[IncidentState], 
 
         # Se DANGEROUS ou MALICIOUS, bloqueia (raise -> on_failure=ABORT)
         if result.risk.value >= 2:  # DANGEROUS or MALICIOUS
-            safety_reasons = [*state.safety_reasons, f"VersionValidator: {result.risk.name}"]
+            safety_reasons = [
+                *state.safety_reasons,
+                f"VersionValidator: {result.risk.name}",
+            ]
             for pattern in result.blocked_patterns:
                 safety_reasons.append(f"  - {pattern}")
 
@@ -129,17 +139,23 @@ def make_version_validator_node(config: AppConfig) -> Callable[[IncidentState], 
 
         return dataclasses.replace(
             state,
-            safety_reasons=[*state.safety_reasons, f"VersionValidator: {result.risk.name}"],
+            safety_reasons=[
+                *state.safety_reasons,
+                f"VersionValidator: {result.risk.name}",
+            ],
         )
 
     return execute
 
 
-def make_pre_validator_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]:
+def make_pre_validator_node(
+    config: AppConfig,
+) -> Callable[[IncidentState], IncidentState]:
     """Cria adaptador para PreExecutionValidator (Layer 2 — pre-action safety).
 
     Valida blast radius, blocklist, e scoring de risco antes da execucao.
     """
+
     def execute(state: IncidentState) -> IncidentState:
         from safety.pre_validator import PreExecutionValidator
         from safety.tnr import MitigationAction
@@ -192,7 +208,11 @@ def make_pre_validator_node(config: AppConfig) -> Callable[[IncidentState], Inci
                 f"PreExecutionValidator blocked: {result.risk_level.value}"
             )
 
-        safety_verdict = "APPROVED" if result.approval_status.value in ("auto_approved", "approved") else "NEEDS_REVIEW"
+        safety_verdict = (
+            "APPROVED"
+            if result.approval_status.value in ("auto_approved", "approved")
+            else "NEEDS_REVIEW"
+        )
 
         return dataclasses.replace(
             state,
@@ -212,8 +232,9 @@ def make_tnr_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]
     Captura snapshot de health pre-acao, simula verificacao pos-acao.
     Se detecta regressao, bloqueia.
     """
+
     def execute(state: IncidentState) -> IncidentState:
-        from safety.tnr import TNRSafetyGuard, HealthSnapshot, MitigationAction
+        from safety.tnr import HealthSnapshot, MitigationAction, TNRSafetyGuard
 
         tnr = TNRSafetyGuard(
             regression_threshold=config.thresholds.regression_threshold,

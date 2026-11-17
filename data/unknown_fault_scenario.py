@@ -11,6 +11,7 @@ a retornar confidence="low" e o mitigator a usar o padrão "unknown".
 
 Módulo stdlib-only — não importa dependências pesadas (torch, faiss, etc.).
 """
+
 from __future__ import annotations
 
 import datetime
@@ -63,33 +64,44 @@ def generate_logs(count: int = 500) -> list[LogEntry]:
         logs.append(LogEntry(ts, "INFO", svc, random.choice(normal_msgs)))
 
     # --- Deploy event (10:00) ---
-    logs.append(LogEntry(
-        DEPLOY_TIME,
-        "INFO", "deployment-controller",
-        "Deployment data-processor updated: image=data-processor:v4.0.0, config=prod-2026-03-05-ser",
-    ))
-    logs.append(LogEntry(
-        DEPLOY_TIME + datetime.timedelta(seconds=3),
-        "INFO", PRIMARY_SERVICE,
-        "Application started: data-processor v4.0.0 with new serialization codec",
-    ))
-    logs.append(LogEntry(
-        DEPLOY_TIME + datetime.timedelta(seconds=5),
-        "INFO", PRIMARY_SERVICE,
-        "Configuration loaded: codec=avro-v2, batch_size=1000, compression=snappy",
-    ))
+    logs.append(
+        LogEntry(
+            DEPLOY_TIME,
+            "INFO",
+            "deployment-controller",
+            "Deployment data-processor updated: image=data-processor:v4.0.0, config=prod-2026-03-05-ser",
+        )
+    )
+    logs.append(
+        LogEntry(
+            DEPLOY_TIME + datetime.timedelta(seconds=3),
+            "INFO",
+            PRIMARY_SERVICE,
+            "Application started: data-processor v4.0.0 with new serialization codec",
+        )
+    )
+    logs.append(
+        LogEntry(
+            DEPLOY_TIME + datetime.timedelta(seconds=5),
+            "INFO",
+            PRIMARY_SERVICE,
+            "Configuration loaded: codec=avro-v2, batch_size=1000, compression=snappy",
+        )
+    )
 
     # --- Degradação gradual (10:00 - 10:12): erros intermitentes ---
     for i in range(50):
         ts = DEPLOY_TIME + datetime.timedelta(seconds=random.randint(30, 12 * 60))
-        progress = (ts - DEPLOY_TIME).total_seconds() / (SPIKE_START - DEPLOY_TIME).total_seconds()
+        progress = (ts - DEPLOY_TIME).total_seconds() / (
+            SPIKE_START - DEPLOY_TIME
+        ).total_seconds()
         progress = min(1.0, max(0.0, progress))
         err_rate = int(2 + progress * 15)
         warns = [
             f"Serialization error rate rising: {err_rate}% of payloads failing validation",
             f"Internal state checksum mismatch: expected {random.randint(1000, 9999):04x}, got {random.randint(1000, 9999):04x}",
             f"Retry count elevated: {int(3 + progress * 20)} retries in last 60s",
-            f"Payload validation failure: field 'event_id' has unexpected null value",
+            "Payload validation failure: field 'event_id' has unexpected null value",
         ]
         logs.append(LogEntry(ts, "WARN", PRIMARY_SERVICE, random.choice(warns)))
 
@@ -110,10 +122,19 @@ def generate_logs(count: int = 500) -> list[LogEntry]:
     for i in range(40):
         ts = SPIKE_START + datetime.timedelta(seconds=random.randint(60, 23 * 60))
         cascade_msgs = [
-            ("ingest-svc", f"Upstream data-processor returned 503 after {random.randint(5000, 15000)}ms"),
-            ("ingest-svc", f"Batch ingestion stalled: data-processor not accepting records"),
-            ("scheduler", f"Job dispatch failed: data-processor reporting unhealthy"),
-            ("storage-gw", f"Write pipeline blocked: data-processor not flushing buffers"),
+            (
+                "ingest-svc",
+                f"Upstream data-processor returned 503 after {random.randint(5000, 15000)}ms",
+            ),
+            (
+                "ingest-svc",
+                "Batch ingestion stalled: data-processor not accepting records",
+            ),
+            ("scheduler", "Job dispatch failed: data-processor reporting unhealthy"),
+            (
+                "storage-gw",
+                "Write pipeline blocked: data-processor not flushing buffers",
+            ),
         ]
         svc, msg = random.choice(cascade_msgs)
         logs.append(LogEntry(ts, "ERROR", svc, msg))
@@ -132,7 +153,9 @@ def generate_logs(count: int = 500) -> list[LogEntry]:
     return logs
 
 
-def generate_metrics(interval_seconds: int = 15, duration_minutes: int = 60) -> list[MetricPoint]:
+def generate_metrics(
+    interval_seconds: int = 15, duration_minutes: int = 60
+) -> list[MetricPoint]:
     """Gera séries temporais com anomalia no data-processor.
 
     Métricas primárias: error_rate_percent, cpu_usage_percent, latency_p99_ms,
@@ -157,7 +180,9 @@ def generate_metrics(interval_seconds: int = 15, duration_minutes: int = 60) -> 
             throughput = 50 + random.gauss(0, 10)
             retry_rate = 35 + random.gauss(0, 4)
         elif is_degrading:
-            progress = (ts - DEPLOY_TIME).total_seconds() / (SPIKE_START - DEPLOY_TIME).total_seconds()
+            progress = (ts - DEPLOY_TIME).total_seconds() / (
+                SPIKE_START - DEPLOY_TIME
+            ).total_seconds()
             error_rate = 0.5 + progress * 39.5 + random.gauss(0, 1)
             cpu = 35 + progress * 25 + random.gauss(0, 3)
             latency = 80 + progress * 2420 + random.gauss(0, 30)
@@ -170,27 +195,61 @@ def generate_metrics(interval_seconds: int = 15, duration_minutes: int = 60) -> 
             throughput = 500 + random.gauss(0, 20)
             retry_rate = 1 + random.gauss(0, 0.2)
 
-        metrics.append(MetricPoint(ts, PRIMARY_SERVICE, "error_rate_percent", max(0, error_rate)))
-        metrics.append(MetricPoint(ts, PRIMARY_SERVICE, "cpu_usage_percent", max(0, cpu)))
-        metrics.append(MetricPoint(ts, PRIMARY_SERVICE, "latency_p99_ms", max(1, latency)))
-        metrics.append(MetricPoint(ts, PRIMARY_SERVICE, "throughput_rps", max(0, throughput)))
-        metrics.append(MetricPoint(ts, PRIMARY_SERVICE, "retry_rate_percent", max(0, retry_rate)))
+        metrics.append(
+            MetricPoint(ts, PRIMARY_SERVICE, "error_rate_percent", max(0, error_rate))
+        )
+        metrics.append(
+            MetricPoint(ts, PRIMARY_SERVICE, "cpu_usage_percent", max(0, cpu))
+        )
+        metrics.append(
+            MetricPoint(ts, PRIMARY_SERVICE, "latency_p99_ms", max(1, latency))
+        )
+        metrics.append(
+            MetricPoint(ts, PRIMARY_SERVICE, "throughput_rps", max(0, throughput))
+        )
+        metrics.append(
+            MetricPoint(ts, PRIMARY_SERVICE, "retry_rate_percent", max(0, retry_rate))
+        )
 
         # --- ingest-svc metrics (leve impacto durante incidente) ---
-        ing_latency = (600 + random.gauss(0, 80)) if is_incident else (40 + random.gauss(0, 5))
-        ing_cpu = (30 + random.gauss(0, 4)) if is_incident else (20 + random.gauss(0, 2))
-        metrics.append(MetricPoint(ts, "ingest-svc", "latency_p99_ms", max(1, ing_latency)))
-        metrics.append(MetricPoint(ts, "ingest-svc", "cpu_usage_percent", max(0, ing_cpu)))
+        ing_latency = (
+            (600 + random.gauss(0, 80)) if is_incident else (40 + random.gauss(0, 5))
+        )
+        ing_cpu = (
+            (30 + random.gauss(0, 4)) if is_incident else (20 + random.gauss(0, 2))
+        )
+        metrics.append(
+            MetricPoint(ts, "ingest-svc", "latency_p99_ms", max(1, ing_latency))
+        )
+        metrics.append(
+            MetricPoint(ts, "ingest-svc", "cpu_usage_percent", max(0, ing_cpu))
+        )
 
         # --- scheduler metrics (saudável) ---
-        metrics.append(MetricPoint(ts, "scheduler", "cpu_usage_percent", max(0, 10 + random.gauss(0, 2))))
-        metrics.append(MetricPoint(ts, "scheduler", "latency_p99_ms", max(1, 20 + random.gauss(0, 3))))
+        metrics.append(
+            MetricPoint(
+                ts, "scheduler", "cpu_usage_percent", max(0, 10 + random.gauss(0, 2))
+            )
+        )
+        metrics.append(
+            MetricPoint(
+                ts, "scheduler", "latency_p99_ms", max(1, 20 + random.gauss(0, 3))
+            )
+        )
 
         # --- storage-gw metrics (saudável, leve impacto durante incidente) ---
-        stg_cpu = (18 + random.gauss(0, 3)) if is_incident else (10 + random.gauss(0, 2))
-        stg_latency = (35 + random.gauss(0, 6)) if is_incident else (12 + random.gauss(0, 2))
-        metrics.append(MetricPoint(ts, "storage-gw", "cpu_usage_percent", max(0, stg_cpu)))
-        metrics.append(MetricPoint(ts, "storage-gw", "latency_p99_ms", max(1, stg_latency)))
+        stg_cpu = (
+            (18 + random.gauss(0, 3)) if is_incident else (10 + random.gauss(0, 2))
+        )
+        stg_latency = (
+            (35 + random.gauss(0, 6)) if is_incident else (12 + random.gauss(0, 2))
+        )
+        metrics.append(
+            MetricPoint(ts, "storage-gw", "cpu_usage_percent", max(0, stg_cpu))
+        )
+        metrics.append(
+            MetricPoint(ts, "storage-gw", "latency_p99_ms", max(1, stg_latency))
+        )
 
     return metrics
 
@@ -206,11 +265,15 @@ def generate_traces(count: int = 100) -> list[Span]:
     for i in range(count):
         trace_id = f"trace-uf-{i:04d}"
         ts_offset = random.randint(0, 60 * 60)
-        base_ts = (DEPLOY_TIME - datetime.timedelta(minutes=30)) + datetime.timedelta(seconds=ts_offset)
+        base_ts = (DEPLOY_TIME - datetime.timedelta(minutes=30)) + datetime.timedelta(
+            seconds=ts_offset
+        )
         is_incident = base_ts >= SPIKE_START
 
         # Span 1: data-processor (root)
-        dp_duration = (3000 + random.gauss(0, 400)) if is_incident else (70 + random.gauss(0, 10))
+        dp_duration = (
+            (3000 + random.gauss(0, 400)) if is_incident else (70 + random.gauss(0, 10))
+        )
         dp_span = Span(
             trace_id=trace_id,
             span_id=f"span-uf-{i:04d}-dp",
@@ -228,7 +291,9 @@ def generate_traces(count: int = 100) -> list[Span]:
         traces.append(dp_span)
 
         # Span 2: ingest-svc
-        ing_duration = (800 + random.gauss(0, 150)) if is_incident else (35 + random.gauss(0, 5))
+        ing_duration = (
+            (800 + random.gauss(0, 150)) if is_incident else (35 + random.gauss(0, 5))
+        )
         ing_span = Span(
             trace_id=trace_id,
             span_id=f"span-uf-{i:04d}-ing",
@@ -243,14 +308,19 @@ def generate_traces(count: int = 100) -> list[Span]:
 
         # Span 3: storage-gw (não aparece se processo falhou antes)
         if not is_incident or random.random() > 0.5:
-            stg_duration = (150 + random.gauss(0, 30)) if is_incident else (10 + random.gauss(0, 2))
+            stg_duration = (
+                (150 + random.gauss(0, 30))
+                if is_incident
+                else (10 + random.gauss(0, 2))
+            )
             stg_span = Span(
                 trace_id=trace_id,
                 span_id=f"span-uf-{i:04d}-stg",
                 parent_span_id=ing_span.span_id,
                 service="storage-gw",
                 operation="PUT blob:batch:*",
-                start_time=ing_span.start_time + datetime.timedelta(milliseconds=ing_duration - 10),
+                start_time=ing_span.start_time
+                + datetime.timedelta(milliseconds=ing_duration - 10),
                 duration_ms=max(1, stg_duration),
                 status="OK",
                 attributes={"storage.backend": "s3"},
@@ -299,7 +369,7 @@ if __name__ == "__main__":
     print(f"Logs gerados: {len(incident.logs)}")
     print(f"Metric points: {len(incident.metrics)}")
     print(f"Trace spans: {len(incident.traces)}")
-    print(f"\nPrimeiros 5 logs:")
+    print("\nPrimeiros 5 logs:")
     for log in incident.logs[:5]:
         print(f"  {log}")
     print(f"\nRoot cause real: {incident.actual_root_cause}")

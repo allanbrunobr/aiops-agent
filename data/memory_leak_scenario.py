@@ -9,6 +9,7 @@ serviços e padrões de telemetria distintos.
 
 Módulo stdlib-only — não importa dependências pesadas (torch, faiss, etc.).
 """
+
 from __future__ import annotations
 
 import datetime
@@ -59,27 +60,38 @@ def generate_logs(count: int = 500) -> list[LogEntry]:
         logs.append(LogEntry(ts, "INFO", svc, random.choice(normal_msgs)))
 
     # --- Deploy event (16:00) ---
-    logs.append(LogEntry(
-        DEPLOY_TIME,
-        "INFO", "deployment-controller",
-        "Deployment api-server updated: image=api-server:v3.1.0, config=prod-2026-03-04-mem",
-    ))
-    logs.append(LogEntry(
-        DEPLOY_TIME + datetime.timedelta(seconds=3),
-        "INFO", PRIMARY_SERVICE,
-        "Application started: api-server v3.1.0 with HTTP client pool enabled",
-    ))
-    logs.append(LogEntry(
-        DEPLOY_TIME + datetime.timedelta(seconds=5),
-        "INFO", PRIMARY_SERVICE,
-        "Configuration loaded: http_client_pool_size=unlimited, connection_cleanup=disabled",
-    ))
+    logs.append(
+        LogEntry(
+            DEPLOY_TIME,
+            "INFO",
+            "deployment-controller",
+            "Deployment api-server updated: image=api-server:v3.1.0, config=prod-2026-03-04-mem",
+        )
+    )
+    logs.append(
+        LogEntry(
+            DEPLOY_TIME + datetime.timedelta(seconds=3),
+            "INFO",
+            PRIMARY_SERVICE,
+            "Application started: api-server v3.1.0 with HTTP client pool enabled",
+        )
+    )
+    logs.append(
+        LogEntry(
+            DEPLOY_TIME + datetime.timedelta(seconds=5),
+            "INFO",
+            PRIMARY_SERVICE,
+            "Configuration loaded: http_client_pool_size=unlimited, connection_cleanup=disabled",
+        )
+    )
 
     # --- Degradação gradual (16:00 - 16:15): memória subindo ---
     for i in range(50):
         ts = DEPLOY_TIME + datetime.timedelta(seconds=random.randint(30, 15 * 60))
         # Progresso de 0.0 a 1.0 dentro da janela de degradação.
-        progress = (ts - DEPLOY_TIME).total_seconds() / (SPIKE_START - DEPLOY_TIME).total_seconds()
+        progress = (ts - DEPLOY_TIME).total_seconds() / (
+            SPIKE_START - DEPLOY_TIME
+        ).total_seconds()
         progress = min(1.0, max(0.0, progress))
         heap_pct = int(40 + progress * 40)
         gc_ms = int(20 + progress * 300)
@@ -99,7 +111,7 @@ def generate_logs(count: int = 500) -> list[LogEntry]:
             f"OOM killer terminated process api-server (pid={random.randint(1000, 9999)}), used {heap_mb}MB",
             f"Java heap space exceeded: allocated {heap_mb}MB of {HEAP_LIMIT_MB}MB limit",
             f"Memory allocation failed: cannot allocate {random.randint(64, 256)}MB, heap at {heap_mb}MB/{HEAP_LIMIT_MB}MB",
-            f"OutOfMemoryError: heap space exhausted, triggering emergency GC",
+            "OutOfMemoryError: heap space exhausted, triggering emergency GC",
             f"Process restarted after OOM kill, uptime was {random.randint(30, 900)}s",
             f"Memory leak detected: {random.randint(500, 2000)} unclosed HTTP connections consuming {random.randint(200, 800)}MB",
         ]
@@ -109,10 +121,19 @@ def generate_logs(count: int = 500) -> list[LogEntry]:
     for i in range(40):
         ts = SPIKE_START + datetime.timedelta(seconds=random.randint(60, 15 * 60))
         cascade_msgs = [
-            ("worker-svc", f"Upstream api-server returned 503 after {random.randint(5000, 30000)}ms"),
-            ("worker-svc", f"Task dispatch failed: api-server unavailable (OOM restart in progress)"),
-            ("cache-svc", f"Connection to api-server refused: service restarting"),
-            ("db-proxy", f"Connection pool idle: api-server not sending queries (process down)"),
+            (
+                "worker-svc",
+                f"Upstream api-server returned 503 after {random.randint(5000, 30000)}ms",
+            ),
+            (
+                "worker-svc",
+                "Task dispatch failed: api-server unavailable (OOM restart in progress)",
+            ),
+            ("cache-svc", "Connection to api-server refused: service restarting"),
+            (
+                "db-proxy",
+                "Connection pool idle: api-server not sending queries (process down)",
+            ),
         ]
         svc, msg = random.choice(cascade_msgs)
         logs.append(LogEntry(ts, "ERROR", svc, msg))
@@ -131,7 +152,9 @@ def generate_logs(count: int = 500) -> list[LogEntry]:
     return logs
 
 
-def generate_metrics(interval_seconds: int = 15, duration_minutes: int = 60) -> list[MetricPoint]:
+def generate_metrics(
+    interval_seconds: int = 15, duration_minutes: int = 60
+) -> list[MetricPoint]:
     """Gera séries temporais com anomalia de memory leak no api-server.
 
     Métricas primárias: memory_usage_percent, cpu_usage_percent, gc_pause_ms,
@@ -157,7 +180,9 @@ def generate_metrics(interval_seconds: int = 15, duration_minutes: int = 60) -> 
             latency = 3500 + random.gauss(0, 500)
             error_rate = 35 + random.gauss(0, 5)
         elif is_degrading:
-            progress = (ts - DEPLOY_TIME).total_seconds() / (SPIKE_START - DEPLOY_TIME).total_seconds()
+            progress = (ts - DEPLOY_TIME).total_seconds() / (
+                SPIKE_START - DEPLOY_TIME
+            ).total_seconds()
             memory = 40 + progress * 52 + random.gauss(0, 1.5)
             cpu = 30 + progress * 45 + random.gauss(0, 3)
             gc_pause = 20 + progress * 580 + random.gauss(0, 20)
@@ -172,28 +197,62 @@ def generate_metrics(interval_seconds: int = 15, duration_minutes: int = 60) -> 
             latency = 100 + random.gauss(0, 12)
             error_rate = 0.1 + random.gauss(0, 0.03)
 
-        metrics.append(MetricPoint(ts, PRIMARY_SERVICE, "memory_usage_percent", max(0, memory)))
-        metrics.append(MetricPoint(ts, PRIMARY_SERVICE, "cpu_usage_percent", max(0, cpu)))
-        metrics.append(MetricPoint(ts, PRIMARY_SERVICE, "gc_pause_ms", max(0, gc_pause)))
-        metrics.append(MetricPoint(ts, PRIMARY_SERVICE, "heap_used_mb", max(0, heap_used)))
-        metrics.append(MetricPoint(ts, PRIMARY_SERVICE, "latency_p99_ms", max(1, latency)))
-        metrics.append(MetricPoint(ts, PRIMARY_SERVICE, "error_rate_percent", max(0, error_rate)))
+        metrics.append(
+            MetricPoint(ts, PRIMARY_SERVICE, "memory_usage_percent", max(0, memory))
+        )
+        metrics.append(
+            MetricPoint(ts, PRIMARY_SERVICE, "cpu_usage_percent", max(0, cpu))
+        )
+        metrics.append(
+            MetricPoint(ts, PRIMARY_SERVICE, "gc_pause_ms", max(0, gc_pause))
+        )
+        metrics.append(
+            MetricPoint(ts, PRIMARY_SERVICE, "heap_used_mb", max(0, heap_used))
+        )
+        metrics.append(
+            MetricPoint(ts, PRIMARY_SERVICE, "latency_p99_ms", max(1, latency))
+        )
+        metrics.append(
+            MetricPoint(ts, PRIMARY_SERVICE, "error_rate_percent", max(0, error_rate))
+        )
 
         # --- worker-svc metrics (leve impacto durante incidente) ---
-        wk_latency = (800 + random.gauss(0, 100)) if is_incident else (60 + random.gauss(0, 8))
+        wk_latency = (
+            (800 + random.gauss(0, 100)) if is_incident else (60 + random.gauss(0, 8))
+        )
         wk_cpu = (40 + random.gauss(0, 5)) if is_incident else (25 + random.gauss(0, 3))
-        metrics.append(MetricPoint(ts, "worker-svc", "latency_p99_ms", max(1, wk_latency)))
-        metrics.append(MetricPoint(ts, "worker-svc", "cpu_usage_percent", max(0, wk_cpu)))
+        metrics.append(
+            MetricPoint(ts, "worker-svc", "latency_p99_ms", max(1, wk_latency))
+        )
+        metrics.append(
+            MetricPoint(ts, "worker-svc", "cpu_usage_percent", max(0, wk_cpu))
+        )
 
         # --- cache-svc metrics (saudável) ---
-        metrics.append(MetricPoint(ts, "cache-svc", "cpu_usage_percent", max(0, 15 + random.gauss(0, 2))))
-        metrics.append(MetricPoint(ts, "cache-svc", "latency_p99_ms", max(1, 30 + random.gauss(0, 4))))
+        metrics.append(
+            MetricPoint(
+                ts, "cache-svc", "cpu_usage_percent", max(0, 15 + random.gauss(0, 2))
+            )
+        )
+        metrics.append(
+            MetricPoint(
+                ts, "cache-svc", "latency_p99_ms", max(1, 30 + random.gauss(0, 4))
+            )
+        )
 
         # --- db-proxy metrics (saudável, leve impacto durante incidente) ---
-        dbp_cpu = (22 + random.gauss(0, 3)) if is_incident else (12 + random.gauss(0, 2))
-        dbp_latency = (45 + random.gauss(0, 8)) if is_incident else (15 + random.gauss(0, 3))
-        metrics.append(MetricPoint(ts, "db-proxy", "cpu_usage_percent", max(0, dbp_cpu)))
-        metrics.append(MetricPoint(ts, "db-proxy", "latency_p99_ms", max(1, dbp_latency)))
+        dbp_cpu = (
+            (22 + random.gauss(0, 3)) if is_incident else (12 + random.gauss(0, 2))
+        )
+        dbp_latency = (
+            (45 + random.gauss(0, 8)) if is_incident else (15 + random.gauss(0, 3))
+        )
+        metrics.append(
+            MetricPoint(ts, "db-proxy", "cpu_usage_percent", max(0, dbp_cpu))
+        )
+        metrics.append(
+            MetricPoint(ts, "db-proxy", "latency_p99_ms", max(1, dbp_latency))
+        )
 
     return metrics
 
@@ -209,11 +268,15 @@ def generate_traces(count: int = 100) -> list[Span]:
     for i in range(count):
         trace_id = f"trace-ml-{i:04d}"
         ts_offset = random.randint(0, 60 * 60)
-        base_ts = (DEPLOY_TIME - datetime.timedelta(minutes=30)) + datetime.timedelta(seconds=ts_offset)
+        base_ts = (DEPLOY_TIME - datetime.timedelta(minutes=30)) + datetime.timedelta(
+            seconds=ts_offset
+        )
         is_incident = base_ts >= SPIKE_START
 
         # Span 1: api-server (root)
-        api_duration = (4000 + random.gauss(0, 600)) if is_incident else (90 + random.gauss(0, 12))
+        api_duration = (
+            (4000 + random.gauss(0, 600)) if is_incident else (90 + random.gauss(0, 12))
+        )
         api_span = Span(
             trace_id=trace_id,
             span_id=f"span-ml-{i:04d}-api",
@@ -224,14 +287,20 @@ def generate_traces(count: int = 100) -> list[Span]:
             duration_ms=max(1, api_duration),
             status="ERROR" if is_incident else "OK",
             attributes={
-                "jvm.heap_used_mb": (1950 + random.gauss(0, 50)) if is_incident else (512 + random.gauss(0, 30)),
-                "gc.pause_ms": (600 + random.gauss(0, 100)) if is_incident else (20 + random.gauss(0, 5)),
+                "jvm.heap_used_mb": (1950 + random.gauss(0, 50))
+                if is_incident
+                else (512 + random.gauss(0, 30)),
+                "gc.pause_ms": (600 + random.gauss(0, 100))
+                if is_incident
+                else (20 + random.gauss(0, 5)),
             },
         )
         traces.append(api_span)
 
         # Span 2: worker-svc
-        wk_duration = (1200 + random.gauss(0, 200)) if is_incident else (50 + random.gauss(0, 8))
+        wk_duration = (
+            (1200 + random.gauss(0, 200)) if is_incident else (50 + random.gauss(0, 8))
+        )
         wk_span = Span(
             trace_id=trace_id,
             span_id=f"span-ml-{i:04d}-wk",
@@ -246,14 +315,17 @@ def generate_traces(count: int = 100) -> list[Span]:
 
         # Span 3: redis (não aparece se processo morreu antes)
         if not is_incident or random.random() > 0.6:
-            redis_duration = (200 + random.gauss(0, 40)) if is_incident else (8 + random.gauss(0, 2))
+            redis_duration = (
+                (200 + random.gauss(0, 40)) if is_incident else (8 + random.gauss(0, 2))
+            )
             redis_span = Span(
                 trace_id=trace_id,
                 span_id=f"span-ml-{i:04d}-rd",
                 parent_span_id=wk_span.span_id,
                 service="redis",
                 operation="GET cache:task:*",
-                start_time=wk_span.start_time + datetime.timedelta(milliseconds=wk_duration - 10),
+                start_time=wk_span.start_time
+                + datetime.timedelta(milliseconds=wk_duration - 10),
                 duration_ms=max(1, redis_duration),
                 status="OK",
                 attributes={"db.system": "redis"},
@@ -301,7 +373,7 @@ if __name__ == "__main__":
     print(f"Logs gerados: {len(incident.logs)}")
     print(f"Metric points: {len(incident.metrics)}")
     print(f"Trace spans: {len(incident.traces)}")
-    print(f"\nPrimeiros 5 logs:")
+    print("\nPrimeiros 5 logs:")
     for log in incident.logs[:5]:
         print(f"  {log}")
     print(f"\nRoot cause real: {incident.actual_root_cause}")

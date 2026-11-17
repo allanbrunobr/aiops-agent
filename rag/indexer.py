@@ -13,9 +13,9 @@ import hashlib
 import json
 import os
 import sys
+from dataclasses import dataclass
 
 import numpy as np
-from dataclasses import dataclass
 
 # Cache de modelos para evitar recarga entre instâncias (evaluate cria nova instância por volume)
 _model_cache: dict[str, object] = {}
@@ -27,6 +27,7 @@ _embedding_cache: dict[str, np.ndarray] = {}
 @dataclass
 class IndexedChunk:
     """Um chunk indexado no FAISS."""
+
     text: str
     source: str  # "log", "metric", "trace"
     metadata: dict
@@ -49,6 +50,7 @@ class ObservabilityIndexer:
             else:
                 import torch
                 from sentence_transformers import SentenceTransformer
+
                 if torch.backends.mps.is_available():
                     device = "mps"
                 elif torch.cuda.is_available():
@@ -56,6 +58,7 @@ class ObservabilityIndexer:
                 else:
                     device = "cpu"
                 import os
+
                 offline = (
                     os.environ.get("HF_HUB_OFFLINE") == "1"
                     or os.environ.get("TRANSFORMERS_OFFLINE") == "1"
@@ -67,7 +70,9 @@ class ObservabilityIndexer:
                 )
                 _model_cache[self.model_name] = self.model
 
-    def build_index(self, log_templates: list, metric_anomalies: list, slow_traces: list):
+    def build_index(
+        self, log_templates: list, metric_anomalies: list, slow_traces: list
+    ):
         """Constrói o índice FAISS a partir dos dados processados."""
         import faiss
 
@@ -80,31 +85,52 @@ class ObservabilityIndexer:
             # Normaliza variantes textuais para melhorar keyword matching
             normalized = tpl.template.replace("timed out", "timed out timeout")
             text = f"[{tpl.level}] {svcs} {normalized}"
-            self.chunks.append(IndexedChunk(
-                text=text, source="log",
-                metadata={"level": tpl.level, "count": tpl.count, "services": list(tpl.services)},
-            ))
+            self.chunks.append(
+                IndexedChunk(
+                    text=text,
+                    source="log",
+                    metadata={
+                        "level": tpl.level,
+                        "count": tpl.count,
+                        "services": list(tpl.services),
+                    },
+                )
+            )
 
         # Indexa anomalias de métricas
         for anomaly in metric_anomalies:
             # Texto canônico: omite serviço e sigma para maximizar deduplicação
             text = f"anomaly {anomaly.metric_name} {anomaly.anomaly_type} sigma"
-            self.chunks.append(IndexedChunk(
-                text=text, source="metric",
-                metadata={"service": anomaly.service, "metric": anomaly.metric_name,
-                           "deviation": anomaly.deviation_sigma},
-            ))
+            self.chunks.append(
+                IndexedChunk(
+                    text=text,
+                    source="metric",
+                    metadata={
+                        "service": anomaly.service,
+                        "metric": anomaly.metric_name,
+                        "deviation": anomaly.deviation_sigma,
+                    },
+                )
+            )
 
         # Indexa traces lentos
         for trace in slow_traces:
             path_str = " -> ".join(trace.path)
             # Texto canônico sem duração para maximizar deduplicação entre escalas
-            text = f"slow trace {path_str} duration bottleneck {trace.bottleneck_service}"
-            self.chunks.append(IndexedChunk(
-                text=text, source="trace",
-                metadata={"path": trace.path, "duration_ms": trace.total_duration_ms,
-                           "bottleneck": trace.bottleneck_service},
-            ))
+            text = (
+                f"slow trace {path_str} duration bottleneck {trace.bottleneck_service}"
+            )
+            self.chunks.append(
+                IndexedChunk(
+                    text=text,
+                    source="trace",
+                    metadata={
+                        "path": trace.path,
+                        "duration_ms": trace.total_duration_ms,
+                        "bottleneck": trace.bottleneck_service,
+                    },
+                )
+            )
 
         # Gera embeddings com deduplicação + cache global entre volumes
         texts = [chunk.text for chunk in self.chunks]
@@ -124,7 +150,9 @@ class ObservabilityIndexer:
                 _embedding_cache[t] = emb
 
         # Constrói índice FAISS apenas sobre embeddings únicos (menos vetores = treino+busca mais rápidos)
-        unique_embs = np.array([_embedding_cache[t] for t in unique_texts], dtype=np.float32)
+        unique_embs = np.array(
+            [_embedding_cache[t] for t in unique_texts], dtype=np.float32
+        )
 
         # Mapeia posição no índice FAISS → índices de chunks (para retrieval correto)
         unique_to_idx = {t: i for i, t in enumerate(unique_texts)}
@@ -138,7 +166,9 @@ class ObservabilityIndexer:
             # IVFFlat sobre únicos: treino muito mais rápido que sobre todos os chunks
             nlist = min(100, max(4, nu // 39))
             quantizer = faiss.IndexFlatIP(dim)
-            self.index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
+            self.index = faiss.IndexIVFFlat(
+                quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT
+            )
             # Reduz iterações de k-means para treino mais rápido (5 suficiente para aproximação)
             self.index.cp.niter = 5
             self.index.train(unique_embs)
@@ -167,7 +197,9 @@ class ObservabilityIndexer:
             ValueError: Se o índice não foi construído (self.index is None).
         """
         if self.index is None:
-            raise ValueError("Índice FAISS não construído — chame build_index() antes de save_index()")
+            raise ValueError(
+                "Índice FAISS não construído — chame build_index() antes de save_index()"
+            )
 
         import faiss
 
@@ -191,7 +223,9 @@ class ObservabilityIndexer:
             "num_chunks": len(self.chunks),
             "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
-        with open(os.path.join(cache_dir, "index_meta.json"), "w", encoding="utf-8") as f:
+        with open(
+            os.path.join(cache_dir, "index_meta.json"), "w", encoding="utf-8"
+        ) as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
 
     def load_index(self, cache_dir: str, content_hash: str) -> bool:
@@ -220,7 +254,10 @@ class ObservabilityIndexer:
                 return False
 
             if not all(os.path.isfile(p) for p in [meta_path, chunks_path, faiss_path]):
-                print(f"[RAG Cache] Arquivos de cache incompletos em {cache_dir}", file=sys.stderr)
+                print(
+                    f"[RAG Cache] Arquivos de cache incompletos em {cache_dir}",
+                    file=sys.stderr,
+                )
                 return False
 
             # Carrega e valida metadados
@@ -256,6 +293,7 @@ class ObservabilityIndexer:
 
             # Carrega índice FAISS (binário) — import lazy para evitar carga em testes
             import faiss
+
             self.index = faiss.read_index(faiss_path)
 
             return True
@@ -268,7 +306,9 @@ class ObservabilityIndexer:
             return False
 
     @staticmethod
-    def _compute_content_hash(log_templates: list, metric_anomalies: list, slow_traces: list) -> str:
+    def _compute_content_hash(
+        log_templates: list, metric_anomalies: list, slow_traces: list
+    ) -> str:
         """Calcula SHA-256 do conteúdo a ser indexado.
 
         Gera representação textual determinística dos dados de entrada,
@@ -301,7 +341,11 @@ class ObservabilityIndexer:
 
         # Traces — ordena por path joined
         for t in sorted(slow_traces, key=lambda tr: "->".join(tr.path)):
-            attrs_str = ",".join(f"{k}={v}" for k, v in sorted(t.attributes.items())) if t.attributes else ""
+            attrs_str = (
+                ",".join(f"{k}={v}" for k, v in sorted(t.attributes.items()))
+                if t.attributes
+                else ""
+            )
             parts.append(
                 f"TRACE|{'->'.join(t.path)}|{t.total_duration_ms}|{t.normal_duration_ms}|"
                 f"{t.bottleneck_service}|{t.bottleneck_duration_ms}|{attrs_str}"
@@ -360,11 +404,18 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
                 f"Occurrences: {tpl.count}. "
                 f"Time range: {tpl.first_seen} to {tpl.last_seen}."
             )
-            chunks.append(IndexedChunk(
-                text=text,
-                source="log",
-                metadata={"level": tpl.level, "count": tpl.count, "services": list(tpl.services), "chunk_weight": 1.0},
-            ))
+            chunks.append(
+                IndexedChunk(
+                    text=text,
+                    source="log",
+                    metadata={
+                        "level": tpl.level,
+                        "count": tpl.count,
+                        "services": list(tpl.services),
+                        "chunk_weight": 1.0,
+                    },
+                )
+            )
 
         for anomaly in metric_anomalies:
             text = (
@@ -373,36 +424,44 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
                 f"Value: {anomaly.value} (baseline: {anomaly.mean}, deviation: {anomaly.deviation_sigma} sigma). "
                 f"Detected at: {anomaly.timestamp}."
             )
-            chunks.append(IndexedChunk(
-                text=text,
-                source="metric",
-                metadata={
-                    "service": anomaly.service,
-                    "metric": anomaly.metric_name,
-                    "deviation": anomaly.deviation_sigma,
-                    "chunk_weight": 1.0,
-                },
-            ))
+            chunks.append(
+                IndexedChunk(
+                    text=text,
+                    source="metric",
+                    metadata={
+                        "service": anomaly.service,
+                        "metric": anomaly.metric_name,
+                        "deviation": anomaly.deviation_sigma,
+                        "chunk_weight": 1.0,
+                    },
+                )
+            )
 
         for trace in slow_traces:
             path_str = " -> ".join(trace.path)
-            attrs = ", ".join(f"{k}={v}" for k, v in trace.attributes.items()) if trace.attributes else "none"
+            attrs = (
+                ", ".join(f"{k}={v}" for k, v in trace.attributes.items())
+                if trace.attributes
+                else "none"
+            )
             text = (
                 f"Slow trace: {path_str}. "
                 f"Duration: {trace.total_duration_ms:.0f}ms (normal: {trace.normal_duration_ms:.0f}ms). "
                 f"Bottleneck: {trace.bottleneck_service} ({trace.bottleneck_duration_ms:.0f}ms). "
                 f"Attributes: {attrs}."
             )
-            chunks.append(IndexedChunk(
-                text=text,
-                source="trace",
-                metadata={
-                    "path": trace.path,
-                    "duration_ms": trace.total_duration_ms,
-                    "bottleneck": trace.bottleneck_service,
-                    "chunk_weight": 1.0,
-                },
-            ))
+            chunks.append(
+                IndexedChunk(
+                    text=text,
+                    source="trace",
+                    metadata={
+                        "path": trace.path,
+                        "duration_ms": trace.total_duration_ms,
+                        "bottleneck": trace.bottleneck_service,
+                        "chunk_weight": 1.0,
+                    },
+                )
+            )
 
         if include_history:
             try:
@@ -428,16 +487,18 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
                         f"Confidence: {row['diagnosis_confidence']:.2f}. "
                         f"Resolution time: {row['resolution_time_sec']:.0f}s."
                     )
-                    chunks.append(IndexedChunk(
-                        text=text,
-                        source="historical",
-                        metadata={
-                            "incident_id": row["incident_id"],
-                            "scenario": row["scenario"],
-                            "is_historical": True,
-                            "chunk_weight": 0.5,
-                        },
-                    ))
+                    chunks.append(
+                        IndexedChunk(
+                            text=text,
+                            source="historical",
+                            metadata={
+                                "incident_id": row["incident_id"],
+                                "scenario": row["scenario"],
+                                "is_historical": True,
+                                "chunk_weight": 0.5,
+                            },
+                        )
+                    )
             except Exception:
                 # Degradação graciosa — continua sem histórico
                 pass
@@ -484,7 +545,9 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
         if n >= 40:
             nlist = min(100, max(4, n // 39))
             quantizer = faiss.IndexFlatIP(dim)
-            self.index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
+            self.index = faiss.IndexIVFFlat(
+                quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT
+            )
             self.index.cp.niter = 5
             self.index.train(embeddings)
             self.index.nprobe = max(1, min(nlist, 50 * nlist // max(n, 1)))

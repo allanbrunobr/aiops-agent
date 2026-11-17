@@ -1,23 +1,24 @@
 from __future__ import annotations
+
 """Testes unitários para pipeline.risk_scorer."""
 
 import pytest
 
 from pipeline.log_predictor import LogBurstSignal
-from pipeline.trace_predictor import LatencyDriftSignal
 from pipeline.risk_scorer import (
     MetricTrendSignal,
-    _score_metric_signal,
-    _score_log_signal,
     _score_latency_signal,
+    _score_log_signal,
+    _score_metric_signal,
     compute_risk_score,
     get_event_level,
 )
-
+from pipeline.trace_predictor import LatencyDriftSignal
 
 # ---------------------------------------------------------------------------
 # _score_metric_signal
 # ---------------------------------------------------------------------------
+
 
 def test_score_metric_none():
     assert _score_metric_signal(None) == 0.0
@@ -48,6 +49,7 @@ def test_score_metric_low_slope():
 # _score_log_signal
 # ---------------------------------------------------------------------------
 
+
 def test_score_log_none():
     assert _score_log_signal(None) == 0.0
 
@@ -65,28 +67,41 @@ def test_score_log_burst_only():
 
 def test_score_log_burst_with_novel_templates():
     # rate_ratio=2.0 → (2.0 - 1.0) * 50 = 50, +20 = 70
-    s = LogBurstSignal(burst_detected=True, rate_ratio=2.0, dominant_template=None,
-                       novel_templates=["tpl_new"])
+    s = LogBurstSignal(
+        burst_detected=True,
+        rate_ratio=2.0,
+        dominant_template=None,
+        novel_templates=["tpl_new"],
+    )
     assert _score_log_signal(s) == 70.0
 
 
 def test_score_log_burst_capped():
     # rate_ratio=10.0 → (10.0 - 1.0) * 50 = 450, capped at 100 + 20 = capped at 100
-    s = LogBurstSignal(burst_detected=True, rate_ratio=10.0, dominant_template=None,
-                       novel_templates=["tpl_new"])
+    s = LogBurstSignal(
+        burst_detected=True,
+        rate_ratio=10.0,
+        dominant_template=None,
+        novel_templates=["tpl_new"],
+    )
     assert _score_log_signal(s) == 100.0
 
 
 def test_score_log_no_burst_with_novel():
     # novel_templates mas sem burst → base=0 + 20 = 20
-    s = LogBurstSignal(burst_detected=False, rate_ratio=1.0, dominant_template=None,
-                       novel_templates=["tpl_new"])
+    s = LogBurstSignal(
+        burst_detected=False,
+        rate_ratio=1.0,
+        dominant_template=None,
+        novel_templates=["tpl_new"],
+    )
     assert _score_log_signal(s) == 20.0
 
 
 # ---------------------------------------------------------------------------
 # _score_latency_signal
 # ---------------------------------------------------------------------------
+
 
 def test_score_latency_none():
     assert _score_latency_signal(None) == 0.0
@@ -119,6 +134,7 @@ def test_score_latency_capped():
 # compute_risk_score
 # ---------------------------------------------------------------------------
 
+
 def test_compute_risk_all_none():
     assert compute_risk_score(None, None, None) == 0.0
 
@@ -144,7 +160,9 @@ def test_compute_risk_partial_signals():
 
 def test_compute_risk_bounded():
     metric = MetricTrendSignal(slope=100.0, change_point_detected=True)
-    log_s = LogBurstSignal(burst_detected=True, rate_ratio=100.0, dominant_template=None)
+    log_s = LogBurstSignal(
+        burst_detected=True, rate_ratio=100.0, dominant_template=None
+    )
     lat_s = LatencyDriftSignal(drift_detected=True, p95_ratio=100.0, p99_ratio=100.0)
     score = compute_risk_score(metric, log_s, lat_s)
     assert score <= 100.0
@@ -154,6 +172,7 @@ def test_compute_risk_bounded():
 # ---------------------------------------------------------------------------
 # get_event_level
 # ---------------------------------------------------------------------------
+
 
 def test_event_level_alert():
     assert get_event_level(60.0) == "prediction.alert"

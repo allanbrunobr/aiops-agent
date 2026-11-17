@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 
 import structlog
@@ -48,7 +47,7 @@ class TestConfigureLogging:
         root = logging.getLogger()
         handler = root.handlers[0]
         # O handler deve ter um formatter do structlog
-        assert hasattr(handler.formatter, 'processors')
+        assert hasattr(handler.formatter, "processors")
 
 
 class TestGetLogger:
@@ -178,4 +177,7 @@ class TestSecretRedaction:
         }
         result = _redact_secrets(None, "info", event_dict)
         assert "sk-ant-" not in result["detail"]
-        assert "sk-" not in result["detail"] or result["detail"] == "[REDACTED] and [REDACTED]"
+        assert (
+            "sk-" not in result["detail"]
+            or result["detail"] == "[REDACTED] and [REDACTED]"
+        )

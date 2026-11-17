@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
@@ -64,7 +63,8 @@ async def create_pattern(
     # Verifica duplicatas (mesmo serviço + causa raiz)
     duplicate_warning = None
     existing = knowledge_store.find_by_service_and_cause(
-        request.service, request.root_cause,
+        request.service,
+        request.root_cause,
     )
     if existing:
         duplicate_warning = (

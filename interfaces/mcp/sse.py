@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import jwt as pyjwt
 from fastapi import FastAPI, Request, Response
-from mcp.server.sse import SseServerTransport
 
 from auth.jwt_validator import MIN_HMAC_KEY_BYTES, validate_token
 from interfaces.mcp.server import (
@@ -27,6 +26,7 @@ from interfaces.mcp.server import (
     _enforce_scopes,
     create_server,
 )
+from mcp.server.sse import SseServerTransport
 
 # Estado do módulo — transporte e servidor MCP compartilhados
 _sse_transport: SseServerTransport | None = None
@@ -80,9 +80,11 @@ def mount_sse(
 
         # Phase 2 — inicializa OIDCValidator se auth_method="federated"
         if auth_method == "federated":
+            import structlog as _structlog
+
             from auth.oidc_validator import OIDCValidator
             from auth.oidc_validator import TrustedIssuerConfig as _OIDCTrustedIssuerCfg
-            import structlog as _structlog
+
             _log = _structlog.get_logger()
 
             trusted_raw = getattr(oauth_cfg, "trusted_issuers", []) if oauth_cfg else []
@@ -166,7 +168,6 @@ def mount_sse(
                 )
             raw_token = auth_header[7:]
             try:
-                import asyncio
                 claims = await _oidc_validator.validate(raw_token)  # type: ignore[union-attr]
             except pyjwt.ExpiredSignatureError:
                 return Response(
@@ -231,11 +232,23 @@ def mount_sse(
             try:
                 await _oidc_validator.validate(auth_header[7:])  # type: ignore[union-attr]
             except pyjwt.ExpiredSignatureError:
-                return Response(status_code=401, content='{"error":"token_expired"}', media_type="application/json")
+                return Response(
+                    status_code=401,
+                    content='{"error":"token_expired"}',
+                    media_type="application/json",
+                )
             except pyjwt.InvalidTokenError:
-                return Response(status_code=401, content='{"error":"invalid_token"}', media_type="application/json")
+                return Response(
+                    status_code=401,
+                    content='{"error":"invalid_token"}',
+                    media_type="application/json",
+                )
             except Exception:
-                return Response(status_code=503, content='{"error":"idp_unavailable"}', media_type="application/json")
+                return Response(
+                    status_code=503,
+                    content='{"error":"idp_unavailable"}',
+                    media_type="application/json",
+                )
         else:
             authenticated = _authenticate(request)
             if isinstance(authenticated, Response):

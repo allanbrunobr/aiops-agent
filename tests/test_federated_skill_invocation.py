@@ -13,6 +13,7 @@ Cenários:
   - Enforcement de scopes
   - Tokens expirados/inválidos rejeitados pelo OIDCValidator
 """
+
 from __future__ import annotations
 
 import time
@@ -26,7 +27,6 @@ from fastapi.testclient import TestClient
 from auth.keys import generate_rsa_keypair, public_key_to_jwk
 from auth.oidc_validator import OIDCValidator, TrustedIssuerConfig
 from interfaces.http.routes.a2a import router as a2a_router
-
 
 # ---------------------------------------------------------------------------
 # Constantes
@@ -100,9 +100,21 @@ class _MockRetriever:
 
     async def retrieve(self, query: str, top_k: int = 5) -> list[dict]:
         incidents = [
-            {"id": "inc-2024-001", "summary": "CPU spike — scaled out workers", "score": 0.91},
-            {"id": "inc-2024-002", "summary": "Memory leak — rolling restart", "score": 0.87},
-            {"id": "inc-2024-003", "summary": "DB connection pool exhaustion", "score": 0.83},
+            {
+                "id": "inc-2024-001",
+                "summary": "CPU spike — scaled out workers",
+                "score": 0.91,
+            },
+            {
+                "id": "inc-2024-002",
+                "summary": "Memory leak — rolling restart",
+                "score": 0.87,
+            },
+            {
+                "id": "inc-2024-003",
+                "summary": "DB connection pool exhaustion",
+                "score": 0.83,
+            },
         ]
         return incidents[:top_k]
 
@@ -176,27 +188,34 @@ def _make_a2a_app() -> FastAPI:
     return app
 
 
-def _send_task(client: TestClient, skill_id: str, data: dict, task_id: str = "task-001") -> dict:
+def _send_task(
+    client: TestClient, skill_id: str, data: dict, task_id: str = "task-001"
+) -> dict:
     """Envia tarefa A2A via POST /a2a/tasks e retorna a resposta JSON."""
     from auth.jwt_validator import issue_token
+
     token = issue_token(
         "assistant-agent",
         ["aiops:diagnose", "aiops:search", "aiops:validate"],
         _A2A_SECRET,
     )
-    resp = client.post("/a2a/tasks", headers={"Authorization": f"Bearer {token}"}, json={
-        "jsonrpc": "2.0",
-        "method": "tasks/send",
-        "id": "rpc-1",
-        "params": {
-            "id": task_id,
-            "skill": {"id": skill_id},
-            "message": {
-                "role": "user",
-                "parts": [{"type": "data", "data": data}],
+    resp = client.post(
+        "/a2a/tasks",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "jsonrpc": "2.0",
+            "method": "tasks/send",
+            "id": "rpc-1",
+            "params": {
+                "id": task_id,
+                "skill": {"id": skill_id},
+                "message": {
+                    "role": "user",
+                    "parts": [{"type": "data", "data": data}],
+                },
             },
         },
-    })
+    )
     return resp
 
 
@@ -220,7 +239,9 @@ class TestFederatedAgentDiagnose:
         token = _make_token(priv, sub="assistant-bot", scopes="aiops:diagnose")
 
         validator = OIDCValidator(
-            trusted_issuers=[TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)]
+            trusted_issuers=[
+                TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)
+            ]
         )
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERA), partnera_jwks)
 
@@ -269,7 +290,11 @@ class TestFederatedAgentDiagnose:
             resp = _send_task(
                 client,
                 skill_id="diagnose_incident",
-                data={"source": "prometheus", "severity": "high", "service": "api-gateway"},
+                data={
+                    "source": "prometheus",
+                    "severity": "high",
+                    "service": "api-gateway",
+                },
                 task_id="partnera-incident-002",
             )
 
@@ -294,7 +319,9 @@ class TestFederatedAgentDiagnose:
         )
 
         validator = OIDCValidator(
-            trusted_issuers=[TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)]
+            trusted_issuers=[
+                TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)
+            ]
         )
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERA), partnera_jwks)
 
@@ -332,7 +359,9 @@ class TestFederatedAgentSearch:
         )
 
         validator = OIDCValidator(
-            trusted_issuers=[TrustedIssuerConfig(issuer=_ISSUER_PARTNERB, audience=_AUDIENCE)]
+            trusted_issuers=[
+                TrustedIssuerConfig(issuer=_ISSUER_PARTNERB, audience=_AUDIENCE)
+            ]
         )
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERB), partnerb_jwks)
 
@@ -438,14 +467,18 @@ class TestFederatedMultiAgentWorkflow:
         )
 
         # Valida token PartnerA
-        partnera_mock = _mock_idp_client(_make_discovery(_ISSUER_PARTNERA), partnera_jwks)
+        partnera_mock = _mock_idp_client(
+            _make_discovery(_ISSUER_PARTNERA), partnera_jwks
+        )
         with patch("httpx.AsyncClient", return_value=partnera_mock):
             partnera_claims = await validator.validate(partnera_token)
 
         assert partnera_claims.sub == "assistant-bot"
 
         # Valida token PartnerB (usa cache do validator para PartnerA, faz discovery da PartnerB)
-        partnerb_mock = _mock_idp_client(_make_discovery(_ISSUER_PARTNERB), partnerb_jwks)
+        partnerb_mock = _mock_idp_client(
+            _make_discovery(_ISSUER_PARTNERB), partnerb_jwks
+        )
         with patch("httpx.AsyncClient", return_value=partnerb_mock):
             partnerb_claims = await validator.validate(partnerb_token)
 
@@ -549,7 +582,9 @@ class TestFederatedTokenScopes:
         token = _make_token(priv, scopes="aiops:search")
 
         validator = OIDCValidator(
-            trusted_issuers=[TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)]
+            trusted_issuers=[
+                TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)
+            ]
         )
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERA), partnera_jwks)
 
@@ -571,7 +606,9 @@ class TestFederatedTokenScopes:
         token = _make_token(priv, scopes="aiops:diagnose")
 
         validator = OIDCValidator(
-            trusted_issuers=[TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)]
+            trusted_issuers=[
+                TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)
+            ]
         )
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERA), partnera_jwks)
 
@@ -626,14 +663,20 @@ class TestFederatedTokenScopes:
         )
 
         validator = OIDCValidator(
-            trusted_issuers=[TrustedIssuerConfig(issuer=_ISSUER_PARTNERB, audience=_AUDIENCE)]
+            trusted_issuers=[
+                TrustedIssuerConfig(issuer=_ISSUER_PARTNERB, audience=_AUDIENCE)
+            ]
         )
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERB), partnerb_jwks)
 
         with patch("httpx.AsyncClient", return_value=mock_client):
             claims = await validator.validate(token)
 
-        assert set(claims.scopes) == {"aiops:diagnose", "aiops:search", "aiops:validate"}
+        assert set(claims.scopes) == {
+            "aiops:diagnose",
+            "aiops:search",
+            "aiops:validate",
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -656,7 +699,9 @@ class TestFederatedTokenExpiry:
         token = _make_token(priv, exp_offset=-60)  # expirou há 60 segundos
 
         validator = OIDCValidator(
-            trusted_issuers=[TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)]
+            trusted_issuers=[
+                TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)
+            ]
         )
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERA), partnera_jwks)
 
@@ -676,7 +721,9 @@ class TestFederatedTokenExpiry:
         token = _make_token(priv, aud="wrong-service")
 
         validator = OIDCValidator(
-            trusted_issuers=[TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)]
+            trusted_issuers=[
+                TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)
+            ]
         )
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERA), partnera_jwks)
 
@@ -696,7 +743,9 @@ class TestFederatedTokenExpiry:
 
         # Validator sem nenhum issuer confiável configurado para o attacker
         validator = OIDCValidator(
-            trusted_issuers=[TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)]
+            trusted_issuers=[
+                TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)
+            ]
         )
 
         # Não deve fazer chamada HTTP — deve falhar antes
@@ -718,7 +767,9 @@ class TestFederatedTokenExpiry:
         corrupted_token = ".".join(parts)
 
         validator = OIDCValidator(
-            trusted_issuers=[TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)]
+            trusted_issuers=[
+                TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)
+            ]
         )
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERA), partnera_jwks)
 
@@ -731,7 +782,9 @@ class TestFederatedTokenExpiry:
     async def test_malformed_jwt_raises_invalid_token_error(self) -> None:
         """JWT malformado (não é um JWT válido) deve lançar InvalidTokenError."""
         validator = OIDCValidator(
-            trusted_issuers=[TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)]
+            trusted_issuers=[
+                TrustedIssuerConfig(issuer=_ISSUER_PARTNERA, audience=_AUDIENCE)
+            ]
         )
 
         with pytest.raises(pyjwt.InvalidTokenError):
@@ -754,7 +807,9 @@ class TestFederatedTokenExpiry:
         )
 
         validator = OIDCValidator(
-            trusted_issuers=[TrustedIssuerConfig(issuer=_ISSUER_PARTNERB, audience=_AUDIENCE)]
+            trusted_issuers=[
+                TrustedIssuerConfig(issuer=_ISSUER_PARTNERB, audience=_AUDIENCE)
+            ]
         )
         # JWKS retorna a chave pública da PartnerB → assinatura não bate
         mock_client = _mock_idp_client(_make_discovery(_ISSUER_PARTNERB), partnerb_jwks)

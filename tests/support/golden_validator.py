@@ -54,34 +54,40 @@ def validate_against_golden(
     # Check 1: Incidente declarado
     expected_declared = golden["expected_detection"]["incident_declared"]
     actual_declared = actual_output.get("incident_declared", False)
-    checks.append(ValidationCheck(
-        name="incident_declared",
-        passed=expected_declared == actual_declared,
-        expected=str(expected_declared),
-        actual=str(actual_declared),
-    ))
+    checks.append(
+        ValidationCheck(
+            name="incident_declared",
+            passed=expected_declared == actual_declared,
+            expected=str(expected_declared),
+            actual=str(actual_declared),
+        )
+    )
 
     # Check 2: Serviços afetados (subset match)
     expected_services = set(golden["expected_affected_services"])
     actual_services = set(actual_output.get("affected_services", []))
     missing = expected_services - actual_services
-    checks.append(ValidationCheck(
-        name="affected_services",
-        passed=expected_services.issubset(actual_services),
-        expected=str(sorted(expected_services)),
-        actual=str(sorted(actual_services)),
-        diff=str(missing) if missing else "",
-    ))
+    checks.append(
+        ValidationCheck(
+            name="affected_services",
+            passed=expected_services.issubset(actual_services),
+            expected=str(sorted(expected_services)),
+            actual=str(sorted(actual_services)),
+            diff=str(missing) if missing else "",
+        )
+    )
 
     # Check 3: Causa raiz (substring match para modo heurístico)
     expected_contains = golden["expected_diagnosis"]["root_cause_contains"]
     actual_root_cause = actual_output.get("root_cause", "").lower()
-    checks.append(ValidationCheck(
-        name="root_cause_contains",
-        passed=expected_contains.lower() in actual_root_cause,
-        expected=f"contains '{expected_contains}'",
-        actual=actual_root_cause[:200],
-    ))
+    checks.append(
+        ValidationCheck(
+            name="root_cause_contains",
+            passed=expected_contains.lower() in actual_root_cause,
+            expected=f"contains '{expected_contains}'",
+            actual=actual_root_cause[:200],
+        )
+    )
 
     all_passed = all(c.passed for c in checks)
     return ValidationResult(

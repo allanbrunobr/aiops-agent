@@ -19,7 +19,9 @@ from typing import Any
 from domain.alert import NormalizedAlert
 
 # Verditos validos para o endpoint de accuracy (consumido por server/api/accuracy.py)
-VALID_ACCURACY_VERDICTS = frozenset({"correct", "partially_correct", "incorrect", "false_positive"})
+VALID_ACCURACY_VERDICTS = frozenset(
+    {"correct", "partially_correct", "incorrect", "false_positive"}
+)
 
 
 @dataclass(frozen=True)
@@ -27,26 +29,28 @@ class IncidentState:
     """Contexto de incidente passado por todo o pipeline Blueprint."""
 
     # Identificadores
-    incident_id: str        # Formato: inc-{YYYYMMDD}-{uuid4_short_8chars}
-    correlation_id: str     # Igual a NormalizedAlert.correlation_id
+    incident_id: str  # Formato: inc-{YYYYMMDD}-{uuid4_short_8chars}
+    correlation_id: str  # Igual a NormalizedAlert.correlation_id
 
     # Alerta de origem
     alert: NormalizedAlert
 
     # Timeline
     received_at: datetime
-    started_at: datetime    # = alert.timestamp
+    started_at: datetime  # = alert.timestamp
 
     # Estado do pipeline
     state: str = "DETECTING"  # DETECTING|DIAGNOSING|MITIGATING|VERIFYING|RESOLVED
 
     # Resultados do pipeline (preenchidos por nodes)
     aggregated_report: dict[str, Any] | None = None
-    diagnosis: dict[str, Any] | None = None        # root_cause, evidence, confidence, timeline
-    proposed_action: dict[str, Any] | None = None   # action_type, command, rollback
+    diagnosis: dict[str, Any] | None = (
+        None  # root_cause, evidence, confidence, timeline
+    )
+    proposed_action: dict[str, Any] | None = None  # action_type, command, rollback
 
     # Seguranca
-    safety_verdict: str | None = None               # "APPROVED", "BLOCKED", "NEEDS_REVIEW"
+    safety_verdict: str | None = None  # "APPROVED", "BLOCKED", "NEEDS_REVIEW"
     safety_reasons: list[str] = field(default_factory=list)
 
     # Saude pos-acao (TNR)
@@ -63,7 +67,9 @@ class IncidentState:
 
     # Acurácia de diagnóstico (Story 3.3)
     accuracy_status: str = "pending_review"  # "pending_review" | "reviewed"
-    accuracy_verdict: str | None = None      # "correct" | "partially_correct" | "incorrect" | "false_positive"
+    accuracy_verdict: str | None = (
+        None  # "correct" | "partially_correct" | "incorrect" | "false_positive"
+    )
     accuracy_notes: str | None = None
     reviewed_at: datetime | None = None
 

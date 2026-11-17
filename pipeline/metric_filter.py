@@ -9,13 +9,15 @@ Baseado no paper OpsAgent (Nankai University, Oct 2025):
 
 from __future__ import annotations
 
-import numpy as np
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
-from collections import defaultdict
+
+import numpy as np
 
 try:
     import _aiops_rust as _rust
+
     _RUST_AVAILABLE = True
 except ImportError:
     _rust = None
@@ -25,6 +27,7 @@ except ImportError:
 @dataclass
 class MetricAnomaly:
     """Uma anomalia detectada em uma métrica."""
+
     service: str
     metric_name: str
     anomaly_type: str  # "spike", "level_shift", "steady_increase"
@@ -45,7 +48,11 @@ class MetricFilter:
 
     def detect_anomalies(self, metrics: list) -> list[MetricAnomaly]:
         """Detecta anomalias em todas as métricas."""
-        if _RUST_AVAILABLE and self.sigma_threshold == 3.0 and self.baseline_ratio == 0.5:
+        if (
+            _RUST_AVAILABLE
+            and self.sigma_threshold == 3.0
+            and self.baseline_ratio == 0.5
+        ):
             return self._detect_rust(metrics)
         return self._detect_python(metrics)
 
@@ -55,20 +62,27 @@ class MetricFilter:
         result = []
         for r in raw:
             ts = datetime.fromtimestamp(r["timestamp"])
-            result.append(MetricAnomaly(
-                service=r["service"],
-                metric_name=r["metric_name"],
-                anomaly_type=r["anomaly_type"],
-                timestamp=ts,
-                value=r["value"],
-                mean=r["mean"],
-                std=r["std"],
-                deviation_sigma=r["deviation_sigma"],
-                description=self._describe(
-                    r["service"], r["metric_name"], r["anomaly_type"],
-                    ts, r["value"], r["mean"], r["deviation_sigma"],
-                ),
-            ))
+            result.append(
+                MetricAnomaly(
+                    service=r["service"],
+                    metric_name=r["metric_name"],
+                    anomaly_type=r["anomaly_type"],
+                    timestamp=ts,
+                    value=r["value"],
+                    mean=r["mean"],
+                    std=r["std"],
+                    deviation_sigma=r["deviation_sigma"],
+                    description=self._describe(
+                        r["service"],
+                        r["metric_name"],
+                        r["anomaly_type"],
+                        ts,
+                        r["value"],
+                        r["mean"],
+                        r["deviation_sigma"],
+                    ),
+                )
+            )
         return result
 
     def _detect_python(self, metrics: list) -> list[MetricAnomaly]:
@@ -106,27 +120,34 @@ class MetricFilter:
                     rounded_mean = round(mean, 2)
                     rounded_std = round(std, 2)
                     rounded_deviation = round(deviation, 1)
-                    anomalies.append(MetricAnomaly(
-                        service=service,
-                        metric_name=metric_name,
-                        anomaly_type=anomaly_type,
-                        timestamp=timestamps[i],
-                        value=rounded_value,
-                        mean=rounded_mean,
-                        std=rounded_std,
-                        deviation_sigma=rounded_deviation,
-                        description=self._describe(
-                            service, metric_name, anomaly_type,
-                            timestamps[i], rounded_value, rounded_mean, rounded_deviation
-                        ),
-                    ))
+                    anomalies.append(
+                        MetricAnomaly(
+                            service=service,
+                            metric_name=metric_name,
+                            anomaly_type=anomaly_type,
+                            timestamp=timestamps[i],
+                            value=rounded_value,
+                            mean=rounded_mean,
+                            std=rounded_std,
+                            deviation_sigma=rounded_deviation,
+                            description=self._describe(
+                                service,
+                                metric_name,
+                                anomaly_type,
+                                timestamps[i],
+                                rounded_value,
+                                rounded_mean,
+                                rounded_deviation,
+                            ),
+                        )
+                    )
 
         # Deduplica: mantém apenas o ponto de maior desvio por (service, metric)
         return self._deduplicate(anomalies)
 
     def _classify_shape(self, values: np.ndarray, idx: int, baseline_end: int) -> str:
         """Classifica a forma da anomalia (simplificado, sem CNN do OpsAgent)."""
-        window = values[max(baseline_end, idx - 10):idx + 1]
+        window = values[max(baseline_end, idx - 10) : idx + 1]
         if len(window) < 3:
             return "spike"
 
@@ -139,8 +160,16 @@ class MetricFilter:
         else:
             return "level_shift"
 
-    def _describe(self, service: str, metric: str, anomaly_type: str,
-                  ts: datetime, value: float, mean: float, deviation: float) -> str:
+    def _describe(
+        self,
+        service: str,
+        metric: str,
+        anomaly_type: str,
+        ts: datetime,
+        value: float,
+        mean: float,
+        deviation: float,
+    ) -> str:
         """Gera descrição textual da anomalia (formato OpsAgent)."""
         ts_str = ts.strftime("%H:%M:%S")
         return (

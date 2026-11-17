@@ -2,6 +2,7 @@
 
 BlueprintNode, NodeType, OnFailure e PipelineDefinition.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -11,12 +12,14 @@ from typing import Any, Callable
 
 class NodeType(Enum):
     """Tipo de node no pipeline."""
+
     DETERMINISTIC = "deterministic"
     AGENTIC = "agentic"
 
 
 class OnFailure(Enum):
     """Comportamento em caso de falha do node."""
+
     ABORT = "abort"
     SKIP = "skip"
     FALLBACK = "fallback"
@@ -25,6 +28,7 @@ class OnFailure(Enum):
 @dataclass
 class BlueprintNode:
     """Um node no pipeline do Blueprint Engine."""
+
     id: str
     node_type: NodeType
     execute: Callable[..., Any]
@@ -36,6 +40,7 @@ class BlueprintNode:
 @dataclass
 class NodeResult:
     """Resultado da execucao de um node."""
+
     node_id: str
     success: bool
     duration_ms: float = 0.0
@@ -46,6 +51,7 @@ class NodeResult:
 @dataclass
 class PipelineDefinition:
     """Definicao completa de um pipeline."""
+
     name: str
     nodes: list[BlueprintNode] = field(default_factory=list)
     description: str = ""

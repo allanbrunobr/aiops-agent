@@ -32,6 +32,7 @@ def tmp_db(tmp_path):
 
 # ---- cold start ----
 
+
 def test_cold_start_returns_empty(tmp_db):
     """Sem assinaturas armazenadas, deve retornar lista vazia."""
     results = tmp_db.query_similar_signatures([_CpuSpike()])
@@ -47,6 +48,7 @@ def test_cold_start_no_exception(tmp_db):
 
 
 # ---- com assinaturas armazenadas ----
+
 
 def test_returns_matches_when_signatures_stored(tmp_db):
     """Com assinaturas armazenadas, deve retornar ao menos uma correspondência."""
@@ -74,7 +76,9 @@ def test_top_k_limits_results(tmp_db):
 def test_result_structure(tmp_db):
     """Cada resultado deve ter incident_id, similarity_score e outcome."""
     signals = [_CpuSpike()]
-    tmp_db.store_degradation_signature(signals, risk_score=35.0, incident_id="inc-struct")
+    tmp_db.store_degradation_signature(
+        signals, risk_score=35.0, incident_id="inc-struct"
+    )
 
     results = tmp_db.query_similar_signatures(signals)
     assert results, "Deve retornar ao menos um resultado"
@@ -110,8 +114,10 @@ def test_identical_signals_high_similarity(tmp_db):
 
 # ---- tratamento de exceção ----
 
+
 def test_exception_returns_empty_list(tmp_db, monkeypatch):
     """Exceção durante a query deve retornar [] sem propagar."""
+
     def _bad_connect():
         raise RuntimeError("DB unreachable")
 

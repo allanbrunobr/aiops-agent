@@ -3,6 +3,7 @@
 PipelineRunner usa asyncio.Semaphore/Queue — todos os testes
 devem rodar APENAS com asyncio (nao trio).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -53,6 +54,7 @@ async def test_submit_triggers_pipeline():
 async def test_webhook_returns_202_before_pipeline():
     """AC1: submit retorna imediatamente sem bloquear."""
     import time
+
     runner = PipelineRunner(max_concurrent=3, max_queued=10)
     await runner.start()
     try:

@@ -5,14 +5,13 @@ Testes para Stories 4.1 e 4.2: RAG Knowledge Base e Graceful Degradation.
 Evita imports de ML pesados (torch, faiss, sentence_transformers).
 """
 
-import pytest
 
-from rag.models import KnowledgePattern, KnowledgeSearchResult
-from rag.knowledge_store import KnowledgeStore
 from rag.knowledge_retriever import KnowledgeRetriever
-
+from rag.knowledge_store import KnowledgeStore
+from rag.models import KnowledgePattern, KnowledgeSearchResult
 
 # ── KnowledgePattern ──────────────────────────────────────────────────────────
+
 
 def test_knowledge_pattern_to_embedding_text():
     """to_embedding_text deve combinar service, symptoms, root_cause e resolution."""
@@ -64,6 +63,7 @@ def test_knowledge_search_result_to_llm_context():
 
 
 # ── KnowledgeStore ────────────────────────────────────────────────────────────
+
 
 def test_knowledge_store_add_pattern_marks_stale(tmp_path):
     """add_pattern deve marcar índice como stale."""
@@ -175,27 +175,32 @@ def test_knowledge_store_load_from_disk(tmp_path):
 
 # ── KnowledgeRetriever — Graceful Degradation (Story 4.2) ─────────────────────
 
+
 class _FakeIndexerNoIndex:
     """Simulador de indexer sem índice FAISS carregado."""
+
     index = None
     model = None
 
 
 class _FakeIndexerNoModel:
     """Simulador de indexer com índice mas sem model."""
+
     index = object()  # truthy, não None
     model = None
 
 
 def test_retriever_returns_empty_when_index_is_none():
     """Story 4.2: Sem índice FAISS, retriever retorna [] sem exception."""
-    patterns = [KnowledgePattern(
-        pattern_id="p1",
-        service="svc",
-        symptoms=["err"],
-        root_cause="bug",
-        resolution="fix",
-    )]
+    patterns = [
+        KnowledgePattern(
+            pattern_id="p1",
+            service="svc",
+            symptoms=["err"],
+            root_cause="bug",
+            resolution="fix",
+        )
+    ]
     retriever = KnowledgeRetriever(indexer=_FakeIndexerNoIndex(), patterns=patterns)
 
     results = retriever.search_similar_incidents("connection pool exhausted")
@@ -205,13 +210,15 @@ def test_retriever_returns_empty_when_index_is_none():
 
 def test_retriever_returns_empty_when_model_is_none():
     """Story 4.2: Sem modelo de embedding, retriever retorna [] sem exception."""
-    patterns = [KnowledgePattern(
-        pattern_id="p1",
-        service="svc",
-        symptoms=["err"],
-        root_cause="bug",
-        resolution="fix",
-    )]
+    patterns = [
+        KnowledgePattern(
+            pattern_id="p1",
+            service="svc",
+            symptoms=["err"],
+            root_cause="bug",
+            resolution="fix",
+        )
+    ]
     retriever = KnowledgeRetriever(indexer=_FakeIndexerNoModel(), patterns=patterns)
 
     results = retriever.search_similar_incidents("memory leak")

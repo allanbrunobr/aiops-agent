@@ -6,19 +6,19 @@ Cobre endpoints PATCH /accuracy e GET /metrics/accuracy.
 """
 
 import dataclasses
+import datetime
+
 import pytest
-import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
 from adapters.persistence.in_memory_store import InMemoryStore
 from domain.alert import NormalizedAlert
 from domain.incident_state import IncidentState
-from interfaces.http.api.accuracy import router, get_store
-from fastapi import FastAPI
-import datetime
-
+from interfaces.http.api.accuracy import get_store, router
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def _make_alert(cid: str) -> NormalizedAlert:
     """Cria NormalizedAlert mínimo para IncidentState."""
@@ -60,6 +60,7 @@ def _make_app(store: InMemoryStore) -> FastAPI:
 
 # ── testes ────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_incident_default_accuracy_status_is_pending_review():
     """6.1: IncidentState criado com accuracy_status=pending_review."""
@@ -76,7 +77,9 @@ async def test_patch_accuracy_updates_verdict_and_notes():
     store.save("corr-001", _make_incident("corr-001"))
 
     app = _make_app(store)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         resp = await client.patch(
             "/api/v1/incidents/corr-001/accuracy",
             json={"accuracy": "correct", "notes": "Looks good"},
@@ -104,7 +107,9 @@ async def test_patch_invalid_accuracy_returns_422():
     store.save("corr-001", _make_incident("corr-001"))
 
     app = _make_app(store)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         resp = await client.patch(
             "/api/v1/incidents/corr-001/accuracy",
             json={"accuracy": "wrong_value"},
@@ -119,7 +124,9 @@ async def test_patch_unknown_correlation_id_returns_404():
     store = InMemoryStore()
 
     app = _make_app(store)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         resp = await client.patch(
             "/api/v1/incidents/does-not-exist/accuracy",
             json={"accuracy": "correct"},
@@ -152,7 +159,9 @@ async def test_get_accuracy_metrics_aggregates_correctly():
         store.save(cid, inc)
 
     app = _make_app(store)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         resp = await client.get("/api/v1/metrics/accuracy")
 
     assert resp.status_code == 200
@@ -160,7 +169,7 @@ async def test_get_accuracy_metrics_aggregates_correctly():
     assert data["total_incidents"] == 3
     assert data["total_reviewed"] == 2
     assert data["total_pending"] == 1
-    assert data["accuracy_rate"] == 0.5       # 1 correct / 2 reviewed
+    assert data["accuracy_rate"] == 0.5  # 1 correct / 2 reviewed
     assert data["false_positive_rate"] == 0.5  # 1 fp / 2 reviewed
     assert data["category_breakdown"]["correct"] == 1
     assert data["category_breakdown"]["false_positive"] == 1
@@ -173,7 +182,9 @@ async def test_get_accuracy_metrics_empty_store_returns_zeroed():
     store = InMemoryStore()
 
     app = _make_app(store)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         resp = await client.get("/api/v1/metrics/accuracy")
 
     assert resp.status_code == 200
@@ -191,7 +202,9 @@ async def test_patch_overwrites_previous_review():
     store.save("corr-001", _make_incident("corr-001"))
 
     app = _make_app(store)
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         # Primeira review
         await client.patch(
             "/api/v1/incidents/corr-001/accuracy",

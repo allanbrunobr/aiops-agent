@@ -13,20 +13,18 @@ Cobertura:
   - _fetch_jwks(): propaga erro HTTP do IdP
   - TrustedIssuerConfig: scope_claim customizado
 """
+
 from __future__ import annotations
 
-import json
 import time
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt as pyjwt
 import pytest
-from jwt.algorithms import RSAAlgorithm
 
 from auth.keys import generate_rsa_keypair, public_key_to_jwk
 from auth.oidc_validator import OIDCValidator, TrustedIssuerConfig
-
 
 # ---------------------------------------------------------------------------
 # Helpers — Mock IdP
@@ -125,8 +123,8 @@ def _make_validator(issuers: list[TrustedIssuerConfig] | None = None) -> OIDCVal
 # Testes: validate() — caminho feliz
 # ---------------------------------------------------------------------------
 
-class TestOIDCValidatorSuccess:
 
+class TestOIDCValidatorSuccess:
     @pytest.mark.asyncio
     @pytest.mark.unit
     async def test_validates_valid_rs256_token(
@@ -194,8 +192,8 @@ class TestOIDCValidatorSuccess:
 # Testes: validate() — rejeições
 # ---------------------------------------------------------------------------
 
-class TestOIDCValidatorRejections:
 
+class TestOIDCValidatorRejections:
     @pytest.mark.asyncio
     @pytest.mark.unit
     async def test_rejects_untrusted_issuer(self, idp_private_pem: str) -> None:
@@ -267,8 +265,8 @@ class TestOIDCValidatorRejections:
 # Testes: cache JWKS
 # ---------------------------------------------------------------------------
 
-class TestOIDCValidatorCache:
 
+class TestOIDCValidatorCache:
     @pytest.mark.asyncio
     @pytest.mark.unit
     async def test_jwks_cached_after_first_call(
@@ -334,8 +332,8 @@ class TestOIDCValidatorCache:
 # Testes: seleção de chave (_find_key)
 # ---------------------------------------------------------------------------
 
-class TestFindKey:
 
+class TestFindKey:
     @pytest.mark.unit
     def test_finds_key_by_kid(self, idp_jwk: dict) -> None:
         validator = _make_validator()

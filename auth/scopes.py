@@ -3,6 +3,7 @@
 Cada ferramenta exige um scope específico. Agentes que não possuem o scope
 recebem 403 com o scope necessário no body da resposta.
 """
+
 from __future__ import annotations
 
 import json
@@ -35,13 +36,15 @@ def require_scope(tool_name: str, granted_scopes: list[str]) -> TextContent | No
         return None  # ferramenta sem restrição de scope
 
     if required not in granted_scopes:
-        body = json.dumps({
-            "type": "forbidden",
-            "title": "Insufficient scope",
-            "detail": f"Tool '{tool_name}' requires scope '{required}'.",
-            "required_scope": required,
-            "granted_scopes": granted_scopes,
-        })
+        body = json.dumps(
+            {
+                "type": "forbidden",
+                "title": "Insufficient scope",
+                "detail": f"Tool '{tool_name}' requires scope '{required}'.",
+                "required_scope": required,
+                "granted_scopes": granted_scopes,
+            }
+        )
         return TextContent(type="text", text=body)
 
     return None

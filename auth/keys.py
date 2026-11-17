@@ -7,6 +7,7 @@ Expõe:
   public_key_to_jwk(public_key_pem, kid) → dict  — chave JWK (RFC 7517)
   load_or_generate_keypair(private_path, public_path, kid) → (str, str, dict)
 """
+
 from __future__ import annotations
 
 import base64
@@ -34,10 +35,14 @@ def generate_rsa_keypair(key_size: int = 2048) -> tuple[str, str]:
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
     ).decode()
-    public_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
     return private_pem, public_pem
 
 

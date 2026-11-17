@@ -6,7 +6,6 @@ dedup store, pipeline runner and Slack notifier.
 Usage: python infra/run_webhook_server.py
 """
 
-import asyncio
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -26,21 +25,21 @@ if env_file.exists():
             os.environ.setdefault(key.strip(), value.strip())
 
 
-from fastapi import FastAPI
 import structlog
 import uvicorn
+from fastapi import FastAPI
 
-from config.loader import AppConfig
-from adapters.credentials import EnvCredentialProvider
-from interfaces.http.webhook.dedup import DedupStore
-from interfaces.http.webhook.pipeline_runner import PipelineRunner
-from interfaces.http.webhook.router import webhook_router
-from interfaces.http.webhook.errors import webhook_error_handler, WebhookError
+import interfaces.http.webhook.normalizers.databricks  # noqa: F401
 
 # Import normalizers so they self-register via @register_normalizer
 import interfaces.http.webhook.normalizers.grafana  # noqa: F401
 import interfaces.http.webhook.normalizers.pagerduty  # noqa: F401
-import interfaces.http.webhook.normalizers.databricks  # noqa: F401
+from adapters.credentials import EnvCredentialProvider
+from config.loader import AppConfig
+from interfaces.http.webhook.dedup import DedupStore
+from interfaces.http.webhook.errors import WebhookError, webhook_error_handler
+from interfaces.http.webhook.pipeline_runner import PipelineRunner
+from interfaces.http.webhook.router import webhook_router
 
 log = structlog.get_logger()
 
@@ -96,10 +95,14 @@ if __name__ == "__main__":
     print("AIOps Agent — Webhook Server")
     print("=" * 60)
     print("  Listening:    http://127.0.0.1:47890")
-    print(f"  Health:       http://localhost:47890/health")
-    print(f"  Webhook:      POST http://localhost:47890/webhook")
+    print("  Health:       http://localhost:47890/health")
+    print("  Webhook:      POST http://localhost:47890/webhook")
     print(f"  .env.local:   {'loaded' if env_file.exists() else 'NOT FOUND'}")
-    print(f"  GRAFANA_TOKEN: {'set' if os.environ.get('GRAFANA_WEBHOOK_TOKEN') else 'MISSING'}")
-    print(f"  SLACK_TOKEN:   {'set' if os.environ.get('SLACK_BOT_TOKEN') else 'MISSING'}")
+    print(
+        f"  GRAFANA_TOKEN: {'set' if os.environ.get('GRAFANA_WEBHOOK_TOKEN') else 'MISSING'}"
+    )
+    print(
+        f"  SLACK_TOKEN:   {'set' if os.environ.get('SLACK_BOT_TOKEN') else 'MISSING'}"
+    )
     print("=" * 60)
     uvicorn.run(app, host="127.0.0.1", port=47890, log_level="info")

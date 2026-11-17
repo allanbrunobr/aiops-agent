@@ -459,7 +459,9 @@ def _check_pre_validator(
         # Normaliza risk_score de 0-100 para 0-1 se necessário
         if risk > 1.0:
             risk = risk / 100.0
-        detail = getattr(result, "recommendation", "Passed blast radius and blocklist checks")
+        detail = getattr(
+            result, "recommendation", "Passed blast radius and blocklist checks"
+        )
         return LayerResult(
             layer_name="PreExecutionValidator",
             passed=passed,
@@ -517,7 +519,9 @@ def _check_tnr(command: str, target_service: str, tnr: object) -> LayerResult:
             layer_name="TNR",
             passed=passed,
             risk_contribution=0.3 if not passed else 0.0,
-            detail=report.message if not passed else "Health snapshot comparison passed",
+            detail=report.message
+            if not passed
+            else "Health snapshot comparison passed",
         )
     except Exception as exc:
         return LayerResult(
@@ -533,7 +537,9 @@ def _check_version_validator(command: str, version_validator: object) -> LayerRe
     try:
         result = version_validator.validate_remediation(command)
         passed = getattr(result, "is_safe", True)
-        detail = getattr(result, "recommendation", "No known CVEs in referenced versions")
+        detail = getattr(
+            result, "recommendation", "No known CVEs in referenced versions"
+        )
         risk = 0.2 if not passed else 0.0
         return LayerResult(
             layer_name="VersionValidator",
@@ -775,7 +781,12 @@ def _normalize_alert(
 
     # Fallback: objeto NormalizedAlert com defaults para campos obrigatórios
     # Mapeia severidades MCP (critical/high/medium/low) para pipeline (critical/error/warning/info)
-    _severity_map = {"critical": "critical", "high": "error", "medium": "warning", "low": "info"}
+    _severity_map = {
+        "critical": "critical",
+        "high": "error",
+        "medium": "warning",
+        "low": "info",
+    }
     pipeline_severity = _severity_map.get(severity.lower(), "warning")
     now = datetime.now(timezone.utc)
     return NormalizedAlert(

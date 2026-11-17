@@ -1,4 +1,5 @@
 """Launcher desktop — sobe interfaces/demo/server.py e abre janela nativa com loading."""
+
 from __future__ import annotations
 
 import os

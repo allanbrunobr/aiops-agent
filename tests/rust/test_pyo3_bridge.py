@@ -7,6 +7,7 @@ Valida (Story 1.4):
   - Tipos de retorno corretos: tuple(str, dict) e list[dict]
   - Inputs inválidos levantam PyException, não panic/crash do processo
 """
+
 from __future__ import annotations
 
 import datetime
@@ -18,17 +19,20 @@ pytest.importorskip("_aiops_rust")
 
 # ── Fixture ───────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="module")
 def rust():
     """Importa _aiops_rust ou pula o módulo se não disponível."""
     try:
         import _aiops_rust as m
+
         return m
     except ImportError:
         pytest.skip("_aiops_rust não disponível")
 
 
 # ── Import ────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.unit
 def test_import_succeeds():
@@ -49,6 +53,7 @@ def test_parse_logs_callable(rust):
 
 
 # ── compress_context ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.unit
 def test_compress_context_return_type_empty(rust):
@@ -73,9 +78,12 @@ def test_compress_context_return_type_empty(rust):
     assert isinstance(stats, dict), f"Esperado dict, obtido {type(stats)}"
 
     required_keys = {
-        "original_tokens", "compressed_tokens",
-        "chunks_kept", "chunks_removed",
-        "critical_preserved", "compression_ratio",
+        "original_tokens",
+        "compressed_tokens",
+        "chunks_kept",
+        "chunks_removed",
+        "critical_preserved",
+        "compression_ratio",
     }
     missing = required_keys - set(stats.keys())
     assert not missing, f"Chaves faltando nos stats: {missing}"
@@ -123,6 +131,7 @@ def test_compress_context_invalid_input_raises(rust):
 
 # ── parse_logs ────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.unit
 def test_parse_logs_return_type(rust):
     """parse_logs retorna list[dict] com chaves corretas para 1 log."""
@@ -165,9 +174,7 @@ def test_parse_logs_count_matches_input(rust):
     ]
     result = rust.parse_logs(logs)
     total = sum(d["count"] for d in result)
-    assert total == len(logs), (
-        f"Sum dos counts ({total}) != len(logs) ({len(logs)})"
-    )
+    assert total == len(logs), f"Sum dos counts ({total}) != len(logs) ({len(logs)})"
 
 
 @pytest.mark.unit

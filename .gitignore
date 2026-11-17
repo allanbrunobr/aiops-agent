@@ -37,6 +37,13 @@ docs/superpowers/
 .pytest_cache/
 tests/__snapshots__/
 
+# Lint / type-check / coverage artifacts
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
 # Root markdown that is not part of the published docs.
 # SECURITY.md, CONTRIBUTING.md and AGENTS.md stay tracked.
 *.md

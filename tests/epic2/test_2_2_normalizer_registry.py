@@ -1,12 +1,14 @@
 """Testes para Story 2.2: Alert Normalizer Plugin Registry."""
+
 from __future__ import annotations
 
 import pytest
 
-from application.ports.credential_provider import CredentialProvider
-from domain.alert import NormalizedAlert
 from interfaces.http.webhook.normalizers.base import AlertNormalizer
-from interfaces.http.webhook.normalizers.registry import NormalizerRegistry, register_normalizer
+from interfaces.http.webhook.normalizers.registry import (
+    NormalizerRegistry,
+    register_normalizer,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -19,6 +21,7 @@ def clean_registry():
 
 def _make_minimal_normalizer(source: str) -> type[AlertNormalizer]:
     """Cria classe de normalizer minima para testes."""
+
     class _Normalizer(AlertNormalizer):
         @property
         def source_name(self) -> str:
@@ -35,6 +38,7 @@ def _make_minimal_normalizer(source: str) -> type[AlertNormalizer]:
 
 def test_register_normalizer_decorator():
     """AC1: decorator registra normalizer com sucesso."""
+
     @register_normalizer("test_source")
     class TestNormalizer(AlertNormalizer):
         @property
@@ -100,6 +104,7 @@ def test_normalizer_has_required_methods():
 
 def test_decorator_preserves_class_identity():
     """AC4: decorator retorna a mesma classe sem modificacao."""
+
     class Original(AlertNormalizer):
         @property
         def source_name(self) -> str:
@@ -117,17 +122,29 @@ def test_decorator_preserves_class_identity():
 
 def test_duplicate_registration_via_decorator_raises():
     """AC4: segundo decorator com mesma fonte levanta ValueError."""
+
     @register_normalizer("dup2")
     class First(AlertNormalizer):
         @property
-        def source_name(self): return "dup2"
-        def validate_auth(self, h, b, c): return True
-        def normalize(self, p): raise NotImplementedError
+        def source_name(self):
+            return "dup2"
+
+        def validate_auth(self, h, b, c):
+            return True
+
+        def normalize(self, p):
+            raise NotImplementedError
 
     with pytest.raises(ValueError, match="Duplicate normalizer"):
+
         @register_normalizer("dup2")
         class Second(AlertNormalizer):
             @property
-            def source_name(self): return "dup2"
-            def validate_auth(self, h, b, c): return True
-            def normalize(self, p): raise NotImplementedError
+            def source_name(self):
+                return "dup2"
+
+            def validate_auth(self, h, b, c):
+                return True
+
+            def normalize(self, p):
+                raise NotImplementedError

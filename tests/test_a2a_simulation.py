@@ -11,19 +11,20 @@ Cenários cobertos:
   5. Fluxo completo com JWT — Assistant Agent obtém token e chama AIOps Agent
   6. Fluxo multi-agente — dois agentes com scopes diferentes chamando o mesmo server
 """
+
 from __future__ import annotations
 
-import pytest
 import httpx
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from interfaces.http.routes.a2a import router as a2a_router, AGENT_CARD
-from agents.a2a_client import A2AClient
 import auth.server as auth_server
-from auth.token_store import InMemoryTokenStore
-from auth.pkce import generate_verifier, derive_challenge
+from agents.a2a_client import A2AClient
 from auth.jwt_validator import issue_token
+from auth.pkce import derive_challenge, generate_verifier
+from auth.token_store import InMemoryTokenStore
+from interfaces.http.routes.a2a import router as a2a_router
 
 _BASE_URL = "http://aiops-agent.internal"
 _JWT_SECRET = "test-a2a-32bytes-secret-minimum!!"
@@ -32,6 +33,7 @@ _JWT_SECRET = "test-a2a-32bytes-secret-minimum!!"
 # ---------------------------------------------------------------------------
 # Mocks de infra (engine e retriever)
 # ---------------------------------------------------------------------------
+
 
 class _MockEngine:
     """BlueprintEngine mínimo — retorna diagnosis + mitigation fixos."""
@@ -60,9 +62,21 @@ class _MockRetriever:
 
     async def retrieve(self, query: str, top_k: int = 5) -> list[dict]:
         incidents = [
-            {"id": "inc-2024-001", "summary": "CPU spike — scaled out workers", "score": 0.91},
-            {"id": "inc-2024-002", "summary": "Memory leak — rolling restart", "score": 0.87},
-            {"id": "inc-2024-003", "summary": "DB connection pool exhaustion", "score": 0.83},
+            {
+                "id": "inc-2024-001",
+                "summary": "CPU spike — scaled out workers",
+                "score": 0.91,
+            },
+            {
+                "id": "inc-2024-002",
+                "summary": "Memory leak — rolling restart",
+                "score": 0.87,
+            },
+            {
+                "id": "inc-2024-003",
+                "summary": "DB connection pool exhaustion",
+                "score": 0.83,
+            },
         ]
         return incidents[:top_k]
 
@@ -70,6 +84,7 @@ class _MockRetriever:
 # ---------------------------------------------------------------------------
 # Factories de app
 # ---------------------------------------------------------------------------
+
 
 def _make_a2a_app(*, with_engine: bool = True, with_retriever: bool = True) -> FastAPI:
     """App FastAPI com A2A router + state mockado."""
@@ -104,7 +119,10 @@ def _make_auth_a2a_app() -> FastAPI:
         allowed_clients=[
             {"id": "assistant-agent", "scopes": ["aiops:diagnose", "aiops:search"]},
             {"id": "databricks-mcp", "scopes": ["aiops:search"]},
-            {"id": "sre-orchestrator", "scopes": ["aiops:diagnose", "aiops:search", "aiops:validate"]},
+            {
+                "id": "sre-orchestrator",
+                "scopes": ["aiops:diagnose", "aiops:search", "aiops:validate"],
+            },
         ],
         base_url=_BASE_URL,
         token_store=InMemoryTokenStore(),
@@ -120,6 +138,7 @@ def _make_auth_a2a_app() -> FastAPI:
 # ---------------------------------------------------------------------------
 # Fixture: ASGI transport para A2AClient
 # ---------------------------------------------------------------------------
+
 
 def _make_asgi_client_class(transport: httpx.ASGITransport, base_url: str) -> type:
     """Cria uma classe substituta para httpx.AsyncClient que usa ASGI transport.
@@ -151,6 +170,7 @@ def _make_asgi_client_class(transport: httpx.ASGITransport, base_url: str) -> ty
 # ---------------------------------------------------------------------------
 # 1. Discovery
 # ---------------------------------------------------------------------------
+
 
 class TestA2ADiscovery:
     """Testa o endpoint de discovery (Agent Card)."""
@@ -193,6 +213,7 @@ class TestA2ADiscovery:
 # 2. Dispatch de tasks via TestClient (server-side)
 # ---------------------------------------------------------------------------
 
+
 class TestA2ATaskDispatch:
     """Testa o handler POST /a2a/tasks diretamente."""
 
@@ -201,39 +222,50 @@ class TestA2ATaskDispatch:
         self._client = TestClient(_make_a2a_app())
 
     def _send_task(self, skill_id: str, data: dict, task_id: str = "task-001") -> dict:
-        return self._client.post("/a2a/tasks", headers=_bearer(), json={
-            "jsonrpc": "2.0",
-            "method": "tasks/send",
-            "id": "rpc-1",
-            "params": {
-                "id": task_id,
-                "skill": {"id": skill_id},
-                "message": {
-                    "role": "user",
-                    "parts": [{"type": "data", "data": data}],
+        return self._client.post(
+            "/a2a/tasks",
+            headers=_bearer(),
+            json={
+                "jsonrpc": "2.0",
+                "method": "tasks/send",
+                "id": "rpc-1",
+                "params": {
+                    "id": task_id,
+                    "skill": {"id": skill_id},
+                    "message": {
+                        "role": "user",
+                        "parts": [{"type": "data", "data": data}],
+                    },
                 },
             },
-        })
+        )
 
     def test_diagnose_incident_returns_completed(self):
-        resp = self._send_task("diagnose_incident", {
-            "source": "pagerduty",
-            "severity": "high",
-            "title": "CPU spike em api-gateway",
-            "service": "api-gateway",
-        })
+        resp = self._send_task(
+            "diagnose_incident",
+            {
+                "source": "pagerduty",
+                "severity": "high",
+                "title": "CPU spike em api-gateway",
+                "service": "api-gateway",
+            },
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["jsonrpc"] == "2.0"
         assert body["result"]["status"]["state"] == "completed"
 
     def test_diagnose_incident_task_id_preserved(self):
-        resp = self._send_task("diagnose_incident", {"severity": "high"}, task_id="my-task-42")
+        resp = self._send_task(
+            "diagnose_incident", {"severity": "high"}, task_id="my-task-42"
+        )
         body = resp.json()
         assert body["result"]["id"] == "my-task-42"
 
     def test_diagnose_incident_returns_diagnosis_artifact(self):
-        resp = self._send_task("diagnose_incident", {"severity": "critical", "service": "worker"})
+        resp = self._send_task(
+            "diagnose_incident", {"severity": "critical", "service": "worker"}
+        )
         artifacts = resp.json()["result"]["artifacts"]
         names = [a["name"] for a in artifacts]
         assert "diagnosis" in names
@@ -245,10 +277,13 @@ class TestA2ATaskDispatch:
         assert "mitigation" in names
 
     def test_search_incidents_returns_results_artifact(self):
-        resp = self._send_task("search_incidents", {
-            "query": "CPU spike kubernetes",
-            "top_k": 2,
-        })
+        resp = self._send_task(
+            "search_incidents",
+            {
+                "query": "CPU spike kubernetes",
+                "top_k": 2,
+            },
+        )
         assert resp.status_code == 200
         artifacts = resp.json()["result"]["artifacts"]
         assert artifacts[0]["name"] == "search_results"
@@ -282,16 +317,23 @@ class TestA2ATaskDispatch:
         """Sem engine no app.state, retorna artifact de erro (graceful degradation)."""
         app = _make_a2a_app(with_engine=False)
         client = TestClient(app)
-        resp = client.post("/a2a/tasks", headers=_bearer(), json={
-            "jsonrpc": "2.0",
-            "method": "tasks/send",
-            "id": "1",
-            "params": {
-                "id": "task-x",
-                "skill": {"id": "diagnose_incident"},
-                "message": {"role": "user", "parts": [{"type": "data", "data": {}}]},
+        resp = client.post(
+            "/a2a/tasks",
+            headers=_bearer(),
+            json={
+                "jsonrpc": "2.0",
+                "method": "tasks/send",
+                "id": "1",
+                "params": {
+                    "id": "task-x",
+                    "skill": {"id": "diagnose_incident"},
+                    "message": {
+                        "role": "user",
+                        "parts": [{"type": "data", "data": {}}],
+                    },
+                },
             },
-        })
+        )
         body = resp.json()
         assert body["error"]["code"] == -32603
         assert body["error"]["data"]["error"] == "engine_unavailable"
@@ -301,16 +343,23 @@ class TestA2ATaskDispatch:
         """Sem retriever no app.state, retorna artifact de erro (graceful degradation)."""
         app = _make_a2a_app(with_retriever=False)
         client = TestClient(app)
-        resp = client.post("/a2a/tasks", headers=_bearer(), json={
-            "jsonrpc": "2.0",
-            "method": "tasks/send",
-            "id": "1",
-            "params": {
-                "id": "task-x",
-                "skill": {"id": "search_incidents"},
-                "message": {"role": "user", "parts": [{"type": "data", "data": {"query": "test"}}]},
+        resp = client.post(
+            "/a2a/tasks",
+            headers=_bearer(),
+            json={
+                "jsonrpc": "2.0",
+                "method": "tasks/send",
+                "id": "1",
+                "params": {
+                    "id": "task-x",
+                    "skill": {"id": "search_incidents"},
+                    "message": {
+                        "role": "user",
+                        "parts": [{"type": "data", "data": {"query": "test"}}],
+                    },
+                },
             },
-        })
+        )
         body = resp.json()
         assert body["error"]["code"] == -32603
         assert body["error"]["data"]["error"] == "retriever_unavailable"
@@ -320,6 +369,7 @@ class TestA2ATaskDispatch:
 # ---------------------------------------------------------------------------
 # 3. A2AClient end-to-end via ASGI transport
 # ---------------------------------------------------------------------------
+
 
 class TestA2AClientEndToEnd:
     """Testa A2AClient chamando server via ASGI — sem HTTP real."""
@@ -340,7 +390,9 @@ class TestA2AClientEndToEnd:
 
     @pytest.mark.asyncio
     async def test_send_task_diagnose_returns_completed(self):
-        client = A2AClient(token=issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET))
+        client = A2AClient(
+            token=issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET)
+        )
         result = await client.send_task(
             agent_url=_BASE_URL,
             skill_id="diagnose_incident",
@@ -350,7 +402,9 @@ class TestA2AClientEndToEnd:
 
     @pytest.mark.asyncio
     async def test_send_task_search_returns_results(self):
-        client = A2AClient(token=issue_token("assistant-agent", ["aiops:search"], _JWT_SECRET))
+        client = A2AClient(
+            token=issue_token("assistant-agent", ["aiops:search"], _JWT_SECRET)
+        )
         result = await client.send_task(
             agent_url=_BASE_URL,
             skill_id="search_incidents",
@@ -362,7 +416,9 @@ class TestA2AClientEndToEnd:
 
     @pytest.mark.asyncio
     async def test_send_task_unknown_skill_raises(self):
-        client = A2AClient(token=issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET))
+        client = A2AClient(
+            token=issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET)
+        )
         with pytest.raises(ValueError, match="A2A error -32601"):
             await client.send_task(
                 agent_url=_BASE_URL,
@@ -372,7 +428,9 @@ class TestA2AClientEndToEnd:
 
     @pytest.mark.asyncio
     async def test_task_id_passed_explicitly(self):
-        client = A2AClient(token=issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET))
+        client = A2AClient(
+            token=issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET)
+        )
         result = await client.send_task(
             agent_url=_BASE_URL,
             skill_id="diagnose_incident",
@@ -399,6 +457,7 @@ class TestA2AClientEndToEnd:
 # 4. Fluxo completo: OAuth → Bearer JWT → A2A
 # ---------------------------------------------------------------------------
 
+
 class TestA2AFullSimulation:
     """Simula o fluxo real de um agente externo:
     1. Descoberta do Agent Card
@@ -419,12 +478,15 @@ class TestA2AFullSimulation:
         """Simula OAuth PKCE: register → access_token."""
         verifier = generate_verifier()
         challenge = derive_challenge(verifier)
-        resp = self._http.post("/auth/token/register", json={
-            "client_id": client_id,
-            "scopes": scopes,
-            "code_verifier": verifier,
-            "code_challenge": challenge,
-        })
+        resp = self._http.post(
+            "/auth/token/register",
+            json={
+                "client_id": client_id,
+                "scopes": scopes,
+                "code_verifier": verifier,
+                "code_challenge": challenge,
+            },
+        )
         assert resp.status_code == 200, f"OAuth falhou: {resp.json()}"
         return resp.json()["access_token"]
 
@@ -434,7 +496,9 @@ class TestA2AFullSimulation:
         card_resp = self._http.get("/a2a/agent-card.json")
         assert card_resp.status_code == 200
         card = card_resp.json()
-        token_url = card["securitySchemes"]["oauth2"]["flows"]["clientCredentials"]["tokenUrl"]
+        token_url = card["securitySchemes"]["oauth2"]["flows"]["clientCredentials"][
+            "tokenUrl"
+        ]
         assert token_url == "/auth/token/register"
 
         # Step 2: Obter token via OAuth PKCE
@@ -442,25 +506,34 @@ class TestA2AFullSimulation:
         assert token  # token JWT emitido
 
         # Step 3: Chamar skill com Bearer token
-        resp = self._http.post("/a2a/tasks", json={
-            "jsonrpc": "2.0",
-            "method": "tasks/send",
-            "id": "rpc-assistant-1",
-            "params": {
-                "id": "incident-assistant-42",
-                "skill": {"id": "diagnose_incident"},
-                "message": {
-                    "role": "user",
-                    "parts": [{"type": "data", "data": {
-                        "source": "pagerduty",
-                        "severity": "critical",
-                        "title": "High error rate on /api/v2/prescriptions",
-                        "service": "prescription-service",
-                        "description": "5xx rate jumped to 45% — 3000 req/min",
-                    }}],
+        resp = self._http.post(
+            "/a2a/tasks",
+            json={
+                "jsonrpc": "2.0",
+                "method": "tasks/send",
+                "id": "rpc-assistant-1",
+                "params": {
+                    "id": "incident-assistant-42",
+                    "skill": {"id": "diagnose_incident"},
+                    "message": {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "type": "data",
+                                "data": {
+                                    "source": "pagerduty",
+                                    "severity": "critical",
+                                    "title": "High error rate on /api/v2/prescriptions",
+                                    "service": "prescription-service",
+                                    "description": "5xx rate jumped to 45% — 3000 req/min",
+                                },
+                            }
+                        ],
+                    },
                 },
             },
-        }, headers={"Authorization": f"Bearer {token}"})
+            headers={"Authorization": f"Bearer {token}"},
+        )
 
         assert resp.status_code == 200
         result = resp.json()["result"]
@@ -475,22 +548,31 @@ class TestA2AFullSimulation:
         token = self._get_token("databricks-mcp", ["aiops:search"])
 
         # Busca: deve funcionar
-        resp = self._http.post("/a2a/tasks", json={
-            "jsonrpc": "2.0",
-            "method": "tasks/send",
-            "id": "1",
-            "params": {
-                "id": "databricks-search-1",
-                "skill": {"id": "search_incidents"},
-                "message": {
-                    "role": "user",
-                    "parts": [{"type": "data", "data": {
-                        "query": "spark job OOM killed",
-                        "top_k": 3,
-                    }}],
+        resp = self._http.post(
+            "/a2a/tasks",
+            json={
+                "jsonrpc": "2.0",
+                "method": "tasks/send",
+                "id": "1",
+                "params": {
+                    "id": "databricks-search-1",
+                    "skill": {"id": "search_incidents"},
+                    "message": {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "type": "data",
+                                "data": {
+                                    "query": "spark job OOM killed",
+                                    "top_k": 3,
+                                },
+                            }
+                        ],
+                    },
                 },
             },
-        }, headers={"Authorization": f"Bearer {token}"})
+            headers={"Authorization": f"Bearer {token}"},
+        )
 
         assert resp.status_code == 200
         assert resp.json()["result"]["status"]["state"] == "completed"
@@ -507,32 +589,57 @@ class TestA2AFullSimulation:
         }
 
         # Diagnose
-        diagnose_resp = self._http.post("/a2a/tasks", json={
-            "jsonrpc": "2.0", "method": "tasks/send", "id": "1",
-            "params": {
-                "id": "sre-diagnose-1",
-                "skill": {"id": "diagnose_incident"},
-                "message": {"role": "user", "parts": [{"type": "data", "data": incident_data}]},
+        diagnose_resp = self._http.post(
+            "/a2a/tasks",
+            json={
+                "jsonrpc": "2.0",
+                "method": "tasks/send",
+                "id": "1",
+                "params": {
+                    "id": "sre-diagnose-1",
+                    "skill": {"id": "diagnose_incident"},
+                    "message": {
+                        "role": "user",
+                        "parts": [{"type": "data", "data": incident_data}],
+                    },
+                },
             },
-        }, headers={"Authorization": f"Bearer {token}"})
+            headers={"Authorization": f"Bearer {token}"},
+        )
 
         assert diagnose_resp.json()["result"]["status"]["state"] == "completed"
 
         # Search — usa contexto do diagnóstico
-        search_resp = self._http.post("/a2a/tasks", json={
-            "jsonrpc": "2.0", "method": "tasks/send", "id": "2",
-            "params": {
-                "id": "sre-search-1",
-                "skill": {"id": "search_incidents"},
-                "message": {"role": "user", "parts": [{"type": "data", "data": {
-                    "query": "P99 latency checkout-service",
-                    "top_k": 3,
-                }}]},
+        search_resp = self._http.post(
+            "/a2a/tasks",
+            json={
+                "jsonrpc": "2.0",
+                "method": "tasks/send",
+                "id": "2",
+                "params": {
+                    "id": "sre-search-1",
+                    "skill": {"id": "search_incidents"},
+                    "message": {
+                        "role": "user",
+                        "parts": [
+                            {
+                                "type": "data",
+                                "data": {
+                                    "query": "P99 latency checkout-service",
+                                    "top_k": 3,
+                                },
+                            }
+                        ],
+                    },
+                },
             },
-        }, headers={"Authorization": f"Bearer {token}"})
+            headers={"Authorization": f"Bearer {token}"},
+        )
 
         assert search_resp.json()["result"]["status"]["state"] == "completed"
-        results = search_resp.json()["result"]["artifacts"][0]["parts"][0]["data"]["results"]
+        results = search_resp.json()["result"]["artifacts"][0]["parts"][0]["data"][
+            "results"
+        ]
         assert len(results) == 3
 
     @pytest.mark.asyncio
@@ -566,6 +673,7 @@ class TestA2AFullSimulation:
 # 5. Diagnóstico de artifacts — conteúdo real do MockEngine
 # ---------------------------------------------------------------------------
 
+
 class TestA2AArtifactContent:
     """Verifica a estrutura interna dos artifacts retornados."""
 
@@ -574,14 +682,23 @@ class TestA2AArtifactContent:
         self._client = TestClient(_make_a2a_app())
 
     def _diagnose(self, data: dict) -> list[dict]:
-        resp = self._client.post("/a2a/tasks", headers=_bearer(), json={
-            "jsonrpc": "2.0", "method": "tasks/send", "id": "1",
-            "params": {
-                "id": "art-test",
-                "skill": {"id": "diagnose_incident"},
-                "message": {"role": "user", "parts": [{"type": "data", "data": data}]},
+        resp = self._client.post(
+            "/a2a/tasks",
+            headers=_bearer(),
+            json={
+                "jsonrpc": "2.0",
+                "method": "tasks/send",
+                "id": "1",
+                "params": {
+                    "id": "art-test",
+                    "skill": {"id": "diagnose_incident"},
+                    "message": {
+                        "role": "user",
+                        "parts": [{"type": "data", "data": data}],
+                    },
+                },
             },
-        })
+        )
         return resp.json()["result"]["artifacts"]
 
     def test_diagnosis_artifact_has_root_cause(self):
@@ -597,14 +714,23 @@ class TestA2AArtifactContent:
         assert "action" in content
 
     def test_search_artifact_has_score_field(self):
-        resp = self._client.post("/a2a/tasks", headers=_bearer(), json={
-            "jsonrpc": "2.0", "method": "tasks/send", "id": "1",
-            "params": {
-                "id": "search-art",
-                "skill": {"id": "search_incidents"},
-                "message": {"role": "user", "parts": [{"type": "data", "data": {"query": "OOM"}}]},
+        resp = self._client.post(
+            "/a2a/tasks",
+            headers=_bearer(),
+            json={
+                "jsonrpc": "2.0",
+                "method": "tasks/send",
+                "id": "1",
+                "params": {
+                    "id": "search-art",
+                    "skill": {"id": "search_incidents"},
+                    "message": {
+                        "role": "user",
+                        "parts": [{"type": "data", "data": {"query": "OOM"}}],
+                    },
+                },
             },
-        })
+        )
         results = resp.json()["result"]["artifacts"][0]["parts"][0]["data"]["results"]
         for r in results:
             assert "score" in r

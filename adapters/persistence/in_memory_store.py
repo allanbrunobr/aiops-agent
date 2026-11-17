@@ -32,8 +32,7 @@ class InMemoryStore:
     def list_active(self) -> list[tuple[str, IncidentState]]:
         """Lista incidentes ativos (nao-terminais)."""
         return [
-            (iid, s) for iid, s in self._data.items()
-            if s.state not in _TERMINAL_STATES
+            (iid, s) for iid, s in self._data.items() if s.state not in _TERMINAL_STATES
         ]
 
     def list_all(self) -> list[tuple[str, IncidentState]]:

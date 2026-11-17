@@ -19,10 +19,10 @@ from rag.indexer import ObservabilityIndexer
 from rag.retriever import ObservabilityRetriever
 
 if TYPE_CHECKING:
+    from application.ports.credential_provider import CredentialProvider
     from application.ports.incident_store import IncidentStore
     from blueprint.nodes import PipelineDefinition
     from config.loader import AppConfig
-    from application.ports.credential_provider import CredentialProvider
 
 
 def build_engine(

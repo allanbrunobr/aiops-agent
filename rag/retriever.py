@@ -9,7 +9,8 @@ import logging
 import warnings
 
 import numpy as np
-from rag.indexer import ObservabilityIndexer, IndexedChunk
+
+from rag.indexer import IndexedChunk, ObservabilityIndexer
 
 _query_cache: dict[str, np.ndarray] = {}
 
@@ -105,8 +106,12 @@ class ObservabilityRetriever:
             if faiss_to_chunks is not None:
                 chunk_indices = faiss_to_chunks[idx]
                 chunk = next(
-                    (self.indexer.chunks[ci] for ci in chunk_indices
-                     if not source_filter or self.indexer.chunks[ci].source == source_filter),
+                    (
+                        self.indexer.chunks[ci]
+                        for ci in chunk_indices
+                        if not source_filter
+                        or self.indexer.chunks[ci].source == source_filter
+                    ),
                     None,
                 )
             else:
@@ -115,10 +120,12 @@ class ObservabilityRetriever:
                     chunk = None
             if chunk is None:
                 continue
-            results.append(SearchResult(
-                chunk=chunk,
-                score=float(dist),
-            ))
+            results.append(
+                SearchResult(
+                    chunk=chunk,
+                    score=float(dist),
+                )
+            )
             if len(results) >= limit:
                 break
 
@@ -178,7 +185,9 @@ class ObservabilityRetriever:
 
         lines = []
         for i, r in enumerate(results, 1):
-            lines.append(f"{i}. [{r.chunk.source.upper()}] (score={r.score:.3f}) {r.chunk.text}")
+            lines.append(
+                f"{i}. [{r.chunk.source.upper()}] (score={r.score:.3f}) {r.chunk.text}"
+            )
         return "\n".join(lines)
 
 

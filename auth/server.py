@@ -9,17 +9,22 @@ Endpoints:
 Baseado em: IETF draft-klrc-aiagent-auth-00 (março 2026).
 Phase 2: suporte a RS256 assimétrico + JWKS endpoint para federação.
 """
+
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+import jwt as pyjwt
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from auth.jwt_validator import MIN_HMAC_KEY_BYTES, TokenClaims, issue_token, validate_token
+from auth.jwt_validator import (
+    MIN_HMAC_KEY_BYTES,
+    TokenClaims,
+    issue_token,
+    validate_token,
+)
 from auth.pkce import verify_challenge
 from auth.scopes import ALL_SCOPES
 from auth.token_store import InMemoryTokenStore, TokenStore
-
-import jwt as pyjwt
 
 router = APIRouter(prefix="/auth", tags=["oauth"])
 
@@ -86,6 +91,7 @@ def configure(
     }
     if rsa_private_pem and rsa_public_pem:
         from auth.keys import public_key_to_jwk
+
         _rsa_private_pem = rsa_private_pem
         _rsa_public_pem = rsa_public_pem
         _jwk_set = {"keys": [public_key_to_jwk(rsa_public_pem, kid=kid)]}
@@ -100,8 +106,10 @@ def configure(
 # Schemas de request/response
 # ---------------------------------------------------------------------------
 
+
 class RegisterRequest(BaseModel):
     """Body do endpoint POST /auth/token/register."""
+
     client_id: str
     scopes: list[str]
     code_verifier: str = ""
@@ -111,6 +119,7 @@ class RegisterRequest(BaseModel):
 
 class RegisterResponse(BaseModel):
     """Resposta com JWT emitido."""
+
     access_token: str
     token_type: str = "Bearer"
     expires_in: int
@@ -119,12 +128,14 @@ class RegisterResponse(BaseModel):
 
 class IntrospectRequest(BaseModel):
     """Body do endpoint POST /auth/token/introspect."""
+
     token: str
 
 
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
+
 
 @router.post("/token/register", response_model=RegisterResponse)
 async def register(body: RegisterRequest) -> RegisterResponse:
@@ -171,7 +182,9 @@ async def register(body: RegisterRequest) -> RegisterResponse:
 
     # 4. O cliente precisa provar o verifier. Um challenge arbitrário
     # (deadbeef, texto que não é S256) não emite token.
-    if not body.code_verifier or not verify_challenge(body.code_verifier, body.code_challenge):
+    if not body.code_verifier or not verify_challenge(
+        body.code_verifier, body.code_challenge
+    ):
         raise HTTPException(
             status_code=400,
             detail="PKCE verification failed",

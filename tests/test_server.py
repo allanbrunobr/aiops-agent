@@ -62,6 +62,7 @@ def test_lazy_rag_no_heavy_imports():
 def test_lazy_rag_index_path():
     """LazyRAG deve aceitar index_path customizado."""
     from pathlib import Path
+
     custom_path = Path("/tmp/test_index.faiss")
     rag = LazyRAG(index_path=custom_path)
     assert rag._index_path == custom_path
@@ -76,6 +77,7 @@ def test_lazy_rag_load_persisted_nonexistent(tmp_path):
 def test_create_app_returns_fastapi():
     """create_app deve retornar instancia de FastAPI."""
     from fastapi import FastAPI
+
     application = create_app()
     assert isinstance(application, FastAPI)
     assert application.title == "AIOps Agent"
@@ -84,6 +86,7 @@ def test_create_app_returns_fastapi():
 def test_dependency_helpers():
     """Dependency helpers devem existir e ser importaveis."""
     from interfaces.http.dependencies import get_config, get_engine, get_store
+
     # Funcoes devem existir — falham com AssertionError se app_state nao inicializado
     assert callable(get_config)
     assert callable(get_store)

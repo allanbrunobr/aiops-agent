@@ -39,7 +39,9 @@ class LocalFallbackWriter:
             "postmortem": postmortem_data,
         }
 
-        filepath.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        filepath.write_text(
+            json.dumps(payload, indent=2, default=str), encoding="utf-8"
+        )
 
         log.warning(
             "notification.fallback_local",

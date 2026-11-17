@@ -10,11 +10,10 @@ Cobre:
 from __future__ import annotations
 
 import os
-import tempfile
+
 import pytest
 
-from rag.memory import IncidentRecord, IncidentMemoryDB
-
+from rag.memory import IncidentMemoryDB, IncidentRecord
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -53,6 +52,7 @@ def db(tmp_db):
 # Story 7.1: IncidentMemoryDB
 # ---------------------------------------------------------------------------
 
+
 class TestIncidentMemoryDBInit:
     """Testa criação automática do banco e esquema."""
 
@@ -67,13 +67,20 @@ class TestIncidentMemoryDBInit:
     def test_creates_schema(self, db, tmp_db):
         """Tabela incidents é criada com colunas corretas."""
         import sqlite3
+
         with sqlite3.connect(tmp_db) as conn:
             cursor = conn.execute("PRAGMA table_info(incidents)")
             columns = {row[1] for row in cursor.fetchall()}
         expected = {
-            "incident_id", "timestamp", "scenario", "root_cause",
-            "affected_services", "diagnosis_confidence", "resolution_time_sec",
-            "tags", "evidence_summary",
+            "incident_id",
+            "timestamp",
+            "scenario",
+            "root_cause",
+            "affected_services",
+            "diagnosis_confidence",
+            "resolution_time_sec",
+            "tags",
+            "evidence_summary",
         }
         assert expected.issubset(columns)
 
@@ -81,6 +88,7 @@ class TestIncidentMemoryDBInit:
     def test_creates_indexes(self, tmp_db):
         """Índices em scenario, timestamp e affected_services são criados."""
         import sqlite3
+
         IncidentMemoryDB(db_path=tmp_db)
         with sqlite3.connect(tmp_db) as conn:
             cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='index'")
@@ -98,6 +106,7 @@ class TestSaveIncident:
         """Registro é salvo com todos os campos."""
         db.save_incident(sample_record)
         import sqlite3
+
         with sqlite3.connect(db.db_path) as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
@@ -115,6 +124,7 @@ class TestSaveIncident:
         db.save_incident(sample_record)
         db.save_incident(sample_record)
         import sqlite3
+
         with sqlite3.connect(db.db_path) as conn:
             count = conn.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
         assert count == 1
@@ -136,6 +146,7 @@ class TestSaveIncident:
         )
         db.save_incident(updated)
         import sqlite3
+
         with sqlite3.connect(db.db_path) as conn:
             row = conn.execute(
                 "SELECT root_cause, diagnosis_confidence FROM incidents WHERE incident_id = ?",
@@ -219,7 +230,7 @@ class TestFindSimilarIncidents:
         for i in range(10):
             rec = IncidentRecord(
                 incident_id=f"id-{i}",
-                timestamp=f"2026-03-{i+1:02d}T10:00:00+00:00",
+                timestamp=f"2026-03-{i + 1:02d}T10:00:00+00:00",
                 scenario=f"scenario-{i}",
                 root_cause=f"Root {i}",
                 affected_services=["payment-service"],
@@ -229,7 +240,9 @@ class TestFindSimilarIncidents:
                 evidence_summary="",
             )
             db.save_incident(rec)
-        result = db.find_similar_incidents(["payment-service"], ["connection-pool"], limit=3)
+        result = db.find_similar_incidents(
+            ["payment-service"], ["connection-pool"], limit=3
+        )
         assert len(result) == 3
 
     @pytest.mark.unit
@@ -255,6 +268,7 @@ class TestIncidentRecordNew:
     def test_generates_uuid(self):
         """new() gera incident_id como UUID válido."""
         import uuid
+
         rec = IncidentRecord.new(
             scenario="test",
             root_cause="test cause",
@@ -284,6 +298,7 @@ class TestIncidentRecordNew:
 # Story 7.2: ObservabilityIndexerWithHistory
 # ---------------------------------------------------------------------------
 
+
 class TestObservabilityIndexerWithHistory:
     """Testa indexador com suporte a chunks históricos."""
 
@@ -291,6 +306,7 @@ class TestObservabilityIndexerWithHistory:
     def test_is_importable(self):
         """ObservabilityIndexerWithHistory pode ser importado."""
         from rag.indexer import ObservabilityIndexerWithHistory
+
         assert ObservabilityIndexerWithHistory is not None
 
     @pytest.mark.unit
@@ -298,7 +314,9 @@ class TestObservabilityIndexerWithHistory:
         """include_history=False não adiciona chunks históricos."""
         import sys
         from unittest.mock import MagicMock, patch
+
         import numpy as np
+
         from rag.indexer import ObservabilityIndexerWithHistory
 
         db_path = str(tmp_path / "test.db")
@@ -321,7 +339,9 @@ class TestObservabilityIndexerWithHistory:
         """include_history=True adiciona chunks históricos ao índice."""
         import sys
         from unittest.mock import MagicMock, patch
+
         import numpy as np
+
         from rag.indexer import ObservabilityIndexerWithHistory
 
         db_path = str(tmp_path / "mem.db")
@@ -358,7 +378,9 @@ class TestObservabilityIndexerWithHistory:
         """Banco vazio não levanta exceção — indexa apenas chunks atuais."""
         import sys
         from unittest.mock import MagicMock, patch
+
         import numpy as np
+
         from rag.indexer import ObservabilityIndexerWithHistory
 
         db_path = str(tmp_path / "empty.db")
@@ -380,7 +402,9 @@ class TestObservabilityIndexerWithHistory:
         """Exceção ao acessar DB histórico não interrompe indexação."""
         import sys
         from unittest.mock import MagicMock, patch
+
         import numpy as np
+
         from rag.indexer import ObservabilityIndexerWithHistory
 
         mock_faiss = MagicMock()
@@ -401,6 +425,7 @@ class TestObservabilityIndexerWithHistory:
 # Story 7.3: ObservabilityRetrieverWithHistory
 # ---------------------------------------------------------------------------
 
+
 class TestObservabilityRetrieverWithHistory:
     """Testa retriever com precedentes históricos."""
 
@@ -408,13 +433,14 @@ class TestObservabilityRetrieverWithHistory:
     def test_is_importable(self):
         """ObservabilityRetrieverWithHistory pode ser importado."""
         from rag.retriever_history import ObservabilityRetrieverWithHistory
+
         assert ObservabilityRetrieverWithHistory is not None
 
     @pytest.mark.unit
     def test_returns_empty_when_no_memory(self, tmp_path):
         """get_similar_past_incidents retorna [] quando banco está vazio."""
-        from rag.retriever_history import ObservabilityRetrieverWithHistory
         from rag.indexer import ObservabilityIndexer
+        from rag.retriever_history import ObservabilityRetrieverWithHistory
 
         db_path = str(tmp_path / "empty.db")
         IncidentMemoryDB(db_path=db_path)
@@ -427,8 +453,8 @@ class TestObservabilityRetrieverWithHistory:
     @pytest.mark.unit
     def test_returns_formatted_precedents(self, tmp_path):
         """get_similar_past_incidents retorna dicts formatados."""
-        from rag.retriever_history import ObservabilityRetrieverWithHistory
         from rag.indexer import ObservabilityIndexer
+        from rag.retriever_history import ObservabilityRetrieverWithHistory
 
         db_path = str(tmp_path / "mem.db")
         mem_db = IncidentMemoryDB(db_path=db_path)
@@ -447,7 +473,9 @@ class TestObservabilityRetrieverWithHistory:
 
         indexer = ObservabilityIndexer()
         retriever = ObservabilityRetrieverWithHistory(indexer, db_path=db_path)
-        result = retriever.get_similar_past_incidents(["payment-service"], ["connection-pool"])
+        result = retriever.get_similar_past_incidents(
+            ["payment-service"], ["connection-pool"]
+        )
 
         assert len(result) == 1
         p = result[0]
@@ -460,12 +488,14 @@ class TestObservabilityRetrieverWithHistory:
     @pytest.mark.unit
     def test_exception_is_silenced(self, tmp_path):
         """Exceção em get_similar_past_incidents é silenciada — retorna []."""
-        from rag.retriever_history import ObservabilityRetrieverWithHistory
         from rag.indexer import ObservabilityIndexer
+        from rag.retriever_history import ObservabilityRetrieverWithHistory
 
         # Fornece path inválido que causará erro ao acessar
         indexer = ObservabilityIndexer()
-        retriever = ObservabilityRetrieverWithHistory(indexer, db_path="/invalid/path/db.db")
+        retriever = ObservabilityRetrieverWithHistory(
+            indexer, db_path="/invalid/path/db.db"
+        )
         # Não deve levantar exceção
         result = retriever.get_similar_past_incidents(["svc"], ["tag"])
         assert result == []

@@ -7,17 +7,18 @@ Valida:
 - Criação de diretórios aninhados (AC #2)
 - Default backward-compatible (AC #3)
 """
+
 from __future__ import annotations
 
 import io
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 
 import pytest
-
 
 # ──────────────────────────────────────────────────────────────────────
 # Task 3: Unit tests for --output-dir CLI flag (AC #3, #4, #6)
 # ──────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.unit
 class TestArgparseOutputDirFlag:
@@ -44,12 +45,16 @@ class TestArgparseOutputDirFlag:
         from main import build_arg_parser
 
         parser = build_arg_parser()
-        args = parser.parse_args([
-            "--output-dir", "/tmp/x",
-            "--scenario", "memory-leak",
-            "--no-llm",
-            "--no-rag",
-        ])
+        args = parser.parse_args(
+            [
+                "--output-dir",
+                "/tmp/x",
+                "--scenario",
+                "memory-leak",
+                "--no-llm",
+                "--no-rag",
+            ]
+        )
         assert args.output_dir == "/tmp/x"
         assert args.scenario == "memory-leak"
         assert args.no_llm is True
@@ -68,19 +73,24 @@ class TestArgparseOutputDirFlag:
 # Task 4: Integration tests for postmortem path (AC #1, #2, #5)
 # ──────────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.integration
 class TestPostmortemOutputDir:
     """Testes de integração: postmortem salvo em diretório customizado."""
 
     def test_postmortem_saved_to_custom_directory(
-        self, pipeline_result, simulated_incident, tmp_path,
+        self,
+        pipeline_result,
+        simulated_incident,
+        tmp_path,
     ) -> None:
         """Postmortem salvo em diretório customizado via output_dir."""
         from main import step_postmortem
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             path, _ = step_postmortem(
-                pipeline_result, simulated_incident,
+                pipeline_result,
+                simulated_incident,
                 output_dir=str(tmp_path),
             )
 
@@ -90,7 +100,10 @@ class TestPostmortemOutputDir:
         assert path.name.startswith("postmortem_"), f"Nome inesperado: {path.name}"
 
     def test_postmortem_creates_nested_directory(
-        self, pipeline_result, simulated_incident, tmp_path,
+        self,
+        pipeline_result,
+        simulated_incident,
+        tmp_path,
     ) -> None:
         """Diretórios aninhados são auto-criados (parents=True)."""
         from main import step_postmortem
@@ -100,7 +113,8 @@ class TestPostmortemOutputDir:
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             path, _ = step_postmortem(
-                pipeline_result, simulated_incident,
+                pipeline_result,
+                simulated_incident,
                 output_dir=str(nested),
             )
 
@@ -109,11 +123,14 @@ class TestPostmortemOutputDir:
         assert path.parent == nested
 
     def test_postmortem_default_output_dir(
-        self, pipeline_result, simulated_incident,
+        self,
+        pipeline_result,
+        simulated_incident,
     ) -> None:
         """Sem output_dir, postmortem é salvo em 'output/' (backward-compatible)."""
-        from main import step_postmortem
         from pathlib import Path
+
+        from main import step_postmortem
 
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
             path, _ = step_postmortem(pipeline_result, simulated_incident)

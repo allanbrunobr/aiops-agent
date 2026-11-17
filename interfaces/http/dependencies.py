@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 from application.ports.incident_store import IncidentStore
 from blueprint.engine import BlueprintEngine
 from config.loader import AppConfig
-from application.ports.credential_provider import CredentialProvider
 
 if TYPE_CHECKING:
     from rag.knowledge_store import KnowledgeStore
@@ -16,6 +15,7 @@ if TYPE_CHECKING:
 def get_config() -> AppConfig:
     """Dependencia FastAPI: retorna configuracao da aplicacao."""
     from interfaces.http.app import app_state
+
     assert app_state.config is not None, "Config not initialized"
     return app_state.config
 
@@ -23,6 +23,7 @@ def get_config() -> AppConfig:
 def get_store() -> IncidentStore:
     """Dependencia FastAPI: retorna IncidentStore."""
     from interfaces.http.app import app_state
+
     assert app_state.store is not None, "Store not initialized"
     return app_state.store
 
@@ -30,6 +31,7 @@ def get_store() -> IncidentStore:
 def get_engine() -> BlueprintEngine:
     """Dependencia FastAPI: retorna BlueprintEngine."""
     from interfaces.http.app import app_state
+
     assert app_state.engine is not None, "Engine not initialized"
     return app_state.engine
 
@@ -37,7 +39,9 @@ def get_engine() -> BlueprintEngine:
 def get_knowledge_store(request: object) -> KnowledgeStore | None:
     """Dependencia FastAPI: retorna KnowledgeStore via request.app.state."""
     from fastapi import Request
+
     if isinstance(request, Request):
         return request.app.state.knowledge_store  # type: ignore[attr-defined]
     from interfaces.http.app import app_state
+
     return app_state.knowledge_store

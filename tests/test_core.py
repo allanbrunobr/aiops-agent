@@ -8,10 +8,10 @@ from datetime import datetime, timezone
 
 import pytest
 
-from adapters.persistence.in_memory_store import InMemoryStore
-from application.ports.incident_store import IncidentStore
 from adapters.credentials import EnvCredentialProvider
+from adapters.persistence.in_memory_store import InMemoryStore
 from application.ports.credential_provider import CredentialProvider
+from application.ports.incident_store import IncidentStore
 from domain.alert import NormalizedAlert
 from domain.incident_state import IncidentState
 from interfaces.http.webhook.schemas import NormalizedAlertDTO, normalize_severity
@@ -121,10 +121,16 @@ class TestIncidentState:
         # Reconstrói datetimes (alert + state) a partir do ISO string
         alert_dict = restored_dict["alert"]
         alert_dict["timestamp"] = datetime.fromisoformat(alert_dict["timestamp"])
-        alert_dict["detection_timestamp"] = datetime.fromisoformat(alert_dict["detection_timestamp"])
+        alert_dict["detection_timestamp"] = datetime.fromisoformat(
+            alert_dict["detection_timestamp"]
+        )
         restored_dict["alert"] = NormalizedAlert(**alert_dict)
-        restored_dict["received_at"] = datetime.fromisoformat(restored_dict["received_at"])
-        restored_dict["started_at"] = datetime.fromisoformat(restored_dict["started_at"])
+        restored_dict["received_at"] = datetime.fromisoformat(
+            restored_dict["received_at"]
+        )
+        restored_dict["started_at"] = datetime.fromisoformat(
+            restored_dict["started_at"]
+        )
         restored = IncidentState(**restored_dict)
         assert restored.incident_id == state.incident_id
         assert restored.alert.source == state.alert.source
@@ -138,7 +144,9 @@ class TestIncidentState:
     def test_immutable_replace(self):
         """Campos do pipeline devem ser atualizaveis via dataclasses.replace."""
         state = _make_state()
-        updated = dataclasses.replace(state, diagnosis={"root_cause": "pool exhaustion"})
+        updated = dataclasses.replace(
+            state, diagnosis={"root_cause": "pool exhaustion"}
+        )
         assert updated.diagnosis == {"root_cause": "pool exhaustion"}
         assert state.diagnosis is None  # Original inalterado
 

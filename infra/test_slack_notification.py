@@ -30,7 +30,9 @@ from core.lifecycle import LifecycleEvent
 from interfaces.http.notifications.slack import SlackNotifier
 
 
-def evt(event_type: str, cid: str, node_name: str | None = None, **data) -> LifecycleEvent:
+def evt(
+    event_type: str, cid: str, node_name: str | None = None, **data
+) -> LifecycleEvent:
     """Helper to create a LifecycleEvent with the current timestamp."""
     return LifecycleEvent(
         event_type=event_type,
@@ -55,13 +57,15 @@ async def main():
 
     # 1. Pipeline started
     print(f"[1/4] Sending pipeline.started to {channel}...")
-    await notifier.on_event(evt(
-        "pipeline.started",
-        correlation_id,
-        title="Connection Pool Exhaustion - payment-svc",
-        severity="critical",
-        service="payment-svc",
-    ))
+    await notifier.on_event(
+        evt(
+            "pipeline.started",
+            correlation_id,
+            title="Connection Pool Exhaustion - payment-svc",
+            severity="critical",
+            service="payment-svc",
+        )
+    )
     await asyncio.sleep(1.5)
 
     # 2. Nodes completing progressively
@@ -81,41 +85,45 @@ async def main():
 
     for i, (node_name, duration_ms) in enumerate(nodes, 1):
         print(f"[2/4] Node {i}/{len(nodes)}: {node_name} ({duration_ms}ms)")
-        await notifier.on_event(evt(
-            "node.completed",
-            correlation_id,
-            node_name=node_name,
-            duration_ms=duration_ms,
-        ))
+        await notifier.on_event(
+            evt(
+                "node.completed",
+                correlation_id,
+                node_name=node_name,
+                duration_ms=duration_ms,
+            )
+        )
         await asyncio.sleep(0.8)
 
     # 3. Pipeline completed with diagnosis
     print("[3/4] Sending pipeline.completed with diagnosis...")
-    await notifier.on_event(LifecycleEvent(
-        event_type="pipeline.completed",
-        correlation_id=correlation_id,
-        node_name=None,
-        timestamp=datetime.now(timezone.utc),
-        data={
-            "root_cause": (
-                "Config change in deploy v2.3.1 reduced max_connections from 200 to 50, "
-                "causing connection pool exhaustion under normal load (~150 req/s). "
-                "Pool saturated at 50/50 connections, new requests queued indefinitely."
-            ),
-            "evidence": [
-                "Deploy event at 14:19 UTC: payment-svc v2.3.1 config change",
-                "connection_pool_active = 50/50 (100% saturated) since 14:23",
-                "error_rate spiked from 0.5% to 38.2% at 14:23",
-                "p95 latency increased from 45ms to 950ms",
-                "Drain3 cluster: 'Connection pool exhausted, 80 requests waiting'",
-            ],
-            "confidence": 0.92,
-            "proposed_fix": "kubectl set env deployment/payment-svc MAX_CONNECTIONS=200",
-            "risk_level": "LOW",
-            "blast_radius": "1 service (payment-svc)",
-            "total_duration_ms": 3145,
-        },
-    ))
+    await notifier.on_event(
+        LifecycleEvent(
+            event_type="pipeline.completed",
+            correlation_id=correlation_id,
+            node_name=None,
+            timestamp=datetime.now(timezone.utc),
+            data={
+                "root_cause": (
+                    "Config change in deploy v2.3.1 reduced max_connections from 200 to 50, "
+                    "causing connection pool exhaustion under normal load (~150 req/s). "
+                    "Pool saturated at 50/50 connections, new requests queued indefinitely."
+                ),
+                "evidence": [
+                    "Deploy event at 14:19 UTC: payment-svc v2.3.1 config change",
+                    "connection_pool_active = 50/50 (100% saturated) since 14:23",
+                    "error_rate spiked from 0.5% to 38.2% at 14:23",
+                    "p95 latency increased from 45ms to 950ms",
+                    "Drain3 cluster: 'Connection pool exhausted, 80 requests waiting'",
+                ],
+                "confidence": 0.92,
+                "proposed_fix": "kubectl set env deployment/payment-svc MAX_CONNECTIONS=200",
+                "risk_level": "LOW",
+                "blast_radius": "1 service (payment-svc)",
+                "total_duration_ms": 3145,
+            },
+        )
+    )
 
     print("[4/4] Full notification sent!")
     print(f"     Check the {channel} channel in Slack.")

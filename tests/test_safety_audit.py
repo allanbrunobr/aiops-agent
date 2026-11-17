@@ -10,8 +10,8 @@ import structlog.testing
 
 from safety.audit import SafetyAuditEvent, SafetyAuditor
 
-
 # ── SafetyAuditEvent ──────────────────────────────────────────────────────────
+
 
 def test_audit_event_is_frozen():
     """SafetyAuditEvent deve ser imutável (frozen dataclass)."""
@@ -44,6 +44,7 @@ def test_audit_event_defaults():
 
 
 # ── SafetyAuditor.log_decision ─────────────────────────────────────────────────
+
 
 def test_log_decision_pass_emits_info():
     """Veredito 'pass' deve emitir log de nível info."""
@@ -143,14 +144,16 @@ def test_log_decision_includes_metadata():
 
 # ── Instrumentação das camadas de segurança ───────────────────────────────────
 
+
 def test_sanitizer_emits_audit_log_on_clean_input():
     """TelemetrySanitizer deve emitir evento safety.sanitizer ao processar logs limpos."""
     from pipeline.telemetry_sanitizer import TelemetrySanitizer
 
     sanitizer = TelemetrySanitizer(strict_mode=False)
 
-    from data.models import LogEntry
     import datetime
+
+    from data.models import LogEntry
 
     logs = [
         LogEntry(

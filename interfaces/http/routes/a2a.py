@@ -9,6 +9,7 @@ sem alterar nenhuma lógica de negócio do core.
 
 Baseado em: A2A Protocol v0.3 + IETF draft-klrc-aiagent-auth-00.
 """
+
 from __future__ import annotations
 
 import json
@@ -210,6 +211,7 @@ async def handle_task(request: Request) -> dict:
 # Handlers de skill — traduzem A2A → pipeline existente
 # ---------------------------------------------------------------------------
 
+
 def _map_severity(raw: str) -> str:
     """Normaliza severity A2A → NormalizedAlert (critical/error/warning/info).
 
@@ -217,7 +219,14 @@ def _map_severity(raw: str) -> str:
     handler externo captura e devolve artifact ``pipeline_error``.
     """
     from interfaces.http.webhook.schemas import normalize_severity
-    _MAP = {"high": "error", "medium": "warning", "low": "info", "p1": "critical", "p2": "error"}
+
+    _MAP = {
+        "high": "error",
+        "medium": "warning",
+        "low": "info",
+        "p1": "critical",
+        "p2": "error",
+    }
     normalized = raw.lower()
     mapped = _MAP.get(normalized, normalized)
     return normalize_severity(mapped)
@@ -227,10 +236,13 @@ async def _handle_diagnose(task_id: str, data: dict, request: Request) -> list[d
     """Traduz task A2A diagnose_incident → BlueprintEngine."""
     engine = getattr(request.app.state, "engine", None)
     if engine is None:
-        return [_error_artifact("engine_unavailable", "BlueprintEngine not initialized")]
+        return [
+            _error_artifact("engine_unavailable", "BlueprintEngine not initialized")
+        ]
 
     try:
         from datetime import datetime, timezone
+
         from domain.alert import NormalizedAlert
         from domain.incident_state import IncidentState
 
@@ -256,6 +268,7 @@ async def _handle_diagnose(task_id: str, data: dict, request: Request) -> list[d
         )
 
         from app.builders import build_pipeline
+
         config = getattr(request.app.state, "config", None)
         pipeline = build_pipeline(config)
         result = engine.run(pipeline, state)
@@ -267,7 +280,9 @@ async def _handle_diagnose(task_id: str, data: dict, request: Request) -> list[d
             },
             {
                 "name": "mitigation",
-                "parts": [{"type": "data", "data": _safe_dict(result, "mitigation_proposal")}],
+                "parts": [
+                    {"type": "data", "data": _safe_dict(result, "mitigation_proposal")}
+                ],
             },
         ]
     except Exception as exc:
@@ -279,7 +294,9 @@ async def _handle_search(task_id: str, data: dict, request: Request) -> list[dic
     """Traduz task A2A search_incidents → RAG retriever."""
     retriever = getattr(request.app.state, "retriever", None)
     if retriever is None:
-        return [_error_artifact("retriever_unavailable", "RAG retriever not initialized")]
+        return [
+            _error_artifact("retriever_unavailable", "RAG retriever not initialized")
+        ]
 
     try:
         query = data.get("query", "")
@@ -292,7 +309,9 @@ async def _handle_search(task_id: str, data: dict, request: Request) -> list[dic
         return [
             {
                 "name": "search_results",
-                "parts": [{"type": "data", "data": {"results": results, "query": query}}],
+                "parts": [
+                    {"type": "data", "data": {"results": results, "query": query}}
+                ],
             }
         ]
     except Exception as exc:
@@ -303,6 +322,7 @@ async def _handle_search(task_id: str, data: dict, request: Request) -> list[dic
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _safe_dict(obj: Any, attr: str) -> dict:
     """Extrai atributo como dict, retornando {} se ausente."""

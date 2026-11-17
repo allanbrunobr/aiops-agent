@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 Estágio preditivo do pipeline AIOps.
 
@@ -11,13 +12,13 @@ import logging
 
 from data.models import PredictionReport
 from pipeline.log_predictor import LogBurstSignal, analyze_log_signals
-from pipeline.trace_predictor import LatencyDriftSignal, analyze_trace_signals
 from pipeline.metric_predictor import compute_ewma_slope
 from pipeline.risk_scorer import (
     MetricTrendSignal,
     compute_risk_score,
     get_event_level,
 )
+from pipeline.trace_predictor import LatencyDriftSignal, analyze_trace_signals
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +52,10 @@ def run_predictive_stage(aggregated_report) -> PredictionReport | None:
             metric_anomalies = getattr(aggregated_report, "metric_anomalies", [])
             if metric_anomalies:
                 # Usa os valores das anomalias como proxy de série temporal
-                from data.models import MetricPoint
                 import datetime
+
+                from data.models import MetricPoint
+
                 now = datetime.datetime.now()
                 points = [
                     MetricPoint(
@@ -86,19 +89,26 @@ def run_predictive_stage(aggregated_report) -> PredictionReport | None:
             log_templates = getattr(aggregated_report, "log_templates", [])
             if log_templates:
                 # Constrói entradas de log sintéticas a partir dos templates
-                from data.models import LogEntry
                 import datetime
+
+                from data.models import LogEntry
+
                 now = datetime.datetime.now()
                 log_entries = []
                 for tpl in log_templates:
                     count = getattr(tpl, "count", 1)
                     for _ in range(min(count, 10)):  # limita para evitar explosion
-                        log_entries.append(LogEntry(
-                            timestamp=now,
-                            level=getattr(tpl, "level", "INFO"),
-                            service=next(iter(getattr(tpl, "services", {"unknown"})), "unknown"),
-                            message=str(getattr(tpl, "template", "")),
-                        ))
+                        log_entries.append(
+                            LogEntry(
+                                timestamp=now,
+                                level=getattr(tpl, "level", "INFO"),
+                                service=next(
+                                    iter(getattr(tpl, "services", {"unknown"})),
+                                    "unknown",
+                                ),
+                                message=str(getattr(tpl, "template", "")),
+                            )
+                        )
                 if len(log_entries) >= 2:
                     log_signal = analyze_log_signals(log_entries)
                     signals.append("log_burst")
@@ -109,23 +119,27 @@ def run_predictive_stage(aggregated_report) -> PredictionReport | None:
         try:
             slow_traces = getattr(aggregated_report, "slow_traces", [])
             if slow_traces:
-                from data.models import Span
                 import datetime
                 import uuid
+
+                from data.models import Span
+
                 now = datetime.datetime.now()
                 spans = []
                 for trace in slow_traces:
                     duration = getattr(trace, "duration_ms", 0.0)
-                    spans.append(Span(
-                        trace_id=str(uuid.uuid4()),
-                        span_id=str(uuid.uuid4()),
-                        parent_span_id=None,
-                        service=getattr(trace, "bottleneck_service", "unknown"),
-                        operation=getattr(trace, "path", "unknown"),
-                        start_time=now,
-                        duration_ms=duration,
-                        status="ok",
-                    ))
+                    spans.append(
+                        Span(
+                            trace_id=str(uuid.uuid4()),
+                            span_id=str(uuid.uuid4()),
+                            parent_span_id=None,
+                            service=getattr(trace, "bottleneck_service", "unknown"),
+                            operation=getattr(trace, "path", "unknown"),
+                            start_time=now,
+                            duration_ms=duration,
+                            status="ok",
+                        )
+                    )
                 if len(spans) >= 2:
                     latency_signal = analyze_trace_signals(spans)
                     signals.append("latency_drift")

@@ -4,16 +4,18 @@ Testes unitários para o scenario registry e abstração de cenários.
 Verifica registro, lookup, determinismo por seed e backward-compatibility
 da função create_incident().
 """
+
 from __future__ import annotations
 
 import datetime
 
 import pytest
 
+from data.models import LogEntry, MetricPoint, SimulatedIncident, Span
+from data.registry import get_scenario, list_scenarios
+
 # Importar sample_incident primeiro — dispara register_scenario() em module-level.
 from data.sample_incident import create_incident
-from data.models import LogEntry, MetricPoint, Span, SimulatedIncident
-from data.registry import get_scenario, list_scenarios
 
 
 @pytest.mark.unit
@@ -120,7 +122,9 @@ class TestMemoryLeakScenario:
         fn = get_scenario("memory-leak")
         inc = fn(seed=42)
         services = set(log.service for log in inc.logs)
-        assert len(services) >= 3, f"Esperado ≥3 serviços, encontrado {len(services)}: {services}"
+        assert len(services) >= 3, (
+            f"Esperado ≥3 serviços, encontrado {len(services)}: {services}"
+        )
 
     def test_memory_leak_root_cause_contains_memory(self) -> None:
         """actual_root_cause deve conter 'memory' (case-insensitive)."""
@@ -136,9 +140,15 @@ class TestMemoryLeakScenario:
         inc = fn(seed=42)
 
         expected_fields = {
-            "logs", "metrics", "traces",
-            "deploy_time", "spike_start", "detection_time", "fix_time",
-            "actual_root_cause", "actual_fix",
+            "logs",
+            "metrics",
+            "traces",
+            "deploy_time",
+            "spike_start",
+            "detection_time",
+            "fix_time",
+            "actual_root_cause",
+            "actual_fix",
         }
         actual_fields = set(inc.__dataclass_fields__.keys())
         assert actual_fields == expected_fields
@@ -183,9 +193,15 @@ class TestBackwardCompatibility:
     def test_simulated_incident_contract(self) -> None:
         """SimulatedIncident deve ter exatamente os 9 campos do contrato."""
         expected_fields = {
-            "logs", "metrics", "traces",
-            "deploy_time", "spike_start", "detection_time", "fix_time",
-            "actual_root_cause", "actual_fix",
+            "logs",
+            "metrics",
+            "traces",
+            "deploy_time",
+            "spike_start",
+            "detection_time",
+            "fix_time",
+            "actual_root_cause",
+            "actual_fix",
         }
         incident = create_incident()
 
@@ -195,6 +211,7 @@ class TestBackwardCompatibility:
 
         # Verifica tipos dos campos de timestamp.
         import datetime
+
         assert isinstance(incident.deploy_time, datetime.datetime)
         assert isinstance(incident.spike_start, datetime.datetime)
         assert isinstance(incident.detection_time, datetime.datetime)

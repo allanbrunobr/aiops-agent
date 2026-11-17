@@ -1,7 +1,9 @@
 from __future__ import annotations
+
 """Testes unitários para MetricSeries e compute_ewma_slope."""
 
 import datetime
+
 import pytest
 
 from data.models import MetricPoint, MetricSeries
@@ -15,6 +17,7 @@ def _make_point(value: float, minute: int = 0) -> MetricPoint:
 
 
 # ── Testes de MetricSeries ────────────────────────────────────────────────────
+
 
 class TestMetricSeriesInstantiation:
     """Verifica a instanciação do dataclass MetricSeries."""
@@ -37,13 +40,17 @@ class TestMetricSeriesInstantiation:
     def test_with_eta_minutes(self):
         pts = [_make_point(50.0, i) for i in range(3)]
         ms = MetricSeries(
-            service="svc", metric_name="cpu", points=pts,
-            threshold=90.0, eta_minutes=8.0,
+            service="svc",
+            metric_name="cpu",
+            points=pts,
+            threshold=90.0,
+            eta_minutes=8.0,
         )
         assert ms.eta_minutes == 8.0
 
 
 # ── Testes de compute_ewma_slope ──────────────────────────────────────────────
+
 
 @pytest.mark.unit
 class TestComputeEwmaSlope:

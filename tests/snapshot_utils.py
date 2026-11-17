@@ -5,6 +5,7 @@ para validação de determinismo do pipeline com seed-42.
 
 Zero dependências externas — usa apenas stdlib Python.
 """
+
 from __future__ import annotations
 
 import json
@@ -60,7 +61,8 @@ def normalize_for_snapshot(
     # Dataclass → dict e re-normaliza
     if is_dataclass(data) and not isinstance(data, type):
         return normalize_for_snapshot(
-            asdict(data), _trace_counter=_trace_counter,
+            asdict(data),
+            _trace_counter=_trace_counter,
             _parent_key=_parent_key,
         )
 
@@ -72,7 +74,9 @@ def normalize_for_snapshot(
     if isinstance(data, dict):
         return {
             k: normalize_for_snapshot(
-                v, _trace_counter=_trace_counter, _parent_key=k,
+                v,
+                _trace_counter=_trace_counter,
+                _parent_key=k,
             )
             for k, v in sorted(data.items())
         }
@@ -80,8 +84,7 @@ def normalize_for_snapshot(
     # Lista/tupla → normaliza cada item
     if isinstance(data, (list, tuple)):
         items = [
-            normalize_for_snapshot(item, _trace_counter=_trace_counter)
-            for item in data
+            normalize_for_snapshot(item, _trace_counter=_trace_counter) for item in data
         ]
         # Listas derivadas de sets (ex: affected_services) — ordenar
         if _parent_key in _SET_LIKE_KEYS:
@@ -91,8 +94,7 @@ def normalize_for_snapshot(
     # Set/frozenset → sorted list para ordenação determinística
     if isinstance(data, (set, frozenset)):
         return sorted(
-            normalize_for_snapshot(item, _trace_counter=_trace_counter)
-            for item in data
+            normalize_for_snapshot(item, _trace_counter=_trace_counter) for item in data
         )
 
     # datetime → placeholder fixo
@@ -151,6 +153,7 @@ def _sort_service_list_in_string(text: str) -> str:
     Transforma 'em auth-svc, payment-svc, gateway'
     em 'em auth-svc, gateway, payment-svc' para determinismo.
     """
+
     def _sort_match(m: re.Match) -> str:
         prefix = m.group(1)
         services = [s.strip() for s in m.group(2).split(",")]
@@ -196,8 +199,11 @@ class SnapshotManager:
         snapshot_path = self.snapshot_dir / f"{snapshot_name}.json"
         normalized = normalize_for_snapshot(data)
         current = json.dumps(
-            normalized, indent=2, sort_keys=True,
-            ensure_ascii=False, default=str,
+            normalized,
+            indent=2,
+            sort_keys=True,
+            ensure_ascii=False,
+            default=str,
         )
 
         if self.update or not snapshot_path.exists():
@@ -206,12 +212,15 @@ class SnapshotManager:
 
         stored = snapshot_path.read_text(encoding="utf-8")
         if current != stored:
-            diff_lines = list(unified_diff(
-                stored.splitlines(), current.splitlines(),
-                fromfile=f"stored/{snapshot_name}.json",
-                tofile=f"current/{snapshot_name}.json",
-                lineterm="",
-            ))
+            diff_lines = list(
+                unified_diff(
+                    stored.splitlines(),
+                    current.splitlines(),
+                    fromfile=f"stored/{snapshot_name}.json",
+                    tofile=f"current/{snapshot_name}.json",
+                    lineterm="",
+                )
+            )
             diff = "\n".join(diff_lines)
             raise AssertionError(
                 f"Snapshot mismatch para '{snapshot_name}'.\n"
@@ -233,12 +242,15 @@ class SnapshotManager:
 
         stored = snapshot_path.read_text(encoding="utf-8")
         if normalized != stored:
-            diff_lines = list(unified_diff(
-                stored.splitlines(), normalized.splitlines(),
-                fromfile=f"stored/{snapshot_name}.txt",
-                tofile=f"current/{snapshot_name}.txt",
-                lineterm="",
-            ))
+            diff_lines = list(
+                unified_diff(
+                    stored.splitlines(),
+                    normalized.splitlines(),
+                    fromfile=f"stored/{snapshot_name}.txt",
+                    tofile=f"current/{snapshot_name}.txt",
+                    lineterm="",
+                )
+            )
             diff = "\n".join(diff_lines)
             raise AssertionError(
                 f"Snapshot mismatch para '{snapshot_name}'.\n"

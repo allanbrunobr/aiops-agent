@@ -4,6 +4,7 @@ Predição de surtos e novidades em logs para o pipeline AIOps.
 Detecta aumentos de taxa de log (burst) e templates novos entre janelas
 temporais adjacentes, emitindo sinais de alerta antecipado.
 """
+
 from __future__ import annotations
 
 from collections import Counter
@@ -85,9 +86,7 @@ def detect_novel_templates(
         novel_templates (list[str]): lista de IDs inéditos encontrados.
     """
     novel_templates = [
-        _get_template_id(e)
-        for e in new_entries
-        if _get_template_id(e) not in known_ids
+        _get_template_id(e) for e in new_entries if _get_template_id(e) not in known_ids
     ]
     return {"novel_templates": novel_templates}
 

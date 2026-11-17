@@ -1,4 +1,5 @@
 """Módulo de autenticação OAuth 2.1 com PKCE para o AIOps Agent."""
+
 from __future__ import annotations
 
 from auth.jwt_validator import TokenClaims, issue_token, validate_token

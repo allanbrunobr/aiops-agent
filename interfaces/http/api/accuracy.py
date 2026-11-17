@@ -56,6 +56,7 @@ class AccuracyMetricsResponse(BaseModel):
 
 # --- Dependency injection ---
 
+
 def get_store() -> IncidentStore:
     """Placeholder — substituído pelo composition root em server/app.py."""
     raise NotImplementedError("Store must be injected via app.dependency_overrides")
@@ -63,7 +64,10 @@ def get_store() -> IncidentStore:
 
 # --- Endpoints ---
 
-@router.patch("/incidents/{correlation_id}/accuracy", response_model=AccuracyReviewResponse)
+
+@router.patch(
+    "/incidents/{correlation_id}/accuracy", response_model=AccuracyReviewResponse
+)
 async def update_accuracy(
     correlation_id: str,
     body: AccuracyReviewRequest,
@@ -72,7 +76,9 @@ async def update_accuracy(
     """Atualiza veredito de acurácia de um diagnóstico."""
     state = store.get(correlation_id)
     if state is None:
-        raise HTTPException(status_code=404, detail=f"Incident {correlation_id} not found")
+        raise HTTPException(
+            status_code=404, detail=f"Incident {correlation_id} not found"
+        )
 
     now = datetime.utcnow()
 
@@ -88,8 +94,13 @@ async def update_accuracy(
     # Tratamento especial para falso positivo (Story 4.5)
     if body.accuracy == "false_positive":
         try:
-            from interfaces.http.handlers.false_positive import handle_false_positive_side_effects
-            await handle_false_positive_side_effects(correlation_id, body.notes, updated)
+            from interfaces.http.handlers.false_positive import (
+                handle_false_positive_side_effects,
+            )
+
+            await handle_false_positive_side_effects(
+                correlation_id, body.notes, updated
+            )
         except Exception:
             pass  # side-effects não bloqueiam a resposta principal
 

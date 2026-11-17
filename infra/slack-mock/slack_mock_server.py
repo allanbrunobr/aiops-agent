@@ -27,19 +27,18 @@ Docker:
 import json
 import os
 import time
-import uuid
-from dataclasses import dataclass, field, asdict
-from typing import Any
+from dataclasses import asdict, dataclass, field
 
+import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-import uvicorn
 
 app = FastAPI(title="Slack Mock Server")
 
 # ---------------------------------------------------------------------------
 # In-memory message store
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class StoredMessage:
@@ -63,6 +62,7 @@ def _generate_ts() -> str:
 # ---------------------------------------------------------------------------
 # Slack API endpoints
 # ---------------------------------------------------------------------------
+
 
 @app.post("/api/chat.postMessage")
 async def chat_post_message(request: Request) -> JSONResponse:
@@ -95,18 +95,20 @@ async def chat_post_message(request: Request) -> JSONResponse:
     messages.append(msg)
     print(f"[chat.postMessage] channel={channel} text={text[:80]!r}")
 
-    return JSONResponse({
-        "ok": True,
-        "channel": channel,
-        "ts": ts,
-        "message": {
-            "text": text,
+    return JSONResponse(
+        {
+            "ok": True,
+            "channel": channel,
             "ts": ts,
-            "type": "message",
-            "subtype": "bot_message",
-            "bot_id": "B_MOCK_BOT",
-        },
-    })
+            "message": {
+                "text": text,
+                "ts": ts,
+                "type": "message",
+                "subtype": "bot_message",
+                "bot_id": "B_MOCK_BOT",
+            },
+        }
+    )
 
 
 @app.post("/api/chat.update")
@@ -141,47 +143,61 @@ async def chat_update(request: Request) -> JSONResponse:
     if not found:
         # Still return success (Slack does too if ts is wrong, just no-ops)
         print(f"[chat.update] WARNING: message ts={ts} not found, storing as new")
-        messages.append(StoredMessage(
-            channel=channel, text=text, blocks=blocks,
-            ts=ts, thread_ts=None, updated=True, raw_request=body,
-        ))
+        messages.append(
+            StoredMessage(
+                channel=channel,
+                text=text,
+                blocks=blocks,
+                ts=ts,
+                thread_ts=None,
+                updated=True,
+                raw_request=body,
+            )
+        )
 
     print(f"[chat.update] channel={channel} ts={ts} text={text[:80]!r}")
 
-    return JSONResponse({
-        "ok": True,
-        "channel": channel,
-        "ts": ts,
-        "text": text,
-    })
+    return JSONResponse(
+        {
+            "ok": True,
+            "channel": channel,
+            "ts": ts,
+            "text": text,
+        }
+    )
 
 
 @app.get("/api/auth.test")
 @app.post("/api/auth.test")
 async def auth_test(request: Request) -> JSONResponse:
     """Mock auth.test -- always returns success."""
-    return JSONResponse({
-        "ok": True,
-        "url": "https://mock-workspace.slack.com/",
-        "team": "Mock Workspace",
-        "user": "aiops-bot",
-        "team_id": "T_MOCK",
-        "user_id": "U_MOCK",
-        "bot_id": "B_MOCK_BOT",
-    })
+    return JSONResponse(
+        {
+            "ok": True,
+            "url": "https://mock-workspace.slack.com/",
+            "team": "Mock Workspace",
+            "user": "aiops-bot",
+            "team_id": "T_MOCK",
+            "user_id": "U_MOCK",
+            "bot_id": "B_MOCK_BOT",
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Test helper endpoints (not part of Slack API)
 # ---------------------------------------------------------------------------
 
+
 @app.get("/_mock/messages")
 async def get_messages() -> JSONResponse:
     """Return all captured messages for test assertions."""
-    return JSONResponse({
-        "count": len(messages),
-        "messages": [asdict(m) for m in messages],
-    })
+    return JSONResponse(
+        {
+            "count": len(messages),
+            "messages": [asdict(m) for m in messages],
+        }
+    )
 
 
 @app.delete("/_mock/messages")

@@ -8,6 +8,7 @@ Cobre:
   - Scope enforcement por ferramenta
   - SSE endpoint com Bearer JWT (usando TestClient)
 """
+
 from __future__ import annotations
 
 import time
@@ -17,16 +18,16 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import auth.server as auth_server
 from auth.jwt_validator import TokenClaims, issue_token, validate_token
 from auth.pkce import derive_challenge, generate_verifier, verify_challenge
 from auth.scopes import TOOL_SCOPES, require_scope
 from auth.token_store import InMemoryTokenStore
-import auth.server as auth_server
-
 
 # ---------------------------------------------------------------------------
 # PKCE
 # ---------------------------------------------------------------------------
+
 
 class TestPKCE:
     def test_generate_verifier_is_url_safe(self):
@@ -34,6 +35,7 @@ class TestPKCE:
         assert len(verifier) > 32
         # URL-safe: só chars válidos
         import re
+
         assert re.fullmatch(r"[A-Za-z0-9_\-]+", verifier)
 
     def test_derive_challenge_deterministic(self):
@@ -71,7 +73,9 @@ SECRET = "test-secret-aiops-32b-minimum-key!"
 
 class TestJWT:
     def test_issue_and_validate_roundtrip(self):
-        token = issue_token("assistant-agent", ["aiops:diagnose", "aiops:search"], SECRET)
+        token = issue_token(
+            "assistant-agent", ["aiops:diagnose", "aiops:search"], SECRET
+        )
         claims = validate_token(token, SECRET)
         assert claims.sub == "assistant-agent"
         assert "aiops:diagnose" in claims.scopes
@@ -109,6 +113,7 @@ class TestJWT:
 # TokenStore
 # ---------------------------------------------------------------------------
 
+
 class TestInMemoryTokenStore:
     def test_save_and_pop(self):
         store = InMemoryTokenStore()
@@ -144,6 +149,7 @@ class TestInMemoryTokenStore:
 # Authorization Server endpoints
 # ---------------------------------------------------------------------------
 
+
 def _make_auth_app() -> FastAPI:
     """Cria app FastAPI mínimo com o auth router para testes."""
     app = FastAPI()
@@ -169,12 +175,15 @@ class TestAuthServer:
     def test_register_valid_client(self):
         verifier = generate_verifier()
         challenge = derive_challenge(verifier)
-        resp = self._client.post("/auth/token/register", json={
-            "client_id": "assistant-agent",
-            "scopes": ["aiops:diagnose"],
-            "code_verifier": verifier,
-            "code_challenge": challenge,
-        })
+        resp = self._client.post(
+            "/auth/token/register",
+            json={
+                "client_id": "assistant-agent",
+                "scopes": ["aiops:diagnose"],
+                "code_verifier": verifier,
+                "code_challenge": challenge,
+            },
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert "access_token" in body
@@ -182,31 +191,40 @@ class TestAuthServer:
         assert "aiops:diagnose" in body["scope"]
 
     def test_register_unknown_client_returns_401(self):
-        resp = self._client.post("/auth/token/register", json={
-            "client_id": "unknown-agent",
-            "scopes": ["aiops:search"],
-            "code_challenge": "abc",
-        })
+        resp = self._client.post(
+            "/auth/token/register",
+            json={
+                "client_id": "unknown-agent",
+                "scopes": ["aiops:search"],
+                "code_challenge": "abc",
+            },
+        )
         assert resp.status_code == 401
 
     def test_register_disallowed_scope_returns_403(self):
         verifier = generate_verifier()
         challenge = derive_challenge(verifier)
         # databricks-mcp só tem aiops:search, tenta aiops:diagnose
-        resp = self._client.post("/auth/token/register", json={
-            "client_id": "databricks-mcp",
-            "scopes": ["aiops:diagnose"],
-            "code_challenge": challenge,
-        })
+        resp = self._client.post(
+            "/auth/token/register",
+            json={
+                "client_id": "databricks-mcp",
+                "scopes": ["aiops:diagnose"],
+                "code_challenge": challenge,
+            },
+        )
         assert resp.status_code == 403
 
     def test_register_unsupported_pkce_method_returns_400(self):
-        resp = self._client.post("/auth/token/register", json={
-            "client_id": "assistant-agent",
-            "scopes": ["aiops:search"],
-            "code_challenge": "abc",
-            "code_challenge_method": "plain",
-        })
+        resp = self._client.post(
+            "/auth/token/register",
+            json={
+                "client_id": "assistant-agent",
+                "scopes": ["aiops:search"],
+                "code_challenge": "abc",
+                "code_challenge_method": "plain",
+            },
+        )
         assert resp.status_code == 400
 
     def test_introspect_valid_token(self):
@@ -241,6 +259,7 @@ class TestAuthServer:
 # Scope enforcement
 # ---------------------------------------------------------------------------
 
+
 class TestScopeEnforcement:
     def test_require_scope_granted(self):
         result = require_scope("diagnose_incident", ["aiops:diagnose", "aiops:search"])
@@ -265,14 +284,21 @@ class TestScopeEnforcement:
         result = require_scope("search_incidents", [])
         assert result is not None
 
-    @pytest.mark.parametrize("tool,scope", [
-        ("diagnose_incident", "aiops:diagnose"),
-        ("search_incidents", "aiops:search"),
-        ("validate_action", "aiops:validate"),
-    ])
+    @pytest.mark.parametrize(
+        "tool,scope",
+        [
+            ("diagnose_incident", "aiops:diagnose"),
+            ("search_incidents", "aiops:search"),
+            ("validate_action", "aiops:validate"),
+        ],
+    )
     def test_each_tool_requires_correct_scope(self, tool, scope):
         # Com scope correto: permitido
         assert require_scope(tool, [scope]) is None
         # Com scope errado: bloqueado
-        wrong = [s for s in ["aiops:diagnose", "aiops:search", "aiops:validate"] if s != scope]
+        wrong = [
+            s
+            for s in ["aiops:diagnose", "aiops:search", "aiops:validate"]
+            if s != scope
+        ]
         assert require_scope(tool, wrong) is not None

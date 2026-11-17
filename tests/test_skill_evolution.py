@@ -12,11 +12,9 @@ Cobre as 5 fases:
 from __future__ import annotations
 
 import pytest
-from unittest.mock import MagicMock
 
 from agents.diagnoser import DiagnosisAgent
 from rag.memory import IncidentRecord
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -180,7 +178,7 @@ class TestPhase3SkillStore:
 
     def test_save_and_find_skill(self, tmp_path):
         """save_skill + find_best_skill devem persistir e recuperar."""
-        from rag.memory import IncidentMemoryDB, DiagnosticSkill
+        from rag.memory import DiagnosticSkill, IncidentMemoryDB
 
         db = IncidentMemoryDB(db_path=str(tmp_path / "test.db"))
         skill = DiagnosticSkill(
@@ -199,7 +197,7 @@ class TestPhase3SkillStore:
 
     def test_get_skill_by_id(self, tmp_path):
         """get_skill deve recuperar skill por ID."""
-        from rag.memory import IncidentMemoryDB, DiagnosticSkill
+        from rag.memory import DiagnosticSkill, IncidentMemoryDB
 
         db = IncidentMemoryDB(db_path=str(tmp_path / "test.db"))
         skill = DiagnosticSkill(
@@ -223,7 +221,7 @@ class TestPhase3SkillStore:
 
     def test_update_skill_score_ema(self, tmp_path):
         """update_skill_score deve aplicar EMA α=0.3."""
-        from rag.memory import IncidentMemoryDB, DiagnosticSkill
+        from rag.memory import DiagnosticSkill, IncidentMemoryDB
 
         db = IncidentMemoryDB(db_path=str(tmp_path / "test.db"))
         skill = DiagnosticSkill(
@@ -245,7 +243,7 @@ class TestPhase3SkillStore:
 
     def test_update_skill_score_tnr_failure(self, tmp_path):
         """update_skill_score com TNR failure não incrementa success_count."""
-        from rag.memory import IncidentMemoryDB, DiagnosticSkill
+        from rag.memory import DiagnosticSkill, IncidentMemoryDB
 
         db = IncidentMemoryDB(db_path=str(tmp_path / "test.db"))
         skill = DiagnosticSkill(
@@ -267,7 +265,7 @@ class TestPhase3SkillStore:
 
     def test_save_skill_outcome(self, tmp_path):
         """save_skill_outcome deve persistir SkillOutcome no banco."""
-        from rag.memory import IncidentMemoryDB, DiagnosticSkill, SkillOutcome
+        from rag.memory import DiagnosticSkill, IncidentMemoryDB, SkillOutcome
 
         db = IncidentMemoryDB(db_path=str(tmp_path / "test.db"))
         skill = DiagnosticSkill(
@@ -297,7 +295,7 @@ class TestPhase3SkillStore:
 
     def test_get_skill_outcomes_limit(self, tmp_path):
         """get_skill_outcomes deve respeitar o limite."""
-        from rag.memory import IncidentMemoryDB, DiagnosticSkill, SkillOutcome
+        from rag.memory import DiagnosticSkill, IncidentMemoryDB, SkillOutcome
 
         db = IncidentMemoryDB(db_path=str(tmp_path / "test.db"))
         skill = DiagnosticSkill(
@@ -309,17 +307,19 @@ class TestPhase3SkillStore:
         )
         db.save_skill(skill)
         for i in range(5):
-            db.save_skill_outcome(SkillOutcome(
-                outcome_id=f"o{i}",
-                skill_id="s-lim",
-                incident_id=f"i{i}",
-                tnr_passed=True,
-                reflection_score=0.7,
-                reflection_lesson=f"lesson {i}",
-                tools_used=[],
-                iteration_count=2,
-                timestamp="2026-03-26T00:00:00+00:00",
-            ))
+            db.save_skill_outcome(
+                SkillOutcome(
+                    outcome_id=f"o{i}",
+                    skill_id="s-lim",
+                    incident_id=f"i{i}",
+                    tnr_passed=True,
+                    reflection_score=0.7,
+                    reflection_lesson=f"lesson {i}",
+                    tools_used=[],
+                    iteration_count=2,
+                    timestamp="2026-03-26T00:00:00+00:00",
+                )
+            )
         outcomes = db.get_skill_outcomes("s-lim", limit=3)
         assert len(outcomes) == 3
 
@@ -335,8 +335,8 @@ class TestPhase4SkillRouter:
 
     def test_router_returns_default_when_no_skills(self, tmp_path):
         """Sem skills no banco, SkillRouter retorna DEFAULT_SKILL."""
+        from agents.skill_router import DEFAULT_SKILL, SkillRouter
         from rag.memory import IncidentMemoryDB
-        from agents.skill_router import SkillRouter, DEFAULT_SKILL
 
         db = IncidentMemoryDB(db_path=str(tmp_path / "test.db"))
         router = SkillRouter(db)
@@ -345,8 +345,8 @@ class TestPhase4SkillRouter:
 
     def test_router_returns_best_skill(self, tmp_path):
         """Router retorna skill com maior utility_score para o padrão dado."""
-        from rag.memory import IncidentMemoryDB, DiagnosticSkill
         from agents.skill_router import SkillRouter
+        from rag.memory import DiagnosticSkill, IncidentMemoryDB
 
         db = IncidentMemoryDB(db_path=str(tmp_path / "test.db"))
         skill = DiagnosticSkill(
@@ -364,8 +364,8 @@ class TestPhase4SkillRouter:
 
     def test_router_ignores_low_score_skill(self, tmp_path):
         """Router ignora skills com utility_score < 0.3 e retorna DEFAULT_SKILL."""
-        from rag.memory import IncidentMemoryDB, DiagnosticSkill
-        from agents.skill_router import SkillRouter, DEFAULT_SKILL
+        from agents.skill_router import DEFAULT_SKILL, SkillRouter
+        from rag.memory import DiagnosticSkill, IncidentMemoryDB
 
         db = IncidentMemoryDB(db_path=str(tmp_path / "test.db"))
         skill = DiagnosticSkill(
@@ -403,16 +403,14 @@ class TestPhase4SkillRouter:
 
     def test_seed_default_skills_creates_3(self, tmp_path):
         """seed_default_skills deve criar 3 skills no banco."""
-        from rag.memory import IncidentMemoryDB
         from agents.skill_router import SkillRouter
+        from rag.memory import IncidentMemoryDB
 
         db = IncidentMemoryDB(db_path=str(tmp_path / "test.db"))
         router = SkillRouter(db)
         router.seed_default_skills()
         with db._connect() as conn:
-            count = conn.execute(
-                "SELECT COUNT(*) FROM diagnostic_skills"
-            ).fetchone()[0]
+            count = conn.execute("SELECT COUNT(*) FROM diagnostic_skills").fetchone()[0]
         assert count == 3
 
 
@@ -472,7 +470,7 @@ class TestPhase5SkillEvolver:
 
     def test_evolver_importable(self):
         """SkillEvolver e EVOLVE_PROMPT devem ser importáveis sem erro."""
-        from agents.skill_evolver import SkillEvolver, EVOLVE_PROMPT
+        from agents.skill_evolver import EVOLVE_PROMPT
 
         assert EVOLVE_PROMPT  # não vazio
         assert "{skill_name}" in EVOLVE_PROMPT

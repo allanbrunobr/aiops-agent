@@ -45,7 +45,9 @@ class TestHandleFalsePositiveSideEffects:
         _inject_server_app(bad_ks)
 
         try:
-            from interfaces.http.handlers.false_positive import handle_false_positive_side_effects
+            from interfaces.http.handlers.false_positive import (
+                handle_false_positive_side_effects,
+            )
 
             with patch("interfaces.http.handlers.false_positive.log") as mock_log:
                 await handle_false_positive_side_effects(
@@ -71,7 +73,9 @@ class TestHandleFalsePositiveSideEffects:
         _inject_server_app(bad_ks)
 
         try:
-            from interfaces.http.handlers.false_positive import handle_false_positive_side_effects
+            from interfaces.http.handlers.false_positive import (
+                handle_false_positive_side_effects,
+            )
 
             with patch("interfaces.http.handlers.false_positive.log"):
                 # Não deve lançar exceção
@@ -92,7 +96,9 @@ class TestHandleFalsePositiveSideEffects:
         _inject_server_app(None)
 
         try:
-            from interfaces.http.handlers.false_positive import handle_false_positive_side_effects
+            from interfaces.http.handlers.false_positive import (
+                handle_false_positive_side_effects,
+            )
 
             with patch("interfaces.http.handlers.false_positive.log") as mock_log:
                 await handle_false_positive_side_effects(

@@ -8,6 +8,7 @@ Autenticação via HTTP Basic Auth (email + API token) seguindo o
 padrão Atlassian Cloud. Configuração lida de variáveis de ambiente
 ou passada explicitamente no construtor.
 """
+
 from __future__ import annotations
 
 import os
@@ -15,7 +16,6 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from tools.interfaces import IncidentTracker
-
 
 # Mapeamento de severidade do diagnóstico para prioridade Jira
 SEVERITY_PRIORITY_MAP = {
@@ -41,10 +41,7 @@ class JiraTrackerError(Exception):
 
     def __str__(self) -> str:
         """Representação textual do erro."""
-        return (
-            f"[{self.error_type}] {self.service} at {self.timestamp}: "
-            f"{self.details}"
-        )
+        return f"[{self.error_type}] {self.service} at {self.timestamp}: {self.details}"
 
 
 class JiraIncidentTracker(IncidentTracker):
@@ -92,10 +89,7 @@ class JiraIncidentTracker(IncidentTracker):
                 service="JiraIncidentTracker",
                 error_type="config",
                 timestamp=datetime.now().isoformat(),
-                details=(
-                    "Missing required configuration: "
-                    + ", ".join(missing)
-                ),
+                details=("Missing required configuration: " + ", ".join(missing)),
             )
 
     def _get_auth(self) -> tuple[str, str]:
@@ -146,10 +140,7 @@ class JiraIncidentTracker(IncidentTracker):
                 service="JiraIncidentTracker",
                 error_type=self._classify_http_error(response.status_code),
                 timestamp=datetime.now().isoformat(),
-                details=(
-                    f"Jira API returned {response.status_code}: "
-                    f"{response.text}"
-                ),
+                details=(f"Jira API returned {response.status_code}: {response.text}"),
             )
 
         try:
@@ -162,18 +153,14 @@ class JiraIncidentTracker(IncidentTracker):
                 details=f"Invalid JSON in Jira response: {e}",
             ) from e
 
-    def create_incident(
-        self, title: str, severity: str, description: str
-    ) -> str:
+    def create_incident(self, title: str, severity: str, description: str) -> str:
         """Cria issue Jira para um incidente detectado.
 
         Envia POST para /rest/api/2/issue com campos mapeados:
         summary, description, labels, priority e issue type.
         Retorna a chave da issue criada (ex: 'OPS-123').
         """
-        priority = SEVERITY_PRIORITY_MAP.get(
-            severity.lower(), "Medium"
-        )
+        priority = SEVERITY_PRIORITY_MAP.get(severity.lower(), "Medium")
 
         payload = {
             "fields": {

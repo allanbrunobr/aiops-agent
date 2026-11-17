@@ -13,30 +13,40 @@ import sys
 
 import structlog
 
-
 # Padroes de secrets para redacao — reutilizados de main.py
 _SECRET_PATTERNS = [
-    re.compile(r"sk-ant-[a-zA-Z0-9_-]{20,}"),      # Anthropic API keys
-    re.compile(r"dapi[a-zA-Z0-9]{20,}"),             # Databricks API keys
-    re.compile(r"sk-[a-zA-Z0-9]{32,}"),              # OpenAI-style keys
-    re.compile(r"key-[a-zA-Z0-9]{32,}"),             # Generic API keys
-    re.compile(r"xoxb-[a-zA-Z0-9-]+"),               # Slack Bot tokens
-    re.compile(r"Bearer\s+[a-zA-Z0-9._-]{20,}"),     # Bearer tokens
+    re.compile(r"sk-ant-[a-zA-Z0-9_-]{20,}"),  # Anthropic API keys
+    re.compile(r"dapi[a-zA-Z0-9]{20,}"),  # Databricks API keys
+    re.compile(r"sk-[a-zA-Z0-9]{32,}"),  # OpenAI-style keys
+    re.compile(r"key-[a-zA-Z0-9]{32,}"),  # Generic API keys
+    re.compile(r"xoxb-[a-zA-Z0-9-]+"),  # Slack Bot tokens
+    re.compile(r"Bearer\s+[a-zA-Z0-9._-]{20,}"),  # Bearer tokens
 ]
 
 # Chaves cujo valor SEMPRE deve ser redactado
-_SENSITIVE_KEYS = frozenset({
-    "password", "secret", "token", "api_key", "apikey",
-    "credential", "credentials", "authorization", "auth_token",
-    "private_key", "access_token", "refresh_token",
-})
+_SENSITIVE_KEYS = frozenset(
+    {
+        "password",
+        "secret",
+        "token",
+        "api_key",
+        "apikey",
+        "credential",
+        "credentials",
+        "authorization",
+        "auth_token",
+        "private_key",
+        "access_token",
+        "refresh_token",
+    }
+)
 
 
 def _redact_secrets(
-    logger: logging.Logger,
+    logger: structlog.types.WrappedLogger,
     method_name: str,
-    event_dict: dict,
-) -> dict:
+    event_dict: structlog.types.EventDict,
+) -> structlog.types.EventDict:
     """Processador structlog que redacta secrets de todos os valores do log."""
     for key, value in event_dict.items():
         if isinstance(value, str):

@@ -15,6 +15,7 @@ import json
 from contextvars import ContextVar
 
 import structlog
+
 from mcp.server import Server
 from mcp.types import TextContent, Tool
 
@@ -109,6 +110,7 @@ def create_server(
         granted_scopes = _current_scopes.get()
         if _enforce_scopes.get():
             from auth.scopes import require_scope
+
             scope_error = require_scope(name, granted_scopes)
             if scope_error is not None:
                 return [scope_error]

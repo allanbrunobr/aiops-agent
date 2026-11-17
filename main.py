@@ -48,42 +48,43 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from config.loader import AppConfig, load_config
 from dotenv import load_dotenv
 from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
 from rich.markdown import Markdown
+from rich.panel import Panel
 from rich.rule import Rule
+from rich.table import Table
 from rich.text import Text
 
-# Modulos do projeto
-from data.models import SimulatedIncident
-from data.sample_incident import create_incident
-from data.registry import get_scenario, list_scenarios
-from pipeline.aggregator import Aggregator, AggregatedReport
-from rag.indexer import ObservabilityIndexer
-from rag.retriever import ObservabilityRetriever
-from rag.retriever_history import ObservabilityRetrieverWithHistory
-from rag.memory import IncidentMemoryDB, IncidentRecord
 from adapters.reporter import RichConsoleReporter
 from agents.detector import DetectionAgent
 from agents.diagnoser import DiagnosisAgent
 from agents.mitigator import MitigationAgent
-from safety.tnr import TNRSafetyGuard
+from config.loader import AppConfig, load_config
+
+# Modulos do projeto
+from data.models import SimulatedIncident
+from data.registry import get_scenario, list_scenarios
+from data.sample_incident import create_incident
+from domain.incident_state import IncidentState
+from pipeline.aggregator import AggregatedReport, Aggregator
 from pipeline.context_compressor import ContextCompressor
-from safety.pre_validator import PreExecutionValidator
 from pipeline.telemetry_sanitizer import TelemetrySanitizer
-from safety.version_validator import VersionValidator
+from rag.indexer import ObservabilityIndexer
+from rag.memory import IncidentMemoryDB, IncidentRecord
+from rag.retriever_history import ObservabilityRetrieverWithHistory
 from safety.orchestrator import SafetyOrchestrator
+from safety.pre_validator import PreExecutionValidator
+from safety.tnr import TNRSafetyGuard
+from safety.version_validator import VersionValidator
 
 console = Console()
 
 # Exit codes para pipeline outcomes (Story 3.2)
-EXIT_SUCCESS = 0           # Pipeline resolved (TNR success)
-EXIT_ERROR = 1             # Unrecoverable error (exception in any stage)
-EXIT_REGRESSION = 2        # TNR detected regression (post-health worse)
-EXIT_APPROVAL_NEEDED = 3   # Safety blocked action (human approval required)
+EXIT_SUCCESS = 0  # Pipeline resolved (TNR success)
+EXIT_ERROR = 1  # Unrecoverable error (exception in any stage)
+EXIT_REGRESSION = 2  # TNR detected regression (post-health worse)
+EXIT_APPROVAL_NEEDED = 3  # Safety blocked action (human approval required)
 
 EXIT_CODE_LABELS = {
     EXIT_SUCCESS: "resolved",
@@ -94,10 +95,10 @@ EXIT_CODE_LABELS = {
 
 # Padrões de API key para sanitização de secrets (Story 3.3)
 API_KEY_PATTERNS = [
-    re.compile(r"sk-ant-[a-zA-Z0-9_-]{20,}"),      # Anthropic API keys
-    re.compile(r"dapi[a-zA-Z0-9]{20,}"),             # Databricks API keys
-    re.compile(r"sk-[a-zA-Z0-9]{32,}"),              # OpenAI-style keys
-    re.compile(r"key-[a-zA-Z0-9]{32,}"),             # Generic API keys
+    re.compile(r"sk-ant-[a-zA-Z0-9_-]{20,}"),  # Anthropic API keys
+    re.compile(r"dapi[a-zA-Z0-9]{20,}"),  # Databricks API keys
+    re.compile(r"sk-[a-zA-Z0-9]{32,}"),  # OpenAI-style keys
+    re.compile(r"key-[a-zA-Z0-9]{32,}"),  # Generic API keys
 ]
 
 
@@ -135,7 +136,9 @@ def print_banner():
     console.print(Panel(banner, border_style="cyan", padding=(1, 2)))
 
 
-def step_generate_data(scenario_name: str | None = None) -> tuple[SimulatedIncident, str]:
+def step_generate_data(
+    scenario_name: str | None = None,
+) -> tuple[SimulatedIncident, str]:
     """Etapa 1: Gera dados simulados de incidente.
 
     Args:
@@ -156,14 +159,22 @@ def step_generate_data(scenario_name: str | None = None) -> tuple[SimulatedIncid
 
     num_services = len({log.service for log in incident.logs})
 
-    table = Table(title="Simulated Incident Data", border_style="cyan", show_header=True)
+    table = Table(
+        title="Simulated Incident Data", border_style="cyan", show_header=True
+    )
     table.add_column("Source", style="bold")
     table.add_column("Count", justify="right")
     table.add_column("Details")
     table.add_row("Scenario", "", f"[bold]{effective_scenario}[/bold]")
-    table.add_row("Logs", str(len(incident.logs)), f"{num_services} services, ERROR/WARN/INFO mix")
-    table.add_row("Metrics", str(len(incident.metrics)), "Multi-service telemetry series")
-    table.add_row("Traces", str(len(incident.traces)), "Distributed spans with bottleneck")
+    table.add_row(
+        "Logs", str(len(incident.logs)), f"{num_services} services, ERROR/WARN/INFO mix"
+    )
+    table.add_row(
+        "Metrics", str(len(incident.metrics)), "Multi-service telemetry series"
+    )
+    table.add_row(
+        "Traces", str(len(incident.traces)), "Distributed spans with bottleneck"
+    )
     console.print(table)
 
     console.print(f"\n  [dim]Root cause: {incident.actual_root_cause}[/dim]")
@@ -171,46 +182,74 @@ def step_generate_data(scenario_name: str | None = None) -> tuple[SimulatedIncid
     spike = incident.spike_start.strftime("%H:%M")
     detect = incident.detection_time.strftime("%H:%M")
     fix = incident.fix_time.strftime("%H:%M")
-    console.print(f"  [dim]Timeline: deploy@{deploy} -> spike@{spike} -> detect@{detect} -> fix@{fix}[/dim]\n")
+    console.print(
+        f"  [dim]Timeline: deploy@{deploy} -> spike@{spike} -> detect@{detect} -> fix@{fix}[/dim]\n"
+    )
 
     return incident, effective_scenario
 
 
 def step_sanitize(incident):
     """Etapa 1b: Sanitiza telemetria contra adversarial reward-hacking."""
-    console.print(Rule("[bold]Stage 1b: Telemetry Sanitization (AIOpsShield)[/bold]", style="cyan"))
+    console.print(
+        Rule(
+            "[bold]Stage 1b: Telemetry Sanitization (AIOpsShield)[/bold]", style="cyan"
+        )
+    )
     console.print()
 
     t0 = time.time()
     sanitizer = TelemetrySanitizer(strict_mode=False)
     s_logs, s_metrics, s_traces, san_report = sanitizer.sanitize_all(
-        incident.logs, incident.metrics, incident.traces,
+        incident.logs,
+        incident.metrics,
+        incident.traces,
     )
     elapsed = time.time() - t0
 
     # Display results
-    table = Table(title="Telemetry Sanitization Results", border_style="red" if san_report.threat_detected else "green",
-                  show_header=True)
+    table = Table(
+        title="Telemetry Sanitization Results",
+        border_style="red" if san_report.threat_detected else "green",
+        show_header=True,
+    )
     table.add_column("Metric", style="bold")
     table.add_column("Value", justify="right")
 
     table.add_row("Total entries analyzed", str(san_report.total_entries))
     table.add_row("Clean entries", f"[green]{san_report.clean_entries}[/green]")
-    table.add_row("Suspicious entries", f"[yellow]{san_report.suspicious_entries}[/yellow]" if san_report.suspicious_entries > 0 else "0")
-    table.add_row("Tainted entries", f"[red]{san_report.tainted_entries}[/red]" if san_report.tainted_entries > 0 else "0")
-    table.add_row("Adversarial entries", f"[bold red]{san_report.adversarial_entries}[/bold red]" if san_report.adversarial_entries > 0 else "0")
+    table.add_row(
+        "Suspicious entries",
+        f"[yellow]{san_report.suspicious_entries}[/yellow]"
+        if san_report.suspicious_entries > 0
+        else "0",
+    )
+    table.add_row(
+        "Tainted entries",
+        f"[red]{san_report.tainted_entries}[/red]"
+        if san_report.tainted_entries > 0
+        else "0",
+    )
+    table.add_row(
+        "Adversarial entries",
+        f"[bold red]{san_report.adversarial_entries}[/bold red]"
+        if san_report.adversarial_entries > 0
+        else "0",
+    )
     table.add_row("Fields sanitized", str(san_report.fields_sanitized))
     console.print(table)
 
     if san_report.threat_detected:
-        console.print(f"  [bold red]🛡️ ADVERSARIAL PAYLOADS BLOCKED:[/bold red]")
+        console.print("  [bold red]🛡️ ADVERSARIAL PAYLOADS BLOCKED:[/bold red]")
         for i, payload in enumerate(san_report.adversarial_payloads_blocked[:5], 1):
             console.print(f"    {i}. [dim]{payload[:100]}...[/dim]")
     else:
-        console.print(f"  [green]✅ No adversarial payloads detected[/green]")
+        console.print("  [green]✅ No adversarial payloads detected[/green]")
 
     console.print(f"  [dim]Sanitization time: {elapsed:.3f}s[/dim]")
-    console.print(f"  [dim]Defense: AIOpsShield (taint analysis + pattern matching + abstraction)[/dim]\n")
+    console.print(
+        "  [dim]Defense: AIOpsShield (taint analysis + pattern matching + abstraction)[/dim]\n"
+    )
 
     # Update incident data with sanitized versions
     incident.logs = s_logs
@@ -264,14 +303,18 @@ def step_pipeline(incident, config: AppConfig | None = None) -> AggregatedReport
     console.print(table)
     console.print(f"  [dim]Processing time: {elapsed:.2f}s[/dim]")
     console.print(f"  [dim]Severity: {report.severity}[/dim]")
-    console.print(f"  [dim]Affected services: {', '.join(sorted(report.affected_services))}[/dim]\n")
+    console.print(
+        f"  [dim]Affected services: {', '.join(sorted(report.affected_services))}[/dim]\n"
+    )
 
     return report
 
 
 def step_compression(report):
     """Etapa 2b: Context Compression (Acon + AOI)."""
-    console.print(Rule("[bold]Stage 2b: Context Compression (Acon + AOI)[/bold]", style="cyan"))
+    console.print(
+        Rule("[bold]Stage 2b: Context Compression (Acon + AOI)[/bold]", style="cyan")
+    )
     console.print()
 
     compressor = ContextCompressor(compression_level="balanced")
@@ -282,7 +325,9 @@ def step_compression(report):
     elapsed = time.time() - t0
 
     # Display stats
-    table = Table(title="Context Compression Results", border_style="magenta", show_header=True)
+    table = Table(
+        title="Context Compression Results", border_style="magenta", show_header=True
+    )
     table.add_column("Metric", style="bold")
     table.add_column("Value", justify="right")
 
@@ -292,25 +337,41 @@ def step_compression(report):
 
     table.add_row("Full report tokens (est.)", f"{original_full_tokens:,}")
     table.add_row("Compressed tokens (est.)", f"{stats.compressed_tokens:,}")
-    table.add_row("Compression ratio", f"{max(actual_ratio, 0):.0%}" if actual_ratio > 0 else "0% (input within budget)")
+    table.add_row(
+        "Compression ratio",
+        f"{max(actual_ratio, 0):.0%}"
+        if actual_ratio > 0
+        else "0% (input within budget)",
+    )
     table.add_row("Chunks preserved", str(stats.chunks_kept))
     table.add_row("Chunks removed", str(stats.chunks_removed))
-    table.add_row("Critical info preserved", f"{min(stats.critical_preserved, 100):.0f}%")
+    table.add_row(
+        "Critical info preserved", f"{min(stats.critical_preserved, 100):.0f}%"
+    )
     console.print(table)
 
     console.print(f"  [dim]Compression time: {elapsed:.3f}s[/dim]")
-    console.print(f"  [dim]Level: balanced (priority-based classification + budget enforcement)[/dim]")
+    console.print(
+        "  [dim]Level: balanced (priority-based classification + budget enforcement)[/dim]"
+    )
 
     # Show priority breakdown
     by_priority = {}
-    for name, count in [("CRITICAL", 0), ("IMPORTANT", 0), ("CONTEXT", 0), ("NOISE", 0)]:
+    for name, count in [
+        ("CRITICAL", 0),
+        ("IMPORTANT", 0),
+        ("CONTEXT", 0),
+        ("NOISE", 0),
+    ]:
         by_priority[name] = count
     # Count from the classified items in the compressor
-    if hasattr(compressor, '_last_classified'):
+    if hasattr(compressor, "_last_classified"):
         for item in compressor._last_classified:
             by_priority[item.priority.name] = by_priority.get(item.priority.name, 0) + 1
 
-    console.print(f"  [dim]Compressed output: {len(compressed_text)} chars → ready for LLM[/dim]\n")
+    console.print(
+        f"  [dim]Compressed output: {len(compressed_text)} chars → ready for LLM[/dim]\n"
+    )
 
     return compressor, compressed_text, stats
 
@@ -331,6 +392,7 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
 
     t0 = time.time()
     from tools.faiss_setup import setup_faiss_index
+
     indexer = setup_faiss_index() or ObservabilityIndexer()
 
     # Calcula hash do conteudo atual para deteccao de stale
@@ -349,11 +411,13 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
         indexer._load_model()
         num_chunks = len(indexer.chunks)
         elapsed = time.time() - t0
-        console.print(f"  Loaded [bold]{num_chunks}[/bold] chunks from cache in {elapsed:.2f}s")
+        console.print(
+            f"  Loaded [bold]{num_chunks}[/bold] chunks from cache in {elapsed:.2f}s"
+        )
         console.print(f"  Cache: [dim]{cache_dir}[/dim]")
     else:
         if rebuild:
-            console.print(f"  [dim]--rebuild-rag: forcing index reconstruction[/dim]")
+            console.print("  [dim]--rebuild-rag: forcing index reconstruction[/dim]")
         num_chunks = indexer.build_index(
             report.log_templates,
             report.metric_anomalies,
@@ -364,19 +428,23 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
             indexer.save_index(cache_dir, content_hash=content_hash)
             console.print(f"  [dim]Index saved to {cache_dir}[/dim]")
         except Exception as exc:
-            console.print(f"  [yellow]Warning: could not save index cache: {exc}[/yellow]")
+            console.print(
+                f"  [yellow]Warning: could not save index cache: {exc}[/yellow]"
+            )
         elapsed = time.time() - t0
         console.print(f"  Indexed [bold]{num_chunks}[/bold] chunks in {elapsed:.2f}s")
 
-    console.print(f"  Model: [dim]all-MiniLM-L6-v2 (384 dimensions)[/dim]")
+    console.print("  Model: [dim]all-MiniLM-L6-v2 (384 dimensions)[/dim]")
 
     retriever = ObservabilityRetrieverWithHistory(indexer)
 
     # Demo query
-    console.print(f"\n  [dim]Sample query: 'connection pool timeout'[/dim]")
+    console.print("\n  [dim]Sample query: 'connection pool timeout'[/dim]")
     results = retriever.search("connection pool timeout", top_k=3)
     for i, r in enumerate(results, 1):
-        console.print(f"    {i}. [{r.chunk.source.upper()}] (score={r.score:.3f}) {r.chunk.text[:100]}...")
+        console.print(
+            f"    {i}. [{r.chunk.source.upper()}] (score={r.score:.3f}) {r.chunk.text[:100]}..."
+        )
 
     # Exibe precedentes históricos antes do diagnóstico
     try:
@@ -384,7 +452,7 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
         tags = _extract_fault_tags(report)
         precedents = retriever.get_similar_past_incidents(services, tags, limit=3)
         if precedents:
-            console.print(f"\n  [bold cyan]Similar past incidents found:[/bold cyan]")
+            console.print("\n  [bold cyan]Similar past incidents found:[/bold cyan]")
             for p in precedents:
                 console.print(f"    • {p['scenario']}: {p['root_cause']}")
     except Exception:
@@ -410,9 +478,13 @@ def _extract_fault_tags(report) -> list[str]:
     return list(set(tags)) or ["unknown"]
 
 
-def step_agents(report, retriever, use_llm: bool = True,
-                llm_model: str = "claude-sonnet-4-20250514",
-                config: AppConfig | None = None) -> dict:
+def step_agents(
+    report,
+    retriever,
+    use_llm: bool = True,
+    llm_model: str = "claude-sonnet-4-20250514",
+    config: AppConfig | None = None,
+) -> dict:
     """Etapa 4: Pipeline de agentes (Detect -> Diagnose -> Mitigate -> Verify).
 
     Args:
@@ -432,6 +504,7 @@ def step_agents(report, retriever, use_llm: bool = True,
     # 1. Consulta memória para injetar precedentes relevantes no diagnóstico.
     # 2. Seleciona a melhor DiagnosticSkill para o tipo de incidente detectado.
     from agents.skill_router import SkillRouter
+
     _memory_db = IncidentMemoryDB()
     _fault_tags = _extract_fault_tags(report)
     _similar_incidents = _memory_db.find_similar_incidents(
@@ -482,10 +555,14 @@ def step_agents(report, retriever, use_llm: bool = True,
         reporter=_reporter,
     )
     mitigator = MitigationAgent(reporter=_reporter)
-    tnr_guard = TNRSafetyGuard(regression_threshold=config.thresholds.regression_threshold)
+    tnr_guard = TNRSafetyGuard(
+        regression_threshold=config.thresholds.regression_threshold
+    )
 
     if not use_llm:
-        console.print("  [yellow]Running in no-LLM mode (heuristic diagnosis only)[/yellow]\n")
+        console.print(
+            "  [yellow]Running in no-LLM mode (heuristic diagnosis only)[/yellow]\n"
+        )
     else:
         console.print(f"  [dim]Model: {llm_model} — Stage 2 AgentOrchestrator[/dim]\n")
 
@@ -495,12 +572,14 @@ def step_agents(report, retriever, use_llm: bool = True,
     timeline: list[dict] = []
 
     def _transition(from_state: str, to_state: str, reason: str) -> None:
-        timeline.append({
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "from": from_state,
-            "to": to_state,
-            "reason": reason,
-        })
+        timeline.append(
+            {
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "from": from_state,
+                "to": to_state,
+                "reason": reason,
+            }
+        )
         console.print(f"\n  [{to_state}] {reason}", style="bold")
 
     # 1. DETECTING
@@ -512,7 +591,9 @@ def step_agents(report, retriever, use_llm: bool = True,
         _transition("DETECTING", "IDLE", "Nenhum incidente detectado")
         result["timeline"] = timeline
         result["llm_model"] = llm_model if use_llm else "heuristic"
-        console.print(f"\n  [dim]Agent pipeline completed in {time.time() - t0:.1f}s[/dim]")
+        console.print(
+            f"\n  [dim]Agent pipeline completed in {time.time() - t0:.1f}s[/dim]"
+        )
         return result
 
     # 2. DIAGNOSING
@@ -534,7 +615,9 @@ def step_agents(report, retriever, use_llm: bool = True,
         _transition("DIAGNOSING", "FAILED", "Não foi possível identificar root cause")
         result["timeline"] = timeline
         result["llm_model"] = llm_model if use_llm else "heuristic"
-        console.print(f"\n  [dim]Agent pipeline completed in {time.time() - t0:.1f}s[/dim]")
+        console.print(
+            f"\n  [dim]Agent pipeline completed in {time.time() - t0:.1f}s[/dim]"
+        )
         return result
 
     # 3. MITIGATING
@@ -569,7 +652,9 @@ def step_agents(report, retriever, use_llm: bool = True,
 
     if _tnr_regression:
         _transition("VERIFYING", "ROLLBACK", f"Regressão detectada: {_tnr_msg}")
-        result["stages"]["rollback"] = {"message": "Rollback executado, retornando ao diagnostico"}
+        result["stages"]["rollback"] = {
+            "message": "Rollback executado, retornando ao diagnostico"
+        }
     else:
         _transition(
             "VERIFYING",
@@ -581,7 +666,7 @@ def step_agents(report, retriever, use_llm: bool = True,
     # ── Skill Evolution: REFLECT + WRITE ─────────────────────────────────
     # Reflexão pós-TNR e persistência de outcome no SQLite.
     _tnr_str = result.get("stages", {}).get("verification", {}).get("result", "unknown")
-    _tnr_passed = (_tnr_str == "success")
+    _tnr_passed = _tnr_str == "success"
 
     # Fix 3: inicializa antes dos branches para evitar NameError em fluxos inesperados
     _reflection: dict = {"lesson": "no-llm mode", "score": 0.5, "priority_tools": []}
@@ -602,8 +687,10 @@ def step_agents(report, retriever, use_llm: bool = True,
 
     # Persiste outcome independente do modo (write funciona em --no-llm)
     try:
-        from rag.memory import SkillOutcome
         import datetime as _dt
+
+        from rag.memory import SkillOutcome
+
         # Fix 2: renomeado para _skill_outcome — evita shadow sobre AgentOutcome
         _skill_outcome = SkillOutcome(
             outcome_id=str(uuid.uuid4()),
@@ -646,7 +733,9 @@ def step_agents(report, retriever, use_llm: bool = True,
 
 def step_safety_validation(result):
     """Etapa 4b: Pre-Execution Safety Validation."""
-    console.print(Rule("[bold]Stage 4b: Pre-Execution Safety Validation[/bold]", style="cyan"))
+    console.print(
+        Rule("[bold]Stage 4b: Pre-Execution Safety Validation[/bold]", style="cyan")
+    )
     console.print()
 
     mitigation = result.get("stages", {}).get("mitigation", {})
@@ -668,22 +757,37 @@ def step_safety_validation(result):
     safety_result = orch_result.layer_details["pre_validator"]
 
     # Display results
-    table = Table(title="Pre-Execution Safety Check", border_style="red" if not safety_result.is_safe else "green",
-                  show_header=True)
+    table = Table(
+        title="Pre-Execution Safety Check",
+        border_style="red" if not safety_result.is_safe else "green",
+        show_header=True,
+    )
     table.add_column("Check", style="bold")
     table.add_column("Result")
 
     # Risk level with color
-    risk_colors = {"LOW": "green", "MEDIUM": "yellow", "HIGH": "red", "CRITICAL": "bold red"}
+    risk_colors = {
+        "LOW": "green",
+        "MEDIUM": "yellow",
+        "HIGH": "red",
+        "CRITICAL": "bold red",
+    }
     risk_color = risk_colors.get(safety_result.risk_level.value, "white")
-    table.add_row("Risk Level", f"[{risk_color}]{safety_result.risk_level.value}[/{risk_color}]")
+    table.add_row(
+        "Risk Level", f"[{risk_color}]{safety_result.risk_level.value}[/{risk_color}]"
+    )
     table.add_row("Risk Score", f"{safety_result.risk_score:.0f}/100")
     table.add_row("Approval", safety_result.approval_status.value)
-    table.add_row("Requires Human", "Yes ⚠️" if safety_result.requires_human else "No ✅")
+    table.add_row(
+        "Requires Human", "Yes ⚠️" if safety_result.requires_human else "No ✅"
+    )
 
     # Blast radius
     br = safety_result.blast_radius
-    table.add_row("Blast Radius", f"{br.scope} ({br.affected_services} services, ~{br.affected_pods_estimate} pods)")
+    table.add_row(
+        "Blast Radius",
+        f"{br.scope} ({br.affected_services} services, ~{br.affected_pods_estimate} pods)",
+    )
     table.add_row("Reversible", "✅ Yes" if br.is_reversible else "❌ No")
     table.add_row("Data Destructive", "❌ Yes" if br.is_data_destructive else "✅ No")
     table.add_row("Est. Downtime", f"{br.estimated_downtime_seconds}s")
@@ -716,7 +820,9 @@ def step_safety_validation(result):
 
 def step_remediation_validation(result):
     """Etapa 4c: Valida versões e CVEs na remediação proposta."""
-    console.print(Rule("[bold]Stage 4c: Remediation Version/CVE Validation[/bold]", style="cyan"))
+    console.print(
+        Rule("[bold]Stage 4c: Remediation Version/CVE Validation[/bold]", style="cyan")
+    )
     console.print()
 
     mitigation = result.get("stages", {}).get("mitigation", {})
@@ -735,11 +841,20 @@ def step_remediation_validation(result):
 
     # Display results
     border_color = "green" if validation.is_safe else "red"
-    table = Table(title="Remediation CVE/Version Check", border_style=border_color, show_header=True)
+    table = Table(
+        title="Remediation CVE/Version Check",
+        border_style=border_color,
+        show_header=True,
+    )
     table.add_column("Check", style="bold")
     table.add_column("Result")
 
-    risk_colors = {"SAFE": "green", "CAUTION": "yellow", "DANGEROUS": "red", "MALICIOUS": "bold red"}
+    risk_colors = {
+        "SAFE": "green",
+        "CAUTION": "yellow",
+        "DANGEROUS": "red",
+        "MALICIOUS": "bold red",
+    }
     risk_color = risk_colors.get(validation.risk.name, "white")
     table.add_row("Risk Level", f"[{risk_color}]{validation.risk.name}[/{risk_color}]")
     table.add_row("Is Safe", "✅ Yes" if validation.is_safe else "❌ No")
@@ -747,7 +862,9 @@ def step_remediation_validation(result):
     if validation.checks:
         for check in validation.checks:
             status = "✅" if check.is_safe else "❌"
-            cve_str = f" ({', '.join(check.known_cves[:2])})" if check.known_cves else ""
+            cve_str = (
+                f" ({', '.join(check.known_cves[:2])})" if check.known_cves else ""
+            )
             table.add_row(
                 f"Version: {check.package}",
                 f"{status} {check.proposed_version}{cve_str}",
@@ -882,7 +999,11 @@ def _serialize_result(result: dict, incident) -> dict:
     if mitigation_raw:
         action = mitigation_raw.get("action")
         if action is not None:
-            mitigation["action"] = dataclasses.asdict(action) if dataclasses.is_dataclass(action) else action
+            mitigation["action"] = (
+                dataclasses.asdict(action)
+                if dataclasses.is_dataclass(action)
+                else action
+            )
         mitigation["pattern_matched"] = mitigation_raw.get("pattern_matched", "default")
 
     # Safety validation
@@ -906,7 +1027,11 @@ def _serialize_result(result: dict, incident) -> dict:
             verification["post_snapshot"] = _serialize_health_snapshot(post)
 
     # Action items
-    pattern_matched = mitigation_raw.get("pattern_matched", "default") if mitigation_raw else "default"
+    pattern_matched = (
+        mitigation_raw.get("pattern_matched", "default")
+        if mitigation_raw
+        else "default"
+    )
     action_items = _get_action_items(pattern_matched)
 
     # Timeline
@@ -924,7 +1049,11 @@ def _serialize_result(result: dict, incident) -> dict:
     config = {}
     tc = result.get("threshold_config")
     if tc is not None:
-        config["thresholds"] = tc.thresholds.model_dump() if hasattr(tc, 'thresholds') else dataclasses.asdict(tc)
+        config["thresholds"] = (
+            tc.thresholds.model_dump()
+            if hasattr(tc, "thresholds")
+            else dataclasses.asdict(tc)
+        )
     config["source"] = result.get("config_source", "defaults")
 
     # Tracking (Story 6.3)
@@ -948,8 +1077,9 @@ def _serialize_result(result: dict, incident) -> dict:
     return serialized
 
 
-def step_predict(result: dict, report, *,
-                 slack_fire=None, correlation_id: str = "") -> None:
+def step_predict(
+    result: dict, report, *, slack_fire=None, correlation_id: str = ""
+) -> None:
     """Etapa 4d: Estágio preditivo — gera PredictionReport e emite eventos de lifecycle.
 
     Executa análise preditiva sobre o aggregated_report e armazena o resultado
@@ -966,10 +1096,11 @@ def step_predict(result: dict, report, *,
     console.print()
 
     try:
-        from pipeline.predictive_stage import run_predictive_stage
-        from core.lifecycle import LifecycleEvent, ALLOWED_EVENT_TYPES
-        from datetime import datetime, timezone
         import uuid
+        from datetime import datetime, timezone
+
+        from core.lifecycle import LifecycleEvent
+        from pipeline.predictive_stage import run_predictive_stage
 
         prediction = run_predictive_stage(report)
         result["stages"]["prediction"] = prediction
@@ -978,7 +1109,9 @@ def step_predict(result: dict, report, *,
             console.print(f"  Risk score: [bold]{prediction.risk_score:.1f}/100[/bold]")
             console.print(f"  Signals: {', '.join(prediction.signals) or 'none'}")
             if prediction.event_level:
-                color = "red" if prediction.event_level == "prediction.alert" else "yellow"
+                color = (
+                    "red" if prediction.event_level == "prediction.alert" else "yellow"
+                )
                 console.print(f"  Event: [{color}]{prediction.event_level}[/{color}]")
 
                 # Emite evento de lifecycle
@@ -995,7 +1128,9 @@ def step_predict(result: dict, report, *,
                         "matched_history": getattr(prediction, "matched_history", []),
                     },
                 )
-                console.print(f"  [dim]Lifecycle event emitted: {event.event_type}[/dim]")
+                console.print(
+                    f"  [dim]Lifecycle event emitted: {event.event_type}[/dim]"
+                )
 
                 # Envia para o Slack se callback disponível
                 if slack_fire is not None:
@@ -1007,7 +1142,9 @@ def step_predict(result: dict, report, *,
             else:
                 console.print("  [dim]No lifecycle event (risk below threshold)[/dim]")
         else:
-            console.print("  [yellow]Predictive stage returned None (graceful degradation)[/yellow]")
+            console.print(
+                "  [yellow]Predictive stage returned None (graceful degradation)[/yellow]"
+            )
 
     except Exception as exc:
         console.print(f"  [yellow]Predictive stage error (non-fatal): {exc}[/yellow]")
@@ -1016,10 +1153,14 @@ def step_predict(result: dict, report, *,
     console.print()
 
 
-def step_postmortem(result, incident, output_dir: str = "output",
-                    output_format: str = "markdown",
-                    tracker_url: str | None = None,
-                    tracker_issue_key: str | None = None):
+def step_postmortem(
+    result,
+    incident,
+    output_dir: str = "output",
+    output_format: str = "markdown",
+    tracker_url: str | None = None,
+    tracker_issue_key: str | None = None,
+):
     """Etapa 5: Gera postmortem em markdown e/ou JSON."""
     console.print(Rule("[bold]Stage 5: Postmortem Generation[/bold]", style="cyan"))
     console.print()
@@ -1031,23 +1172,23 @@ def step_postmortem(result, incident, output_dir: str = "output",
     scenario_name = result.get("scenario_name", "payment-pool-exhaustion")
     now = datetime.now()
     llm_model = result.get("llm_model", "unknown")
-    postmortem = f"""# Postmortem - Incident {now.strftime('%Y-%m-%d')}
+    postmortem = f"""# Postmortem - Incident {now.strftime("%Y-%m-%d")}
 
 ## Summary
 
-- **Date**: {now.strftime('%Y-%m-%d %H:%M')}
+- **Date**: {now.strftime("%Y-%m-%d %H:%M")}
 - **Scenario**: {scenario_name}
 - **LLM Model**: {llm_model}
 - **Duration**: ~{(incident.fix_time - incident.deploy_time).total_seconds() / 60:.0f} minutes
-- **Severity**: {result.get('stages', {}).get('detection', {}).get('severity', 'UNKNOWN')}
+- **Severity**: {result.get("stages", {}).get("detection", {}).get("severity", "UNKNOWN")}
 - **Impact**: Service degradation detected via automated analysis
-- **Resolution**: {'Resolved' if result.get('success') else 'Requires manual intervention'}
+- **Resolution**: {"Resolved" if result.get("success") else "Requires manual intervention"}
 
 ## Root Cause
 
-{diagnosis.get('root_cause', 'Unable to determine root cause')}
+{diagnosis.get("root_cause", "Unable to determine root cause")}
 
-**Confidence**: {diagnosis.get('confidence', 'unknown')}
+**Confidence**: {diagnosis.get("confidence", "unknown")}
 
 ## Evidence
 
@@ -1060,10 +1201,10 @@ def step_postmortem(result, incident, output_dir: str = "output",
 
 | Time | Event |
 |------|-------|
-| {incident.deploy_time.strftime('%H:%M:%S')} | Deployment or configuration change applied |
-| {incident.spike_start.strftime('%H:%M:%S')} | {diagnosis.get('root_cause', 'Anomaly detected')[:80]} |
-| {incident.detection_time.strftime('%H:%M:%S')} | Automated detection triggered |
-| {incident.fix_time.strftime('%H:%M:%S')} | Mitigation applied |
+| {incident.deploy_time.strftime("%H:%M:%S")} | Deployment or configuration change applied |
+| {incident.spike_start.strftime("%H:%M:%S")} | {diagnosis.get("root_cause", "Anomaly detected")[:80]} |
+| {incident.detection_time.strftime("%H:%M:%S")} | Automated detection triggered |
+| {incident.fix_time.strftime("%H:%M:%S")} | Mitigation applied |
 
 ### State Machine Transitions
 
@@ -1071,7 +1212,7 @@ def step_postmortem(result, incident, output_dir: str = "output",
     for t in result.get("timeline", []):
         postmortem += f"- **{t['time']}** {t['from']} -> {t['to']}: {t['reason']}\n"
 
-    postmortem += f"""
+    postmortem += """
 ## Mitigation Applied
 
 """
@@ -1089,12 +1230,12 @@ def step_postmortem(result, incident, output_dir: str = "output",
         postmortem += f"""
 ## Pre-Execution Safety Check
 
-- **Risk Level**: {safety_validation.get('risk_level', 'N/A')}
-- **Risk Score**: {safety_validation.get('risk_score', 'N/A')}/100
-- **Approval Status**: {safety_validation.get('approval_status', 'N/A')}
-- **Requires Human**: {'Yes' if safety_validation.get('requires_human') else 'No'}
-- **Blast Radius**: {safety_validation.get('blast_radius_scope', 'N/A')}
-- **Recommendation**: {safety_validation.get('recommendation', 'N/A')}
+- **Risk Level**: {safety_validation.get("risk_level", "N/A")}
+- **Risk Score**: {safety_validation.get("risk_score", "N/A")}/100
+- **Approval Status**: {safety_validation.get("approval_status", "N/A")}
+- **Requires Human**: {"Yes" if safety_validation.get("requires_human") else "No"}
+- **Blast Radius**: {safety_validation.get("blast_radius_scope", "N/A")}
+- **Recommendation**: {safety_validation.get("recommendation", "N/A")}
 """
 
     # Remediation validation section
@@ -1103,26 +1244,28 @@ def step_postmortem(result, incident, output_dir: str = "output",
         postmortem += f"""
 ## Remediation CVE/Version Validation
 
-- **Risk**: {remediation_validation.get('risk', 'N/A')}
-- **Is Safe**: {'Yes' if remediation_validation.get('is_safe') else 'No'}
-- **Blocked Patterns**: {', '.join(remediation_validation.get('blocked_patterns', [])) or 'None'}
-- **Warnings**: {', '.join(remediation_validation.get('warnings', [])) or 'None'}
-- **Recommendation**: {remediation_validation.get('recommendation', 'N/A')}
+- **Risk**: {remediation_validation.get("risk", "N/A")}
+- **Is Safe**: {"Yes" if remediation_validation.get("is_safe") else "No"}
+- **Blocked Patterns**: {", ".join(remediation_validation.get("blocked_patterns", [])) or "None"}
+- **Warnings**: {", ".join(remediation_validation.get("warnings", [])) or "None"}
+- **Recommendation**: {remediation_validation.get("recommendation", "N/A")}
 """
 
     postmortem += f"""
 ## TNR Verification
 
-- **Result**: {verification.get('result', 'N/A')}
-- **Health Delta**: {verification.get('health_delta', 'N/A')}
-- **Message**: {verification.get('message', 'N/A')}
+- **Result**: {verification.get("result", "N/A")}
+- **Health Delta**: {verification.get("health_delta", "N/A")}
+- **Message**: {verification.get("message", "N/A")}
 
 ## Action Items
 
 """
 
     # Gera action items dinâmicos com base no pattern_matched da mitigação.
-    pattern_matched = mitigation.get("pattern_matched", "default") if mitigation else "default"
+    pattern_matched = (
+        mitigation.get("pattern_matched", "default") if mitigation else "default"
+    )
     items = _get_action_items(pattern_matched)
     for i, item in enumerate(items, 1):
         postmortem += f"{i}. [ ] {item}\n"
@@ -1155,7 +1298,7 @@ def step_postmortem(result, incident, output_dir: str = "output",
     # Salva postmortem nos formatos solicitados
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
-    timestamp_str = now.strftime('%Y-%m-%d_%H%M%S')
+    timestamp_str = now.strftime("%Y-%m-%d_%H%M%S")
 
     markdown_path = None
     json_path = None
@@ -1170,23 +1313,33 @@ def step_postmortem(result, incident, output_dir: str = "output",
     if output_format in ("json", "both"):
         serialized = _serialize_result(result, incident)
         json_path = out / f"postmortem_{timestamp_str}.json"
-        json_path.write_text(json.dumps(serialized, default=_json_default, indent=2, ensure_ascii=False))
+        json_path.write_text(
+            json.dumps(serialized, default=_json_default, indent=2, ensure_ascii=False)
+        )
         console.print(f"  Postmortem (JSON) saved to: [bold]{json_path}[/bold]")
 
     # Preview (mostra markdown se disponivel)
     if output_format in ("markdown", "both"):
         console.print()
-        console.print(Panel(
-            Markdown(postmortem[:1500] + "\n\n*... (truncated for display)*"),
-            title="Postmortem Preview",
-            border_style="dim",
-        ))
+        console.print(
+            Panel(
+                Markdown(postmortem[:1500] + "\n\n*... (truncated for display)*"),
+                title="Postmortem Preview",
+                border_style="dim",
+            )
+        )
 
     return markdown_path, json_path
 
 
-def print_summary(result, compression_stats=None, safety_result=None,
-                   san_report=None, remediation_result=None, tracker_info=None):
+def print_summary(
+    result,
+    compression_stats=None,
+    safety_result=None,
+    san_report=None,
+    remediation_result=None,
+    tracker_info=None,
+):
     """Exibe resumo final."""
     console.print()
     console.print(Rule("[bold]Summary[/bold]", style="cyan"))
@@ -1239,7 +1392,9 @@ def print_summary(result, compression_stats=None, safety_result=None,
     detection = result.get("stages", {}).get("detection", {})
     table.add_row(
         "Detection",
-        "[green]Incident detected[/green]" if detection.get("is_incident") else "[yellow]No incident[/yellow]",
+        "[green]Incident detected[/green]"
+        if detection.get("is_incident")
+        else "[yellow]No incident[/yellow]",
         f"{len(detection.get('signals', []))} correlated signals",
     )
 
@@ -1250,7 +1405,9 @@ def print_summary(result, compression_stats=None, safety_result=None,
         crit_pres = min(compression_stats.critical_preserved, 100) / 100
         table.add_row(
             "Compression",
-            f"[magenta]{ratio:.0%} reduction[/magenta]" if ratio > 0 else "[magenta]within budget[/magenta]",
+            f"[magenta]{ratio:.0%} reduction[/magenta]"
+            if ratio > 0
+            else "[magenta]within budget[/magenta]",
             f"{compression_stats.chunks_kept} chunks kept, {compression_stats.chunks_removed} removed, "
             f"{crit_pres:.0%} critical preserved",
         )
@@ -1272,7 +1429,12 @@ def print_summary(result, compression_stats=None, safety_result=None,
 
     # Safety Validation (Pre-Validator)
     if safety_result:
-        risk_colors = {"LOW": "green", "MEDIUM": "yellow", "HIGH": "red", "CRITICAL": "bold red"}
+        risk_colors = {
+            "LOW": "green",
+            "MEDIUM": "yellow",
+            "HIGH": "red",
+            "CRITICAL": "bold red",
+        }
         risk_color = risk_colors.get(safety_result.risk_level.value, "white")
         table.add_row(
             "Safety Check",
@@ -1283,7 +1445,12 @@ def print_summary(result, compression_stats=None, safety_result=None,
 
     # Remediation Validation (VersionValidator)
     if remediation_result:
-        rem_colors = {"SAFE": "green", "CAUTION": "yellow", "DANGEROUS": "red", "MALICIOUS": "bold red"}
+        rem_colors = {
+            "SAFE": "green",
+            "CAUTION": "yellow",
+            "DANGEROUS": "red",
+            "MALICIOUS": "bold red",
+        }
         rem_color = rem_colors.get(remediation_result.risk.name, "white")
         table.add_row(
             "CVE/Version",
@@ -1295,7 +1462,13 @@ def print_summary(result, compression_stats=None, safety_result=None,
     # Predictive Analysis
     prediction = result.get("stages", {}).get("prediction")
     if prediction is not None:
-        risk_color = "red" if prediction.risk_score >= 60 else "yellow" if prediction.risk_score >= 30 else "green"
+        risk_color = (
+            "red"
+            if prediction.risk_score >= 60
+            else "yellow"
+            if prediction.risk_score >= 30
+            else "green"
+        )
         event_str = prediction.event_level or "none"
         table.add_row(
             "Prediction",
@@ -1308,7 +1481,11 @@ def print_summary(result, compression_stats=None, safety_result=None,
     if verification:
         tnr_result = verification.get("result", "N/A")
         style = "green" if tnr_result == "success" else "red"
-        table.add_row("TNR Verify", f"[{style}]{tnr_result}[/{style}]", verification.get("message", "")[:80])
+        table.add_row(
+            "TNR Verify",
+            f"[{style}]{tnr_result}[/{style}]",
+            verification.get("message", "")[:80],
+        )
 
     # Incident Tracking (Story 6.3)
     if tracker_info:
@@ -1327,15 +1504,26 @@ def print_summary(result, compression_stats=None, safety_result=None,
                 "tracker error — postmortem still generated",
             )
 
-    table.add_row("Status", status_icon, f"{len(result.get('timeline', []))} state transitions")
+    table.add_row(
+        "Status", status_icon, f"{len(result.get('timeline', []))} state transitions"
+    )
     console.print(table)
 
     # Timeline visual
     console.print("\n  [bold]State Machine Timeline:[/bold]")
     for t in result.get("timeline", []):
-        icon = {"DETECTING": "->", "DIAGNOSING": "->", "MITIGATING": "->",
-                "VERIFYING": "->", "RESOLVED": "->", "ROLLBACK": "<-", "FAILED": "!!"}.get(t["to"], "->")
-        console.print(f"    {t['time']} {icon} {t['from']} -> [bold]{t['to']}[/bold]: {t['reason'][:60]}")
+        icon = {
+            "DETECTING": "->",
+            "DIAGNOSING": "->",
+            "MITIGATING": "->",
+            "VERIFYING": "->",
+            "RESOLVED": "->",
+            "ROLLBACK": "<-",
+            "FAILED": "!!",
+        }.get(t["to"], "->")
+        console.print(
+            f"    {t['time']} {icon} {t['from']} -> [bold]{t['to']}[/bold]: {t['reason'][:60]}"
+        )
 
 
 class _CliParser(argparse.ArgumentParser):
@@ -1360,10 +1548,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
   3  Safety blocked action (human approval required)""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--no-llm", action="store_true", help="Skip LLM calls (heuristic mode)")
+    parser.add_argument(
+        "--no-llm", action="store_true", help="Skip LLM calls (heuristic mode)"
+    )
     parser.add_argument("--compact", action="store_true", help="Compact output")
-    parser.add_argument("--no-rag", action="store_true", help="Skip RAG indexing (faster)")
-    parser.add_argument("--pipeline-v1", action="store_true", help="Use Blueprint Engine (V1) pipeline")
+    parser.add_argument(
+        "--no-rag", action="store_true", help="Skip RAG indexing (faster)"
+    )
+    parser.add_argument(
+        "--pipeline-v1", action="store_true", help="Use Blueprint Engine (V1) pipeline"
+    )
     parser.add_argument(
         "--scenario",
         choices=list_scenarios(),
@@ -1426,7 +1620,9 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
       Dados reais nao possuem cenarios simulados.
     """
     if args.data_source == "databricks" and args.scenario is not None:
-        parser.error("--data-source databricks cannot be combined with --scenario (real data has no simulated scenarios)")
+        parser.error(
+            "--data-source databricks cannot be combined with --scenario (real data has no simulated scenarios)"
+        )
 
 
 def _create_databricks_sources():
@@ -1449,7 +1645,9 @@ def _create_databricks_sources():
         missing.append("DATABRICKS_WAREHOUSE_ID")
 
     if missing:
-        console.print(f"[red]Missing required env vars for Databricks: {', '.join(missing)}[/red]")
+        console.print(
+            f"[red]Missing required env vars for Databricks: {', '.join(missing)}[/red]"
+        )
         console.print("[dim]Set them in .env or export before running.[/dim]")
         return None
 
@@ -1461,13 +1659,18 @@ def _create_databricks_sources():
     )
 
     log_source = DatabricksLogSource(host=host, token=token, warehouse_id=warehouse_id)
-    metrics_source = DatabricksMetricsSource(host=host, token=token, warehouse_id=warehouse_id)
-    trace_source = DatabricksTraceSource(host=host, token=token, warehouse_id=warehouse_id)
+    metrics_source = DatabricksMetricsSource(
+        host=host, token=token, warehouse_id=warehouse_id
+    )
+    trace_source = DatabricksTraceSource(
+        host=host, token=token, warehouse_id=warehouse_id
+    )
 
     return log_source, metrics_source, trace_source
 
 
 # --- Tracker Registry (Story 6.3) ---
+
 
 def _create_jira_tracker():
     """Factory que cria JiraIncidentTracker a partir de env vars.
@@ -1477,9 +1680,12 @@ def _create_jira_tracker():
     """
     try:
         from tools.jira_tracker import JiraIncidentTracker
+
         return JiraIncidentTracker()
     except Exception as e:
-        console.print(f"[yellow]Warning: Could not initialize Jira tracker: {e}[/yellow]")
+        console.print(
+            f"[yellow]Warning: Could not initialize Jira tracker: {e}[/yellow]"
+        )
         return None
 
 
@@ -1499,7 +1705,9 @@ def _resolve_tracker(tracker_name: str | None):
 
     factory = TRACKER_REGISTRY.get(tracker_name)
     if factory is None:
-        console.print(f"[yellow]Warning: Unknown tracker '{tracker_name}'. Skipping.[/yellow]")
+        console.print(
+            f"[yellow]Warning: Unknown tracker '{tracker_name}'. Skipping.[/yellow]"
+        )
         return None
 
     return factory()
@@ -1537,8 +1745,12 @@ def step_tracking(result, tracker) -> str | None:
         console.print(f"  URL: [dim]{tracker.url}/browse/{issue_key}[/dim]")
         return issue_key
     except Exception as e:
-        console.print(f"[yellow]  Warning: Tracker incident creation failed: {e}[/yellow]")
-        console.print("[dim]  Pipeline continues — postmortem will still be generated.[/dim]")
+        console.print(
+            f"[yellow]  Warning: Tracker incident creation failed: {e}[/yellow]"
+        )
+        console.print(
+            "[dim]  Pipeline continues — postmortem will still be generated.[/dim]"
+        )
         return None
 
 
@@ -1557,17 +1769,23 @@ def _attach_postmortem_to_tracker(tracker, issue_key: str, result) -> str | None
     # Mapeia timeline do pipeline para formato do tracker
     timeline = []
     for entry in result.get("timeline", []):
-        timeline.append({
-            "time": entry.get("time", "?"),
-            "event": f"{entry.get('from', '?')} -> {entry.get('to', '?')}: {entry.get('reason', '')}",
-        })
+        timeline.append(
+            {
+                "time": entry.get("time", "?"),
+                "event": f"{entry.get('from', '?')} -> {entry.get('to', '?')}: {entry.get('reason', '')}",
+            }
+        )
 
     # Action items do pattern matched
-    pattern_matched = mitigation.get("pattern_matched", "default") if mitigation else "default"
+    pattern_matched = (
+        mitigation.get("pattern_matched", "default") if mitigation else "default"
+    )
     action_items = _get_action_items(pattern_matched)
 
     try:
-        comment_id = tracker.create_postmortem(issue_key, timeline, root_cause, action_items)
+        comment_id = tracker.create_postmortem(
+            issue_key, timeline, root_cause, action_items
+        )
         console.print(f"  Postmortem attached to {issue_key} (comment: {comment_id})")
         return comment_id
     except Exception as e:
@@ -1576,7 +1794,9 @@ def _attach_postmortem_to_tracker(tracker, issue_key: str, result) -> str | None
 
 
 def step_fetch_databricks_data(
-    log_source, metrics_source, trace_source,
+    log_source,
+    metrics_source,
+    trace_source,
 ) -> tuple[SimulatedIncident, str]:
     """Etapa 1 (Databricks): Busca dados reais via conectores.
 
@@ -1592,6 +1812,7 @@ def step_fetch_databricks_data(
         Tupla (SimulatedIncident com dados reais, "databricks-live").
     """
     import uuid as _uuid
+
     from data.models import LogEntry, MetricPoint, Span
 
     console.print(Rule("[bold]Stage 1: Databricks Data Fetch[/bold]", style="cyan"))
@@ -1605,15 +1826,19 @@ def step_fetch_databricks_data(
         raw_logs = log_source.search(query="*", service="", start=None, end=None)
         for d in raw_logs:
             ts = datetime.fromisoformat(d["timestamp"]) if d.get("timestamp") else now
-            logs.append(LogEntry(
-                timestamp=ts,
-                level=d.get("level", "INFO"),
-                service=d.get("service", "unknown"),
-                message=d.get("message", ""),
-            ))
+            logs.append(
+                LogEntry(
+                    timestamp=ts,
+                    level=d.get("level", "INFO"),
+                    service=d.get("service", "unknown"),
+                    message=d.get("message", ""),
+                )
+            )
         console.print(f"  [green]Logs:[/green] {len(logs)} entries fetched")
     except Exception as exc:
-        console.print(f"  [yellow]Logs:[/yellow] fetch failed ({exc}), using empty list")
+        console.print(
+            f"  [yellow]Logs:[/yellow] fetch failed ({exc}), using empty list"
+        )
 
     # --- Metrics ---
     metrics: list[MetricPoint] = []
@@ -1621,35 +1846,43 @@ def step_fetch_databricks_data(
         raw_metrics = metrics_source.query(promql="", start=None, end=None)
         for d in raw_metrics:
             ts = datetime.fromisoformat(d["timestamp"]) if d.get("timestamp") else now
-            metrics.append(MetricPoint(
-                timestamp=ts,
-                service=d.get("service", "unknown"),
-                metric_name=d.get("metric", ""),
-                value=float(d.get("value", 0.0)),
-            ))
+            metrics.append(
+                MetricPoint(
+                    timestamp=ts,
+                    service=d.get("service", "unknown"),
+                    metric_name=d.get("metric", ""),
+                    value=float(d.get("value", 0.0)),
+                )
+            )
         console.print(f"  [green]Metrics:[/green] {len(metrics)} points fetched")
     except Exception as exc:
-        console.print(f"  [yellow]Metrics:[/yellow] fetch failed ({exc}), using empty list")
+        console.print(
+            f"  [yellow]Metrics:[/yellow] fetch failed ({exc}), using empty list"
+        )
 
     # --- Traces ---
     traces: list[Span] = []
     try:
         raw_traces = trace_source.find_traces(service="", min_duration_ms=0.0)
         for d in raw_traces:
-            traces.append(Span(
-                trace_id=d.get("trace_id", ""),
-                span_id=str(_uuid.uuid4()),
-                parent_span_id=None,
-                service=d.get("service", "unknown"),
-                operation=d.get("operation", ""),
-                start_time=now,
-                duration_ms=float(d.get("duration_ms", 0.0)),
-                status=d.get("status", "unknown"),
-                attributes=d.get("attributes", {}),
-            ))
+            traces.append(
+                Span(
+                    trace_id=d.get("trace_id", ""),
+                    span_id=str(_uuid.uuid4()),
+                    parent_span_id=None,
+                    service=d.get("service", "unknown"),
+                    operation=d.get("operation", ""),
+                    start_time=now,
+                    duration_ms=float(d.get("duration_ms", 0.0)),
+                    status=d.get("status", "unknown"),
+                    attributes=d.get("attributes", {}),
+                )
+            )
         console.print(f"  [green]Traces:[/green] {len(traces)} spans fetched")
     except Exception as exc:
-        console.print(f"  [yellow]Traces:[/yellow] fetch failed ({exc}), using empty list")
+        console.print(
+            f"  [yellow]Traces:[/yellow] fetch failed ({exc}), using empty list"
+        )
 
     incident = SimulatedIncident(
         logs=logs,
@@ -1681,6 +1914,7 @@ def create_incident_state(
     """
     import uuid
     from datetime import timezone
+
     from domain.alert import NormalizedAlert
     from domain.incident_state import IncidentState
 
@@ -1726,23 +1960,27 @@ def display_results(state: "IncidentState", compact: bool = False) -> None:
     # Diagnostico
     diagnosis = state.diagnosis or {}
     if diagnosis:
-        console.print(Panel(
-            f"[bold]Root Cause:[/bold] {diagnosis.get('root_cause', 'Unknown')}\n"
-            f"[bold]Confidence:[/bold] {diagnosis.get('confidence', 'unknown')}\n"
-            f"[bold]Evidence:[/bold] {', '.join(diagnosis.get('evidence', [])[:3])}",
-            title="Diagnosis Result",
-            border_style="green",
-        ))
+        console.print(
+            Panel(
+                f"[bold]Root Cause:[/bold] {diagnosis.get('root_cause', 'Unknown')}\n"
+                f"[bold]Confidence:[/bold] {diagnosis.get('confidence', 'unknown')}\n"
+                f"[bold]Evidence:[/bold] {', '.join(diagnosis.get('evidence', [])[:3])}",
+                title="Diagnosis Result",
+                border_style="green",
+            )
+        )
 
     # Safety
     if state.safety_verdict:
         style = "green" if state.safety_verdict == "APPROVED" else "red"
-        console.print(Panel(
-            f"[bold]Verdict:[/bold] {state.safety_verdict}\n"
-            f"[bold]Reasons:[/bold] {'; '.join(state.safety_reasons)}",
-            title="Safety Verification",
-            border_style=style,
-        ))
+        console.print(
+            Panel(
+                f"[bold]Verdict:[/bold] {state.safety_verdict}\n"
+                f"[bold]Reasons:[/bold] {'; '.join(state.safety_reasons)}",
+                title="Safety Verification",
+                border_style=style,
+            )
+        )
 
     # Postmortem
     if state.postmortem_md and not compact:
@@ -1770,12 +2008,13 @@ def main_v1(args: argparse.Namespace) -> int:
     import asyncio
     import os
     from pathlib import Path as _Path
-    from adapters.persistence.in_memory_store import InMemoryStore
-    from core.logging import configure_logging, get_logger
+
     from adapters.credentials import EnvCredentialProvider
-    from config.loader import load_config as load_app_config
-    from blueprint.engine import PipelineAborted, LLMCallLimitExceeded
+    from adapters.persistence.in_memory_store import InMemoryStore
     from app.builders import build_engine, build_pipeline, build_rag
+    from blueprint.engine import LLMCallLimitExceeded, PipelineAborted
+    from config.loader import load_config as load_app_config
+    from core.logging import configure_logging, get_logger
 
     # Carrega .env.local se existir (sem dependencia de python-dotenv)
     _env_file = _Path(".env.local")
@@ -1792,19 +2031,28 @@ def main_v1(args: argparse.Namespace) -> int:
     app_config = load_app_config(args.config)
     configure_logging()
 
-    log.info("main.started", no_llm=args.no_llm, no_rag=args.no_rag, compact=args.compact)
+    log.info(
+        "main.started", no_llm=args.no_llm, no_rag=args.no_rag, compact=args.compact
+    )
 
     # Slack notifier — opcional, wired se SLACK_BOT_TOKEN estiver no ambiente
-    from core.lifecycle import LifecycleEvent
     from datetime import timezone as _tz
+
+    from core.lifecycle import LifecycleEvent
     from tools.slack_setup import setup_slack_notifier
+
     _slack_notifier = setup_slack_notifier()
     if _slack_notifier is not None:
         _slack_channel = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
         log.info("slack.notifier_created", channel=_slack_channel)
         console.print(f"[cyan]Slack: notifier created for #{_slack_channel}[/cyan]")
 
-    def _fire(event_type: str, node_name: str | None = None, data: dict | None = None, cid: str = "") -> None:
+    def _fire(
+        event_type: str,
+        node_name: str | None = None,
+        data: dict | None = None,
+        cid: str = "",
+    ) -> None:
         """Dispara evento de ciclo de vida para o SlackNotifier (sync wrapper)."""
         if _slack_notifier is None:
             return
@@ -1863,14 +2111,20 @@ def main_v1(args: argparse.Namespace) -> int:
     exit_code = EXIT_SUCCESS
 
     _cid = state.correlation_id
-    _fire("pipeline.started", cid=_cid, data={
-        "title": state.alert.title if state.alert else "AIOps Incident",
-        "severity": state.alert.severity if state.alert else "unknown",
-        "service": state.alert.service if state.alert else "unknown",
-    })
+    _fire(
+        "pipeline.started",
+        cid=_cid,
+        data={
+            "title": state.alert.title if state.alert else "AIOps Incident",
+            "severity": state.alert.severity if state.alert else "unknown",
+            "service": state.alert.service if state.alert else "unknown",
+        },
+    )
 
     try:
-        console.print(Rule("[bold]Pipeline Execution (Blueprint Engine V1)[/bold]", style="cyan"))
+        console.print(
+            Rule("[bold]Pipeline Execution (Blueprint Engine V1)[/bold]", style="cyan")
+        )
         state = engine.run(pipeline, state)
     except PipelineAborted as exc:
         log.error("main.pipeline_aborted", error=str(exc))
@@ -1891,14 +2145,21 @@ def main_v1(args: argparse.Namespace) -> int:
         # Pipeline completou com sucesso
         diagnosis = state.diagnosis or {}
         _conf_v1 = diagnosis.get("confidence", 0.0)
-        _fire("pipeline.completed", cid=_cid, data={
-            "root_cause": diagnosis.get("root_cause", ""),
-            "confidence": float(_conf_v1) if isinstance(_conf_v1, (int, float)) else 0.0,
-            "proposed_fix": diagnosis.get("proposed_fix") or diagnosis.get("fix_command", ""),
-            "risk_level": state.safety_verdict or "unknown",
-            "evidence": diagnosis.get("evidence", []),
-            "total_duration_ms": 0,  # preenchido abaixo
-        })
+        _fire(
+            "pipeline.completed",
+            cid=_cid,
+            data={
+                "root_cause": diagnosis.get("root_cause", ""),
+                "confidence": float(_conf_v1)
+                if isinstance(_conf_v1, (int, float))
+                else 0.0,
+                "proposed_fix": diagnosis.get("proposed_fix")
+                or diagnosis.get("fix_command", ""),
+                "risk_level": state.safety_verdict or "unknown",
+                "evidence": diagnosis.get("evidence", []),
+                "total_duration_ms": 0,  # preenchido abaixo
+            },
+        )
 
     elapsed = time.monotonic() - start_time
 
@@ -1913,7 +2174,9 @@ def main_v1(args: argparse.Namespace) -> int:
     # 9. Resumo final
     console.print(Rule("[bold]Summary[/bold]", style="cyan"))
     console.print(f"Total time: {elapsed:.1f}s")
-    console.print(f"Exit code: {exit_code} ({EXIT_CODE_LABELS.get(exit_code, 'unknown')})")
+    console.print(
+        f"Exit code: {exit_code} ({EXIT_CODE_LABELS.get(exit_code, 'unknown')})"
+    )
 
     log.info("main.completed", exit_code=exit_code, duration_seconds=round(elapsed, 1))
 
@@ -1978,8 +2241,12 @@ def main() -> int:
     # Verifica API key se vai usar LLM
     use_llm = not args.no_llm
     if use_llm and not os.environ.get("ANTHROPIC_API_KEY"):
-        console.print("[yellow]ANTHROPIC_API_KEY not found. Running in heuristic mode (--no-llm).[/yellow]")
-        console.print("[dim]Set ANTHROPIC_API_KEY in .env for full ReAct diagnosis.[/dim]\n")
+        console.print(
+            "[yellow]ANTHROPIC_API_KEY not found. Running in heuristic mode (--no-llm).[/yellow]"
+        )
+        console.print(
+            "[dim]Set ANTHROPIC_API_KEY in .env for full ReAct diagnosis.[/dim]\n"
+        )
         use_llm = False
         args.no_llm = True
 
@@ -1992,15 +2259,19 @@ def main() -> int:
 
     # Slack notifier — opcional, sem impacto no pipeline se falhar
     import asyncio as _asyncio
-    from core.lifecycle import LifecycleEvent as _LifecycleEvent
     from datetime import timezone as _tz2
+
+    from core.lifecycle import LifecycleEvent as _LifecycleEvent
     from tools.slack_setup import setup_slack_notifier as _setup_slack
+
     _notifier = _setup_slack()
     if _notifier is not None:
         _slack_ch = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
         console.print(f"[cyan]Slack: notificacoes ativas em #{_slack_ch}[/cyan]")
 
-    def _slack_fire(event_type: str, data: dict | None = None, cid: str = "unknown") -> None:
+    def _slack_fire(
+        event_type: str, data: dict | None = None, cid: str = "unknown"
+    ) -> None:
         if _notifier is None:
             return
         evt = _LifecycleEvent(
@@ -2013,7 +2284,9 @@ def main() -> int:
         try:
             _asyncio.run(_notifier.on_event(evt))
         except Exception as _fe:
-            console.print(f"[yellow]Slack: falha ao enviar {event_type}: {_fe}[/yellow]")
+            console.print(
+                f"[yellow]Slack: falha ao enviar {event_type}: {_fe}[/yellow]"
+            )
 
     # Blueprint Engine V1 esta disponivel via main_v1(args).
     # O path V0 e mantido como default para compatibilidade com testes existentes.
@@ -2030,27 +2303,36 @@ def main() -> int:
     tracker = _resolve_tracker(args.tracker)
 
     import uuid as _uuid
+
     _pipeline_cid = f"inc-{datetime.now().strftime('%Y%m%d')}-{_uuid.uuid4().hex[:8]}"
 
     try:
         # === Pipeline ===
         t_total = time.time()
 
-        _slack_fire("pipeline.started", cid=_pipeline_cid, data={
-            "title": f"AIOps: {args.scenario or 'payment-pool-exhaustion'}",
-            "severity": "critical",
-            "service": "payment-svc",
-        })
+        _slack_fire(
+            "pipeline.started",
+            cid=_pipeline_cid,
+            data={
+                "title": f"AIOps: {args.scenario or 'payment-pool-exhaustion'}",
+                "severity": "critical",
+                "service": "payment-svc",
+            },
+        )
 
         # 1. Data Generation / Fetch
         if args.data_source == "databricks":
             sources = _create_databricks_sources()
             if sources is None:
-                console.print("[red]Cannot proceed without Databricks connection. Exiting.[/red]")
+                console.print(
+                    "[red]Cannot proceed without Databricks connection. Exiting.[/red]"
+                )
                 return EXIT_ERROR
             log_source, metrics_source, trace_source = sources
             incident, scenario_name = step_fetch_databricks_data(
-                log_source, metrics_source, trace_source,
+                log_source,
+                metrics_source,
+                trace_source,
             )
         else:
             incident, scenario_name = step_generate_data(scenario_name=args.scenario)
@@ -2076,18 +2358,31 @@ def main() -> int:
             retriever = step_rag(report, rebuild=args.rebuild_rag)
         else:
             if args.rebuild_rag:
-                console.print("[yellow]Warning: --rebuild-rag ignored because --no-rag is set[/yellow]")
-            console.print(Rule("[bold]Stage 3: RAG Indexing[/bold] [dim](skipped)[/dim]", style="cyan"))
+                console.print(
+                    "[yellow]Warning: --rebuild-rag ignored because --no-rag is set[/yellow]"
+                )
+            console.print(
+                Rule(
+                    "[bold]Stage 3: RAG Indexing[/bold] [dim](skipped)[/dim]",
+                    style="cyan",
+                )
+            )
             console.print()
             retriever = None
 
         # 4. Agent Pipeline
-        result = step_agents(report, retriever, use_llm=use_llm, llm_model=llm_model,
-                             config=threshold_config)
+        result = step_agents(
+            report,
+            retriever,
+            use_llm=use_llm,
+            llm_model=llm_model,
+            config=threshold_config,
+        )
 
         # 4d. Predictive Analysis
-        step_predict(result, report,
-                     slack_fire=_slack_fire, correlation_id=_pipeline_cid)
+        step_predict(
+            result, report, slack_fire=_slack_fire, correlation_id=_pipeline_cid
+        )
 
         # 4b. Pre-Execution Safety Validation
         safety_result = step_safety_validation(result)
@@ -2098,7 +2393,9 @@ def main() -> int:
         # 4e. Notificação Slack: diagnóstico + correção proposta
         _diag_for_slack = result.get("stages", {}).get("diagnosis", {})
         _mitigation_for_slack = result.get("stages", {}).get("mitigation", {})
-        _fix_action = _mitigation_for_slack.get("action") if _mitigation_for_slack else None
+        _fix_action = (
+            _mitigation_for_slack.get("action") if _mitigation_for_slack else None
+        )
         _proposed_fix_slack = (
             _diag_for_slack.get("proposed_fix")
             or _diag_for_slack.get("fix_command")
@@ -2109,14 +2406,22 @@ def main() -> int:
         _CONF_MAP_SLACK = {"high": 0.85, "medium": 0.5, "low": 0.25}
         if not isinstance(_conf_for_slack, (int, float)):
             _conf_for_slack = _CONF_MAP_SLACK.get(str(_conf_for_slack).lower(), 0.0)
-        _slack_fire("diagnosis.completed", cid=_pipeline_cid, data={
-            "root_cause": _diag_for_slack.get("root_cause", ""),
-            "proposed_fix": _proposed_fix_slack,
-            "risk_level": safety_result.risk_level.value if safety_result else "unknown",
-            "requires_human": safety_result.requires_human if safety_result else False,
-            "confidence": float(_conf_for_slack),
-            "evidence": list(_diag_for_slack.get("evidence", []))[:5],
-        })
+        _slack_fire(
+            "diagnosis.completed",
+            cid=_pipeline_cid,
+            data={
+                "root_cause": _diag_for_slack.get("root_cause", ""),
+                "proposed_fix": _proposed_fix_slack,
+                "risk_level": safety_result.risk_level.value
+                if safety_result
+                else "unknown",
+                "requires_human": safety_result.requires_human
+                if safety_result
+                else False,
+                "confidence": float(_conf_for_slack),
+                "evidence": list(_diag_for_slack.get("evidence", []))[:5],
+            },
+        )
 
         # Armazena nome do cenário e config no resultado para postmortem e summary.
         result["scenario_name"] = scenario_name
@@ -2132,7 +2437,11 @@ def main() -> int:
             exit_code = EXIT_REGRESSION
 
         # Check safety requires human (exit code 3) — only if no regression
-        if exit_code == EXIT_SUCCESS and safety_result is not None and safety_result.requires_human:
+        if (
+            exit_code == EXIT_SUCCESS
+            and safety_result is not None
+            and safety_result.requires_human
+        ):
             exit_code = EXIT_APPROVAL_NEEDED
 
         # 5b. Incident Tracking (Story 6.3)
@@ -2153,7 +2462,8 @@ def main() -> int:
 
         # 5. Postmortem (still runs regardless of exit code)
         markdown_path, json_path = step_postmortem(
-            result, incident,
+            result,
+            incident,
             output_dir=args.output_dir,
             output_format=args.output_format,
             tracker_url=tracker_url,
@@ -2190,9 +2500,14 @@ def main() -> int:
             pass
 
         # Summary
-        print_summary(result, compression_stats, safety_result,
-                      san_report=san_report, remediation_result=remediation_result,
-                      tracker_info=tracker_info)
+        print_summary(
+            result,
+            compression_stats,
+            safety_result,
+            san_report=san_report,
+            remediation_result=remediation_result,
+            tracker_info=tracker_info,
+        )
 
         elapsed_total = time.time() - t_total
 
@@ -2204,11 +2519,17 @@ def main() -> int:
             _conf = float(_conf_raw)
         else:
             _conf = _CONF_MAP.get(str(_conf_raw).lower(), 0.0)
-        _mitigation_action = result.get("stages", {}).get("mitigation", {}).get("action")
+        _mitigation_action = (
+            result.get("stages", {}).get("mitigation", {}).get("action")
+        )
         _fix = (
             _diag.get("proposed_fix")
             or _diag.get("fix_command")
-            or (getattr(_mitigation_action, "command", None) if _mitigation_action else None)
+            or (
+                getattr(_mitigation_action, "command", None)
+                if _mitigation_action
+                else None
+            )
             or ""
         )
         _br = (
@@ -2216,22 +2537,30 @@ def main() -> int:
             if safety_result and safety_result.blast_radius
             else "unknown"
         )
-        _slack_fire("pipeline.completed", cid=_pipeline_cid, data={
-            "root_cause": _diag.get("root_cause", ""),
-            "confidence": _conf,
-            "proposed_fix": _fix,
-            "risk_level": safety_result.risk_level.value if safety_result else "unknown",
-            "blast_radius": _br,
-            "evidence": list(_diag.get("evidence", []))[:5],
-            "total_duration_ms": int(elapsed_total * 1000),
-        })
+        _slack_fire(
+            "pipeline.completed",
+            cid=_pipeline_cid,
+            data={
+                "root_cause": _diag.get("root_cause", ""),
+                "confidence": _conf,
+                "proposed_fix": _fix,
+                "risk_level": safety_result.risk_level.value
+                if safety_result
+                else "unknown",
+                "blast_radius": _br,
+                "evidence": list(_diag.get("evidence", []))[:5],
+                "total_duration_ms": int(elapsed_total * 1000),
+            },
+        )
 
         console.print(f"\n  [dim]Total execution time: {elapsed_total:.1f}s[/dim]")
         if markdown_path:
             console.print(f"  [dim]Postmortem (md): {markdown_path}[/dim]")
         if json_path:
             console.print(f"  [dim]Postmortem (json): {json_path}[/dim]")
-        console.print(f"  [dim]Exit code: {exit_code} ({EXIT_CODE_LABELS[exit_code]})[/dim]")
+        console.print(
+            f"  [dim]Exit code: {exit_code} ({EXIT_CODE_LABELS[exit_code]})[/dim]"
+        )
         console.print()
 
         return exit_code
@@ -2239,7 +2568,11 @@ def main() -> int:
     except Exception as _exc:
         tb_text = traceback.format_exc()
         console.print(Text(_sanitize_secrets(tb_text), style="red"))
-        _slack_fire("pipeline.failed", cid=_pipeline_cid, data={"error": _sanitize_secrets(str(_exc))})
+        _slack_fire(
+            "pipeline.failed",
+            cid=_pipeline_cid,
+            data={"error": _sanitize_secrets(str(_exc))},
+        )
         return EXIT_ERROR
 
 

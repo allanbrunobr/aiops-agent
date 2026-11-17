@@ -11,7 +11,7 @@ Suporta modo Tier 2 opcional com cross-encoder para refinamento adicional.
 from __future__ import annotations
 
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -80,7 +80,7 @@ class DomainReranker:
                 self._load_cross_encoder()
             except Exception as exc:
                 warnings.warn(
-                    f'Falha ao inicializar cross-encoder — Tier 2 desabilitado: {exc}',
+                    f"Falha ao inicializar cross-encoder — Tier 2 desabilitado: {exc}",
                     RuntimeWarning,
                     stacklevel=2,
                 )
@@ -126,7 +126,9 @@ class DomainReranker:
             services = metadata.get("services", [])
             if services:
                 # Usa a maior criticidade entre os serviços do chunk
-                service = max(services, key=lambda s: self.service_criticality_map.get(s, 0.5))
+                service = max(
+                    services, key=lambda s: self.service_criticality_map.get(s, 0.5)
+                )
         signals.service_criticality = self.service_criticality_map.get(service, 0.5)
 
         # --- log_level_score: mapeamento para score normalizado ---
@@ -186,6 +188,7 @@ class DomainReranker:
             else:
                 try:
                     import datetime
+
                     if isinstance(ts_raw, datetime.datetime):
                         timestamps.append(ts_raw.timestamp())
                     else:
@@ -249,7 +252,12 @@ class DomainReranker:
         tier1_results.sort(key=lambda x: x[1], reverse=True)
 
         # --- Tier 2: cross-encoder opcional ---
-        if use_tier2 and self.use_cross_encoder and self._cross_encoder is not None and len(results) > 10:
+        if (
+            use_tier2
+            and self.use_cross_encoder
+            and self._cross_encoder is not None
+            and len(results) > 10
+        ):
             tier1_results = self._apply_tier2(tier1_results, query)
 
         # Retorna apenas top_k, reescrevendo o score no objeto

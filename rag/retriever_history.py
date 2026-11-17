@@ -8,8 +8,8 @@ antes do diagnóstico (Epic 7 — Institutional Memory).
 
 from __future__ import annotations
 
-from rag.retriever import ObservabilityRetriever
 from rag.indexer import ObservabilityIndexer
+from rag.retriever import ObservabilityRetriever
 
 
 class ObservabilityRetrieverWithHistory(ObservabilityRetriever):

@@ -6,25 +6,26 @@ Verifica:
   2. Fallback para Python quando _aiops_rust não está disponível
   3. Release do GIL: duas threads executam compress() em paralelo
 """
+
 from __future__ import annotations
 
 import threading
-from dataclasses import dataclass, field
 from datetime import datetime
 from unittest.mock import patch
 
 import pytest
 
-from pipeline.context_compressor import ContextCompressor, CompressionStats
 from pipeline.aggregator import AggregatedReport
-
+from pipeline.context_compressor import CompressionStats, ContextCompressor
 
 # ---------------------------------------------------------------------------
 # Fixtures: dados sintéticos determinísticos
 # ---------------------------------------------------------------------------
 
+
 def _make_log_template(template, level, count, services, relevance_score):
     from pipeline.log_parser import LogTemplate
+
     tpl = LogTemplate(
         template=template,
         count=count,
@@ -35,8 +36,11 @@ def _make_log_template(template, level, count, services, relevance_score):
     return tpl
 
 
-def _make_metric_anomaly(service, metric_name, anomaly_type, value, mean, deviation_sigma):
+def _make_metric_anomaly(
+    service, metric_name, anomaly_type, value, mean, deviation_sigma
+):
     from pipeline.metric_filter import MetricAnomaly
+
     return MetricAnomaly(
         service=service,
         metric_name=metric_name,
@@ -52,6 +56,7 @@ def _make_metric_anomaly(service, metric_name, anomaly_type, value, mean, deviat
 
 def _make_slow_trace(path, total_ms, normal_ms, bottleneck, attributes=None):
     from pipeline.trace_filter import SlowCallPath
+
     return SlowCallPath(
         trace_id="trace-001",
         path=path,
@@ -71,35 +76,53 @@ def sample_report():
     log_templates = [
         _make_log_template(
             "Connection pool exhausted after <NUM> retries",
-            "ERROR", 1500, ["payment-svc", "gateway"], 8.0,
+            "ERROR",
+            1500,
+            ["payment-svc", "gateway"],
+            8.0,
         ),
         _make_log_template(
             "Database timeout <NUM>ms exceeded threshold",
-            "ERROR", 450, ["payment-svc"], 5.5,
+            "ERROR",
+            450,
+            ["payment-svc"],
+            5.5,
         ),
         _make_log_template(
             "Slow query detected: <NUM>ms for table orders",
-            "WARN", 120, ["postgres"], 3.5,
+            "WARN",
+            120,
+            ["postgres"],
+            3.5,
         ),
         _make_log_template(
             "Health check passed for service",
-            "INFO", 5000, ["gateway"], 0.5,
+            "INFO",
+            5000,
+            ["gateway"],
+            0.5,
         ),
     ]
     metric_anomalies = [
         _make_metric_anomaly("payment-svc", "db_pool_size", "spike", 0.0, 50.0, 12.5),
-        _make_metric_anomaly("postgres", "query_latency_p99", "level_shift", 8500.0, 200.0, 6.2),
+        _make_metric_anomaly(
+            "postgres", "query_latency_p99", "level_shift", 8500.0, 200.0, 6.2
+        ),
         _make_metric_anomaly("gateway", "error_rate", "spike", 0.45, 0.02, 4.1),
     ]
     slow_traces = [
         _make_slow_trace(
             ["gateway", "payment-svc", "postgres"],
-            8900.0, 250.0, "postgres",
+            8900.0,
+            250.0,
+            "postgres",
             {"db_name": "payments", "query_type": "SELECT"},
         ),
         _make_slow_trace(
             ["gateway", "payment-svc"],
-            2100.0, 150.0, "payment-svc",
+            2100.0,
+            150.0,
+            "payment-svc",
         ),
     ]
     return AggregatedReport(
@@ -129,6 +152,7 @@ def minimal_report():
 # Testes de equivalência Rust vs Python
 # ---------------------------------------------------------------------------
 
+
 class TestRustPythonEquivalence:
     """Verifica que os caminhos Rust e Python produzem output idêntico."""
 
@@ -148,9 +172,7 @@ class TestRustPythonEquivalence:
         py_text, py_stats = compressor._compress_python(sample_report)
 
         assert rust_text == py_text, (
-            f"Output divergente!\n"
-            f"--- Python ---\n{py_text}\n"
-            f"--- Rust ---\n{rust_text}"
+            f"Output divergente!\n--- Python ---\n{py_text}\n--- Rust ---\n{rust_text}"
         )
 
     def test_rust_and_python_same_stats_sample_report(self, sample_report):
@@ -231,6 +253,7 @@ class TestRustPythonEquivalence:
 # Teste de fallback
 # ---------------------------------------------------------------------------
 
+
 class TestFallback:
     """Verifica comportamento quando _aiops_rust não está disponível."""
 
@@ -264,6 +287,7 @@ class TestFallback:
 # ---------------------------------------------------------------------------
 # Teste de release do GIL
 # ---------------------------------------------------------------------------
+
 
 class TestGilRelease:
     """Verifica que duas threads podem executar compress() em paralelo."""

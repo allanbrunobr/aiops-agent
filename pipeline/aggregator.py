@@ -7,17 +7,21 @@ em um relatório textual unificado, pronto para ingestão pelo agente.
 
 from __future__ import annotations
 
-from datetime import datetime
 from pipeline.log_parser import LogParser, LogTemplate
-from pipeline.metric_filter import MetricFilter, MetricAnomaly
-from pipeline.trace_filter import TraceFilter, SlowCallPath
+from pipeline.metric_filter import MetricAnomaly, MetricFilter
+from pipeline.trace_filter import SlowCallPath, TraceFilter
 
 
 class Aggregator:
     """Combina dados de observabilidade em texto para o LLM."""
 
-    def __init__(self, sigma_threshold: float = 3.0, baseline_ratio: float = 0.5,
-                 percentile_threshold: float = 95.0, max_hops: int = 3):
+    def __init__(
+        self,
+        sigma_threshold: float = 3.0,
+        baseline_ratio: float = 0.5,
+        percentile_threshold: float = 95.0,
+        max_hops: int = 3,
+    ):
         self.log_parser = LogParser()
         self.metric_filter = MetricFilter(
             sigma_threshold=sigma_threshold,
@@ -99,7 +103,9 @@ class AggregatedReport:
     @property
     def severity(self) -> str:
         """Severidade estimada do incidente."""
-        error_count = sum(t.count for t in self.log_templates if t.level in ("ERROR", "FATAL"))
+        error_count = sum(
+            t.count for t in self.log_templates if t.level in ("ERROR", "FATAL")
+        )
         high_sigma = any(a.deviation_sigma > 5 for a in self.metric_anomalies)
 
         if error_count > 1000 or high_sigma:
@@ -131,18 +137,22 @@ class AggregatedReport:
         for tpl in self.log_templates[:5]:
             if tpl.level in ("ERROR", "FATAL", "WARN"):
                 svcs = ", ".join(sorted(tpl.services))
-                lines.append(f"- [{tpl.level}][{svcs}] \"{tpl.template}\" x{tpl.count}")
+                lines.append(f'- [{tpl.level}][{svcs}] "{tpl.template}" x{tpl.count}')
 
         # Anomalias
         lines.append("\n## Metric Anomalies")
         for a in self.metric_anomalies[:5]:
-            lines.append(f"- {a.service}/{a.metric_name}: {a.value} ({a.deviation_sigma}sigma)")
+            lines.append(
+                f"- {a.service}/{a.metric_name}: {a.value} ({a.deviation_sigma}sigma)"
+            )
 
         # Traces
         lines.append("\n## Slow Traces")
         for t in self.slow_traces[:3]:
             path = " → ".join(t.path)
-            lines.append(f"- {path}: {t.total_duration_ms:.0f}ms (normal: {t.normal_duration_ms:.0f}ms)")
+            lines.append(
+                f"- {path}: {t.total_duration_ms:.0f}ms (normal: {t.normal_duration_ms:.0f}ms)"
+            )
 
         return "\n".join(lines)
 
@@ -163,7 +173,7 @@ class AggregatedReport:
             first = tpl.first_seen.strftime("%H:%M:%S") if tpl.first_seen else "?"
             last = tpl.last_seen.strftime("%H:%M:%S") if tpl.last_seen else "?"
             lines.append(
-                f"- [{tpl.level}][{svcs}] \"{tpl.template}\" "
+                f'- [{tpl.level}][{svcs}] "{tpl.template}" '
                 f"| count={tpl.count} | {first}→{last} | score={tpl.relevance_score}"
             )
         return "\n".join(lines)
@@ -193,7 +203,9 @@ class AggregatedReport:
         return "\n".join(lines)
 
     def _summary_section(self) -> str:
-        error_templates = [t for t in self.log_templates if t.level in ("ERROR", "FATAL")]
+        error_templates = [
+            t for t in self.log_templates if t.level in ("ERROR", "FATAL")
+        ]
         total_errors = sum(t.count for t in error_templates)
         return (
             f"## Summary\n"
@@ -209,9 +221,13 @@ class AggregatedReport:
         for tpl in self.log_templates:
             if tpl.level in ("ERROR", "FATAL"):
                 for svc in tpl.services:
-                    service_scores[svc] = service_scores.get(svc, 0) + tpl.count * tpl.relevance_score
+                    service_scores[svc] = (
+                        service_scores.get(svc, 0) + tpl.count * tpl.relevance_score
+                    )
         for a in self.metric_anomalies:
-            service_scores[a.service] = service_scores.get(a.service, 0) + a.deviation_sigma * 100
+            service_scores[a.service] = (
+                service_scores.get(a.service, 0) + a.deviation_sigma * 100
+            )
 
         if not service_scores:
             return "unknown"

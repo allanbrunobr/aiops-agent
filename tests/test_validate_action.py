@@ -196,7 +196,10 @@ class TestHandleValidateAction:
         assert "rationale" in data
         assert len(data["rationale"]) > 0
         # Rationale menciona camadas bloqueantes
-        assert "PreExecutionValidator" in data["rationale"] or "blocked" in data["rationale"].lower()
+        assert (
+            "PreExecutionValidator" in data["rationale"]
+            or "blocked" in data["rationale"].lower()
+        )
 
     @pytest.mark.asyncio
     async def test_empty_command_returns_validation_error(self):

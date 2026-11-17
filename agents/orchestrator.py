@@ -8,6 +8,7 @@ Safety invariant (STRATUS): o agente decide O QUE investigar.
 A safety layer (TNRSafetyGuard, validators) decide SE pode executar — e é
 invariante, nunca controlada pelo LLM.
 """
+
 from __future__ import annotations
 
 import json
@@ -212,15 +213,17 @@ class AgentOutcome:
 # ---------------------------------------------------------------------------
 
 # Tools que o planner pode incluir num plano — qualquer outra é filtrada.
-_VALID_TOOLS = frozenset({
-    "query_logs",
-    "query_metrics",
-    "query_traces",
-    "search_similar",
-    "correlate_signals",
-    "reconstruct_timeline",
-    "classify_fault_type",
-})
+_VALID_TOOLS = frozenset(
+    {
+        "query_logs",
+        "query_metrics",
+        "query_traces",
+        "search_similar",
+        "correlate_signals",
+        "reconstruct_timeline",
+        "classify_fault_type",
+    }
+)
 
 
 class AgentOrchestrator:
@@ -273,12 +276,18 @@ class AgentOrchestrator:
         # ── 1. CONTEXTUALIZE ─────────────────────────────────────────
         tags = self._extract_tags(report)
         services = list(getattr(report, "affected_services", set()))
-        skill = self.skill_router.route(tags, services) if self.skill_router else DEFAULT_SKILL
+        skill = (
+            self.skill_router.route(tags, services)
+            if self.skill_router
+            else DEFAULT_SKILL
+        )
 
         similar: list = []
         if self.memory_db is not None:
             similar = self.memory_db.find_similar_incidents(
-                affected_services=services, tags=tags, limit=3,
+                affected_services=services,
+                tags=tags,
+                limit=3,
             )
 
         # ── 2. PLAN ──────────────────────────────────────────────────
@@ -298,7 +307,9 @@ class AgentOrchestrator:
                 decision = step_reflection.get("decision", "continue")
 
                 if decision == "finalize":
-                    diagnosis = self._synthesize_diagnosis(plan, report, step_reflection, skill)
+                    diagnosis = self._synthesize_diagnosis(
+                        plan, report, step_reflection, skill
+                    )
                     break
 
                 if decision == "replan":
@@ -320,7 +331,9 @@ class AgentOrchestrator:
         mitigation = mitigator.propose(diagnosis)
         tnr_guard = TNRSafetyGuard()
         tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
-        tnr_passed = getattr(getattr(tnr_result, "result", None), "value", None) == "success"
+        tnr_passed = (
+            getattr(getattr(tnr_result, "result", None), "value", None) == "success"
+        )
 
         # TNR regression com replans disponíveis → mais uma tentativa
         if not tnr_passed and replans < self.MAX_REPLANS:
@@ -340,7 +353,9 @@ class AgentOrchestrator:
             diagnosis = self._synthesize_diagnosis(plan, report, {}, skill)
             mitigation = mitigator.propose(diagnosis)
             tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
-            tnr_passed = getattr(getattr(tnr_result, "result", None), "value", None) == "success"
+            tnr_passed = (
+                getattr(getattr(tnr_result, "result", None), "value", None) == "success"
+            )
 
         # ── 5. LEARN ─────────────────────────────────────────────────
         final_reflection = self._reflect_final(diagnosis, tnr_passed, tools_used, plan)
@@ -364,28 +379,33 @@ class AgentOrchestrator:
 
     def _generate_plan(self, report, skill, similar) -> InvestigationPlan:
         """LLM gera plano de investigação baseado em contexto + skill."""
-        similar_text = "\n".join(
-            f"- [{inc.scenario}] {inc.root_cause} (confidence: {inc.diagnosis_confidence})"
-            for inc in similar[:3]
-        ) or "(nenhum incidente similar encontrado)"
+        similar_text = (
+            "\n".join(
+                f"- [{inc.scenario}] {inc.root_cause} (confidence: {inc.diagnosis_confidence})"
+                for inc in similar[:3]
+            )
+            or "(nenhum incidente similar encontrado)"
+        )
 
         try:
             response = self.client.create_message(
                 model=self.model,
                 max_tokens=1024,
-                messages=[{
-                    "role": "user",
-                    "content": PLAN_PROMPT.format(
-                        incident_summary=report.to_compact_text()[:1500],
-                        available_tools=self._list_tools(),
-                        skill_name=skill.name,
-                        utility_score=skill.utility_score,
-                        total_uses=skill.total_uses,
-                        skill_prompt_summary=skill.system_prompt[:300],
-                        similar_incidents=similar_text,
-                        recent_reflections=skill.last_reflection or "(nenhuma)",
-                    ),
-                }],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": PLAN_PROMPT.format(
+                            incident_summary=report.to_compact_text()[:1500],
+                            available_tools=self._list_tools(),
+                            skill_name=skill.name,
+                            utility_score=skill.utility_score,
+                            total_uses=skill.total_uses,
+                            skill_prompt_summary=skill.system_prompt[:300],
+                            similar_incidents=similar_text,
+                            recent_reflections=skill.last_reflection or "(nenhuma)",
+                        ),
+                    }
+                ],
             )
             data = json.loads(response.content[0].text)
         except Exception:  # noqa: BLE001
@@ -450,25 +470,26 @@ class AgentOrchestrator:
         self, plan: InvestigationPlan, step: InvestigationStep, report
     ) -> dict:
         """LLM avalia resultado de um step e decide: continue/replan/finalize."""
-        remaining = len([
-            s for s in plan.steps
-            if s.step_id > step.step_id and s.result is None
-        ])
+        remaining = len(
+            [s for s in plan.steps if s.step_id > step.step_id and s.result is None]
+        )
         try:
             response = self.client.create_message(
                 model=self.model,
                 max_tokens=512,
-                messages=[{
-                    "role": "user",
-                    "content": STEP_REFLECT_PROMPT.format(
-                        hypothesis=plan.hypothesis,
-                        step_goal=step.goal,
-                        step_tool=step.tool,
-                        step_result=(step.result or "")[:800],
-                        expected_signal=step.expected_signal,
-                        remaining_steps=remaining,
-                    ),
-                }],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": STEP_REFLECT_PROMPT.format(
+                            hypothesis=plan.hypothesis,
+                            step_goal=step.goal,
+                            step_tool=step.tool,
+                            step_result=(step.result or "")[:800],
+                            expected_signal=step.expected_signal,
+                            remaining_steps=remaining,
+                        ),
+                    }
+                ],
             )
             return json.loads(response.content[0].text)
         except Exception:  # noqa: BLE001
@@ -490,16 +511,18 @@ class AgentOrchestrator:
             response = self.client.create_message(
                 model=self.model,
                 max_tokens=1024,
-                messages=[{
-                    "role": "user",
-                    "content": REPLAN_PROMPT.format(
-                        original_hypothesis=old_plan.hypothesis,
-                        executed_steps="\n".join(executed),
-                        failure_reason=reflection.get("reason", "unknown"),
-                        incident_summary=report.to_compact_text()[:1000],
-                        skill_guidance=skill.system_prompt[:300],
-                    ),
-                }],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": REPLAN_PROMPT.format(
+                            original_hypothesis=old_plan.hypothesis,
+                            executed_steps="\n".join(executed),
+                            failure_reason=reflection.get("reason", "unknown"),
+                            incident_summary=report.to_compact_text()[:1000],
+                            skill_guidance=skill.system_prompt[:300],
+                        ),
+                    }
+                ],
             )
             data = json.loads(response.content[0].text)
             steps = [
@@ -538,14 +561,16 @@ class AgentOrchestrator:
         kwargs: dict = {
             "model": self.model,
             "max_tokens": 1024,
-            "messages": [{
-                "role": "user",
-                "content": SYNTHESIZE_PROMPT.format(
-                    hypothesis=plan.hypothesis,
-                    evidence="\n".join(evidence) or "(no evidence collected)",
-                    incident_summary=report.to_compact_text()[:500],
-                ),
-            }],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": SYNTHESIZE_PROMPT.format(
+                        hypothesis=plan.hypothesis,
+                        evidence="\n".join(evidence) or "(no evidence collected)",
+                        incident_summary=report.to_compact_text()[:500],
+                    ),
+                }
+            ],
         }
         if system_msg:
             kwargs["system"] = system_msg
@@ -567,16 +592,18 @@ class AgentOrchestrator:
             response = self.client.create_message(
                 model=self.model,
                 max_tokens=512,
-                messages=[{
-                    "role": "user",
-                    "content": FINAL_REFLECT_PROMPT.format(
-                        diagnosis=json.dumps(diagnosis, default=str)[:500],
-                        tnr_result="success" if tnr_passed else "regression",
-                        tools_used=tools_used,
-                        plan_steps=len(plan.steps),
-                        hypothesis=plan.hypothesis,
-                    ),
-                }],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": FINAL_REFLECT_PROMPT.format(
+                            diagnosis=json.dumps(diagnosis, default=str)[:500],
+                            tnr_result="success" if tnr_passed else "regression",
+                            tools_used=tools_used,
+                            plan_steps=len(plan.steps),
+                            hypothesis=plan.hypothesis,
+                        ),
+                    }
+                ],
             )
             return json.loads(response.content[0].text)
         except Exception:  # noqa: BLE001

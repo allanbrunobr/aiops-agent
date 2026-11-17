@@ -7,6 +7,7 @@ Valida targets de performance (Story 1.4):
   - Fallback Python: ambas as classes funcionam sem _aiops_rust
   - Concorrência: 4 threads chamando compress_context() sem deadlock
 """
+
 from __future__ import annotations
 
 import datetime
@@ -19,8 +20,12 @@ import pytest
 # ── Constantes para geração de dados sintéticos ─────────────────────────────
 
 _SERVICES = [
-    "api-gateway", "payment-svc", "auth-svc",
-    "postgres", "redis", "billing-svc",
+    "api-gateway",
+    "payment-svc",
+    "auth-svc",
+    "postgres",
+    "redis",
+    "billing-svc",
 ]
 _LEVELS = ["INFO", "INFO", "INFO", "WARN", "ERROR", "DEBUG"]
 _MESSAGES = [
@@ -38,6 +43,7 @@ _MESSAGES = [
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
 
 def _make_log_entries(n: int, seed: int = 99):
     """Gera n objetos LogEntry sintéticos com seed determinístico."""
@@ -90,10 +96,11 @@ def _make_aggregated_report(n_templates: int):
 
 # ── Benchmarks ───────────────────────────────────────────────────────────────
 
+
 @pytest.mark.slow
 def test_no_sampling_cap_100k():
     """100K logs parseados via Rust em < 5s sem descartar nenhum log."""
-    from pipeline.log_parser import LogParser, _RUST_AVAILABLE
+    from pipeline.log_parser import _RUST_AVAILABLE, LogParser
 
     if not _RUST_AVAILABLE:
         pytest.skip("_aiops_rust não disponível — benchmark Rust apenas")
@@ -105,9 +112,7 @@ def test_no_sampling_cap_100k():
     templates = parser.parse(logs)
     elapsed = time.perf_counter() - t0
 
-    assert elapsed < 5.0, (
-        f"100K logs levaram {elapsed:.2f}s — limite é 5s"
-    )
+    assert elapsed < 5.0, f"100K logs levaram {elapsed:.2f}s — limite é 5s"
     assert len(templates) > 0, "Nenhum template retornado para 100K logs"
 
     # Sem cap de amostragem: a soma dos counts deve ser exatamente 100K
@@ -144,8 +149,8 @@ def test_compressor_under_10ms():
 @pytest.mark.unit
 def test_fallback_mode(monkeypatch):
     """Sem _aiops_rust, LogParser e ContextCompressor fazem fallback sem erro."""
-    import pipeline.log_parser as lp_mod
     import pipeline.context_compressor as cc_mod
+    import pipeline.log_parser as lp_mod
 
     monkeypatch.setattr(lp_mod, "_RUST_AVAILABLE", False)
     monkeypatch.setattr(lp_mod, "_rust", None)
@@ -154,6 +159,7 @@ def test_fallback_mode(monkeypatch):
 
     # LogParser fallback — funciona com sample pequeno
     from pipeline.log_parser import LogParser
+
     logs = _make_log_entries(50)
     parser = LogParser()
     templates = parser.parse(logs)
@@ -161,8 +167,8 @@ def test_fallback_mode(monkeypatch):
     assert isinstance(templates, list)
 
     # ContextCompressor fallback — comprime sem exceção
-    from pipeline.context_compressor import ContextCompressor
     from pipeline.aggregator import AggregatedReport
+    from pipeline.context_compressor import ContextCompressor
     from pipeline.log_parser import LogTemplate
 
     tpl = LogTemplate(

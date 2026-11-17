@@ -1,16 +1,16 @@
 """Testes para Story 2.3: PagerDuty, Grafana e Databricks Normalizers."""
+
 from __future__ import annotations
 
 import hashlib
 import hmac
 import json
-from datetime import datetime, timezone
 
 import pytest
 
-from interfaces.http.webhook.normalizers.pagerduty import PagerDutyNormalizer
-from interfaces.http.webhook.normalizers.grafana import GrafanaNormalizer
 from interfaces.http.webhook.normalizers.databricks import DatabricksNormalizer
+from interfaces.http.webhook.normalizers.grafana import GrafanaNormalizer
+from interfaces.http.webhook.normalizers.pagerduty import PagerDutyNormalizer
 
 
 class MockCredentials:
@@ -26,6 +26,7 @@ class MockCredentials:
 # ---------------------------------------------------------------------------
 # PagerDuty
 # ---------------------------------------------------------------------------
+
 
 def test_pagerduty_hmac_valid():
     """AC1: PagerDuty HMAC valido e aceito."""
@@ -103,8 +104,12 @@ def test_pagerduty_normalize_missing_data_raises():
 def test_pagerduty_severity_mapping():
     """AC: severidades sao mapeadas corretamente."""
     normalizer = PagerDutyNormalizer()
-    for urgency, expected in [("critical", "critical"), ("high", "critical"),
-                               ("low", "warning"), ("info", "info")]:
+    for urgency, expected in [
+        ("critical", "critical"),
+        ("high", "critical"),
+        ("low", "warning"),
+        ("info", "info"),
+    ]:
         payload = {
             "event": {
                 "event_type": "incident.triggered",
@@ -118,6 +123,7 @@ def test_pagerduty_severity_mapping():
 # ---------------------------------------------------------------------------
 # Grafana
 # ---------------------------------------------------------------------------
+
 
 def test_grafana_token_valid():
     """AC2: Grafana Bearer token valido e aceito."""
@@ -153,7 +159,11 @@ def test_grafana_normalize():
         "alerts": [
             {
                 "status": "firing",
-                "labels": {"alertname": "HighCPU", "severity": "critical", "service": "api"},
+                "labels": {
+                    "alertname": "HighCPU",
+                    "severity": "critical",
+                    "service": "api",
+                },
                 "annotations": {"description": "CPU usage > 90%"},
                 "startsAt": "2026-03-08T10:00:00Z",
                 "fingerprint": "abc123def456",
@@ -180,6 +190,7 @@ def test_grafana_normalize_empty_alerts_raises():
 # ---------------------------------------------------------------------------
 # Databricks
 # ---------------------------------------------------------------------------
+
 
 def test_databricks_token_valid():
     """AC3: Databricks token valido e aceito."""
@@ -248,6 +259,7 @@ def test_databricks_normalize_unknown_payload_raises():
 # Esquema unificado (AC4)
 # ---------------------------------------------------------------------------
 
+
 def test_all_normalizers_produce_identical_schema():
     """AC4: todos os normalizers produzem NormalizedAlert com campos identicos."""
     from domain.alert import NormalizedAlert
@@ -256,28 +268,36 @@ def test_all_normalizers_produce_identical_schema():
     gf_normalizer = GrafanaNormalizer()
     db_normalizer = DatabricksNormalizer()
 
-    pd_alert = pd_normalizer.normalize({
-        "event": {
-            "event_type": "incident.triggered",
-            "data": {"id": "P1", "title": "PD Alert", "urgency": "high"},
+    pd_alert = pd_normalizer.normalize(
+        {
+            "event": {
+                "event_type": "incident.triggered",
+                "data": {"id": "P1", "title": "PD Alert", "urgency": "high"},
+            }
         }
-    })
+    )
 
-    gf_alert = gf_normalizer.normalize({
-        "alerts": [{
-            "status": "firing",
-            "labels": {"alertname": "GF Alert"},
-            "annotations": {},
-            "fingerprint": "fp1",
-        }]
-    })
+    gf_alert = gf_normalizer.normalize(
+        {
+            "alerts": [
+                {
+                    "status": "firing",
+                    "labels": {"alertname": "GF Alert"},
+                    "annotations": {},
+                    "fingerprint": "fp1",
+                }
+            ]
+        }
+    )
 
-    db_alert = db_normalizer.normalize({
-        "alert_id": "db-1",
-        "alert_name": "DB Alert",
-        "severity": "ERROR",
-        "message": "test",
-    })
+    db_alert = db_normalizer.normalize(
+        {
+            "alert_id": "db-1",
+            "alert_name": "DB Alert",
+            "severity": "ERROR",
+            "message": "test",
+        }
+    )
 
     # Todos devem ser instancias de NormalizedAlert com mesmos campos
     for alert in [pd_alert, gf_alert, db_alert]:

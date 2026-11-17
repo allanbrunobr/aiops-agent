@@ -3,6 +3,7 @@
 Implementa o método S256: code_challenge = BASE64URL(SHA256(code_verifier)).
 Funções puras sem estado — seguras para uso concorrente.
 """
+
 from __future__ import annotations
 
 import base64

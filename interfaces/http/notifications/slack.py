@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Any, Callable, Awaitable
+from typing import Any, Awaitable, Callable
 
 import structlog
-from slack_sdk.web.async_client import AsyncWebClient
 from slack_sdk.errors import SlackApiError
+from slack_sdk.web.async_client import AsyncWebClient
 
 from adapters.credentials import EnvCredentialProvider
 from core.lifecycle import LifecycleEvent
@@ -29,7 +29,12 @@ _NODE_LABELS: dict[str, str] = {
 }
 
 # Erros do Slack que NAO devem ser retentados
-_NON_RETRYABLE_ERRORS = {"invalid_auth", "token_revoked", "account_inactive", "token_expired"}
+_NON_RETRYABLE_ERRORS = {
+    "invalid_auth",
+    "token_revoked",
+    "account_inactive",
+    "token_expired",
+}
 
 
 class SlackNotifier:
@@ -60,9 +65,11 @@ class SlackNotifier:
         self._backoff_multiplier = backoff_multiplier
         self._fallback_dir = Path(fallback_dir)
         self._dry_run = dry_run
-        self._message_ts: dict[str, str] = {}          # correlation_id -> message timestamp
-        self._channel_ids: dict[str, str] = {}           # correlation_id -> resolved channel ID
-        self._completed_nodes: dict[str, list[str]] = {}  # correlation_id -> lista de nos concluidos
+        self._message_ts: dict[str, str] = {}  # correlation_id -> message timestamp
+        self._channel_ids: dict[str, str] = {}  # correlation_id -> resolved channel ID
+        self._completed_nodes: dict[
+            str, list[str]
+        ] = {}  # correlation_id -> lista de nos concluidos
 
         if dry_run:
             log.info("slack.dry_run_mode", channel=channel)
@@ -74,7 +81,9 @@ class SlackNotifier:
                 self._client = None
             else:
                 # SLACK_API_BASE_URL permite apontar para o mock local (infra/slack-mock).
-                base_url = os.environ.get("SLACK_API_BASE_URL") or AsyncWebClient.BASE_URL
+                base_url = (
+                    os.environ.get("SLACK_API_BASE_URL") or AsyncWebClient.BASE_URL
+                )
                 self._client = AsyncWebClient(token=token, base_url=base_url)
 
     async def on_event(self, event: LifecycleEvent) -> None:
@@ -151,7 +160,9 @@ class SlackNotifier:
                     )
                     raise
 
-                backoff = self._initial_backoff_s * (self._backoff_multiplier ** (attempt - 1))
+                backoff = self._initial_backoff_s * (
+                    self._backoff_multiplier ** (attempt - 1)
+                )
                 log.warning(
                     "slack.retry_attempt",
                     context=context,
@@ -167,7 +178,9 @@ class SlackNotifier:
 
             except Exception as exc:
                 last_error = exc
-                backoff = self._initial_backoff_s * (self._backoff_multiplier ** (attempt - 1))
+                backoff = self._initial_backoff_s * (
+                    self._backoff_multiplier ** (attempt - 1)
+                )
                 log.warning(
                     "slack.retry_attempt",
                     context=context,
@@ -208,10 +221,17 @@ class SlackNotifier:
                 text=f"Incident {cid}: Diagnosing...",
             )
 
-        response = await self._send_with_retry(_send, context="initial_message", correlation_id=cid)
+        response = await self._send_with_retry(
+            _send, context="initial_message", correlation_id=cid
+        )
         self._message_ts[cid] = response["ts"]
         self._channel_ids[cid] = response.get("channel", self._channel)
-        log.info("slack.message_posted", correlation_id=cid, ts=response["ts"], channel_id=response["channel"])
+        log.info(
+            "slack.message_posted",
+            correlation_id=cid,
+            ts=response["ts"],
+            channel_id=response["channel"],
+        )
 
     async def _update_progress(self, event: LifecycleEvent) -> None:
         """Atualiza mensagem com progresso do pipeline via chat.update()."""
@@ -244,7 +264,9 @@ class SlackNotifier:
                 text=f"Incident {cid}: Processing stage {event.node_name}...",
             )
 
-        await self._send_with_retry(_send, context="update_progress", correlation_id=cid)
+        await self._send_with_retry(
+            _send, context="update_progress", correlation_id=cid
+        )
 
     async def _post_final_message(self, event: LifecycleEvent) -> None:
         """Posta mensagem final com retry. Fallback local se todos falharem."""
@@ -284,7 +306,9 @@ class SlackNotifier:
                 )
 
         try:
-            await self._send_with_retry(_send, context="final_message", correlation_id=cid)
+            await self._send_with_retry(
+                _send, context="final_message", correlation_id=cid
+            )
             log.info("slack.final_message", correlation_id=cid)
         except Exception:
             # Todos os retries falharam — fallback local
@@ -294,6 +318,7 @@ class SlackNotifier:
                 max_retries=self._max_retries,
             )
             from interfaces.http.notifications.fallback import LocalFallbackWriter
+
             fallback = LocalFallbackWriter(str(self._fallback_dir))
             fallback.write(cid, event.data)
 
@@ -309,12 +334,23 @@ class SlackNotifier:
         error = event.data.get("error", "Unknown error")
 
         blocks = [
-            {"type": "header", "text": {"type": "plain_text", "text": f"Pipeline Failed: {cid}"}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": f":x: *Error:* {error}"}},
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": f"Pipeline Failed: {cid}"},
+            },
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f":x: *Error:* {error}"},
+            },
         ]
 
         if self._dry_run:
-            log.info("slack.dry_run", action="post_failure", correlation_id=cid, blocks=blocks)
+            log.info(
+                "slack.dry_run",
+                action="post_failure",
+                correlation_id=cid,
+                blocks=blocks,
+            )
             self._message_ts.pop(cid, None)
             self._completed_nodes.pop(cid, None)
             return
@@ -337,7 +373,9 @@ class SlackNotifier:
                     text=f"Incident {cid}: Pipeline failed",
                 )
 
-        await self._send_with_retry(_send, context="failure_message", correlation_id=cid)
+        await self._send_with_retry(
+            _send, context="failure_message", correlation_id=cid
+        )
         self._message_ts.pop(cid, None)
         self._channel_ids.pop(cid, None)
         self._completed_nodes.pop(cid, None)
@@ -352,16 +390,27 @@ class SlackNotifier:
         service = event.data.get("service", "unknown")
 
         return [
-            {"type": "header", "text": {"type": "plain_text", "text": f"Incident: {cid}"}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": (
-                f"*{title}*\n"
-                f"Severity: `{severity}` | Service: `{service}`\n"
-                f"Status: :hourglass_flowing_sand: *Diagnosing...*"
-            )}},
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": f"Incident: {cid}"},
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"*{title}*\n"
+                        f"Severity: `{severity}` | Service: `{service}`\n"
+                        f"Status: :hourglass_flowing_sand: *Diagnosing...*"
+                    ),
+                },
+            },
             {"type": "divider"},
         ]
 
-    def _build_progress_blocks(self, correlation_id: str, event: LifecycleEvent) -> list[dict]:
+    def _build_progress_blocks(
+        self, correlation_id: str, event: LifecycleEvent
+    ) -> list[dict]:
         """Monta blocos com checklist de progresso dos estagios."""
         completed = self._completed_nodes.get(correlation_id, [])
         lines = []
@@ -375,7 +424,10 @@ class SlackNotifier:
                 lines.append(f":black_square_button: {label}")
 
         return [
-            {"type": "header", "text": {"type": "plain_text", "text": f"Incident: {correlation_id}"}},
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": f"Incident: {correlation_id}"},
+            },
             {"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)}},
         ]
 
@@ -400,9 +452,17 @@ class SlackNotifier:
 
         # Header diferenciado por nível
         if event_level == "prediction.critical":
-            header_text = f"🚨 Incident Imminent — ETA ~{eta:.1f} min" if eta is not None else "🚨 Incident Imminent"
+            header_text = (
+                f"🚨 Incident Imminent — ETA ~{eta:.1f} min"
+                if eta is not None
+                else "🚨 Incident Imminent"
+            )
         elif event_level == "prediction.alert":
-            header_text = f"⚠️ Degradation Alert — Incident likely in ~{eta:.1f} min" if eta is not None else "⚠️ Degradation Alert"
+            header_text = (
+                f"⚠️ Degradation Alert — Incident likely in ~{eta:.1f} min"
+                if eta is not None
+                else "⚠️ Degradation Alert"
+            )
         else:
             header_text = f"📈 Degradation Warning — Risk {risk_score:.0f}%"
 
@@ -431,10 +491,25 @@ class SlackNotifier:
 
         return [
             {"type": "header", "text": {"type": "plain_text", "text": header_text}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"*Risk:* {risk_score:.0f}%"}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"*ETA:* {eta_text}"}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"*Signals:* {signals_text}"}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": f"*Historical Match:* {history_text}"}},
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*Risk:* {risk_score:.0f}%"},
+            },
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*ETA:* {eta_text}"},
+            },
+            {
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*Signals:* {signals_text}"},
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Historical Match:* {history_text}",
+                },
+            },
         ]
 
     async def _post_prediction_message(self, event: LifecycleEvent) -> None:
@@ -456,10 +531,16 @@ class SlackNotifier:
                 attachments=[{"color": color, "blocks": blocks}],
             )
 
-        await self._send_with_retry(_send, context="_post_prediction_message",
-                                    correlation_id=event.correlation_id)
-        log.info("slack.prediction_posted", event_type=event.event_type,
-                 correlation_id=event.correlation_id)
+        await self._send_with_retry(
+            _send,
+            context="_post_prediction_message",
+            correlation_id=event.correlation_id,
+        )
+        log.info(
+            "slack.prediction_posted",
+            event_type=event.event_type,
+            correlation_id=event.correlation_id,
+        )
 
     async def _post_resolved_message(self, event: LifecycleEvent) -> None:
         """Envia mensagem de recuperação do incidente — risk voltou ao nível normal."""
@@ -474,12 +555,17 @@ class SlackNotifier:
             )
 
         if self._dry_run:
-            log.info("slack.dry_run", action="post_resolved",
-                     correlation_id=event.correlation_id, blocks=blocks)
+            log.info(
+                "slack.dry_run",
+                action="post_resolved",
+                correlation_id=event.correlation_id,
+                blocks=blocks,
+            )
             return
 
-        await self._send_with_retry(_send, context="_post_resolved_message",
-                                    correlation_id=event.correlation_id)
+        await self._send_with_retry(
+            _send, context="_post_resolved_message", correlation_id=event.correlation_id
+        )
         log.info("slack.resolved_posted", correlation_id=event.correlation_id)
 
     def _build_resolved_blocks(self, event: LifecycleEvent) -> list[dict]:
@@ -492,19 +578,39 @@ class SlackNotifier:
         duration_text = f"{duration_min:.0f} min" if duration_min is not None else "—"
 
         return [
-            {"type": "header", "text": {"type": "plain_text",
-                                        "text": "✅ Incident Resolved"}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": (
-                f"*{fix_detected}*\n"
-                f"Risk score voltou a `{risk_score:.0f}%` — sistema operando normalmente."
-            )}},
-            {"type": "section", "fields": [
-                {"type": "mrkdwn", "text": f"*Duração do incidente:*\n{duration_text}"},
-                {"type": "mrkdwn", "text": f"*Risk Score atual:*\n🟢 {risk_score:.0f}%"},
-            ]},
-            {"type": "context", "elements": [
-                {"type": "mrkdwn", "text": f"AIOps Agent | {event.correlation_id}"},
-            ]},
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": "✅ Incident Resolved"},
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"*{fix_detected}*\n"
+                        f"Risk score voltou a `{risk_score:.0f}%` — sistema operando normalmente."
+                    ),
+                },
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Duração do incidente:*\n{duration_text}",
+                    },
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Risk Score atual:*\n🟢 {risk_score:.0f}%",
+                    },
+                ],
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {"type": "mrkdwn", "text": f"AIOps Agent | {event.correlation_id}"},
+                ],
+            },
         ]
 
     async def _post_diagnosis_message(self, event: LifecycleEvent) -> None:
@@ -516,8 +622,12 @@ class SlackNotifier:
         status = "Aguardando aprovação" if requires_human else "Correção proposta"
 
         if self._dry_run:
-            log.info("slack.dry_run", action="post_diagnosis",
-                     correlation_id=cid, blocks=blocks)
+            log.info(
+                "slack.dry_run",
+                action="post_diagnosis",
+                correlation_id=cid,
+                blocks=blocks,
+            )
             return
 
         async def _send() -> None:
@@ -527,8 +637,9 @@ class SlackNotifier:
                 text=f"Diagnosis {cid}: {status}",
             )
 
-        await self._send_with_retry(_send, context="diagnosis_message",
-                                    correlation_id=cid)
+        await self._send_with_retry(
+            _send, context="diagnosis_message", correlation_id=cid
+        )
         log.info("slack.diagnosis_posted", correlation_id=cid)
 
     def _build_diagnosis_blocks(self, event: LifecycleEvent) -> list[dict]:
@@ -555,33 +666,70 @@ class SlackNotifier:
         else:
             conf_emoji = ":red_circle:"
 
-        evidence_text = "\n".join(f"  • {e}" for e in evidence[:5]) if evidence else "  (sem evidências)"
+        evidence_text = (
+            "\n".join(f"  • {e}" for e in evidence[:5])
+            if evidence
+            else "  (sem evidências)"
+        )
 
         blocks: list[dict] = [
-            {"type": "header", "text": {"type": "plain_text",
-                                        "text": "🔍 Diagnóstico + Correção Proposta"}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": (
-                f"*Root Cause:*\n{root_cause}\n\n"
-                f"*Evidências:*\n{evidence_text}"
-            )}},
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": "🔍 Diagnóstico + Correção Proposta",
+                },
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"*Root Cause:*\n{root_cause}\n\n*Evidências:*\n{evidence_text}"
+                    ),
+                },
+            },
             {"type": "divider"},
-            {"type": "section", "text": {"type": "mrkdwn", "text": (
-                f"*Correção Proposta:*\n```{proposed_fix}```"
-            )}},
-            {"type": "section", "fields": [
-                {"type": "mrkdwn", "text": f"*Risk Level:*\n`{risk_level}`"},
-                {"type": "mrkdwn", "text": f"*Confidence:*\n{conf_emoji} {confidence_pct}%"},
-            ]},
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (f"*Correção Proposta:*\n```{proposed_fix}```"),
+                },
+            },
+            {
+                "type": "section",
+                "fields": [
+                    {"type": "mrkdwn", "text": f"*Risk Level:*\n`{risk_level}`"},
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Confidence:*\n{conf_emoji} {confidence_pct}%",
+                    },
+                ],
+            },
         ]
 
         if requires_human:
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": (
-                ":warning: *Aguardando aprovação humana antes da execução*"
-            )}})
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            ":warning: *Aguardando aprovação humana antes da execução*"
+                        ),
+                    },
+                }
+            )
 
-        blocks.append({"type": "context", "elements": [
-            {"type": "mrkdwn", "text": f"AIOps Agent | {cid}"},
-        ]})
+        blocks.append(
+            {
+                "type": "context",
+                "elements": [
+                    {"type": "mrkdwn", "text": f"AIOps Agent | {cid}"},
+                ],
+            }
+        )
 
         return blocks
 
@@ -599,7 +747,9 @@ class SlackNotifier:
         duration_ms = data.get("total_duration_ms", "?")
 
         # Formata lista de evidencias
-        evidence_text = "\n".join(f"  - {e}" for e in evidence) if evidence else "  None"
+        evidence_text = (
+            "\n".join(f"  - {e}" for e in evidence) if evidence else "  None"
+        )
 
         # Cor do indicador de confianca (confidence pode ser float ou string)
         if isinstance(confidence, str):
@@ -614,23 +764,44 @@ class SlackNotifier:
             conf_emoji = ":red_circle:"
 
         return [
-            {"type": "header", "text": {"type": "plain_text", "text": f"Diagnosis Complete: {cid}"}},
-            {"type": "section", "text": {"type": "mrkdwn", "text": (
-                f"*Root Cause:*\n{root_cause}\n\n"
-                f"*Evidence:*\n{evidence_text}"
-            )}},
+            {
+                "type": "header",
+                "text": {"type": "plain_text", "text": f"Diagnosis Complete: {cid}"},
+            },
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"*Root Cause:*\n{root_cause}\n\n*Evidence:*\n{evidence_text}"
+                    ),
+                },
+            },
             {"type": "divider"},
-            {"type": "section", "fields": [
-                {"type": "mrkdwn", "text": f"*Confidence:*\n{conf_emoji} {confidence_pct}%"},
-                {"type": "mrkdwn", "text": f"*Risk Level:*\n`{risk_level}`"},
-                {"type": "mrkdwn", "text": f"*Blast Radius:*\n`{blast_radius}`"},
-                {"type": "mrkdwn", "text": f"*Duration:*\n{duration_ms}ms"},
-            ]},
+            {
+                "type": "section",
+                "fields": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*Confidence:*\n{conf_emoji} {confidence_pct}%",
+                    },
+                    {"type": "mrkdwn", "text": f"*Risk Level:*\n`{risk_level}`"},
+                    {"type": "mrkdwn", "text": f"*Blast Radius:*\n`{blast_radius}`"},
+                    {"type": "mrkdwn", "text": f"*Duration:*\n{duration_ms}ms"},
+                ],
+            },
             {"type": "divider"},
-            {"type": "section", "text": {"type": "mrkdwn", "text": (
-                f"*Proposed Fix:*\n```{proposed_fix}```"
-            )}},
-            {"type": "context", "elements": [
-                {"type": "mrkdwn", "text": f"AIOps Agent | {cid}"},
-            ]},
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (f"*Proposed Fix:*\n```{proposed_fix}```"),
+                },
+            },
+            {
+                "type": "context",
+                "elements": [
+                    {"type": "mrkdwn", "text": f"AIOps Agent | {cid}"},
+                ],
+            },
         ]

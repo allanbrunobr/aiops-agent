@@ -9,6 +9,14 @@
   ```bash
   python3.12 -m venv .venv
   .venv/bin/pip install -r requirements.txt
+  # ou, com uv (venvs uv não incluem pip):
+  uv venv --python 3.12 .venv
+  uv pip install --python .venv/bin/python -r requirements.txt
+  ```
+- Dev tools (ruff, mypy, pytest-cov — `[dependency-groups]` no `pyproject.toml`):
+  ```bash
+  uv pip install --python .venv/bin/python --group dev
+  # ou: pip install --group dev   (pip 25.1+)
   ```
 - Copy `.env.example` to `.env` and add your `ANTHROPIC_API_KEY` (required for full LLM mode only)
 
@@ -138,6 +146,32 @@ pytest tests/ -v -m integration
 - Use `@pytest.mark.integration` for tests that exercise pipeline stages
 - Snapshot tests MUST remain deterministic (seed-based data generation)
 - New features should include corresponding tests in `tests/test_<feature>.py`
+
+## Lint & Type Check
+
+```bash
+.venv/bin/ruff check .                    # lint (regras padrão + imports)
+.venv/bin/ruff check . --fix              # auto-fix seguro
+.venv/bin/ruff format .                   # formatação
+.venv/bin/ruff format --check .           # verificação de formato (gate do CI)
+.venv/bin/mypy domain application core    # type-check SOMENTE dos módulos puros
+```
+
+- mypy é permissivo fora de `domain/`, `application/` e `core/` (expansão gradual)
+- `E402` é ignorado de propósito: entrypoints carregam `.env.local`/`sys.path` antes dos imports
+
+### Réplica local do CI
+
+`scripts/ci-local.sh` roda os mesmos jobs do GitHub Actions em venvs descartáveis
+(`/tmp/aiops-ci-venv-<job>`), sem tocar no `.venv` local:
+
+```bash
+scripts/ci-local.sh lint          # ruff check + format --check + mypy
+scripts/ci-local.sh unit          # unit tests + coverage report (sem gate de threshold)
+scripts/ci-local.sh integration   # integration & snapshot
+scripts/ci-local.sh rust          # cargo test + maturin build + suíte completa
+scripts/ci-local.sh               # todos os jobs
+```
 
 ## Code Conventions
 

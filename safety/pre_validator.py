@@ -20,21 +20,22 @@ from __future__ import annotations
 
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from datetime import datetime
 
 
 class RiskLevel(Enum):
     """Nível de risco da ação proposta."""
-    LOW = "LOW"          # Auto-approve permitido
-    MEDIUM = "MEDIUM"    # Requer confirmação
-    HIGH = "HIGH"        # Requer aprovação explícita
+
+    LOW = "LOW"  # Auto-approve permitido
+    MEDIUM = "MEDIUM"  # Requer confirmação
+    HIGH = "HIGH"  # Requer aprovação explícita
     CRITICAL = "CRITICAL"  # Bloqueado: requer aprovação manual + justificativa
 
 
 class ApprovalStatus(Enum):
     """Status da aprovação."""
+
     AUTO_APPROVED = "auto_approved"
     PENDING_APPROVAL = "pending_approval"
     APPROVED = "approved"
@@ -45,6 +46,7 @@ class ApprovalStatus(Enum):
 @dataclass
 class SafetyCheckResult:
     """Resultado da validação de segurança pré-execução."""
+
     is_safe: bool
     risk_level: RiskLevel
     approval_status: ApprovalStatus
@@ -68,6 +70,7 @@ class SafetyCheckResult:
 @dataclass
 class BlastRadius:
     """Estimativa do raio de impacto da ação."""
+
     affected_services: int
     affected_pods_estimate: int
     is_data_destructive: bool
@@ -80,23 +83,23 @@ class BlastRadius:
 
 # Comandos explicitamente bloqueados (NUNCA executar)
 BLOCKED_COMMANDS = [
-    r"rm\s+-rf\s+/",           # rm -rf /
+    r"rm\s+-rf\s+/",  # rm -rf /
     r"kubectl\s+delete\s+namespace",  # delete namespace inteiro
-    r"kubectl\s+delete\s+--all",      # delete tudo
-    r"drop\s+database",        # drop database
-    r"drop\s+table",           # drop table
-    r"truncate\s+table",       # truncate
-    r"format\s+",              # format disk
-    r"mkfs\.",                 # format filesystem
-    r"dd\s+if=.*of=/dev/",    # dd para device
-    r">\s*/etc/",             # sobrescrever config do sistema
-    r"chmod\s+777\s+/",       # permissões perigosas
-    r"kubectl\s+exec.*--\s*sh\s+-c\s*['\"].*rm", # exec + rm dentro do pod
+    r"kubectl\s+delete\s+--all",  # delete tudo
+    r"drop\s+database",  # drop database
+    r"drop\s+table",  # drop table
+    r"truncate\s+table",  # truncate
+    r"format\s+",  # format disk
+    r"mkfs\.",  # format filesystem
+    r"dd\s+if=.*of=/dev/",  # dd para device
+    r">\s*/etc/",  # sobrescrever config do sistema
+    r"chmod\s+777\s+/",  # permissões perigosas
+    r"kubectl\s+exec.*--\s*sh\s+-c\s*['\"].*rm",  # exec + rm dentro do pod
     r"\|\s*(sh|bash|zsh|ksh)\b",  # pipe para shell
     r";\s*(sh|bash|zsh)\b",
     r"&&\s*(sh|bash|zsh)\b",
-    r"`",                      # substituição de comando
-    r"\$\(",                   # substituição de comando
+    r"`",  # substituição de comando
+    r"\$\(",  # substituição de comando
 ]
 
 # Padrões que indicam risco elevado
@@ -113,22 +116,22 @@ HIGH_RISK_PATTERNS = [
 
 # Padrões seguros (baixo risco)
 SAFE_PATTERNS = [
-    r"kubectl\s+get\s+",      # Read-only: get resources
-    r"kubectl\s+describe\s+", # Read-only: describe
-    r"kubectl\s+logs\s+",     # Read-only: logs
-    r"kubectl\s+top\s+",      # Read-only: metrics
+    r"kubectl\s+get\s+",  # Read-only: get resources
+    r"kubectl\s+describe\s+",  # Read-only: describe
+    r"kubectl\s+logs\s+",  # Read-only: logs
+    r"kubectl\s+top\s+",  # Read-only: metrics
     # curl só é leitura se não houver metacaractere de shell. O padrão
     # antigo `curl\s+` aprovava `curl http://x | sh` como read-only.
     r"curl\s+\S+$",
-    r"ping\s+",               # Read-only: ping
-    r"nslookup\s+",           # Read-only: DNS
+    r"ping\s+",  # Read-only: ping
+    r"nslookup\s+",  # Read-only: DNS
     r"kubectl\s+rollout\s+status",  # Read-only: rollout status
 ]
 
 # Padrões de rollout (risco moderado, mas reversíveis)
 ROLLOUT_PATTERNS = [
-    r"kubectl\s+rollout\s+undo",      # Rollback
-    r"kubectl\s+rollout\s+restart",   # Restart
+    r"kubectl\s+rollout\s+undo",  # Rollback
+    r"kubectl\s+rollout\s+restart",  # Restart
     r"kubectl\s+scale\s+.*--replicas=[1-9]",  # Scale up
 ]
 
@@ -252,7 +255,9 @@ class PreExecutionValidator:
         ):
             approval_status = ApprovalStatus.AUTO_APPROVED
             requires_human = False
-        elif not is_safe and any("blocked" in f.lower() or "destructive" in f.lower() for f in checks_failed):
+        elif not is_safe and any(
+            "blocked" in f.lower() or "destructive" in f.lower() for f in checks_failed
+        ):
             approval_status = ApprovalStatus.BLOCKED
             requires_human = True
         elif is_safe:
@@ -285,37 +290,44 @@ class PreExecutionValidator:
             from safety.audit import SafetyAuditEvent, SafetyAuditor
 
             duration_ms = int((time.monotonic() - start) * 1000)
-            command_preview = action.command[:100] if hasattr(action, "command") else str(action)[:100]
+            command_preview = (
+                action.command[:100]
+                if hasattr(action, "command")
+                else str(action)[:100]
+            )
             blocked = result.approval_status == ApprovalStatus.BLOCKED
 
-            SafetyAuditor.log_decision(SafetyAuditEvent(
-                layer_name="pre_validator",
-                correlation_id=correlation_id,
-                verdict="block" if blocked else "pass",
-                rationale=(
-                    f"Action blocked: {'; '.join(result.checks_failed)}"
-                    if blocked
-                    else f"Action approved. Risk score: {result.risk_score:.1f}, "
-                         f"Blast radius: {result.blast_radius.affected_services} services"
-                ),
-                input_summary=f"Command: {command_preview}",
-                output_summary=(
-                    "Action rejected — not forwarded to execution"
-                    if blocked
-                    else "Action forwarded to TNR check"
-                ),
-                triggered_rule=(
-                    "; ".join(result.checks_failed[:2]) if blocked else None
-                ),
-                duration_ms=duration_ms,
-                metadata={
-                    "blast_radius": result.blast_radius.affected_services,
-                    "risk_score": result.risk_score,
-                },
-            ))
+            SafetyAuditor.log_decision(
+                SafetyAuditEvent(
+                    layer_name="pre_validator",
+                    correlation_id=correlation_id,
+                    verdict="block" if blocked else "pass",
+                    rationale=(
+                        f"Action blocked: {'; '.join(result.checks_failed)}"
+                        if blocked
+                        else f"Action approved. Risk score: {result.risk_score:.1f}, "
+                        f"Blast radius: {result.blast_radius.affected_services} services"
+                    ),
+                    input_summary=f"Command: {command_preview}",
+                    output_summary=(
+                        "Action rejected — not forwarded to execution"
+                        if blocked
+                        else "Action forwarded to TNR check"
+                    ),
+                    triggered_rule=(
+                        "; ".join(result.checks_failed[:2]) if blocked else None
+                    ),
+                    duration_ms=duration_ms,
+                    metadata={
+                        "blast_radius": result.blast_radius.affected_services,
+                        "risk_score": result.risk_score,
+                    },
+                )
+            )
         except Exception as exc:
             try:
                 from safety.audit import SafetyAuditor
+
                 SafetyAuditor.log_error("pre_validator", correlation_id, exc)
             except Exception:
                 pass
@@ -376,9 +388,8 @@ class PreExecutionValidator:
         )
 
         # Reversibility
-        is_reversible = (
-            bool(action.rollback_command) or
-            any(re.search(p, command) for p in ROLLOUT_PATTERNS)
+        is_reversible = bool(action.rollback_command) or any(
+            re.search(p, command) for p in ROLLOUT_PATTERNS
         )
 
         # Downtime estimation
@@ -491,9 +502,17 @@ class PreExecutionValidator:
             return "No validations performed."
 
         total = len(self.history)
-        blocked = sum(1 for r in self.history if r.approval_status == ApprovalStatus.BLOCKED)
-        auto = sum(1 for r in self.history if r.approval_status == ApprovalStatus.AUTO_APPROVED)
-        pending = sum(1 for r in self.history if r.approval_status == ApprovalStatus.PENDING_APPROVAL)
+        blocked = sum(
+            1 for r in self.history if r.approval_status == ApprovalStatus.BLOCKED
+        )
+        auto = sum(
+            1 for r in self.history if r.approval_status == ApprovalStatus.AUTO_APPROVED
+        )
+        pending = sum(
+            1
+            for r in self.history
+            if r.approval_status == ApprovalStatus.PENDING_APPROVAL
+        )
 
         return (
             f"Safety validations: {total} total | "

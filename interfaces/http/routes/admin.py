@@ -14,9 +14,9 @@ async def validate_knowledge() -> dict:
     Usa estado isolado — não afeta dados de produção.
     """
     from validation.runner import ValidationRunner
-    from validation.scenarios.rag_retrieval import RAGRetrievalScenario
-    from validation.scenarios.rag_degradation import RAGDegradationScenario
     from validation.scenarios.knowledge_write_read import KnowledgeWriteReadScenario
+    from validation.scenarios.rag_degradation import RAGDegradationScenario
+    from validation.scenarios.rag_retrieval import RAGRetrievalScenario
 
     runner = ValidationRunner(subsystem="knowledge")
     runner.register(RAGRetrievalScenario())

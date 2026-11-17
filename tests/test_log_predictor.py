@@ -1,6 +1,7 @@
 """
 Testes unitários para pipeline/log_predictor.py.
 """
+
 from __future__ import annotations
 
 import datetime

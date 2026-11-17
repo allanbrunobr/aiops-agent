@@ -16,7 +16,6 @@ Usage:
 
 import argparse
 import datetime
-import os
 import random
 import sys
 import time
@@ -26,12 +25,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from data.models import LogEntry, MetricPoint, Span
-from pipeline.log_parser import LogParser
-from pipeline.metric_filter import MetricFilter, MetricAnomaly
-from pipeline.trace_filter import TraceFilter, SlowCallPath
-from pipeline.aggregator import AggregatedReport
 from pipeline.context_compressor import ContextCompressor
-
 
 # ---------------------------------------------------------------------------
 # Realistic log generator
@@ -48,41 +42,81 @@ NORMAL_TEMPLATES = [
     lambda: f"Health check passed for {random.choice(SERVICES)}",
     lambda: f"Connection acquired from pool ({random.randint(10, 40)}/200 active)",
     lambda: f"Cache hit for user session {random.randint(1000, 99999)}",
-    lambda: f"Outbound request to {random.choice(SERVICES)} completed in {random.randint(15, 120)}ms",
+    lambda: (
+        f"Outbound request to {random.choice(SERVICES)} completed in {random.randint(15, 120)}ms"
+    ),
     lambda: f"JWT token validated for user_id={random.randint(100, 99999)}",
-    lambda: f"Database query executed in {random.randint(2, 45)}ms rows_returned={random.randint(0, 500)}",
-    lambda: f"gRPC call to {random.choice(SERVICES)} completed status=OK latency={random.randint(5, 80)}ms",
-    lambda: f"Kafka message produced to topic=orders partition={random.randint(0, 11)} offset={random.randint(10000, 99999)}",
-    lambda: f"Redis GET cache_key=session:{random.randint(1000, 99999)} hit=true latency={random.randint(1, 5)}ms",
-    lambda: f"HTTP GET /api/v1/{random.choice(['users', 'orders', 'products', 'payments'])} 200 {random.randint(10, 150)}ms",
-    lambda: f"TLS handshake completed peer={random.choice(SERVICES)} protocol=TLSv1.3 cipher=AES_256_GCM",
-    lambda: f"Metrics exported: {random.randint(40, 80)} series, {random.randint(200, 500)} samples",
-    lambda: f"Config reload completed: {random.randint(12, 30)} keys loaded from ConfigMap",
+    lambda: (
+        f"Database query executed in {random.randint(2, 45)}ms rows_returned={random.randint(0, 500)}"
+    ),
+    lambda: (
+        f"gRPC call to {random.choice(SERVICES)} completed status=OK latency={random.randint(5, 80)}ms"
+    ),
+    lambda: (
+        f"Kafka message produced to topic=orders partition={random.randint(0, 11)} offset={random.randint(10000, 99999)}"
+    ),
+    lambda: (
+        f"Redis GET cache_key=session:{random.randint(1000, 99999)} hit=true latency={random.randint(1, 5)}ms"
+    ),
+    lambda: (
+        f"HTTP GET /api/v1/{random.choice(['users', 'orders', 'products', 'payments'])} 200 {random.randint(10, 150)}ms"
+    ),
+    lambda: (
+        f"TLS handshake completed peer={random.choice(SERVICES)} protocol=TLSv1.3 cipher=AES_256_GCM"
+    ),
+    lambda: (
+        f"Metrics exported: {random.randint(40, 80)} series, {random.randint(200, 500)} samples"
+    ),
+    lambda: (
+        f"Config reload completed: {random.randint(12, 30)} keys loaded from ConfigMap"
+    ),
     lambda: f"Readiness probe: all {random.randint(3, 8)} dependencies healthy",
 ]
 
 WARN_TEMPLATES = [
     lambda: f"Connection pool usage high: {random.randint(150, 190)}/200 active",
-    lambda: f"Slow query detected: SELECT * FROM orders WHERE user_id={random.randint(100, 9999)} took {random.randint(200, 900)}ms",
-    lambda: f"Retry attempt {random.randint(1, 3)}/3 for outbound call to {random.choice(SERVICES)}",
+    lambda: (
+        f"Slow query detected: SELECT * FROM orders WHERE user_id={random.randint(100, 9999)} took {random.randint(200, 900)}ms"
+    ),
+    lambda: (
+        f"Retry attempt {random.randint(1, 3)}/3 for outbound call to {random.choice(SERVICES)}"
+    ),
     lambda: f"Memory usage at {random.randint(70, 85)}% — threshold 90%",
     lambda: f"Request queue depth: {random.randint(50, 150)} (threshold: 200)",
 ]
 
 ERROR_TEMPLATES = [
-    lambda: f"Connection pool exhausted: 200/200 active, {random.randint(10, 50)} waiting — cannot acquire connection after {random.randint(5000, 30000)}ms",
-    lambda: f"Database connection timeout after {random.randint(5000, 30000)}ms to {random.choice(DB_HOSTS)}:5432",
-    lambda: f"Transaction failed: could not serialize access due to concurrent update on orders.id={random.randint(1000, 99999)}",
-    lambda: f"HTTP 503 from {random.choice(SERVICES)}: upstream connection pool exhausted",
-    lambda: f"Circuit breaker OPEN for {random.choice(SERVICES)} after {random.randint(5, 15)} consecutive failures",
-    lambda: f"Request timeout: POST /api/v1/payments/{random.randint(10000, 99999)} exceeded {random.randint(5, 30)}s deadline",
+    lambda: (
+        f"Connection pool exhausted: 200/200 active, {random.randint(10, 50)} waiting — cannot acquire connection after {random.randint(5000, 30000)}ms"
+    ),
+    lambda: (
+        f"Database connection timeout after {random.randint(5000, 30000)}ms to {random.choice(DB_HOSTS)}:5432"
+    ),
+    lambda: (
+        f"Transaction failed: could not serialize access due to concurrent update on orders.id={random.randint(1000, 99999)}"
+    ),
+    lambda: (
+        f"HTTP 503 from {random.choice(SERVICES)}: upstream connection pool exhausted"
+    ),
+    lambda: (
+        f"Circuit breaker OPEN for {random.choice(SERVICES)} after {random.randint(5, 15)} consecutive failures"
+    ),
+    lambda: (
+        f"Request timeout: POST /api/v1/payments/{random.randint(10000, 99999)} exceeded {random.randint(5, 30)}s deadline"
+    ),
     lambda: f"OOM warning: container memory at {random.randint(90, 99)}% of 2Gi limit",
-    lambda: f"Kafka consumer lag critical: topic=payments partition={random.randint(0, 7)} lag={random.randint(5000, 50000)}",
+    lambda: (
+        f"Kafka consumer lag critical: topic=payments partition={random.randint(0, 7)} lag={random.randint(5000, 50000)}"
+    ),
 ]
 
 FATAL_TEMPLATES = [
-    lambda: f"FATAL: connection pool completely drained — service entering degraded mode",
-    lambda: f"FATAL: unrecoverable database error — all {len(DB_HOSTS)} replicas unreachable",
+    lambda: (
+        "FATAL: connection pool completely drained — service entering degraded mode"
+    ),
+    lambda: (
+        f"FATAL: unrecoverable database error — all {len(DB_HOSTS)} replicas unreachable"
+    ),
 ]
 
 
@@ -157,7 +191,7 @@ def generate_logs(count: int, seed: int = 42) -> list[LogEntry]:
             level = "INFO"
         logs.append(LogEntry(ts, level, svc, msg))
 
-    logs.sort(key=lambda l: l.timestamp)
+    logs.sort(key=lambda log: log.timestamp)
     return logs
 
 
@@ -177,7 +211,9 @@ def generate_metrics() -> list[MetricPoint]:
 
         # Connection pool
         val = 200 if is_incident else rng.randint(25, 65)
-        metrics.append(MetricPoint(ts, "payment-svc", "connection_pool_active", float(val)))
+        metrics.append(
+            MetricPoint(ts, "payment-svc", "connection_pool_active", float(val))
+        )
 
         # Latency
         val = 950 + rng.uniform(-50, 50) if is_incident else 45 + rng.uniform(-10, 10)
@@ -194,28 +230,32 @@ def generate_traces() -> list[Span]:
         ts = INCIDENT_START + datetime.timedelta(seconds=i * 12)
         is_incident = i > 10
         dur = rng.uniform(800, 1200) if is_incident else rng.uniform(30, 80)
-        traces.append(Span(
-            trace_id=f"trace-{i:04d}",
-            span_id=f"span-{i:04d}-root",
-            parent_span_id=None,
-            service="gateway",
-            operation="POST /api/v1/payments",
-            start_time=ts,
-            duration_ms=dur,
-            status="ERROR" if is_incident else "OK",
-        ))
+        traces.append(
+            Span(
+                trace_id=f"trace-{i:04d}",
+                span_id=f"span-{i:04d}-root",
+                parent_span_id=None,
+                service="gateway",
+                operation="POST /api/v1/payments",
+                start_time=ts,
+                duration_ms=dur,
+                status="ERROR" if is_incident else "OK",
+            )
+        )
         # Child span — the bottleneck
-        traces.append(Span(
-            trace_id=f"trace-{i:04d}",
-            span_id=f"span-{i:04d}-db",
-            parent_span_id=f"span-{i:04d}-root",
-            service="payment-svc",
-            operation="db.query",
-            start_time=ts + datetime.timedelta(milliseconds=5),
-            duration_ms=dur * 0.9,
-            status="ERROR" if is_incident else "OK",
-            attributes={"db.host": rng.choice(DB_HOSTS)} if is_incident else {},
-        ))
+        traces.append(
+            Span(
+                trace_id=f"trace-{i:04d}",
+                span_id=f"span-{i:04d}-db",
+                parent_span_id=f"span-{i:04d}-root",
+                service="payment-svc",
+                operation="db.query",
+                start_time=ts + datetime.timedelta(milliseconds=5),
+                duration_ms=dur * 0.9,
+                status="ERROR" if is_incident else "OK",
+                attributes={"db.host": rng.choice(DB_HOSTS)} if is_incident else {},
+            )
+        )
     return traces
 
 
@@ -223,11 +263,12 @@ def generate_traces() -> list[Span]:
 # Benchmark runner
 # ---------------------------------------------------------------------------
 
+
 def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     """Run the full pipeline for N logs and return metrics."""
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print(f"  BENCHMARK: {log_count:,} logs")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")
 
     # 1. Generate logs
     t0 = time.time()
@@ -253,7 +294,7 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     print(f"         Distribution: {dict(sorted(level_counts.items()))}")
 
     # Raw size in tokens
-    raw_text = "\n".join(str(l) for l in logs)
+    raw_text = "\n".join(str(log) for log in logs)
     raw_tokens = len(raw_text) // 4
     print(f"         Raw text: {len(raw_text):,} chars = ~{raw_tokens:,} tokens")
 
@@ -267,20 +308,27 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     DRAIN_SAMPLE_CAP = 500
     logs_for_drain = logs[:DRAIN_SAMPLE_CAP] if len(logs) > DRAIN_SAMPLE_CAP else logs
     if len(logs) > DRAIN_SAMPLE_CAP:
-        print(f"  [cap] Sampling for Drain3: {DRAIN_SAMPLE_CAP:,} of {len(logs):,} logs")
+        print(
+            f"  [cap] Sampling for Drain3: {DRAIN_SAMPLE_CAP:,} of {len(logs):,} logs"
+        )
 
     t0 = time.time()
     metrics = generate_metrics()
     traces = generate_traces()
 
     from pipeline.aggregator import Aggregator
+
     aggregator_fresh = Aggregator()
     report = aggregator_fresh.process(logs_for_drain, metrics, traces)
-    drain_time = time.time() - t0  # drain_time now measures the whole pipeline up to the report
+    drain_time = (
+        time.time() - t0
+    )  # drain_time now measures the whole pipeline up to the report
     agg_time = 0.0  # included in drain_time
 
     templates = report.log_templates  # already analyzed by the Aggregator
-    print(f"\n  [2/4] Drain3+Aggregator: {len(logs):,} logs -> {len(templates)} templates in {drain_time:.1f}s")
+    print(
+        f"\n  [2/4] Drain3+Aggregator: {len(logs):,} logs -> {len(templates)} templates in {drain_time:.1f}s"
+    )
 
     # Template text for display
     template_text = "\n".join(
@@ -292,7 +340,9 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     # Show the top 5 templates
     for i, tpl in enumerate(templates[:5]):
         svcs = ", ".join(sorted(tpl.services))
-        print(f"         #{i+1} [{tpl.level}][{svcs}] \"{tpl.template[:80]}\" x{tpl.count}")
+        print(
+            f'         #{i + 1} [{tpl.level}][{svcs}] "{tpl.template[:80]}" x{tpl.count}'
+        )
 
     # 3. Aggregator (reuses already parsed templates to avoid re-parsing)
     t0 = time.time()
@@ -300,23 +350,30 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     traces = generate_traces()
 
     from pipeline.aggregator import Aggregator
+
     aggregator_fresh = Aggregator()
-    report = aggregator_fresh.process_with_templates(templates, metrics, traces, len(logs))
+    report = aggregator_fresh.process_with_templates(
+        templates, metrics, traces, len(logs)
+    )
     agg_time = time.time() - t0
     print(f"\n  [3/4] Aggregator: report generated in {agg_time:.1f}s")
 
     report_text = report.to_text()
     report_tokens = len(report_text) // 4
-    print(f"         Report text: {len(report_text):,} chars = ~{report_tokens:,} tokens")
+    print(
+        f"         Report text: {len(report_text):,} chars = ~{report_tokens:,} tokens"
+    )
 
     # 4. Context Compressor
     t0 = time.time()
     compressor = ContextCompressor(token_budget=4000)
     compressed_text, stats = compressor.compress(report)
     comp_time = time.time() - t0
-    print(f"\n  [4/4] Context Compressor:")
+    print("\n  [4/4] Context Compressor:")
     print(f"         {stats}")
-    print(f"         Compressed text: {len(compressed_text):,} chars = ~{stats.compressed_tokens:,} tokens")
+    print(
+        f"         Compressed text: {len(compressed_text):,} chars = ~{stats.compressed_tokens:,} tokens"
+    )
     print(f"         Time: {comp_time:.3f}s")
 
     # Estimated cost (Claude Sonnet: $3/1M input, $15/1M output)
@@ -328,11 +385,13 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     cost_output = (output_tokens / 1_000_000) * 15.0
     total_cost = cost_input + cost_output
 
-    print(f"\n  ESTIMATED COST (Claude Sonnet 4):")
+    print("\n  ESTIMATED COST (Claude Sonnet 4):")
     print(f"    Input:  {input_tokens:,} tokens × $3/1M  = ${cost_input:.4f}")
     print(f"    Output: {output_tokens:,} tokens × $15/1M = ${cost_output:.4f}")
     print(f"    TOTAL:  ${total_cost:.4f} per incident")
-    print(f"    Reduction: {raw_tokens:,} raw tokens -> {stats.compressed_tokens:,} final tokens ({stats.compression_ratio:.0%} reduction)")
+    print(
+        f"    Reduction: {raw_tokens:,} raw tokens -> {stats.compressed_tokens:,} final tokens ({stats.compression_ratio:.0%} reduction)"
+    )
 
     return {
         "log_count": log_count,
@@ -350,8 +409,14 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description="AIOps pipeline compression benchmark")
-    parser.add_argument("--save-logs", action="store_true", help="Save generated logs to data/generated_logs/")
-    parser.add_argument("--max", type=int, default=100000, help="Maximum log volume (default: 100000)")
+    parser.add_argument(
+        "--save-logs",
+        action="store_true",
+        help="Save generated logs to data/generated_logs/",
+    )
+    parser.add_argument(
+        "--max", type=int, default=100000, help="Maximum log volume (default: 100000)"
+    )
     args = parser.parse_args()
 
     volumes = [500, 10_000, 100_000]
@@ -366,12 +431,18 @@ def main():
         results.append(result)
 
     # Summary table
-    print(f"\n\n{'='*90}")
-    print(f"  SUMMARY TABLE — Cost per Incident (Claude Sonnet 4)")
-    print(f"{'='*90}")
-    print(f"  {'Volume':>12} | {'Raw':>12} | {'Drain3':>8} | {'Compressed':>12} | {'Reduction':>8} | {'Cost':>8} | {'Time':>8}")
-    print(f"  {'':>12} | {'(tokens)':>12} | {'(tpls)':>8} | {'(tokens)':>12} | {'':>8} | {'(USD)':>8} | {'(sec)':>8}")
-    print(f"  {'-'*12}-+-{'-'*12}-+-{'-'*8}-+-{'-'*12}-+-{'-'*8}-+-{'-'*8}-+-{'-'*8}")
+    print(f"\n\n{'=' * 90}")
+    print("  SUMMARY TABLE — Cost per Incident (Claude Sonnet 4)")
+    print(f"{'=' * 90}")
+    print(
+        f"  {'Volume':>12} | {'Raw':>12} | {'Drain3':>8} | {'Compressed':>12} | {'Reduction':>8} | {'Cost':>8} | {'Time':>8}"
+    )
+    print(
+        f"  {'':>12} | {'(tokens)':>12} | {'(tpls)':>8} | {'(tokens)':>12} | {'':>8} | {'(USD)':>8} | {'(sec)':>8}"
+    )
+    print(
+        f"  {'-' * 12}-+-{'-' * 12}-+-{'-' * 8}-+-{'-' * 12}-+-{'-' * 8}-+-{'-' * 8}-+-{'-' * 8}"
+    )
 
     for r in results:
         print(
@@ -384,9 +455,9 @@ def main():
             f"{r['total_time_s']:>7.1f}s"
         )
 
-    print(f"\n  Conclusion: The cost is CONSTANT (~$0.004) regardless of log volume.")
-    print(f"  Drain3 collapses thousands of logs into ~20-35 unique templates.")
-    print(f"  The Context Compressor ensures that EVERYTHING fits in 4000 tokens.\n")
+    print("\n  Conclusion: The cost is CONSTANT (~$0.004) regardless of log volume.")
+    print("  Drain3 collapses thousands of logs into ~20-35 unique templates.")
+    print("  The Context Compressor ensures that EVERYTHING fits in 4000 tokens.\n")
 
 
 if __name__ == "__main__":

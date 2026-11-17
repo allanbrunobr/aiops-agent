@@ -3,14 +3,14 @@
 Valida que todos os safety nodes sao DETERMINISTIC com on_failure=ABORT,
 estao na ordem correta, e que SafetyBlockedError funciona.
 """
+
 from __future__ import annotations
 
-import pytest
 from datetime import datetime, timezone
 
-from config.loader import AppConfig
-from blueprint.pipelines.incident_response import build_incident_response_pipeline
 from blueprint.nodes import NodeType, OnFailure
+from blueprint.pipelines.incident_response import build_incident_response_pipeline
+from config.loader import AppConfig
 
 
 def test_pipeline_has_8_nodes():
@@ -80,9 +80,9 @@ def test_pipeline_node_order_with_safety():
 def test_sanitizer_node_executes():
     """Sanitizer node deve sanitizar dados brutos no estado."""
     from blueprint.adapters.safety_nodes import make_sanitizer_node
+    from data.sample_incident import create_incident
     from domain.alert import NormalizedAlert
     from domain.incident_state import IncidentState
-    from data.sample_incident import create_incident
 
     config = AppConfig()
     adapter = make_sanitizer_node(config)
@@ -94,7 +94,9 @@ def test_sanitizer_node_executes():
         received_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         alert=NormalizedAlert(
-            source="test", source_id="s1", correlation_id="test-safety-001",
+            source="test",
+            source_id="s1",
+            correlation_id="test-safety-001",
             title="Test",
             description="Teste de pipeline node",
             severity="error",
@@ -137,9 +139,9 @@ def test_safety_blocked_error_import():
 def test_full_pipeline_no_llm_with_safety():
     """Pipeline completo em modo --no-llm com safety deve funcionar."""
     from blueprint.engine import BlueprintEngine
+    from data.sample_incident import create_incident
     from domain.alert import NormalizedAlert
     from domain.incident_state import IncidentState
-    from data.sample_incident import create_incident
 
     config = AppConfig()
     engine = BlueprintEngine(config)
@@ -152,7 +154,9 @@ def test_full_pipeline_no_llm_with_safety():
         received_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
         alert=NormalizedAlert(
-            source="test", source_id="sf", correlation_id="test-safety-full",
+            source="test",
+            source_id="sf",
+            correlation_id="test-safety-full",
             title="Test",
             description="Teste de pipeline node",
             severity="error",

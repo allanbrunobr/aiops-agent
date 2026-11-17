@@ -120,13 +120,13 @@ Key fields your normalizer should extract:
 
 ```python
 # From the webhook POST body:
-payload["status"]                          # "firing" or "resolved"
-payload["alerts"][0]["labels"]["service"]   # "payment-svc"
+payload["status"]  # "firing" or "resolved"
+payload["alerts"][0]["labels"]["service"]  # "payment-svc"
 payload["alerts"][0]["labels"]["severity"]  # "critical"
 payload["alerts"][0]["annotations"]["summary"]  # Human-readable summary
-payload["alerts"][0]["values"]             # {"error_rate": 0.1523, ...}
-payload["alerts"][0]["startsAt"]           # RFC3339 timestamp
-payload["alerts"][0]["fingerprint"]        # Unique alert identifier
+payload["alerts"][0]["values"]  # {"error_rate": 0.1523, ...}
+payload["alerts"][0]["startsAt"]  # RFC3339 timestamp
+payload["alerts"][0]["fingerprint"]  # Unique alert identifier
 ```
 
 ### Metrics Simulator Behavior
@@ -159,10 +159,7 @@ Configure your Slack SDK client:
 ```python
 from slack_sdk import WebClient
 
-client = WebClient(
-    token="xoxb-mock-token",
-    base_url="http://localhost:8001/api/"
-)
+client = WebClient(token="xoxb-mock-token", base_url="http://localhost:8001/api/")
 
 # Works exactly like real Slack SDK calls
 response = client.chat_postMessage(channel="#alerts", text="Test alert")

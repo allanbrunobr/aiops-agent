@@ -8,13 +8,12 @@ geracao de arquivo JSON valido, edge cases.
 from __future__ import annotations
 
 import json
-from dataclasses import asdict
 from datetime import datetime
 
 import pytest
 
-
 # === Task 1 Tests: CLI --output-format flag ===
+
 
 @pytest.mark.unit
 class TestOutputFormatFlag:
@@ -22,45 +21,57 @@ class TestOutputFormatFlag:
 
     def test_output_format_default_is_markdown(self):
         from main import build_arg_parser
+
         parser = build_arg_parser()
         args = parser.parse_args([])
         assert args.output_format == "markdown"
 
     def test_output_format_json(self):
         from main import build_arg_parser
+
         parser = build_arg_parser()
         args = parser.parse_args(["--output-format", "json"])
         assert args.output_format == "json"
 
     def test_output_format_both(self):
         from main import build_arg_parser
+
         parser = build_arg_parser()
         args = parser.parse_args(["--output-format", "both"])
         assert args.output_format == "both"
 
     def test_output_format_markdown_explicit(self):
         from main import build_arg_parser
+
         parser = build_arg_parser()
         args = parser.parse_args(["--output-format", "markdown"])
         assert args.output_format == "markdown"
 
     def test_output_format_invalid_choice_rejected(self):
         from main import build_arg_parser
+
         parser = build_arg_parser()
         with pytest.raises(SystemExit):
             parser.parse_args(["--output-format", "xml"])
 
     def test_output_format_combines_with_other_flags(self):
         from main import build_arg_parser
+
         parser = build_arg_parser()
-        args = parser.parse_args([
-            "--output-format", "json",
-            "--no-llm",
-            "--no-rag",
-            "--output-dir", "/tmp/test",
-            "--scenario", "memory-leak",
-            "--config", "/tmp/aiops.toml",
-        ])
+        args = parser.parse_args(
+            [
+                "--output-format",
+                "json",
+                "--no-llm",
+                "--no-rag",
+                "--output-dir",
+                "/tmp/test",
+                "--scenario",
+                "memory-leak",
+                "--config",
+                "/tmp/aiops.toml",
+            ]
+        )
         assert args.output_format == "json"
         assert args.no_llm is True
         assert args.no_rag is True
@@ -71,24 +82,28 @@ class TestOutputFormatFlag:
 
 # === Task 2 Tests: _serialize_result() and _json_default() ===
 
+
 @pytest.mark.unit
 class TestJsonDefault:
     """Testa o encoder fallback para tipos nao-serializaveis."""
 
     def test_datetime_serializes_to_iso(self):
         from main import _json_default
+
         dt = datetime(2026, 3, 7, 14, 30, 0)
         assert _json_default(dt) == "2026-03-07T14:30:00"
 
     def test_enum_serializes_to_value(self):
         from main import _json_default
         from safety.tnr import TNRResult
+
         assert _json_default(TNRResult.SUCCESS) == "success"
         assert _json_default(TNRResult.REGRESSION) == "regression"
 
     def test_dataclass_serializes_to_dict(self):
         from main import _json_default
         from safety.tnr import MitigationAction
+
         action = MitigationAction(
             description="test",
             command="echo test",
@@ -145,6 +160,7 @@ class TestSerializeResult:
     def _make_minimal_incident(self):
         """Cria incident minimo para testes."""
         from data.models import SimulatedIncident
+
         now = datetime(2026, 3, 7, 14, 0, 0)
         return SimulatedIncident(
             logs=[],
@@ -160,6 +176,7 @@ class TestSerializeResult:
 
     def test_produces_valid_json(self):
         from main import _serialize_result
+
         result = self._make_minimal_result()
         incident = self._make_minimal_incident()
         serialized = _serialize_result(result, incident)
@@ -170,6 +187,7 @@ class TestSerializeResult:
 
     def test_contains_meta_section(self):
         from main import _serialize_result
+
         result = self._make_minimal_result()
         incident = self._make_minimal_incident()
         serialized = _serialize_result(result, incident)
@@ -179,6 +197,7 @@ class TestSerializeResult:
 
     def test_contains_detection_section(self):
         from main import _serialize_result
+
         result = self._make_minimal_result()
         incident = self._make_minimal_incident()
         serialized = _serialize_result(result, incident)
@@ -187,6 +206,7 @@ class TestSerializeResult:
 
     def test_contains_diagnosis_section(self):
         from main import _serialize_result
+
         result = self._make_minimal_result()
         incident = self._make_minimal_incident()
         serialized = _serialize_result(result, incident)
@@ -196,6 +216,7 @@ class TestSerializeResult:
 
     def test_contains_timeline_section(self):
         from main import _serialize_result
+
         result = self._make_minimal_result()
         incident = self._make_minimal_incident()
         serialized = _serialize_result(result, incident)
@@ -206,6 +227,7 @@ class TestSerializeResult:
     def test_mitigation_action_serialized(self):
         from main import _serialize_result
         from safety.tnr import MitigationAction
+
         result = self._make_minimal_result()
         result["stages"]["mitigation"] = {
             "action": MitigationAction(
@@ -228,6 +250,7 @@ class TestSerializeResult:
     def test_health_snapshot_includes_health_score(self):
         from main import _serialize_result
         from safety.tnr import HealthSnapshot
+
         result = self._make_minimal_result()
         now = datetime(2026, 3, 7, 14, 0, 0)
         pre = HealthSnapshot(
@@ -254,8 +277,9 @@ class TestSerializeResult:
         assert isinstance(verification["pre_snapshot"]["health_score"], float)
 
     def test_threshold_config_serialized(self):
-        from main import _serialize_result
         from config.loader import AppConfig
+        from main import _serialize_result
+
         result = self._make_minimal_result()
         result["threshold_config"] = AppConfig()
         incident = self._make_minimal_incident()
@@ -267,6 +291,7 @@ class TestSerializeResult:
     def test_empty_stages_produce_valid_json(self):
         """Edge case: result com stages vazios."""
         from main import _serialize_result
+
         result = {
             "stages": {},
             "scenario_name": "test",
@@ -284,6 +309,7 @@ class TestSerializeResult:
 
     def test_safety_validation_serialized(self):
         from main import _serialize_result
+
         result = self._make_minimal_result()
         result["stages"]["safety_validation"] = {
             "risk_level": "LOW",
@@ -300,6 +326,7 @@ class TestSerializeResult:
 
     def test_remediation_validation_serialized(self):
         from main import _serialize_result
+
         result = self._make_minimal_result()
         result["stages"]["remediation_validation"] = {
             "risk": "NONE",
@@ -315,6 +342,7 @@ class TestSerializeResult:
 
     def test_action_items_included(self):
         from main import _serialize_result
+
         result = self._make_minimal_result()
         result["stages"]["mitigation"] = {
             "pattern_matched": "connection pool",
@@ -326,9 +354,9 @@ class TestSerializeResult:
 
     def test_full_roundtrip_json(self):
         """Testa que o resultado completo sobrevive serialize -> dump -> load."""
-        from main import _serialize_result, _json_default
-        from safety.tnr import MitigationAction, HealthSnapshot
         from config.loader import AppConfig
+        from main import _json_default, _serialize_result
+        from safety.tnr import HealthSnapshot, MitigationAction
 
         now = datetime(2026, 3, 7, 14, 0, 0)
         result = self._make_minimal_result()

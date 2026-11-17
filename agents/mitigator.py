@@ -12,19 +12,17 @@ from datetime import datetime
 from application.ports.reporter import (
     HUMAN_APPROVAL_REQUESTED,
     MITIGATION_PROPOSED,
+    TNR_VERIFIED,
     NullReporter,
     Reporter,
-    TNR_VERIFIED,
 )
 from domain.incident import MitigationAction
-from safety.tnr import (
-    TNRSafetyGuard, TNRReport, HealthSnapshot
-)
+from safety.tnr import HealthSnapshot, TNRReport, TNRSafetyGuard
 
 # Mapeamento de versões implantadas → versão estável anterior para rollback
 ROLLBACK_VERSIONS = {
-    "v3.1.0": "v3.0.2",   # api-server memory-leak
-    "v4.0.0": "v3.9.2",   # data-processor unknown-fault
+    "v3.1.0": "v3.0.2",  # api-server memory-leak
+    "v4.0.0": "v3.9.2",  # data-processor unknown-fault
 }
 
 # Padrões de remediação conhecidos
@@ -111,11 +109,15 @@ class MitigationAgent:
 
         action = MitigationAction(
             description=description,
-            command=pattern["command"].format(service=primary_service, current=3, prev=1),
+            command=pattern["command"].format(
+                service=primary_service, current=3, prev=1
+            ),
             risk_level=pattern["risk"],
             rollback_command=pattern["rollback"].format(
                 service=primary_service, current=3, prev=1
-            ) if pattern.get("rollback") else None,
+            )
+            if pattern.get("rollback")
+            else None,
         )
 
         self.reporter.emit(

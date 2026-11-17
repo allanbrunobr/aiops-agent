@@ -6,10 +6,11 @@ que encapsula a logica existente do pipeline sem modifica-la.
 Dependencia: blueprint/adapters/ importa de pipeline/, agents/, rag/.
 O inverso NUNCA e verdadeiro.
 """
+
 from __future__ import annotations
 
 import dataclasses
-from typing import Any, Callable
+from typing import Callable
 
 from config.loader import AppConfig
 from domain.incident_state import IncidentState
@@ -27,6 +28,7 @@ def make_aggregator_node(config: AppConfig) -> Callable[[IncidentState], Inciden
     Returns:
         Callable que aceita e retorna IncidentState.
     """
+
     def execute(state: IncidentState) -> IncidentState:
         from pipeline.aggregator import Aggregator
 
@@ -64,11 +66,14 @@ def make_aggregator_node(config: AppConfig) -> Callable[[IncidentState], Inciden
     return execute
 
 
-def make_context_compressor_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]:
+def make_context_compressor_node(
+    config: AppConfig,
+) -> Callable[[IncidentState], IncidentState]:
     """Cria funcao adaptadora para o ContextCompressor.
 
     Comprime o AggregatedReport para otimizar tokens do LLM.
     """
+
     def execute(state: IncidentState) -> IncidentState:
         from pipeline.context_compressor import ContextCompressor
 
@@ -99,6 +104,7 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
 
     def execute(state: IncidentState) -> IncidentState:
         import os
+
         from adapters.llm.anthropic_client import create_anthropic_llm_client
         from agents.orchestrator import AgentOrchestrator
         from agents.skill_router import SkillRouter
@@ -107,7 +113,9 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
         report_data = state.aggregated_report or {}
         report_obj = report_data.get("_report_obj")
         if report_obj is None:
-            raise ValueError("AggregatedReport not available — aggregator node must run first")
+            raise ValueError(
+                "AggregatedReport not available — aggregator node must run first"
+            )
 
         retriever = state.metadata.get("_retriever")
         model = os.environ.get("AIOPS_LLM_MODEL", "claude-sonnet-4-20250514")
@@ -116,10 +124,14 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
         skill_router = SkillRouter(memory_db)
         skill_router.seed_default_skills()
 
-        client = create_anthropic_llm_client(api_key=os.environ.get("ANTHROPIC_API_KEY", ""))
+        client = create_anthropic_llm_client(
+            api_key=os.environ.get("ANTHROPIC_API_KEY", "")
+        )
         orchestrator = AgentOrchestrator(
-            client=client, model=model,
-            memory_db=memory_db, skill_router=skill_router,
+            client=client,
+            model=model,
+            memory_db=memory_db,
+            skill_router=skill_router,
             config=config,
         )
         outcome = orchestrator.run(report_obj, retriever)
@@ -133,12 +145,15 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
     return execute
 
 
-def make_diagnoser_fallback(config: AppConfig) -> Callable[[IncidentState], IncidentState]:
+def make_diagnoser_fallback(
+    config: AppConfig,
+) -> Callable[[IncidentState], IncidentState]:
     """Cria funcao de fallback heuristico para o DiagnosisAgent.
 
     Usa a mesma logica de _heuristic_diagnosis() do DiagnosisAgent,
     sem chamar a API do Claude.
     """
+
     def execute(state: IncidentState) -> IncidentState:
         from agents.diagnoser import DiagnosisAgent
 
@@ -166,6 +181,7 @@ def make_diagnoser_fallback(config: AppConfig) -> Callable[[IncidentState], Inci
 
 def make_postmortem_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]:
     """Cria funcao adaptadora para geracao de postmortem (agentic — usa LLM)."""
+
     def execute(state: IncidentState) -> IncidentState:
         # Gera postmortem a partir do diagnostico e dados do pipeline
         diagnosis = state.diagnosis or {}
@@ -206,7 +222,9 @@ def make_postmortem_node(config: AppConfig) -> Callable[[IncidentState], Inciden
     return execute
 
 
-def make_postmortem_fallback(config: AppConfig) -> Callable[[IncidentState], IncidentState]:
+def make_postmortem_fallback(
+    config: AppConfig,
+) -> Callable[[IncidentState], IncidentState]:
     """Fallback para postmortem — mesma logica, sem LLM."""
     # Para V1, o postmortem e template-based (nao usa LLM), entao fallback = execute
     return make_postmortem_node(config)

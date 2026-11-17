@@ -9,6 +9,7 @@ Cobre:
   - Scale consistency de tokens entre escalas
   - Chain-of-Thought enrichment -> Slack blocks
 """
+
 from __future__ import annotations
 
 import json
@@ -21,15 +22,14 @@ from slack_sdk.errors import SlackApiError
 
 from core.lifecycle import LifecycleEvent
 from interfaces.http.notifications.slack import SlackNotifier
-from interfaces.http.notifications.fallback import LocalFallbackWriter
-from rag.models import KnowledgePattern, KnowledgeSearchResult
-from rag.knowledge_store import KnowledgeStore
 from rag.enrichment_node import RAGEnrichmentNode
-
+from rag.knowledge_store import KnowledgeStore
+from rag.models import KnowledgePattern, KnowledgeSearchResult
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_event(
     event_type: str,
@@ -141,11 +141,15 @@ def _sample_search_result(
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_slack_client() -> AsyncMock:
     """Cliente Slack mockado com respostas padrao."""
     client = AsyncMock()
-    client.chat_postMessage.return_value = {"ts": "1710000000.000001", "channel": "C-SCALE-TEST"}
+    client.chat_postMessage.return_value = {
+        "ts": "1710000000.000001",
+        "channel": "C-SCALE-TEST",
+    }
     client.chat_update.return_value = {"ok": True}
     return client
 
@@ -167,6 +171,7 @@ def log_scale(request) -> int:
 def generated_logs():
     """Factory fixture que gera logs na escala solicitada."""
     from infra.benchmark_compression import generate_logs
+
     return generate_logs
 
 
@@ -180,13 +185,17 @@ def dry_run_notifier() -> SlackNotifier:
 # 1. SLACK COM ESCALAS DE LOGS
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestSlackMessageAtLogScales:
     """Verifica que mensagens Slack sao enviadas corretamente em cada escala."""
 
     @pytest.mark.asyncio
     async def test_initial_message_posted_at_each_scale(
-        self, mock_slack_client, generated_logs, log_scale,
+        self,
+        mock_slack_client,
+        generated_logs,
+        log_scale,
     ):
         """Mensagem inicial postada com chat_postMessage independente da escala."""
         logs = generated_logs(log_scale)
@@ -217,7 +226,10 @@ class TestSlackMessageAtLogScales:
 
     @pytest.mark.asyncio
     async def test_node_completed_updates_message_at_each_scale(
-        self, mock_slack_client, generated_logs, log_scale,
+        self,
+        mock_slack_client,
+        generated_logs,
+        log_scale,
     ):
         """Eventos node.completed atualizam mensagem via chat_update."""
         _logs = generated_logs(log_scale)
@@ -229,11 +241,13 @@ class TestSlackMessageAtLogScales:
         # Simula nodes completados
         pipeline_nodes = ["log_parser", "metric_filter", "context_compressor"]
         for node in pipeline_nodes:
-            await notifier.on_event(_make_event(
-                "node.completed",
-                node_name=node,
-                data={"duration_ms": 150, "log_count": len(_logs)},
-            ))
+            await notifier.on_event(
+                _make_event(
+                    "node.completed",
+                    node_name=node,
+                    data={"duration_ms": 150, "log_count": len(_logs)},
+                )
+            )
 
         # Cada node.completed deve gerar um chat_update
         assert mock_slack_client.chat_update.call_count == len(pipeline_nodes)
@@ -245,7 +259,10 @@ class TestSlackMessageAtLogScales:
 
     @pytest.mark.asyncio
     async def test_final_message_contains_diagnosis_at_each_scale(
-        self, mock_slack_client, generated_logs, log_scale,
+        self,
+        mock_slack_client,
+        generated_logs,
+        log_scale,
     ):
         """Mensagem final contem severity, root_cause e proposed_fix corretos."""
         _logs = generated_logs(log_scale)
@@ -264,7 +281,9 @@ class TestSlackMessageAtLogScales:
         full_text = str(final_blocks)
 
         assert "Connection pool exhausted" in full_text, "Root cause ausente nos blocks"
-        assert "kubectl scale deployment" in full_text, "Proposed fix ausente nos blocks"
+        assert "kubectl scale deployment" in full_text, (
+            "Proposed fix ausente nos blocks"
+        )
         assert "Diagnosis Complete" in full_text, "Header de conclusao ausente"
         assert "medium" in full_text, "Risk level ausente nos blocks"
         assert "92%" in full_text, "Confidence ausente nos blocks"
@@ -276,10 +295,9 @@ class TestScaleConsistencyTokens:
 
     def test_compressed_tokens_stable_across_scales(self, generated_logs):
         """Tokens comprimidos devem ser similares independente da escala de input."""
-        from pipeline.log_parser import LogParser
+        from infra.benchmark_compression import generate_metrics, generate_traces
         from pipeline.aggregator import Aggregator
         from pipeline.context_compressor import ContextCompressor
-        from infra.benchmark_compression import generate_metrics, generate_traces
 
         token_counts = {}
         for scale in [100, 1_000, 10_000]:
@@ -289,8 +307,10 @@ class TestScaleConsistencyTokens:
 
             aggregator = Aggregator()
             # Forca fallback Python caso Rust esteja incompleto
-            with patch("pipeline.metric_filter._RUST_AVAILABLE", False), \
-                 patch("pipeline.trace_filter._RUST_AVAILABLE", False, create=True):
+            with (
+                patch("pipeline.metric_filter._RUST_AVAILABLE", False),
+                patch("pipeline.trace_filter._RUST_AVAILABLE", False, create=True),
+            ):
                 report = aggregator.process(logs, metrics, traces)
 
             compressor = ContextCompressor(token_budget=4000)
@@ -316,13 +336,15 @@ class TestScaleConsistencyTokens:
 # 2. RAG -> SLACK INTEGRATION
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestRAGToSlackIntegration:
     """Testa que resultados RAG aparecem corretamente nos blocks Slack."""
 
     @pytest.mark.asyncio
     async def test_high_score_rag_result_appears_in_slack_blocks(
-        self, mock_slack_client,
+        self,
+        mock_slack_client,
     ):
         """KnowledgeSearchResult com score >= 0.8 aparece nos blocks finais."""
         notifier = _make_notifier(mock_slack_client)
@@ -351,7 +373,6 @@ class TestRAGToSlackIntegration:
         """KnowledgeSearchResult com is_negative_example=True nao aparece nos blocks."""
         # Simula o retriever filtrando negative examples
         mock_retriever = MagicMock()
-        negative_pattern = _sample_pattern(is_negative=True, pattern_id="neg-001")
         positive_pattern = _sample_pattern(is_negative=False, pattern_id="pos-001")
 
         # KnowledgeRetriever filtra negativos internamente
@@ -394,10 +415,12 @@ class TestRAGToSlackIntegration:
         # Slack ainda funciona normalmente sem RAG
         notifier = _make_notifier(mock_slack_client)
         await notifier.on_event(_make_event("pipeline.started"))
-        await notifier.on_event(_make_event(
-            "pipeline.completed",
-            data=_make_final_data(root_cause="Unknown root cause"),
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.completed",
+                data=_make_final_data(root_cause="Unknown root cause"),
+            )
+        )
 
         mock_slack_client.chat_update.assert_called_once()
         blocks = mock_slack_client.chat_update.call_args.kwargs["blocks"]
@@ -407,7 +430,9 @@ class TestRAGToSlackIntegration:
     async def test_rag_search_error_graceful_degradation(self, mock_slack_client):
         """RAG com erro na busca: pipeline continua sem enriquecimento."""
         mock_retriever = MagicMock()
-        mock_retriever.search_similar_incidents.side_effect = RuntimeError("FAISS index corrupted")
+        mock_retriever.search_similar_incidents.side_effect = RuntimeError(
+            "FAISS index corrupted"
+        )
 
         enrichment_node = RAGEnrichmentNode(mock_retriever, top_k=5)
         context = {
@@ -426,6 +451,7 @@ class TestRAGToSlackIntegration:
 # 3. SLACK RETRY COM MULTIPLAS ESCALAS
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestSlackRetryAtScale:
     """Testa retry e fallback Slack com diferentes escalas de logs."""
@@ -434,7 +460,10 @@ class TestSlackRetryAtScale:
     async def test_ratelimited_during_10k_update_retries_and_succeeds(self):
         """Rate limit durante update em 10K logs: retry com backoff e eventual sucesso."""
         mock_client = AsyncMock()
-        mock_client.chat_postMessage.return_value = {"ts": "ts.10k", "channel": "C-SCALE-TEST"}
+        mock_client.chat_postMessage.return_value = {
+            "ts": "ts.10k",
+            "channel": "C-SCALE-TEST",
+        }
 
         # Primeiro chat_update falha com ratelimited, segundo funciona
         mock_client.chat_update.side_effect = [
@@ -447,11 +476,13 @@ class TestSlackRetryAtScale:
         await notifier.on_event(_make_event("pipeline.started"))
 
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-            await notifier.on_event(_make_event(
-                "node.completed",
-                node_name="log_parser",
-                data={"duration_ms": 3200, "log_count": 10_000},
-            ))
+            await notifier.on_event(
+                _make_event(
+                    "node.completed",
+                    node_name="log_parser",
+                    data={"duration_ms": 3200, "log_count": 10_000},
+                )
+            )
             # Verifica que houve sleep de backoff
             mock_sleep.assert_called_once_with(0.01)
 
@@ -484,7 +515,10 @@ class TestSlackRetryAtScale:
     async def test_fallback_writes_json_with_correct_correlation_id(self, tmp_path):
         """Fallback escreve JSON com correlation_id correto mesmo com contexto grande."""
         mock_client = AsyncMock()
-        mock_client.chat_postMessage.return_value = {"ts": "ts.fallback", "channel": "C-SCALE-TEST"}
+        mock_client.chat_postMessage.return_value = {
+            "ts": "ts.fallback",
+            "channel": "C-SCALE-TEST",
+        }
         mock_client.chat_update.side_effect = _make_slack_error("channel_not_found")
 
         notifier = _make_notifier(
@@ -529,18 +563,23 @@ class TestSlackRetryAtScale:
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
             await notifier.on_event(_make_event("pipeline.started"))
             assert mock_sleep.call_count == 2
-            mock_sleep.assert_any_call(0.01)   # 0.01 * 2^0
-            mock_sleep.assert_any_call(0.02)   # 0.01 * 2^1
+            mock_sleep.assert_any_call(0.01)  # 0.01 * 2^0
+            mock_sleep.assert_any_call(0.02)  # 0.01 * 2^1
 
     @pytest.mark.asyncio
     async def test_all_retries_exhausted_still_cleans_state(self, tmp_path):
         """Apos esgotar retries, estado interno e limpo (sem memory leak)."""
         mock_client = AsyncMock()
-        mock_client.chat_postMessage.return_value = {"ts": "ts.clean", "channel": "C-SCALE-TEST"}
+        mock_client.chat_postMessage.return_value = {
+            "ts": "ts.clean",
+            "channel": "C-SCALE-TEST",
+        }
         mock_client.chat_update.side_effect = _make_slack_error("server_error")
 
         notifier = _make_notifier(
-            mock_client, max_retries=1, initial_backoff_s=0.01,
+            mock_client,
+            max_retries=1,
+            initial_backoff_s=0.01,
             fallback_dir=str(tmp_path),
         )
 
@@ -548,7 +587,9 @@ class TestSlackRetryAtScale:
         await notifier.on_event(_make_event("pipeline.started"))
 
         with patch("asyncio.sleep", new_callable=AsyncMock):
-            await notifier.on_event(_make_event("pipeline.completed", data=_make_final_data()))
+            await notifier.on_event(
+                _make_event("pipeline.completed", data=_make_final_data())
+            )
 
         # Estado interno limpo apos pipeline.completed, mesmo com falha
         assert cid not in notifier._message_ts
@@ -559,6 +600,7 @@ class TestSlackRetryAtScale:
 # ---------------------------------------------------------------------------
 # 4. DRY RUN COM ESCALA
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestDryRunAtScale:
@@ -572,22 +614,32 @@ class TestDryRunAtScale:
         notifier = _make_notifier(mock_client, dry_run=True)
 
         # Simula pipeline completo
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": "Test incident", "severity": "high", "service": "payment-svc"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={
+                    "title": "Test incident",
+                    "severity": "high",
+                    "service": "payment-svc",
+                },
+            )
+        )
 
         for node in ["log_parser", "metric_filter", "context_compressor"]:
-            await notifier.on_event(_make_event(
-                "node.completed",
-                node_name=node,
-                data={"duration_ms": 100, "log_count": len(_logs)},
-            ))
+            await notifier.on_event(
+                _make_event(
+                    "node.completed",
+                    node_name=node,
+                    data={"duration_ms": 100, "log_count": len(_logs)},
+                )
+            )
 
-        await notifier.on_event(_make_event(
-            "pipeline.completed",
-            data=_make_final_data(compressed_tokens=1200),
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.completed",
+                data=_make_final_data(compressed_tokens=1200),
+            )
+        )
 
         # Zero chamadas reais ao Slack
         mock_client.chat_postMessage.assert_not_called()
@@ -609,9 +661,12 @@ class TestDryRunAtScale:
 
         cid = "inc-scale-test-001"
         await notifier.on_event(_make_event("pipeline.started"))
-        await notifier.on_event(_make_event(
-            "pipeline.completed", data=_make_final_data(),
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.completed",
+                data=_make_final_data(),
+            )
+        )
 
         assert cid not in notifier._message_ts
         assert cid not in notifier._completed_nodes
@@ -621,23 +676,30 @@ class TestDryRunAtScale:
         """dry_run: blocks internos contem informacoes de escala corretas."""
         notifier = _make_notifier(AsyncMock(), dry_run=True)
 
-        # Captura logs do structlog para verificar blocks
-        import structlog
-        captured_events = []
-        original_log = structlog.get_logger
-
         # Usamos o mecanismo de dry_run que loga com structlog
         # Verificamos que pipeline.started registra o ts e que progress funciona
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": "Scale test", "severity": "critical", "service": "payment-svc"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={
+                    "title": "Scale test",
+                    "severity": "critical",
+                    "service": "payment-svc",
+                },
+            )
+        )
 
         # Verifica que o notifier construiu blocks iniciais corretamente
-        blocks = notifier._build_initial_blocks(_make_event(
-            "pipeline.started",
-            data={"title": "Scale test", "severity": "critical", "service": "payment-svc"},
-        ))
+        blocks = notifier._build_initial_blocks(
+            _make_event(
+                "pipeline.started",
+                data={
+                    "title": "Scale test",
+                    "severity": "critical",
+                    "service": "payment-svc",
+                },
+            )
+        )
         blocks_text = str(blocks)
         assert "Scale test" in blocks_text
         assert "critical" in blocks_text
@@ -647,6 +709,7 @@ class TestDryRunAtScale:
 # ---------------------------------------------------------------------------
 # 5. CoT + SLACK
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestCoTEnrichmentToSlack:
@@ -667,7 +730,6 @@ class TestCoTEnrichmentToSlack:
     def test_cot_search_summary_format(self):
         """get_search_summary retorna formato correto apos buscas."""
         from rag.cot_retriever import CoTObservabilityRetriever, SearchContext
-        from rag.retriever import SearchResult
 
         mock_indexer = MagicMock()
         mock_indexer.index = None
@@ -731,7 +793,8 @@ class TestCoTEnrichmentToSlack:
 
     @pytest.mark.asyncio
     async def test_cot_enrichment_populates_event_data_for_slack(
-        self, mock_slack_client,
+        self,
+        mock_slack_client,
     ):
         """Dados de CoT enrichment aparecem nos blocks Slack finais."""
         notifier = _make_notifier(mock_slack_client)
@@ -761,6 +824,7 @@ class TestCoTEnrichmentToSlack:
 # ---------------------------------------------------------------------------
 # 6. RAG ENRICHMENT NODE INTEGRATION
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestRAGEnrichmentNodeBehavior:
@@ -824,6 +888,7 @@ class TestRAGEnrichmentNodeBehavior:
 # 7. KNOWLEDGE STORE + SLACK FLOW
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestKnowledgeStoreToSlackFlow:
     """Testa fluxo completo: store -> retriever -> enrichment -> slack blocks."""
@@ -834,7 +899,8 @@ class TestKnowledgeStoreToSlackFlow:
         knowledge_store.add_pattern(pattern)
 
         found = knowledge_store.find_by_service_and_cause(
-            "payment-svc", "Database connection leak in payment service",
+            "payment-svc",
+            "Database connection leak in payment service",
         )
         assert found is not None
         assert found.pattern_id == "flow-001"
@@ -864,6 +930,7 @@ class TestKnowledgeStoreToSlackFlow:
 # 8. BLOCK KIT STRUCTURE VALIDATION
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestBlockKitStructure:
     """Valida estrutura detalhada dos Block Kit blocks."""
@@ -888,7 +955,9 @@ class TestBlockKitStructure:
         cid = "inc-scale-test-001"
         notifier._completed_nodes[cid] = ["log_parser", "metric_filter"]
 
-        event = _make_event("node.completed", node_name="metric_filter", data={"duration_ms": 100})
+        event = _make_event(
+            "node.completed", node_name="metric_filter", data={"duration_ms": 100}
+        )
         blocks = notifier._build_progress_blocks(cid, event)
 
         text = str(blocks)
@@ -912,7 +981,9 @@ class TestBlockKitStructure:
     def test_final_blocks_confidence_emoji_green(self):
         """Confianca >= 0.8 mostra indicador verde."""
         notifier = _make_notifier(AsyncMock(), dry_run=True)
-        event = _make_event("pipeline.completed", data=_make_final_data(confidence=0.85))
+        event = _make_event(
+            "pipeline.completed", data=_make_final_data(confidence=0.85)
+        )
         blocks = notifier._build_final_blocks(event)
         assert "large_green_circle" in str(blocks)
 
@@ -947,6 +1018,7 @@ class TestBlockKitStructure:
 # 9. FULL PIPELINE LIFECYCLE AT SCALE
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.unit
 class TestFullPipelineLifecycleAtScale:
     """Testa ciclo completo de lifecycle events em escalas diferentes."""
@@ -958,26 +1030,45 @@ class TestFullPipelineLifecycleAtScale:
         notifier = _make_notifier(mock_slack_client)
 
         # Pipeline started
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": f"Incident ({len(logs)} logs)", "severity": "high", "service": "payment-svc"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={
+                    "title": f"Incident ({len(logs)} logs)",
+                    "severity": "high",
+                    "service": "payment-svc",
+                },
+            )
+        )
         assert mock_slack_client.chat_postMessage.call_count == 1
 
         # Nodes completados
-        nodes = ["telemetry_sanitizer", "log_parser", "metric_filter",
-                 "trace_filter", "context_compressor", "rag_retriever",
-                 "root_cause_analyzer"]
+        nodes = [
+            "telemetry_sanitizer",
+            "log_parser",
+            "metric_filter",
+            "trace_filter",
+            "context_compressor",
+            "rag_retriever",
+            "root_cause_analyzer",
+        ]
         for node in nodes:
-            await notifier.on_event(_make_event(
-                "node.completed", node_name=node, data={"duration_ms": 50},
-            ))
+            await notifier.on_event(
+                _make_event(
+                    "node.completed",
+                    node_name=node,
+                    data={"duration_ms": 50},
+                )
+            )
         assert mock_slack_client.chat_update.call_count == len(nodes)
 
         # Pipeline completed
-        await notifier.on_event(_make_event(
-            "pipeline.completed", data=_make_final_data(),
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.completed",
+                data=_make_final_data(),
+            )
+        )
         # +1 update para mensagem final
         assert mock_slack_client.chat_update.call_count == len(nodes) + 1
 
@@ -987,26 +1078,50 @@ class TestFullPipelineLifecycleAtScale:
         logs = generated_logs(10_000)
         notifier = _make_notifier(mock_slack_client)
 
-        await notifier.on_event(_make_event(
-            "pipeline.started",
-            data={"title": f"Incident ({len(logs)} logs)", "severity": "critical", "service": "payment-svc"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.started",
+                data={
+                    "title": f"Incident ({len(logs)} logs)",
+                    "severity": "critical",
+                    "service": "payment-svc",
+                },
+            )
+        )
 
         # Simula todos os nodes do pipeline
-        all_nodes = list(dict.fromkeys([
-            "telemetry_sanitizer", "log_parser", "metric_filter",
-            "trace_filter", "context_compressor", "rag_retriever",
-            "root_cause_analyzer", "pre_execution_validator", "tnr",
-            "version_validator", "postmortem_generator",
-        ]))
+        all_nodes = list(
+            dict.fromkeys(
+                [
+                    "telemetry_sanitizer",
+                    "log_parser",
+                    "metric_filter",
+                    "trace_filter",
+                    "context_compressor",
+                    "rag_retriever",
+                    "root_cause_analyzer",
+                    "pre_execution_validator",
+                    "tnr",
+                    "version_validator",
+                    "postmortem_generator",
+                ]
+            )
+        )
         for node in all_nodes:
-            await notifier.on_event(_make_event(
-                "node.completed", node_name=node, data={"duration_ms": 200},
-            ))
+            await notifier.on_event(
+                _make_event(
+                    "node.completed",
+                    node_name=node,
+                    data={"duration_ms": 200},
+                )
+            )
 
-        await notifier.on_event(_make_event(
-            "pipeline.completed", data=_make_final_data(total_duration_ms=15_000),
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.completed",
+                data=_make_final_data(total_duration_ms=15_000),
+            )
+        )
 
         # Verifica contagem total de chamadas
         assert mock_slack_client.chat_postMessage.call_count == 1
@@ -1018,10 +1133,12 @@ class TestFullPipelineLifecycleAtScale:
         notifier = _make_notifier(mock_slack_client)
 
         await notifier.on_event(_make_event("pipeline.started"))
-        await notifier.on_event(_make_event(
-            "pipeline.failed",
-            data={"error": "OOM: container killed by kernel"},
-        ))
+        await notifier.on_event(
+            _make_event(
+                "pipeline.failed",
+                data={"error": "OOM: container killed by kernel"},
+            )
+        )
 
         # chat_update para mensagem de falha
         mock_slack_client.chat_update.assert_called_once()
@@ -1034,6 +1151,7 @@ class TestFullPipelineLifecycleAtScale:
 # ---------------------------------------------------------------------------
 # 10. KNOWLEDGE SEARCH RESULT FORMATTING
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.unit
 class TestKnowledgeSearchResultFormatting:

@@ -12,13 +12,12 @@ Ref: github.com/logpai/Drain3
 
 from __future__ import annotations
 
-import re
-from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 
 try:
     import _aiops_rust as _rust
+
     _RUST_AVAILABLE = True
 except ImportError:
     _rust = None
@@ -27,16 +26,33 @@ except ImportError:
 from drain3 import TemplateMiner
 from drain3.template_miner_config import TemplateMinerConfig
 
-INCIDENT_KEYWORDS = frozenset([
-    "error", "fatal", "crash", "timeout", "oom", "exception",
-    "refused", "unavailable", "panic", "exhausted", "circuit",
-    "breaker", "failed", "aborted", "timed out", "503", "500",
-])
+INCIDENT_KEYWORDS = frozenset(
+    [
+        "error",
+        "fatal",
+        "crash",
+        "timeout",
+        "oom",
+        "exception",
+        "refused",
+        "unavailable",
+        "panic",
+        "exhausted",
+        "circuit",
+        "breaker",
+        "failed",
+        "aborted",
+        "timed out",
+        "503",
+        "500",
+    ]
+)
 
 
 @dataclass
 class LogTemplate:
     """Um template de log com metadados agregados."""
+
     template: str
     count: int
     level: str
@@ -71,7 +87,6 @@ class LogParser:
         convergem bem antes desse volume.
         Fallback para Python com cap de 500 amostras quando Rust não disponível.
         """
-        import random as _rng
         if _RUST_AVAILABLE:
             # Rust processa todos os logs sem cap de amostragem
             return self._rust_parse(logs)
@@ -97,11 +112,15 @@ class LogParser:
             tpl.services = set(d["services"])
             fs = d.get("first_seen")
             ls = d.get("last_seen")
-            tpl.first_seen = fs if isinstance(fs, _dt.datetime) else (
-                _dt.datetime.fromtimestamp(fs) if fs is not None else None
+            tpl.first_seen = (
+                fs
+                if isinstance(fs, _dt.datetime)
+                else (_dt.datetime.fromtimestamp(fs) if fs is not None else None)
             )
-            tpl.last_seen = ls if isinstance(ls, _dt.datetime) else (
-                _dt.datetime.fromtimestamp(ls) if ls is not None else None
+            tpl.last_seen = (
+                ls
+                if isinstance(ls, _dt.datetime)
+                else (_dt.datetime.fromtimestamp(ls) if ls is not None else None)
             )
             tpl.sample_messages = list(d.get("sample_messages", []))
             result.append(tpl)
@@ -146,7 +165,9 @@ class LogParser:
                 tpl.sample_messages.append(log.message)
 
         self._compute_relevance()
-        return sorted(self.templates.values(), key=lambda t: t.relevance_score, reverse=True)
+        return sorted(
+            self.templates.values(), key=lambda t: t.relevance_score, reverse=True
+        )
 
     def _validate_rust_output(self, logs: list) -> dict:
         """Helper de validação para desenvolvimento: compara saídas Rust vs Python.
@@ -187,7 +208,13 @@ class LogParser:
             score += min(keyword_hits * 1.5, 5.0)
 
             # Level boost
-            level_scores = {"ERROR": 3.0, "FATAL": 5.0, "WARN": 1.5, "INFO": 0.0, "DEBUG": 0.0}
+            level_scores = {
+                "ERROR": 3.0,
+                "FATAL": 5.0,
+                "WARN": 1.5,
+                "INFO": 0.0,
+                "DEBUG": 0.0,
+            }
             score += level_scores.get(tpl.level, 0.0)
 
             # Raridade invertida (logs muito frequentes de INFO são menos relevantes,
@@ -196,7 +223,9 @@ class LogParser:
             if tpl.level in ("ERROR", "FATAL"):
                 score += 2.0  # Fixed bonus — scale-invariant, count magnitude already in level_boost
             else:
-                score += max(0, 2.0 - frequency_ratio * 20)  # Info raros = mais relevantes
+                score += max(
+                    0, 2.0 - frequency_ratio * 20
+                )  # Info raros = mais relevantes
 
             tpl.relevance_score = round(score, 2)
 
@@ -204,10 +233,14 @@ class LogParser:
         """Retorna apenas templates de ERROR/FATAL, ordenados por relevância."""
         return [t for t in self.parse([]) if t.level in ("ERROR", "FATAL")]
 
-    def to_text(self, templates: list[LogTemplate] | None = None, top_k: int = 20) -> str:
+    def to_text(
+        self, templates: list[LogTemplate] | None = None, top_k: int = 20
+    ) -> str:
         """Converte templates em texto estruturado para o LLM."""
         if templates is None:
-            templates = sorted(self.templates.values(), key=lambda t: t.relevance_score, reverse=True)
+            templates = sorted(
+                self.templates.values(), key=lambda t: t.relevance_score, reverse=True
+            )
 
         lines = ["## Log Templates (ordenados por relevância)\n"]
         for i, tpl in enumerate(templates[:top_k]):
@@ -215,7 +248,7 @@ class LogParser:
             first = tpl.first_seen.strftime("%H:%M:%S") if tpl.first_seen else "?"
             last = tpl.last_seen.strftime("%H:%M:%S") if tpl.last_seen else "?"
             lines.append(
-                f"- [{tpl.level}] [{services_str}] \"{tpl.template}\" "
+                f'- [{tpl.level}] [{services_str}] "{tpl.template}" '
                 f"| count={tpl.count} | {first}→{last} | relevance={tpl.relevance_score}"
             )
 

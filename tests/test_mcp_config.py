@@ -7,9 +7,6 @@ overrides via variáveis de ambiente.
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 import pytest
 from pydantic import ValidationError
 
@@ -136,6 +133,7 @@ class TestAppConfigMcpSection:
         monkeypatch.setenv("AIOPS_MCP__TRANSPORT", "stdio")
         # Reimporta para evitar cache
         import importlib
+
         import config.loader as loader_mod
 
         importlib.reload(loader_mod)
@@ -147,6 +145,7 @@ class TestAppConfigMcpSection:
         """Verifica que AIOPS__MCP__RATE_LIMITS__DIAGNOSE sobrescreve nested value."""
         monkeypatch.setenv("AIOPS_MCP__RATE_LIMITS__DIAGNOSE", "20")
         import importlib
+
         import config.loader as loader_mod
 
         importlib.reload(loader_mod)

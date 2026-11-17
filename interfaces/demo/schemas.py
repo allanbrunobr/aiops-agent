@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 Schemas de serialização JSON para o módulo de demonstração.
 
@@ -14,6 +15,7 @@ from pydantic import BaseModel
 
 class DemoPhase(str, Enum):
     """Fases da máquina de estado do cenário de demonstração."""
+
     IDLE = "IDLE"
     PLAYING = "PLAYING"
     DEGRADING = "DEGRADING"

@@ -31,12 +31,17 @@ import pytest
 WEBHOOK_URL = "http://localhost:47890/webhook"
 SLACK_MOCK_URL = "http://localhost:47892"
 
-SAMPLE_PAYLOAD_PATH = Path(__file__).parent.parent.parent / "docker" / "grafana_webhook_payload_example.json"
+SAMPLE_PAYLOAD_PATH = (
+    Path(__file__).parent.parent.parent
+    / "docker"
+    / "grafana_webhook_payload_example.json"
+)
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _service_available(url: str) -> bool:
     """Check if a service is reachable."""
@@ -50,6 +55,7 @@ def _service_available(url: str) -> bool:
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def grafana_payload() -> dict:
@@ -74,7 +80,10 @@ def slack_mock_client():
 # Tests
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skip(reason="Requer serviços externos: Slack mock server + webhook server (docker/). Use test_webhook_normalizer_unit.py para testes isolados.")
+
+@pytest.mark.skip(
+    reason="Requer serviços externos: Slack mock server + webhook server (docker/). Use test_webhook_normalizer_unit.py para testes isolados."
+)
 class TestWebhookToSlackFlow:
     """End-to-end integration test for the alert pipeline."""
 
@@ -140,7 +149,9 @@ class TestWebhookToSlackFlow:
 
         mock_resp = slack_mock_client.get("/_mock/messages")
         data = mock_resp.json()
-        assert data["count"] >= 2, "Expected at least 2 Slack messages (firing + resolved)"
+        assert data["count"] >= 2, (
+            "Expected at least 2 Slack messages (firing + resolved)"
+        )
 
 
 @pytest.mark.skip(reason="Requer arquivo docker/grafana_webhook_payload_example.json.")

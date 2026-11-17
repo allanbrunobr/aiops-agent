@@ -28,7 +28,9 @@ class LazyRAG:
     """Carrega índice RAG sob demanda sem importar sentence-transformers no __init__."""
 
     def __init__(self, index_path: object = None) -> None:
-        self._index_path = Path(index_path) if index_path is not None else Path("data/faiss_index.bin")
+        self._index_path = (
+            Path(index_path) if index_path is not None else Path("data/faiss_index.bin")
+        )
         self._loaded = False
 
     @property
@@ -113,8 +115,10 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # --------------------------------------------------------
     # Rotas de infraestrutura — health (liveness + readiness)
     # --------------------------------------------------------
-    from interfaces.http.health import health_router, set_start_time
     import time as _time
+
+    from interfaces.http.health import health_router, set_start_time
+
     set_start_time(_time.monotonic())
     app.include_router(health_router)
 
@@ -123,12 +127,12 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # --------------------------------------------------------
 
     if config.mcp.enabled and config.mcp.transport == "sse":
-        from interfaces.mcp.sse import mount_sse
         from interfaces.mcp.rate_limiter import InMemoryRateLimiter
+        from interfaces.mcp.sse import mount_sse
+        from pipeline.telemetry_sanitizer import TelemetrySanitizer
         from safety.pre_validator import PreExecutionValidator
         from safety.tnr import TNRSafetyGuard
         from safety.version_validator import VersionValidator
-        from pipeline.telemetry_sanitizer import TelemetrySanitizer
 
         # Instancia safety layers
         sanitizer = TelemetrySanitizer()
@@ -160,6 +164,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     _rsa_public_pem = None
     if _oauth.private_key_path and _oauth.public_key_path:
         from pathlib import Path as _Path
+
         _priv_path = _Path(_oauth.private_key_path)
         _pub_path = _Path(_oauth.public_key_path)
         if _priv_path.exists() and _pub_path.exists():
@@ -167,6 +172,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             _rsa_public_pem = _pub_path.read_text()
 
     from auth.jwt_validator import MIN_HMAC_KEY_BYTES
+
     _hmac_ok = len(_jwt_secret.encode("utf-8")) >= MIN_HMAC_KEY_BYTES
     _rsa_ok = bool(_rsa_private_pem and _rsa_public_pem)
     if _hmac_ok or _rsa_ok:
@@ -177,8 +183,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             jwt_secret=_jwt_secret if _hmac_ok else "",
             token_ttl=_oauth.token_ttl,
             allowed_clients=[
-                {"id": c.id, "scopes": c.scopes}
-                for c in _oauth.allowed_clients
+                {"id": c.id, "scopes": c.scopes} for c in _oauth.allowed_clients
             ],
             base_url="",
             token_store=InMemoryTokenStore(),
@@ -202,6 +207,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # A2A (Agent-to-Agent) — sempre montado
     # --------------------------------------------------------
     from interfaces.http.routes.a2a import router as a2a_router
+
     app.include_router(a2a_router)
     log.info("a2a.router.mounted")
 

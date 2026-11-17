@@ -18,7 +18,9 @@ class RAGDegradationScenario:
 
     name = "rag_graceful_degradation"
 
-    def execute(self, knowledge_store: object, incident_store: object, temp_dir: str) -> CheckResult:
+    def execute(
+        self, knowledge_store: object, incident_store: object, temp_dir: str
+    ) -> CheckResult:
         """Simula índice FAISS indisponível e verifica degradação graciosa."""
         from rag.indexer import ObservabilityIndexer
         from rag.knowledge_retriever import KnowledgeRetriever

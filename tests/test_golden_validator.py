@@ -6,12 +6,13 @@ Cobre tests/support/golden_validator.py.
 """
 
 import json
+
 import pytest
 
-from tests.support.golden_validator import validate_against_golden, ValidationResult
-
+from tests.support.golden_validator import ValidationResult, validate_against_golden
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
+
 
 @pytest.fixture
 def golden_file(tmp_path):
@@ -42,6 +43,7 @@ def golden_file(tmp_path):
 
 
 # ── validate_against_golden ───────────────────────────────────────────────────
+
 
 def test_validate_all_pass(golden_file):
     """Saída que atende todos os critérios deve passar."""

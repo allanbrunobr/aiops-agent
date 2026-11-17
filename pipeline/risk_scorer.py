@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 Cálculo de score de risco unificado combinando sinais preditivos.
 
@@ -6,7 +7,7 @@ Pondera MetricTrendSignal, LogBurstSignal e LatencyDriftSignal em
 um score único de 0 a 100 e determina o nível de evento de lifecycle.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from pipeline.log_predictor import LogBurstSignal
 from pipeline.trace_predictor import LatencyDriftSignal
@@ -15,6 +16,7 @@ from pipeline.trace_predictor import LatencyDriftSignal
 @dataclass
 class MetricTrendSignal:
     """Sinal de tendência de métrica a partir da inclinação EWMA."""
+
     slope: float
     eta_minutes: float | None = None
     change_point_detected: bool = False

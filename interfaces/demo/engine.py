@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 """
 Motor de cenário: máquina de estado que combina ScenarioPlayer, DemoAnalyzer
 e transições de fase para produzir TickFrames para o dashboard.
@@ -7,24 +8,23 @@ Suporta modo de comparação (dois motores simultâneos: preditivo vs tradiciona
 """
 
 import time
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any
+from dataclasses import dataclass
 
 from data.models import LogEntry, MetricPoint, Span
 from interfaces.demo.analyzer import DemoAnalyzer
 from interfaces.demo.player import ScenarioPlayer
-from interfaces.demo.schemas import DemoPhase, TickFrame
 from interfaces.demo.scenarios import CorpusItem, DemoScenarioConfig
+from interfaces.demo.schemas import DemoPhase, TickFrame
 
 
 @dataclass
 class _PhaseTransition:
     """Registro de transição de fase com timestamp wall-clock."""
+
     from_phase: str
     to_phase: str
     wall_time: float  # time.monotonic()
-    sim_time: str     # ISO timestamp simulado
+    sim_time: str  # ISO timestamp simulado
 
 
 class ScenarioEngine:
@@ -47,7 +47,9 @@ class ScenarioEngine:
 
         # Player e analisador preditivo (painel esquerdo / modo normal)
         self._player = ScenarioPlayer(corpus, speed_factor=cfg.speed_factor)
-        self._analyzer = DemoAnalyzer(enable_prediction=cfg.enable_prediction, ewma_threshold=cfg.ewma_threshold)
+        self._analyzer = DemoAnalyzer(
+            enable_prediction=cfg.enable_prediction, ewma_threshold=cfg.ewma_threshold
+        )
 
         # Buffers acumulados para análise
         self._logs: list[LogEntry] = []
@@ -57,7 +59,7 @@ class ScenarioEngine:
         # Estado de fase
         self._phase = DemoPhase.IDLE
         self._phase_transitions: list[_PhaseTransition] = []
-        self._phase_entry_wall: float = 0.0   # wall-clock da entrada na fase atual
+        self._phase_entry_wall: float = 0.0  # wall-clock da entrada na fase atual
         self._last_tick_wall: float = 0.0
 
         # Estado para postmortem
@@ -93,11 +95,14 @@ class ScenarioEngine:
         self.last_postmortem = None
         self._warning_wall_time = None
         self._lead_time_seconds = None
-        self._phase_transitions = [_PhaseTransition(
-            from_phase="IDLE", to_phase="PLAYING",
-            wall_time=time.monotonic(),
-            sim_time=self._player.sim_start.isoformat(),
-        )]
+        self._phase_transitions = [
+            _PhaseTransition(
+                from_phase="IDLE",
+                to_phase="PLAYING",
+                wall_time=time.monotonic(),
+                sim_time=self._player.sim_start.isoformat(),
+            )
+        ]
 
         # Inicia motor tradicional se em modo comparação
         if self._comparison_active and self._trad_player is not None:
@@ -115,7 +120,9 @@ class ScenarioEngine:
     def enable_comparison(self, corpus: list[CorpusItem]) -> None:
         """Ativa modo de comparação com um segundo motor (enable_prediction=False)."""
         self._comparison_active = True
-        self._trad_player = ScenarioPlayer(corpus, speed_factor=self._player.speed_factor)
+        self._trad_player = ScenarioPlayer(
+            corpus, speed_factor=self._player.speed_factor
+        )
         self._trad_analyzer = DemoAnalyzer(enable_prediction=False)
         self._trad_logs.clear()
         self._trad_metrics.clear()
@@ -176,15 +183,23 @@ class ScenarioEngine:
 
         # Motor tradicional
         trad_items = self._trad_player.advance(elapsed) if self._trad_player else []
-        self._ingest_items(trad_items, self._trad_logs, self._trad_metrics, self._trad_spans)
+        self._ingest_items(
+            trad_items, self._trad_logs, self._trad_metrics, self._trad_spans
+        )
 
-        trad_result = self._trad_analyzer.analyze(
-            self._trad_logs, self._trad_metrics, self._trad_spans
-        ) if self._trad_analyzer else {"risk_score": 0.0, "signals": {}, "prediction": None, "metrics": {}}
+        trad_result = (
+            self._trad_analyzer.analyze(
+                self._trad_logs, self._trad_metrics, self._trad_spans
+            )
+            if self._trad_analyzer
+            else {"risk_score": 0.0, "signals": {}, "prediction": None, "metrics": {}}
+        )
 
         self._advance_trad_phase(trad_result["risk_score"], now)
 
-        frame_right = self._build_frame(trad_result, self._trad_phase, None, self._trad_logs)
+        frame_right = self._build_frame(
+            trad_result, self._trad_phase, None, self._trad_logs
+        )
 
         return {
             "left": frame_left.dict(),
@@ -234,7 +249,9 @@ class ScenarioEngine:
                 self._phase = DemoPhase.INCIDENT
                 self._phase_entry_wall = wall_now
         elif self._phase == DemoPhase.INCIDENT:
-            time_elapsed = (wall_now - self._phase_entry_wall) * self._player.speed_factor
+            time_elapsed = (
+                wall_now - self._phase_entry_wall
+            ) * self._player.speed_factor
             # Recovery real: score caiu abaixo de 15 após pelo menos 30s simulados
             # Fallback: 900s simulados (15 min) — tempo suficiente para corpus de recovery
             # atingir o minuto 25 (fix) e decair até RESOLVED naturalmente.
@@ -244,17 +261,17 @@ class ScenarioEngine:
                 self._phase = DemoPhase.RESOLVED
 
         if old_phase != self._phase:
-            self._phase_transitions.append(_PhaseTransition(
-                from_phase=old_phase.value,
-                to_phase=self._phase.value,
-                wall_time=wall_now,
-                sim_time=self._player.sim_now.isoformat(),
-            ))
+            self._phase_transitions.append(
+                _PhaseTransition(
+                    from_phase=old_phase.value,
+                    to_phase=self._phase.value,
+                    wall_time=wall_now,
+                    sim_time=self._player.sim_now.isoformat(),
+                )
+            )
 
     def _advance_trad_phase(self, risk_score: float, wall_now: float) -> None:
         """Avança a máquina de estado do motor tradicional."""
-        old_phase = self._trad_phase
-
         if self._trad_phase == DemoPhase.PLAYING:
             if risk_score >= 30.0:
                 self._trad_phase = DemoPhase.DEGRADING
@@ -318,8 +335,11 @@ class ScenarioEngine:
             lt_sec = int(elapsed % 60)
             lead_time_text = f"{elapsed:.1f}s ({lt_min}m {lt_sec}s)"
 
-        signals_fired = [k for k, v in last_result.get("signals", {}).items()
-                         if v and k != "novel_templates"]
+        signals_fired = [
+            k
+            for k, v in last_result.get("signals", {}).items()
+            if v and k != "novel_templates"
+        ]
 
         root_cause_map = {
             "payment-pool-exhaustion": (
@@ -357,7 +377,7 @@ class ScenarioEngine:
 
 ## Signals Fired
 
-{', '.join(signals_fired) if signals_fired else 'none'}
+{", ".join(signals_fired) if signals_fired else "none"}
 
 ## Root Cause
 

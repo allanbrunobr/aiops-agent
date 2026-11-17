@@ -5,22 +5,22 @@ com --scenario, factory de conectores Databricks, fallback gracioso
 em caso de falha, e preservacao de NFR19 (zero network calls em
 modo simulated).
 """
+
 from __future__ import annotations
 
-import os
 import sys
-import uuid
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---- Helpers ----
+
 
 def _parse_args(args_list: list[str]):
     """Roda build_arg_parser().parse_args() com a lista fornecida."""
     from main import build_arg_parser
+
     parser = build_arg_parser()
     return parser.parse_args(args_list)
 
@@ -28,6 +28,7 @@ def _parse_args(args_list: list[str]):
 # ===========================================================================
 # Task 1: --data-source CLI flag
 # ===========================================================================
+
 
 class TestDataSourceArgument:
     """Testes para o argumento --data-source no CLI."""
@@ -59,12 +60,16 @@ class TestDataSourceArgument:
     @pytest.mark.unit
     def test_data_source_with_other_flags(self):
         """--data-source combina com --no-llm, --no-rag, --output-dir."""
-        args = _parse_args([
-            "--data-source", "databricks",
-            "--no-llm",
-            "--no-rag",
-            "--output-dir", "/tmp/out",
-        ])
+        args = _parse_args(
+            [
+                "--data-source",
+                "databricks",
+                "--no-llm",
+                "--no-rag",
+                "--output-dir",
+                "/tmp/out",
+            ]
+        )
         assert args.data_source == "databricks"
         assert args.no_llm is True
         assert args.no_rag is True
@@ -75,6 +80,7 @@ class TestDataSourceArgument:
 # Task 1.2: Mutual exclusion --data-source databricks + --scenario
 # ===========================================================================
 
+
 class TestMutualExclusion:
     """Testes para exclusao mutua entre --data-source databricks e --scenario."""
 
@@ -82,10 +88,14 @@ class TestMutualExclusion:
     def test_databricks_with_scenario_exits(self):
         """--data-source databricks + --scenario produz erro."""
         from main import build_arg_parser
+
         parser = build_arg_parser()
-        args = parser.parse_args(["--data-source", "databricks", "--scenario", "payment-pool-exhaustion"])
+        args = parser.parse_args(
+            ["--data-source", "databricks", "--scenario", "payment-pool-exhaustion"]
+        )
         # A validacao acontece em main(), nao no parser
         from main import _validate_args
+
         with pytest.raises(SystemExit) as exc_info:
             _validate_args(parser, args)
         assert exc_info.value.code == 1
@@ -93,9 +103,12 @@ class TestMutualExclusion:
     @pytest.mark.unit
     def test_simulated_with_scenario_is_valid(self):
         """--data-source simulated + --scenario e valido."""
-        from main import build_arg_parser, _validate_args
+        from main import _validate_args, build_arg_parser
+
         parser = build_arg_parser()
-        args = parser.parse_args(["--data-source", "simulated", "--scenario", "payment-pool-exhaustion"])
+        args = parser.parse_args(
+            ["--data-source", "simulated", "--scenario", "payment-pool-exhaustion"]
+        )
         # Nao deve levantar excecao
         _validate_args(parser, args)
 
@@ -103,6 +116,7 @@ class TestMutualExclusion:
 # ===========================================================================
 # Task 2: _create_databricks_sources() factory
 # ===========================================================================
+
 
 class TestCreateDatabricksSources:
     """Testes para a factory _create_databricks_sources()."""
@@ -115,9 +129,12 @@ class TestCreateDatabricksSources:
         monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "abc123")
 
         # Mock o SDK para nao precisar de conexao real
-        with patch("tools.databricks_connector.DatabricksConnection._get_client") as mock_client:
+        with patch(
+            "tools.databricks_connector.DatabricksConnection._get_client"
+        ) as mock_client:
             mock_client.return_value = MagicMock()
             from main import _create_databricks_sources
+
             result = _create_databricks_sources()
 
         assert result is not None
@@ -134,6 +151,7 @@ class TestCreateDatabricksSources:
         monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "abc123")
 
         from main import _create_databricks_sources
+
         result = _create_databricks_sources()
 
         assert result is None
@@ -146,6 +164,7 @@ class TestCreateDatabricksSources:
         monkeypatch.setenv("DATABRICKS_WAREHOUSE_ID", "abc123")
 
         from main import _create_databricks_sources
+
         result = _create_databricks_sources()
 
         assert result is None
@@ -158,6 +177,7 @@ class TestCreateDatabricksSources:
         monkeypatch.delenv("DATABRICKS_WAREHOUSE_ID", raising=False)
 
         from main import _create_databricks_sources
+
         result = _create_databricks_sources()
 
         assert result is None
@@ -170,6 +190,7 @@ class TestCreateDatabricksSources:
         monkeypatch.delenv("DATABRICKS_WAREHOUSE_ID", raising=False)
 
         from main import _create_databricks_sources
+
         result = _create_databricks_sources()
 
         assert result is None
@@ -178,6 +199,7 @@ class TestCreateDatabricksSources:
 # ===========================================================================
 # Task 3: step_fetch_databricks_data() graceful fallback
 # ===========================================================================
+
 
 class TestStepFetchDatabricksData:
     """Testes para step_fetch_databricks_data() e fallback gracioso."""
@@ -195,7 +217,9 @@ class TestStepFetchDatabricksData:
         trace_source.find_traces.return_value = []
 
         incident, scenario_name = step_fetch_databricks_data(
-            log_source, metrics_source, trace_source,
+            log_source,
+            metrics_source,
+            trace_source,
         )
 
         assert incident is not None
@@ -215,7 +239,9 @@ class TestStepFetchDatabricksData:
         trace_source.find_traces.return_value = []
 
         incident, scenario_name = step_fetch_databricks_data(
-            log_source, metrics_source, trace_source,
+            log_source,
+            metrics_source,
+            trace_source,
         )
 
         assert incident is not None
@@ -234,7 +260,9 @@ class TestStepFetchDatabricksData:
         trace_source.find_traces.side_effect = Exception("Connection refused")
 
         incident, scenario_name = step_fetch_databricks_data(
-            log_source, metrics_source, trace_source,
+            log_source,
+            metrics_source,
+            trace_source,
         )
 
         assert incident is not None
@@ -253,7 +281,9 @@ class TestStepFetchDatabricksData:
         trace_source.find_traces.side_effect = Exception("Fail 3")
 
         incident, scenario_name = step_fetch_databricks_data(
-            log_source, metrics_source, trace_source,
+            log_source,
+            metrics_source,
+            trace_source,
         )
 
         assert incident is not None
@@ -264,14 +294,19 @@ class TestStepFetchDatabricksData:
     @pytest.mark.unit
     def test_successful_data_conversion(self):
         """Dados do conector sao convertidos para dataclasses."""
-        from main import step_fetch_databricks_data
         from data.models import LogEntry, MetricPoint, Span
+        from main import step_fetch_databricks_data
 
         now_iso = datetime.now().isoformat()
 
         log_source = MagicMock()
         log_source.search.return_value = [
-            {"timestamp": now_iso, "level": "ERROR", "service": "svc-a", "message": "test msg"},
+            {
+                "timestamp": now_iso,
+                "level": "ERROR",
+                "service": "svc-a",
+                "message": "test msg",
+            },
         ]
         metrics_source = MagicMock()
         metrics_source.query.return_value = [
@@ -279,11 +314,20 @@ class TestStepFetchDatabricksData:
         ]
         trace_source = MagicMock()
         trace_source.find_traces.return_value = [
-            {"trace_id": "t1", "service": "svc-a", "operation": "GET", "duration_ms": 500.0, "status": "OK", "attributes": {}},
+            {
+                "trace_id": "t1",
+                "service": "svc-a",
+                "operation": "GET",
+                "duration_ms": 500.0,
+                "status": "OK",
+                "attributes": {},
+            },
         ]
 
         incident, scenario_name = step_fetch_databricks_data(
-            log_source, metrics_source, trace_source,
+            log_source,
+            metrics_source,
+            trace_source,
         )
 
         assert len(incident.logs) == 1
@@ -302,6 +346,7 @@ class TestStepFetchDatabricksData:
 # ===========================================================================
 # Task 5.7: NFR19 — simulated mode no Databricks imports
 # ===========================================================================
+
 
 class TestNFR19:
     """Testes para preservacao de NFR19."""

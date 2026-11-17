@@ -6,14 +6,14 @@ Cobre POST /api/v1/knowledge/patterns e GET /api/v1/knowledge/patterns.
 """
 
 import pytest
-from httpx import AsyncClient, ASGITransport
 from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 
+from interfaces.http.routes.knowledge import get_knowledge_store, router
 from rag.knowledge_store import KnowledgeStore
-from interfaces.http.routes.knowledge import router, get_knowledge_store
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def _make_app(store: KnowledgeStore) -> FastAPI:
     """Cria FastAPI app com router de knowledge e store injetado."""
@@ -35,13 +35,16 @@ _VALID_PAYLOAD = {
 
 # ── POST /api/v1/knowledge/patterns ───────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_create_pattern_returns_201(tmp_path):
     """POST com payload válido deve retornar 201."""
     store = KnowledgeStore(storage_path=str(tmp_path / "patterns.json"))
     app = _make_app(store)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         resp = await client.post("/api/v1/knowledge/patterns", json=_VALID_PAYLOAD)
 
     assert resp.status_code == 201
@@ -57,7 +60,9 @@ async def test_create_pattern_persists_to_store(tmp_path):
     store = KnowledgeStore(storage_path=str(tmp_path / "patterns.json"))
     app = _make_app(store)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         await client.post("/api/v1/knowledge/patterns", json=_VALID_PAYLOAD)
 
     patterns = store.get_all_patterns()
@@ -71,7 +76,9 @@ async def test_create_pattern_marks_index_stale(tmp_path):
     store = KnowledgeStore(storage_path=str(tmp_path / "patterns.json"))
     app = _make_app(store)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         await client.post("/api/v1/knowledge/patterns", json=_VALID_PAYLOAD)
 
     assert store.is_index_stale
@@ -83,7 +90,9 @@ async def test_create_duplicate_pattern_returns_warning(tmp_path):
     store = KnowledgeStore(storage_path=str(tmp_path / "patterns.json"))
     app = _make_app(store)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         await client.post("/api/v1/knowledge/patterns", json=_VALID_PAYLOAD)
         resp = await client.post("/api/v1/knowledge/patterns", json=_VALID_PAYLOAD)
 
@@ -100,7 +109,9 @@ async def test_create_pattern_invalid_confidence_returns_422(tmp_path):
     app = _make_app(store)
 
     invalid = {**_VALID_PAYLOAD, "confidence": 1.5}
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         resp = await client.post("/api/v1/knowledge/patterns", json=invalid)
 
     assert resp.status_code == 422
@@ -113,7 +124,9 @@ async def test_create_pattern_empty_symptoms_returns_422(tmp_path):
     app = _make_app(store)
 
     invalid = {**_VALID_PAYLOAD, "symptoms": []}
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         resp = await client.post("/api/v1/knowledge/patterns", json=invalid)
 
     assert resp.status_code == 422
@@ -121,13 +134,16 @@ async def test_create_pattern_empty_symptoms_returns_422(tmp_path):
 
 # ── GET /api/v1/knowledge/patterns ────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_list_patterns_empty_store(tmp_path):
     """GET com store vazio deve retornar total=0 e lista vazia."""
     store = KnowledgeStore(storage_path=str(tmp_path / "patterns.json"))
     app = _make_app(store)
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         resp = await client.get("/api/v1/knowledge/patterns")
 
     assert resp.status_code == 200
@@ -144,7 +160,9 @@ async def test_list_patterns_includes_added_patterns(tmp_path):
 
     payload2 = {**_VALID_PAYLOAD, "service": "api-svc", "root_cause": "Memory leak"}
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
         await client.post("/api/v1/knowledge/patterns", json=_VALID_PAYLOAD)
         await client.post("/api/v1/knowledge/patterns", json=payload2)
         resp = await client.get("/api/v1/knowledge/patterns")

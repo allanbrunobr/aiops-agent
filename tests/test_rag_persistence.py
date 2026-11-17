@@ -15,18 +15,16 @@ evitar importação de dependências pesadas durante coleta.
 
 Use --snapshot-update para regenerar snapshots após mudanças intencionais.
 """
+
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sys
-import tempfile
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ── Helpers para criar dados mock sem importar módulos ML ──
 
@@ -34,6 +32,7 @@ import pytest
 @dataclass
 class _MockLogTemplate:
     """Simula LogTemplate do aggregator para testes de hash."""
+
     level: str
     template: str
     count: int
@@ -45,6 +44,7 @@ class _MockLogTemplate:
 @dataclass
 class _MockMetricAnomaly:
     """Simula MetricAnomaly do metric_filter para testes de hash."""
+
     service: str
     metric_name: str
     anomaly_type: str
@@ -57,6 +57,7 @@ class _MockMetricAnomaly:
 @dataclass
 class _MockSlowTrace:
     """Simula SlowTrace do trace_filter para testes de hash."""
+
     path: list
     total_duration_ms: float
     normal_duration_ms: float
@@ -69,26 +70,40 @@ def _make_sample_data():
     """Cria dados mock para testes de persistência."""
     logs = [
         _MockLogTemplate(
-            level="ERROR", template="Connection to <*> timed out",
-            count=100, services={"payment-svc"}, first_seen="14:20", last_seen="14:30",
+            level="ERROR",
+            template="Connection to <*> timed out",
+            count=100,
+            services={"payment-svc"},
+            first_seen="14:20",
+            last_seen="14:30",
         ),
         _MockLogTemplate(
-            level="WARN", template="Retrying request to <*>",
-            count=50, services={"auth-svc", "gateway"}, first_seen="14:21", last_seen="14:29",
+            level="WARN",
+            template="Retrying request to <*>",
+            count=50,
+            services={"auth-svc", "gateway"},
+            first_seen="14:21",
+            last_seen="14:29",
         ),
     ]
     metrics = [
         _MockMetricAnomaly(
-            service="payment-svc", metric_name="error_rate",
-            anomaly_type="spike", value=45.0, mean=0.1, deviation_sigma=12.3,
+            service="payment-svc",
+            metric_name="error_rate",
+            anomaly_type="spike",
+            value=45.0,
+            mean=0.1,
+            deviation_sigma=12.3,
             timestamp="14:23",
         ),
     ]
     traces = [
         _MockSlowTrace(
             path=["gateway", "payment-svc", "postgres"],
-            total_duration_ms=4500.0, normal_duration_ms=120.0,
-            bottleneck_service="payment-svc", bottleneck_duration_ms=4200.0,
+            total_duration_ms=4500.0,
+            normal_duration_ms=120.0,
+            bottleneck_service="payment-svc",
+            bottleneck_duration_ms=4200.0,
             attributes={"db.statement": "SELECT *"},
         ),
     ]
@@ -122,6 +137,7 @@ class TestRebuildRagFlag:
     def test_rebuild_rag_flag_accepted(self) -> None:
         """--rebuild-rag deve ser aceito pelo parser."""
         from main import build_arg_parser
+
         parser = build_arg_parser()
         args = parser.parse_args(["--rebuild-rag"])
         assert args.rebuild_rag is True
@@ -129,6 +145,7 @@ class TestRebuildRagFlag:
     def test_rebuild_rag_default_false(self) -> None:
         """--rebuild-rag deve ter default False."""
         from main import build_arg_parser
+
         parser = build_arg_parser()
         args = parser.parse_args([])
         assert args.rebuild_rag is False
@@ -136,13 +153,18 @@ class TestRebuildRagFlag:
     def test_rebuild_rag_combines_with_other_flags(self) -> None:
         """--rebuild-rag deve combinar com outros flags sem erro."""
         from main import build_arg_parser
+
         parser = build_arg_parser()
-        args = parser.parse_args([
-            "--rebuild-rag",
-            "--no-llm",
-            "--scenario", "memory-leak",
-            "--output-format", "json",
-        ])
+        args = parser.parse_args(
+            [
+                "--rebuild-rag",
+                "--no-llm",
+                "--scenario",
+                "memory-leak",
+                "--output-format",
+                "json",
+            ]
+        )
         assert args.rebuild_rag is True
         assert args.no_llm is True
         assert args.scenario == "memory-leak"
@@ -158,6 +180,7 @@ class TestComputeContentHash:
     def test_hash_is_deterministic(self) -> None:
         """Mesmos dados de entrada devem produzir mesmo hash."""
         from rag.indexer import ObservabilityIndexer
+
         logs, metrics, traces = _make_sample_data()
         h1 = ObservabilityIndexer._compute_content_hash(logs, metrics, traces)
         h2 = ObservabilityIndexer._compute_content_hash(logs, metrics, traces)
@@ -167,27 +190,39 @@ class TestComputeContentHash:
     def test_hash_changes_with_different_logs(self) -> None:
         """Hash deve mudar quando logs mudam."""
         from rag.indexer import ObservabilityIndexer
+
         logs, metrics, traces = _make_sample_data()
         h1 = ObservabilityIndexer._compute_content_hash(logs, metrics, traces)
 
         logs_modified = list(logs)
-        logs_modified.append(_MockLogTemplate(
-            level="INFO", template="New log pattern",
-            count=5, services={"new-svc"}, first_seen="15:00", last_seen="15:05",
-        ))
+        logs_modified.append(
+            _MockLogTemplate(
+                level="INFO",
+                template="New log pattern",
+                count=5,
+                services={"new-svc"},
+                first_seen="15:00",
+                last_seen="15:05",
+            )
+        )
         h2 = ObservabilityIndexer._compute_content_hash(logs_modified, metrics, traces)
         assert h1 != h2
 
     def test_hash_changes_with_different_metrics(self) -> None:
         """Hash deve mudar quando métricas mudam."""
         from rag.indexer import ObservabilityIndexer
+
         logs, metrics, traces = _make_sample_data()
         h1 = ObservabilityIndexer._compute_content_hash(logs, metrics, traces)
 
         metrics_modified = list(metrics)
         metrics_modified[0] = _MockMetricAnomaly(
-            service="payment-svc", metric_name="error_rate",
-            anomaly_type="spike", value=99.0, mean=0.1, deviation_sigma=20.0,
+            service="payment-svc",
+            metric_name="error_rate",
+            anomaly_type="spike",
+            value=99.0,
+            mean=0.1,
+            deviation_sigma=20.0,
             timestamp="14:25",
         )
         h2 = ObservabilityIndexer._compute_content_hash(logs, metrics_modified, traces)
@@ -196,21 +231,27 @@ class TestComputeContentHash:
     def test_hash_changes_with_different_traces(self) -> None:
         """Hash deve mudar quando traces mudam."""
         from rag.indexer import ObservabilityIndexer
+
         logs, metrics, traces = _make_sample_data()
         h1 = ObservabilityIndexer._compute_content_hash(logs, metrics, traces)
 
-        traces_modified = [_MockSlowTrace(
-            path=["gateway", "auth-svc"],
-            total_duration_ms=2000.0, normal_duration_ms=50.0,
-            bottleneck_service="auth-svc", bottleneck_duration_ms=1800.0,
-            attributes={},
-        )]
+        traces_modified = [
+            _MockSlowTrace(
+                path=["gateway", "auth-svc"],
+                total_duration_ms=2000.0,
+                normal_duration_ms=50.0,
+                bottleneck_service="auth-svc",
+                bottleneck_duration_ms=1800.0,
+                attributes={},
+            )
+        ]
         h2 = ObservabilityIndexer._compute_content_hash(logs, metrics, traces_modified)
         assert h1 != h2
 
     def test_hash_is_valid_sha256(self) -> None:
         """Hash deve ser um hex digest SHA-256 válido."""
         from rag.indexer import ObservabilityIndexer
+
         logs, metrics, traces = _make_sample_data()
         h = ObservabilityIndexer._compute_content_hash(logs, metrics, traces)
         # Deve ser hexadecimal puro de 64 chars
@@ -219,6 +260,7 @@ class TestComputeContentHash:
     def test_hash_empty_inputs(self) -> None:
         """Hash de inputs vazios deve ser um SHA-256 válido e determinístico."""
         from rag.indexer import ObservabilityIndexer
+
         h1 = ObservabilityIndexer._compute_content_hash([], [], [])
         h2 = ObservabilityIndexer._compute_content_hash([], [], [])
         assert h1 == h2
@@ -234,7 +276,7 @@ class TestSaveIndex:
 
     def test_save_creates_expected_files(self, tmp_path, faiss_mock) -> None:
         """save_index() deve criar faiss.index, chunks.json e index_meta.json."""
-        from rag.indexer import ObservabilityIndexer, IndexedChunk
+        from rag.indexer import IndexedChunk, ObservabilityIndexer
 
         indexer = ObservabilityIndexer()
         indexer.chunks = [
@@ -254,12 +296,13 @@ class TestSaveIndex:
 
         # faiss.write_index deve ter sido chamado
         faiss_mock.write_index.assert_called_once_with(
-            mock_index, os.path.join(cache_dir, "faiss.index"),
+            mock_index,
+            os.path.join(cache_dir, "faiss.index"),
         )
 
     def test_save_chunks_json_content(self, tmp_path, faiss_mock) -> None:
         """chunks.json deve conter lista de dicts com text, source, metadata."""
-        from rag.indexer import ObservabilityIndexer, IndexedChunk
+        from rag.indexer import IndexedChunk, ObservabilityIndexer
 
         indexer = ObservabilityIndexer()
         indexer.chunks = [
@@ -291,7 +334,7 @@ class TestSaveIndex:
 
     def test_save_index_meta_content(self, tmp_path, faiss_mock) -> None:
         """index_meta.json deve conter content_hash, model_name, num_chunks, created_at."""
-        from rag.indexer import ObservabilityIndexer, IndexedChunk
+        from rag.indexer import IndexedChunk, ObservabilityIndexer
 
         indexer = ObservabilityIndexer()
         indexer.chunks = [
@@ -316,8 +359,9 @@ class TestSaveIndex:
 class TestLoadIndex:
     """Testes de load_index() — carregamento e validação."""
 
-    def _create_valid_cache(self, cache_dir: str, content_hash: str = "valid_hash",
-                            num_chunks: int = 2) -> None:
+    def _create_valid_cache(
+        self, cache_dir: str, content_hash: str = "valid_hash", num_chunks: int = 2
+    ) -> None:
         """Helper: cria cache válido com dados mock."""
         os.makedirs(cache_dir, exist_ok=True)
 
@@ -422,7 +466,7 @@ class TestLoadIndex:
 
     def test_load_populates_chunks_from_json(self, tmp_path, faiss_mock) -> None:
         """load_index() deve popular self.chunks com IndexedChunk do JSON."""
-        from rag.indexer import ObservabilityIndexer, IndexedChunk
+        from rag.indexer import IndexedChunk, ObservabilityIndexer
 
         cache_dir = str(tmp_path / "rag-cache")
         self._create_valid_cache(cache_dir, content_hash="abc", num_chunks=3)
@@ -479,6 +523,7 @@ class TestNoRagSkipsCache:
     def test_no_rag_flag_skips_rag_step(self) -> None:
         """Com --no-rag, step_rag() não deve ser chamado, logo sem I/O de cache."""
         from main import build_arg_parser
+
         parser = build_arg_parser()
         args = parser.parse_args(["--no-rag"])
         assert args.no_rag is True
@@ -489,7 +534,6 @@ class TestNoRagSkipsCache:
         """Verifica que a lógica em main() pula step_rag() quando --no-rag é True."""
         # Simula o code path de main() que decide se chama step_rag
         no_rag = True
-        rebuild_rag = False
         step_rag_called = False
 
         # Reproduz a lógica condicional de main()
@@ -501,6 +545,7 @@ class TestNoRagSkipsCache:
     def test_rebuild_rag_with_no_rag_warns(self) -> None:
         """--rebuild-rag com --no-rag deve ser aceito sem erro (warning emitido em runtime)."""
         from main import build_arg_parser
+
         parser = build_arg_parser()
         args = parser.parse_args(["--no-rag", "--rebuild-rag"])
         assert args.no_rag is True

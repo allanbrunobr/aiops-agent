@@ -4,15 +4,16 @@ Predição de drift de latência em traces distribuídos para o pipeline AIOps.
 Detecta variações de p95/p99 entre janelas temporais adjacentes nos spans
 de raiz, emitindo sinais de alerta antecipado.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from data.models import Span
 
-
 try:
     import _aiops_rust as _rust
+
     _RUST_AVAILABLE = hasattr(_rust, "detect_latency_drift")
 except ImportError:
     _rust = None
@@ -104,7 +105,9 @@ def detect_latency_drift(
 _TRACE_WINDOW = 20  # spans por janela (~5 min de dados a 2-4 spans/min)
 
 
-def analyze_trace_signals(spans: list[Span], window: int | None = None) -> LatencyDriftSignal:
+def analyze_trace_signals(
+    spans: list[Span], window: int | None = None
+) -> LatencyDriftSignal:
     """Analisa spans de raiz e retorna sinal de drift de latência.
 
     Usa janela fixa: primeiros _TRACE_WINDOW spans como baseline (fase normal)
@@ -136,7 +139,7 @@ def analyze_trace_signals(spans: list[Span], window: int | None = None) -> Laten
     effective_window = window if window is not None else _TRACE_WINDOW
     win = min(effective_window, n // 2)
     baseline = root_durations[:win]
-    current = root_durations[n - win:]
+    current = root_durations[n - win :]
 
     result = detect_latency_drift(baseline, current)
 
