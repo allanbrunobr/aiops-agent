@@ -47,39 +47,50 @@ def run_predictive_stage(aggregated_report) -> PredictionReport | None:
         signals: list[str] = []
         eta_minutes: float | None = None
 
-        # Sinal de métrica: usa anomalias para construir pontos sintéticos de slope
+        # Sinal de métrica: agrupa anomalias POR MÉTRICA antes do slope.
+        # Anomalias são deduplicadas a 1 por (service, metric_name); uma série
+        # misturando métricas distintas não tem significado preditivo (F1-3).
         try:
             metric_anomalies = getattr(aggregated_report, "metric_anomalies", [])
             if metric_anomalies:
-                # Usa os valores das anomalias como proxy de série temporal
                 import datetime
 
                 from data.models import MetricPoint
 
                 now = datetime.datetime.now()
-                points = [
-                    MetricPoint(
-                        timestamp=getattr(a, "timestamp", now),
+                by_metric: dict[str, list] = {}
+                for a in metric_anomalies:
+                    point = MetricPoint(
+                        timestamp=getattr(a, "timestamp", now) or now,
                         service=getattr(a, "service", "unknown"),
                         metric_name=getattr(a, "metric_name", "metric"),
                         value=getattr(a, "value", 0.0),
                     )
-                    for a in metric_anomalies
-                ]
-                if len(points) >= 2:
+                    by_metric.setdefault(point.metric_name, []).append((a, point))
+
+                best_slope: float | None = None
+                best_eta: float | None = None
+                best_sigma = 0.0
+                for entries in by_metric.values():
+                    if len(entries) < 2:
+                        continue  # 1 ponto não estabelece tendência
+                    entries.sort(key=lambda e: e[1].timestamp)
+                    points = [p for _, p in entries]
                     slope, eta = compute_ewma_slope(points)
-                    # Detecta change point se desvio sigma alto
-                    max_sigma = max(
-                        (getattr(a, "deviation_sigma", 0.0) for a in metric_anomalies),
-                        default=0.0,
-                    )
-                    change_point = max_sigma > 5.0
+                    # Sinal = tendência ascendente mais acentuada entre as métricas
+                    if best_slope is None or slope > best_slope:
+                        best_slope = slope
+                        best_eta = eta
+                        best_sigma = max(
+                            getattr(a, "deviation_sigma", 0.0) for a, _ in entries
+                        )
+                if best_slope is not None:
                     metric_signal = MetricTrendSignal(
-                        slope=slope,
-                        eta_minutes=eta,
-                        change_point_detected=change_point,
+                        slope=best_slope,
+                        eta_minutes=best_eta,
+                        change_point_detected=best_sigma > 5.0,
                     )
-                    eta_minutes = eta
+                    eta_minutes = best_eta
                     signals.append("metric_trend")
         except Exception as exc:
             logger.warning("predictive_stage.metric_signal_failed: %s", exc)
@@ -97,10 +108,24 @@ def run_predictive_stage(aggregated_report) -> PredictionReport | None:
                 log_entries = []
                 for tpl in log_templates:
                     count = getattr(tpl, "count", 1)
-                    for _ in range(min(count, 10)):  # limita para evitar explosion
+                    n = min(count, 10)  # limita para evitar explosion
+                    first = getattr(tpl, "first_seen", None)
+                    last = getattr(tpl, "last_seen", None)
+                    for i in range(n):
+                        # Timestamps reais do template quando disponíveis (F1-3):
+                        # distribui as entradas uniformemente em [first, last]
+                        if (
+                            first is not None
+                            and last is not None
+                            and last > first
+                            and n > 1
+                        ):
+                            ts = first + (last - first) * (i / (n - 1))
+                        else:
+                            ts = last or first or now
                         log_entries.append(
                             LogEntry(
-                                timestamp=now,
+                                timestamp=ts,
                                 level=getattr(tpl, "level", "INFO"),
                                 service=next(
                                     iter(getattr(tpl, "services", {"unknown"})),
@@ -127,15 +152,24 @@ def run_predictive_stage(aggregated_report) -> PredictionReport | None:
                 now = datetime.datetime.now()
                 spans = []
                 for trace in slow_traces:
-                    duration = getattr(trace, "duration_ms", 0.0)
+                    # SlowCallPath tem total_duration_ms (não duration_ms) e
+                    # path é list[str] — Span.operation é str (F1-3)
+                    duration = getattr(trace, "total_duration_ms", 0.0)
+                    path = getattr(trace, "path", None)
+                    if isinstance(path, (list, tuple)):
+                        operation = " -> ".join(str(s) for s in path) or "unknown"
+                    elif isinstance(path, str):
+                        operation = path
+                    else:
+                        operation = "unknown"
                     spans.append(
                         Span(
                             trace_id=str(uuid.uuid4()),
                             span_id=str(uuid.uuid4()),
                             parent_span_id=None,
                             service=getattr(trace, "bottleneck_service", "unknown"),
-                            operation=getattr(trace, "path", "unknown"),
-                            start_time=now,
+                            operation=operation,
+                            start_time=getattr(trace, "timestamp", None) or now,
                             duration_ms=duration,
                             status="ok",
                         )

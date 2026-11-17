@@ -69,3 +69,76 @@ já estavam executadas (F5-1 re-escopada); `MitigationAction` já é tipo único
 
 ### Testes adicionados na fase
 - `tests/test_demo_resolved_notification.py` (1 teste, regressão do UnboundLocalError).
+
+---
+
+## Fase 1 — Bugs do caminho padrão (V0) — DONE (2026-11-17)
+
+Cada bug: teste de regressão escrito ANTES do fix, visto falhar, corrigido, visto passar (regra 2).
+
+### F1-1 Mapa FAISS corrompido após load do cache — done
+- Fix: `load_index` reconstrói `_faiss_to_chunks` a partir dos chunks (dedup
+  determinístico `dict.fromkeys`, mesma ordem da indexação). Guarda
+  `ntotal == len(unique_texts)` para não afetar a subclasse `WithHistory`
+  (indexa duplicatas e usa fallback posicional, correto para ela).
+  Formato do cache inalterado — caches antigos também são corrigidos no load.
+  Caminho de falha do load agora reseta o mapa (`None`).
+- Teste: `TestCacheMappingRoundTrip` em `tests/test_rag_persistence.py`
+  (build com textos duplicados → save → load → mesmo mapa E mesmos
+  chunks/ranking na busca). Falhava com `None != [[0,1],[2]]` antes do fix.
+
+### F1-2 for/else na sanitização de traces + mutação in-place — done
+- Fix: `sanitize_traces` conta clean por span via flag `contaminated`
+  (operation OU attributes) — spans sem attributes também contam como clean;
+  `sanitize_metrics`/`sanitize_traces` clonam via `dataclasses.replace`
+  (attributes dict copiado) — input nunca mutado, semântica unificada com logs.
+- Testes: `TestSanitizeTracesCountingAndCloning` em `tests/test_safety.py`
+  (3 testes: contaminado não conta clean; span limpo sem attributes conta;
+  input intacto após `sanitize_all`). Os 3 falhavam antes do fix.
+- Callers verificados: todos usam o retorno (main.py, safety_nodes, conftest) —
+  ninguém dependia da mutação in-place.
+
+### F1-3 Estágio preditivo sobre dados errados — done
+- Fix em `pipeline/predictive_stage.py`:
+  1. slope EWMA agrupado POR MÉTRICA (série = anomalias da mesma métrica entre
+     serviços, ordenadas por timestamp); sinal = maior slope ascendente;
+     grupos com 1 ponto não geram tendência (honesto: 1 ponto não é série);
+  2. `duration_ms` ← `total_duration_ms` (campo real de SlowCallPath);
+  3. `Span.operation` ← `" -> ".join(path)` (str, não list);
+  4. `start_time` ← timestamp real do trace; logs sintéticos distribuídos
+     uniformemente entre `first_seen`/`last_seen` do template (datetimes reais).
+- Testes: `TestPredictiveStageDataFidelity` em `tests/test_predictive_stage.py`
+  (4 testes com spies nos analyzers; 3 falhavam antes do fix). `FakeSlowTrace`
+  atualizado para o shape real de `SlowCallPath`.
+- **Decisão registrada (regra 9):** com anomalias deduplicadas a 1 por
+  (service, metric_name), métricas com 1 ponto só não geram mais sinal de
+  tendência — o sistema é honesto sobre não ter série temporal suficiente.
+
+### F1-4 Key mismatch weight vs chunk_weight — done
+- Fix: `rag/reranker.py` lê `metadata.get("chunk_weight")` (key escrita pelo
+  indexer). Downweight de histórico (0.5) agora aplicado na fusão.
+- Testes: `TestChunkWeightKeyAlignment` em `tests/test_reranker.py` (2 testes:
+  sinal lido do metadata + ranking do downweighted abaixo do idêntico).
+  Helper `_make_chunk` dos testes alinhado para escrever `chunk_weight`.
+
+### F1-5 Foreign keys nunca ativadas — done
+- Fix: `PRAGMA foreign_keys=ON` em `_connect()` (por conexão, fora de transação).
+- **Ripple effect verificado:** V0/V1 salvam outcomes com `skill_id="default"`
+  quando nenhuma skill é roteada; `seed_default_skills()` roda ANTES nos dois
+  fluxos (main.py:517, pipeline_nodes.py:125) → linha "default" existe → FK não
+  quebra produção. O `except Exception: pass` best-effort em main.py:724
+  cobre o save (será tratado em F6-5: logar erro estruturado).
+- Testes: `TestForeignKeyEnforcement` em `tests/test_skill_evolution.py`
+  (3 testes: PRAGMA=1 por conexão; outcome órfão → IntegrityError; outcome com
+  skill existente aceito). 2 falhavam antes do fix.
+
+### Verificação da fase
+- `ruff check .` ✓, `ruff format --check .` ✓ (270 arquivos), mypy ✓
+- unit: **715 passed**; integration/snapshot: **138 passed**
+- Smokes: V0 exit 3, V1 exit 0 (contrato preservado)
+- **Diffs de snapshot: nenhum** — as correções não alteraram os outputs
+  capturados nos cenários de snapshot.
+- CI completo (`scripts/ci-local.sh`): registrado no commit da fase.
+
+### Testes adicionados na fase
+- 13 testes de regressão (1 F1-1 + 3 F1-2 + 4 F1-3 + 2 F1-4 + 3 F1-5).

@@ -49,7 +49,7 @@
       "title": "Bug: mapeamento FAISS corrompido após load do cache",
       "description": "rag/indexer.py:197-273 (load_index) restaura chunks e índice mas NÃO reconstrói _faiss_to_chunks (mapa criado em rag/indexer.py:131-133); save_index (:152-195) também não persiste o mapa. O índice FAISS contém só textos únicos (:111,:150); chunks contém duplicatas; rag/retriever.py:92 cai no fallback chunks[idx] (:113) → resultados TROCADOS após carregar do cache. Fix: reconstruir/persistir o mapa no load_index. Teste de regressão PRIMEIRO: indexar report com textos duplicados → salvar cache → novo indexer load_index → mesma query retorna os MESMOS chunks/ranking do indexer original.",
       "acceptance": "Teste novo falha antes do fix e passa depois; suíte unit verde.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado, alcançável em produção (main.py:345 carrega cache com a classe base). Nuance: a subclasse ObservabilityIndexerWithHistory indexa embeddings COM duplicatas (:467-476) e não usa o mapa — para ela o fallback posicional seria correto; o bug é no caminho da classe base."
     },
     {
@@ -58,7 +58,7 @@
       "title": "Bug: for/else na sanitização de traces + mutação in-place",
       "description": "pipeline/telemetry_sanitizer.py:309-320: o else do for sobre attributes executa sempre (sem break) → spans contaminados contados como clean_entries; spans sem attributes nunca contam como clean. Métricas/traces são mutados IN-PLACE ao contrário dos logs (clonados) — unificar para retornar cópias, nunca mutar o input. Testes: span com payload de injection em attribute conta como contaminado; input original intacto após sanitize_all().",
       "acceptance": "Testes novos verdes; snapshots atualizados com justificativa se mudarem.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado integralmente: nenhum break no arquivo; logs clonados em :231 (_clone_log_entry :645); metrics mutados em :264,268; traces em :304,313."
     },
     {
@@ -67,7 +67,7 @@
       "title": "Bug: estágio preditivo opera sobre dados errados",
       "description": "pipeline/predictive_stage.py:118 usa getattr(trace, 'duration_ms', 0.0) mas o campo real de SlowCallPath é total_duration_ms → spans sintéticos sempre 0.0. :124 coloca path (list) em Span.operation (str). Pontos de métrica vêm de anomalias deduplicadas a 1 por métrica (pipeline/metric_filter.py:151-158) → slope EWMA cruza métricas distintas; agrupar por métrica antes do slope. Logs sintéticos todos com timestamp=now — usar timestamps reais quando disponíveis. Teste: dados conhecidos → risk_score reflete os dados; assert de tipos nos campos sintéticos.",
       "acceptance": "Testes novos verdes; risk_score não é mais constante/ruído com dados de entrada válidos.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado integralmente: SlowCallPath (pipeline/trace_filter.py:26-36) só tem total_duration_ms; Span.operation é str (domain/incident.py:46), dataclass não valida tipo; slope usa só [p.value] sem agrupar (pipeline/metric_predictor.py:44); now único em predictive_stage.py:91-97."
     },
     {
@@ -76,7 +76,7 @@
       "title": "Bug: key mismatch weight vs chunk_weight no reranker",
       "description": "rag/reranker.py:141 lê metadata.get('weight') mas o indexer escreve 'chunk_weight' (rag/indexer.py:366,383,403,438) → downweight de histórico (0.5) nunca aplicado. Alinhar a key (preferir chunk_weight em ambos). Teste: chunk [HISTORICAL] com chunk_weight=0.5 pontua abaixo de chunk idêntico com peso 1.0.",
       "acceptance": "Teste novo verde; suíte unit verde.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado: nenhuma conversão chunk_weight→weight existe no repo; signals.chunk_weight é sempre 0.0 (peso 0.05 em _WEIGHTS, reranker.py:46)."
     },
     {
@@ -85,7 +85,7 @@
       "title": "Bug: foreign keys nunca ativadas no SQLite",
       "description": "rag/memory.py:187-191: docstring promete FK mas falta PRAGMA foreign_keys=ON por conexão. Ativar. Teste: inserir skill_outcomes com skill_id inexistente deve falhar.",
       "acceptance": "Teste novo verde; scripts/ci-local.sh (completo) verde ao fim da Fase 1.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado: zero ocorrências de 'foreign_keys' em todo o repo; schema declara FK em rag/memory.py:149 mas nunca é enforced (save_skill_outcome aceita skill_id órfão)."
     },
     {

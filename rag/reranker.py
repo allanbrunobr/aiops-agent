@@ -139,8 +139,8 @@ class DomainReranker:
         raw_vector = float(getattr(result, "score", 0.0))
         signals.vector_score = max(0.0, min(raw_vector, 1.0))
 
-        # --- chunk_weight: campo opcional no metadata ---
-        raw_weight = float(metadata.get("weight", 0.0))
+        # --- chunk_weight: mesma key escrita pelo indexer (F1-4) ---
+        raw_weight = float(metadata.get("chunk_weight", 0.0))
         signals.chunk_weight = max(0.0, min(raw_weight, 1.0))
 
         # temporal_recency é preenchido em rerank() pois depende do batch inteiro

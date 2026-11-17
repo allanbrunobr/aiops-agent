@@ -190,6 +190,9 @@ class IncidentMemoryDB:
         """Abre conexão SQLite com suporte a chaves estrangeiras."""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+        # FK é off por padrão no SQLite e precisa ser ativada POR conexão,
+        # fora de transação (F1-5)
+        conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
     def save_incident(self, record: IncidentRecord) -> None:

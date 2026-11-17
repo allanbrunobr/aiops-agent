@@ -296,6 +296,18 @@ class ObservabilityIndexer:
 
             self.index = faiss.read_index(faiss_path)
 
+            # Reconstrói o mapa FAISS idx → chunks (não persistido no cache).
+            # O índice da classe base contém só textos únicos, na ordem de primeira
+            # aparição em chunks — o mapa é recomputável deterministicamente.
+            # Subclasses que indexam duplicatas (WithHistory) têm ntotal > únicos
+            # e usam o fallback posicional do retriever, correto para elas.
+            unique_texts = list(dict.fromkeys(c.text for c in self.chunks))
+            if self.index.ntotal == len(unique_texts):
+                unique_to_idx = {t: i for i, t in enumerate(unique_texts)}
+                self._faiss_to_chunks = [[] for _ in range(len(unique_texts))]
+                for ci, chunk in enumerate(self.chunks):
+                    self._faiss_to_chunks[unique_to_idx[chunk.text]].append(ci)
+
             return True
 
         except Exception as exc:
@@ -303,6 +315,7 @@ class ObservabilityIndexer:
             # Reseta estado para evitar dados parciais
             self.chunks = []
             self.index = None
+            self._faiss_to_chunks = None
             return False
 
     @staticmethod

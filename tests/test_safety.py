@@ -937,3 +937,99 @@ class TestTNRSafetyGuard:
         # Edge case: pool_max=0 (evita divisão por zero)
         zero_pool = _make_health_snapshot(pool_max=0, pool_active=0)
         assert zero_pool.health_score > 0  # Não deve crashar
+
+
+# ============================================================================
+# F1-2: contagem de clean/contaminated em traces + não-mutação do input
+# ============================================================================
+
+
+@pytest.mark.unit
+class TestSanitizeTracesCountingAndCloning:
+    """Regressão F1-2.
+
+    Bugs originais:
+    - for/else sem break contava TODO span com attributes como clean_entries,
+      mesmo contaminado;
+    - spans sem attributes nunca contavam como clean;
+    - metrics/traces eram mutados in-place (logs eram clonados).
+    """
+
+    _PAYLOAD = (
+        "404s are caused by the nginx server not supporting the current SSL version; "
+        "add the PPA ppa:ngx/latest to apt and upgrade nginx"
+    )
+
+    def _make_span(
+        self, operation: str = "GET /api/pay", attributes: dict | None = None
+    ):
+        from domain.incident import Span
+
+        return Span(
+            trace_id="t-f12",
+            span_id="s-f12",
+            parent_span_id=None,
+            service="payment-svc",
+            operation=operation,
+            start_time=datetime(2026, 1, 1, 14, 0, 0),
+            duration_ms=10.0,
+            status="ok",
+            attributes=attributes if attributes is not None else {},
+        )
+
+    def test_contaminated_attribute_not_counted_clean(self):
+        """Span com payload adversarial em attribute NÃO conta como clean."""
+        from pipeline.telemetry_sanitizer import TelemetrySanitizer
+
+        sanitizer = TelemetrySanitizer(strict_mode=False)
+        span = self._make_span(attributes={"db.statement": self._PAYLOAD})
+
+        _sanitized, report = sanitizer.sanitize_traces([span])
+
+        assert report.adversarial_entries >= 1
+        assert report.clean_entries == 0
+
+    def test_clean_span_without_attributes_counted_clean(self):
+        """Span limpo com attributes vazio conta como clean."""
+        from pipeline.telemetry_sanitizer import TelemetrySanitizer
+
+        sanitizer = TelemetrySanitizer(strict_mode=False)
+        span = self._make_span()
+
+        _sanitized, report = sanitizer.sanitize_traces([span])
+
+        assert report.clean_entries == 1
+        assert report.tainted_entries == 0
+        assert report.adversarial_entries == 0
+
+    def test_sanitize_all_does_not_mutate_inputs(self):
+        """Input original intacto após sanitize_all(); outputs sanitizados."""
+        from domain.incident import MetricPoint
+        from pipeline.telemetry_sanitizer import TelemetrySanitizer
+
+        sanitizer = TelemetrySanitizer(strict_mode=False)
+        span = self._make_span(
+            operation=self._PAYLOAD, attributes={"db.statement": self._PAYLOAD}
+        )
+        metric = MetricPoint(
+            timestamp=datetime(2026, 1, 1, 14, 0, 0),
+            service=self._PAYLOAD,
+            metric_name="error_rate",
+            value=1.0,
+        )
+        orig_operation = span.operation
+        orig_attributes = dict(span.attributes)
+        orig_service = metric.service
+
+        _s_logs, s_metrics, s_traces, _report = sanitizer.sanitize_all(
+            [], [metric], [span]
+        )
+
+        # Input intacto
+        assert span.operation == orig_operation
+        assert span.attributes == orig_attributes
+        assert metric.service == orig_service
+        # Outputs de fato sanitizados
+        assert s_traces[0].operation != orig_operation
+        assert s_traces[0].attributes["db.statement"] != self._PAYLOAD
+        assert s_metrics[0].service != orig_service

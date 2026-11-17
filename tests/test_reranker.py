@@ -41,7 +41,8 @@ def _make_chunk(
     if timestamp is not None:
         metadata["timestamp"] = timestamp
     if weight:
-        metadata["weight"] = weight
+        # Key de produção: o indexer escreve "chunk_weight" (F1-4)
+        metadata["chunk_weight"] = weight
 
     chunk = MagicMock()
     chunk.source = source
@@ -491,3 +492,60 @@ class TestCrossEncoderTier2:
         # r3 e r4 mantêm seus tier1 scores
         assert blended_scores[id(r3)] == pytest.approx(0.4, abs=1e-6)
         assert blended_scores[id(r4)] == pytest.approx(0.2, abs=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# F1-4: alinhamento da key chunk_weight (indexer ↔ reranker)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestChunkWeightKeyAlignment:
+    """Regressão F1-4: indexer escreve 'chunk_weight', reranker lia 'weight'.
+
+    O downweight de histórico (0.5) nunca era aplicado porque a key lida
+    não existia no metadata → signals.chunk_weight sempre 0.0.
+    """
+
+    def _make_pair(self):
+        historical = _make_result(
+            source="historical",
+            text="[HISTORICAL] past incident: pool exhaustion",
+            score=0.8,
+            level="ERROR",
+            service="payment-svc",
+        )
+        historical.chunk.metadata["chunk_weight"] = 0.5
+        current = _make_result(
+            source="log",
+            text="[HISTORICAL] past incident: pool exhaustion",
+            score=0.8,
+            level="ERROR",
+            service="payment-svc",
+        )
+        current.chunk.metadata["chunk_weight"] = 1.0
+        return historical, current
+
+    def test_chunk_weight_signal_read_from_metadata(self):
+        reranker = DomainReranker()
+        historical, current = self._make_pair()
+
+        sig_h = reranker._compute_signals(historical)
+        sig_c = reranker._compute_signals(current)
+
+        assert sig_h.chunk_weight == pytest.approx(0.5)
+        assert sig_c.chunk_weight == pytest.approx(1.0)
+        assert reranker._fuse_scores(sig_h) < reranker._fuse_scores(sig_c)
+
+    def test_rerank_ranks_downweighted_below_identical(self):
+        reranker = DomainReranker()
+        historical, current = self._make_pair()
+
+        output = reranker.rerank(
+            [historical, current], query="pool exhaustion", top_k=2
+        )
+
+        assert len(output) == 2
+        assert output[0].chunk.metadata["chunk_weight"] == 1.0
+        assert output[1].chunk.metadata["chunk_weight"] == 0.5
+        assert output[0].score > output[1].score

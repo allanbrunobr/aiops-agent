@@ -550,3 +550,90 @@ class TestNoRagSkipsCache:
         args = parser.parse_args(["--no-rag", "--rebuild-rag"])
         assert args.no_rag is True
         assert args.rebuild_rag is True
+
+
+# ── F1-1: load_index reconstrói _faiss_to_chunks (textos duplicados) ──
+
+
+@pytest.mark.unit
+class TestCacheMappingRoundTrip:
+    """Regressão F1-1: índice FAISS contém textos únicos, chunks contém duplicatas.
+
+    Após load_index, o mapa _faiss_to_chunks deve ser reconstruído — sem ele o
+    retriever cai no fallback posicional chunks[idx] e retorna chunks TROCADOS.
+    """
+
+    def test_load_index_rebuilds_faiss_to_chunks(self, tmp_path, faiss_mock) -> None:
+        import numpy as np
+
+        from rag.indexer import ObservabilityIndexer
+        from rag.retriever import ObservabilityRetriever
+
+        # Duas anomalias com mesmo texto canônico (serviços diferentes) + uma distinta
+        metrics = [
+            _MockMetricAnomaly(
+                service="payment-svc",
+                metric_name="error_rate",
+                anomaly_type="spike",
+                value=45.0,
+                mean=0.1,
+                deviation_sigma=12.3,
+                timestamp="14:23",
+            ),
+            _MockMetricAnomaly(
+                service="order-svc",
+                metric_name="error_rate",
+                anomaly_type="spike",
+                value=30.0,
+                mean=0.2,
+                deviation_sigma=9.0,
+                timestamp="14:24",
+            ),
+            _MockMetricAnomaly(
+                service="payment-svc",
+                metric_name="latency_p99",
+                anomaly_type="drift",
+                value=900.0,
+                mean=100.0,
+                deviation_sigma=8.0,
+                timestamp="14:25",
+            ),
+        ]
+
+        fake_model = MagicMock()
+        fake_model.encode.side_effect = lambda texts, **kw: np.ones(
+            (len(texts), 4), dtype=np.float32
+        )
+        fake_index = MagicMock()
+        fake_index.ntotal = 2  # 2 textos únicos para 3 chunks
+        fake_index.search.return_value = (
+            np.array([[0.9, 0.8]], dtype=np.float32),
+            np.array([[0, 1]]),
+        )
+        faiss_mock.IndexFlatIP.return_value = fake_index
+        faiss_mock.read_index.return_value = fake_index
+
+        indexer_a = ObservabilityIndexer()
+        indexer_a._load_model = lambda: setattr(indexer_a, "model", fake_model)
+        indexer_a.build_index([], metrics, [])
+        assert indexer_a._faiss_to_chunks == [[0, 1], [2]]
+
+        cache_dir = str(tmp_path / "rag-cache")
+        indexer_a.save_index(cache_dir, content_hash="hash-f11")
+        # write_index é mockado — cria o arquivo placeholder (read_index também é mock)
+        with open(os.path.join(cache_dir, "faiss.index"), "wb") as f:
+            f.write(b"fake_faiss_data")
+
+        indexer_b = ObservabilityIndexer()
+        indexer_b.model = fake_model
+        assert indexer_b.load_index(cache_dir, content_hash="hash-f11") is True
+
+        # Núcleo do bug: mapa deve existir após o load
+        assert getattr(indexer_b, "_faiss_to_chunks", None) == [[0, 1], [2]]
+
+        # Visível ao usuário: mesma query → mesmos chunks/ranking nos dois indexers
+        results_a = ObservabilityRetriever(indexer_a).search("error rate", top_k=2)
+        results_b = ObservabilityRetriever(indexer_b).search("error rate", top_k=2)
+        assert [(r.chunk.text, r.chunk.metadata, r.score) for r in results_a] == [
+            (r.chunk.text, r.chunk.metadata, r.score) for r in results_b
+        ]

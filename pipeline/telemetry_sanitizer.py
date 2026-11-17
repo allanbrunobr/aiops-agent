@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
 
@@ -269,6 +269,8 @@ class TelemetrySanitizer:
 
         for metric in metrics:
             metric_report.total_entries += 1
+            # Clona — sanitize nunca muta o input (mesma semântica dos logs)
+            metric = replace(metric)
 
             # Verifica metric_name e service por payloads
             combined = f"{metric.service} {metric.metric_name}"
@@ -309,10 +311,17 @@ class TelemetrySanitizer:
 
         for span in traces:
             trace_report.total_entries += 1
+            # Clona o span e o dict de attributes — sanitize nunca muta o input
+            span = replace(span)
+            if span.attributes:
+                span.attributes = dict(span.attributes)
+
+            contaminated = False
 
             # Verifica operation name
             op_taint = self._detect_taint(span.operation)
             if op_taint in (TaintLevel.ADVERSARIAL, TaintLevel.TAINTED):
+                contaminated = True
                 if op_taint == TaintLevel.ADVERSARIAL:
                     trace_report.adversarial_entries += 1
                     trace_report.adversarial_payloads_blocked.append(
@@ -329,14 +338,18 @@ class TelemetrySanitizer:
                     if isinstance(value, str):
                         attr_taint = self._detect_taint(value)
                         if attr_taint in (TaintLevel.ADVERSARIAL, TaintLevel.TAINTED):
+                            contaminated = True
                             span.attributes[key] = self._abstract_value(value, key)
                             trace_report.fields_sanitized += 1
                             if attr_taint == TaintLevel.ADVERSARIAL:
                                 trace_report.adversarial_entries += 1
                             else:
                                 trace_report.tainted_entries += 1
-                else:
-                    trace_report.clean_entries += 1
+
+            # Clean = nenhuma contaminação em operation NEM em attributes
+            # (spans sem attributes também contam como clean)
+            if not contaminated:
+                trace_report.clean_entries += 1
 
             sanitized_traces.append(span)
 

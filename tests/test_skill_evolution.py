@@ -482,3 +482,67 @@ class TestPhase5SkillEvolver:
         evolver = SkillEvolver(client=None, memory_db=None)
         assert evolver.client is None
         assert evolver.memory_db is None
+
+
+# ---------------------------------------------------------------------------
+# F1-5: foreign keys ativadas por conexão SQLite
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestForeignKeyEnforcement:
+    """Regressão F1-5: docstring prometia FK mas PRAGMA foreign_keys nunca era ativado.
+
+    skill_outcomes.skill_id referencia diagnostic_skills.skill_id — sem o
+    PRAGMA por conexão, outcomes órfãos eram aceitos silenciosamente.
+    """
+
+    def _make_outcome(self, skill_id: str, outcome_id: str = "o-fk"):
+        from rag.memory import SkillOutcome
+
+        return SkillOutcome(
+            outcome_id=outcome_id,
+            skill_id=skill_id,
+            incident_id="i-fk",
+            tnr_passed=True,
+            reflection_score=0.7,
+            reflection_lesson="lesson",
+            tools_used=[],
+            iteration_count=1,
+            timestamp="2026-01-01T00:00:00+00:00",
+        )
+
+    def test_pragma_foreign_keys_enabled_per_connection(self, tmp_path):
+        from rag.memory import IncidentMemoryDB
+
+        db = IncidentMemoryDB(db_path=str(tmp_path / "test.db"))
+        conn = db._connect()
+        try:
+            assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        finally:
+            conn.close()
+
+    def test_outcome_with_unknown_skill_rejected(self, tmp_path):
+        import sqlite3
+
+        from rag.memory import IncidentMemoryDB
+
+        db = IncidentMemoryDB(db_path=str(tmp_path / "test.db"))
+        with pytest.raises(sqlite3.IntegrityError):
+            db.save_skill_outcome(self._make_outcome("nonexistent-skill"))
+
+    def test_outcome_with_existing_skill_accepted(self, tmp_path):
+        from rag.memory import DiagnosticSkill, IncidentMemoryDB
+
+        db = IncidentMemoryDB(db_path=str(tmp_path / "test.db"))
+        db.save_skill(
+            DiagnosticSkill(
+                skill_id="s-fk",
+                name="fk-test",
+                scenario_pattern=".*",
+                system_prompt="...",
+                priority_tools=[],
+            )
+        )
+        db.save_skill_outcome(self._make_outcome("s-fk", outcome_id="o-ok"))
+        assert len(db.get_skill_outcomes("s-fk")) == 1
