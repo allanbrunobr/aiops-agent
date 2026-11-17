@@ -64,8 +64,9 @@ AGENT_CARD: dict[str, Any] = {
         "oauth2": {
             "type": "oauth2",
             "flows": {
-                "clientCredentials": {
-                    "tokenUrl": "/auth/token/register",
+                "authorizationCode": {
+                    "authorizationUrl": "/auth/authorize",
+                    "tokenUrl": "/auth/token",
                     "scopes": {
                         "aiops:diagnose": "Run full diagnosis pipeline",
                         "aiops:search": "Search incident history (RAG)",
@@ -97,9 +98,18 @@ def _configured_hmac_secret(request: Request) -> str:
 
 
 def _require_bearer(request: Request) -> Any:
-    """Valida Authorization: Bearer com o mesmo HS256 do MCP."""
+    """Valida Authorization: Bearer com a chave do AS e audiência A2A (F4-3).
+
+    RS256 quando o par RSA está configurado (app.state.a2a_jwt_public_pem);
+    senão HS256 com o secret compartilhado. Token MCP (aud=mcp) é rejeitado.
+    """
+    public_pem = getattr(request.app.state, "a2a_jwt_public_pem", "") or ""
     secret = _configured_hmac_secret(request)
-    if not secret:
+    if public_pem:
+        key, algorithm = public_pem, "RS256"
+    elif secret:
+        key, algorithm = secret, "HS256"
+    else:
         raise HTTPException(
             status_code=401,
             detail="A2A authentication is not configured",
@@ -108,7 +118,9 @@ def _require_bearer(request: Request) -> Any:
     if not header.startswith("Bearer ") or not header[7:].strip():
         raise HTTPException(status_code=401, detail="Bearer token required")
     try:
-        return validate_token(header[7:].strip(), secret)
+        return validate_token(
+            header[7:].strip(), key, algorithm=algorithm, audience="a2a"
+        )
     except pyjwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="JWT has expired")
     except pyjwt.InvalidTokenError:

@@ -1,16 +1,22 @@
 """Authorization Server OAuth 2.1 com PKCE para o AIOps Agent.
 
 Endpoints:
-  POST /auth/token/register            — registra cliente e emite JWT
+  POST /auth/authorize                 — recebe o code_challenge (S256) e emite code
+  POST /auth/token                     — troca code + code_verifier por JWT (PKCE real)
   POST /auth/token/introspect          — valida token ativo (RFC 7662)
   GET  /.well-known/oauth-authorization-server — discovery RFC 8414
   GET  /.well-known/jwks.json          — chaves públicas RSA (Phase 2, RFC 7517)
 
 Baseado em: IETF draft-klrc-aiagent-auth-00 (março 2026).
+F4-1: authorize/token separados — a prova PKCE (verifier) acontece no
+exchange, não na mesma request do challenge; code de uso único vinculado
+a client+scopes+challenge.
 Phase 2: suporte a RS256 assimétrico + JWKS endpoint para federação.
 """
 
 from __future__ import annotations
+
+import secrets
 
 import jwt as pyjwt
 from fastapi import APIRouter, HTTPException
@@ -107,17 +113,32 @@ def configure(
 # ---------------------------------------------------------------------------
 
 
-class RegisterRequest(BaseModel):
-    """Body do endpoint POST /auth/token/register."""
+class AuthorizeRequest(BaseModel):
+    """Body do endpoint POST /auth/authorize — só o challenge, nunca o verifier."""
 
     client_id: str
     scopes: list[str]
-    code_verifier: str = ""
     code_challenge: str
     code_challenge_method: str = "S256"
+    audience: str = "mcp"  # "mcp" | "a2a" — audiência do token (F4-3)
 
 
-class RegisterResponse(BaseModel):
+class AuthorizeResponse(BaseModel):
+    """Authorization code de uso único vinculado ao challenge."""
+
+    code: str
+    expires_in: int = 300
+
+
+class TokenRequest(BaseModel):
+    """Body do endpoint POST /auth/token — exchange com o verifier (prova PKCE)."""
+
+    client_id: str
+    code: str
+    code_verifier: str
+
+
+class TokenResponse(BaseModel):
     """Resposta com JWT emitido."""
 
     access_token: str
@@ -137,73 +158,121 @@ class IntrospectRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-@router.post("/token/register", response_model=RegisterResponse)
-async def register(body: RegisterRequest) -> RegisterResponse:
-    """Registra um agente cliente e emite um access_token JWT.
+def _signing_key_ready() -> bool:
+    return len(_jwt_secret.encode("utf-8")) >= MIN_HMAC_KEY_BYTES or bool(
+        _rsa_private_pem
+    )
 
-    Valida:
-    1. client_id está na allow-list (lista vazia não autoriza ninguém)
-    2. Scopes solicitados são subconjunto dos scopes do cliente
-    3. code_challenge_method é S256 (único suportado)
-    4. code_verifier corresponde ao code_challenge (PKCE S256)
 
-    O code_challenge só é armazenado depois que o verifier confere.
+def _signing_algorithm() -> str:
+    """RS256 de verdade quando o par RSA está configurado (F4-3).
+
+    Antes, o metadata anunciava RS256 mas issue_token usava sempre HS256 —
+    e RSA + secret curto estourava InvalidKeyError (500).
     """
-    if len(_jwt_secret.encode("utf-8")) < MIN_HMAC_KEY_BYTES and not _rsa_private_pem:
+    return "RS256" if _rsa_private_pem else "HS256"
+
+
+def _signing_key() -> str:
+    return _rsa_private_pem or _jwt_secret
+
+
+def _verification_key() -> str:
+    return _rsa_public_pem or _jwt_secret
+
+
+@router.post("/authorize", response_model=AuthorizeResponse)
+async def authorize(body: AuthorizeRequest) -> AuthorizeResponse:
+    """Recebe o code_challenge (S256) e emite um authorization code de uso único.
+
+    Valida allow-list, scopes e método; vincula code → client+scopes+challenge.
+    O verifier NUNCA é aceito aqui — a prova PKCE acontece no /token (F4-1).
+    """
+    if not _signing_key_ready():
         raise HTTPException(
             status_code=503,
             detail="OAuth signing key is not configured",
         )
 
-    # 1. Allow-list fechada. Ids publicados no YAML não bastam se não
-    # foram carregados nesta instância, e lista vazia não é "qualquer um".
+    # Allow-list fechada: lista vazia não autoriza ninguém
     if body.client_id not in _allowed_clients:
         raise HTTPException(
             status_code=401,
             detail=f"Unknown client_id: '{body.client_id}'",
         )
 
-    # 2. Valida scopes
     permitted = set(_allowed_clients.get(body.client_id, []))
-    requested = set(body.scopes)
-    disallowed = requested - permitted
+    disallowed = set(body.scopes) - permitted
     if disallowed:
         raise HTTPException(
             status_code=403,
             detail=f"Scopes not permitted for client: {sorted(disallowed)}",
         )
 
-    # 3. Valida método PKCE
     if body.code_challenge_method != "S256":
         raise HTTPException(
             status_code=400,
             detail="Only code_challenge_method=S256 is supported",
         )
-
-    # 4. O cliente precisa provar o verifier. Um challenge arbitrário
-    # (deadbeef, texto que não é S256) não emite token.
-    if not body.code_verifier or not verify_challenge(
-        body.code_verifier, body.code_challenge
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="PKCE verification failed",
-        )
-
-    _token_store.save_challenge(body.client_id, body.code_challenge)
+    if not body.code_challenge:
+        raise HTTPException(status_code=400, detail="code_challenge is required")
+    if body.audience not in ("mcp", "a2a"):
+        raise HTTPException(status_code=400, detail="audience must be 'mcp' or 'a2a'")
 
     effective_scopes = body.scopes or _allowed_clients.get(body.client_id, [])
-    token = issue_token(
-        agent_id=body.client_id,
-        scopes=effective_scopes,
-        secret=_jwt_secret,
-        ttl=_token_ttl,
+    code = secrets.token_urlsafe(32)
+    _token_store.save_code(
+        code,
+        body.client_id,
+        effective_scopes,
+        body.code_challenge,
+        audience=body.audience,
+        ttl=300,
     )
+    return AuthorizeResponse(code=code, expires_in=300)
 
-    return RegisterResponse(
-        access_token=token,
+
+@router.post("/token", response_model=TokenResponse)
+async def token(body: TokenRequest) -> TokenResponse:
+    """Troca authorization code + code_verifier por access_token JWT.
+
+    O code é consumido (uso único); o verifier precisa corresponder ao
+    challenge armazenado no /authorize; o client_id precisa ser o mesmo
+    do vínculo. Scopes vêm do code, não da request (F4-1).
+    """
+    if not _signing_key_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="OAuth signing key is not configured",
+        )
+
+    entry = _token_store.pop_code(body.code)
+    if entry is None:
+        raise HTTPException(
+            status_code=400, detail="Invalid or expired authorization code"
+        )
+    if entry["client_id"] != body.client_id:
+        raise HTTPException(
+            status_code=400, detail="Code was issued to a different client"
+        )
+    if not body.code_verifier or not verify_challenge(
+        body.code_verifier, entry["challenge"]
+    ):
+        raise HTTPException(status_code=400, detail="PKCE verification failed")
+
+    issued = issue_token(
+        agent_id=body.client_id,
+        scopes=entry["scopes"],
+        secret=_signing_key(),
+        ttl=_token_ttl,
+        algorithm=_signing_algorithm(),
+        issuer=_base_url or "aiops-agent",
+        audience=entry.get("audience", "mcp"),
+    )
+    return TokenResponse(
+        access_token=issued,
         expires_in=_token_ttl,
-        scope=" ".join(effective_scopes),
+        scope=" ".join(entry["scopes"]),
     )
 
 
@@ -215,12 +284,20 @@ async def introspect(body: IntrospectRequest) -> dict:
     Retorna active=False (sem erro 401) para tokens inválidos/expirados.
     """
     try:
-        claims: TokenClaims = validate_token(body.token, _jwt_secret)
+        # Introspecção aceita ambas as audiências (mcp/a2a), mas exige iss
+        claims: TokenClaims = validate_token(
+            body.token,
+            _verification_key(),
+            algorithm=_signing_algorithm(),
+            audience=["mcp", "a2a"],
+            issuer=_base_url or "aiops-agent",
+        )
         return {
             "active": True,
             "sub": claims.sub,
             "scope": " ".join(claims.scopes),
             "exp": claims.exp,
+            "aud": claims.aud,
         }
     except pyjwt.ExpiredSignatureError:
         return {"active": False, "reason": "token_expired"}
@@ -244,12 +321,13 @@ async def discovery() -> dict:
     """Discovery endpoint RFC 8414 — permite que agentes descubram os endpoints."""
     meta: dict = {
         "issuer": _base_url,
-        "token_endpoint": f"{_base_url}/auth/token/register",
+        "authorization_endpoint": f"{_base_url}/auth/authorize",
+        "token_endpoint": f"{_base_url}/auth/token",
         "introspection_endpoint": f"{_base_url}/auth/token/introspect",
         "scopes_supported": ALL_SCOPES,
         "code_challenge_methods_supported": ["S256"],
         "token_endpoint_auth_methods_supported": ["none"],
-        "grant_types_supported": ["client_credentials"],
+        "grant_types_supported": ["authorization_code"],
     }
     # Phase 2: adiciona jwks_uri e algoritmos assimétricos se RS256 estiver configurado
     if _rsa_public_pem:

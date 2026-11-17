@@ -105,6 +105,7 @@ def _bearer(scopes: list[str] | None = None) -> dict[str, str]:
         "assistant-agent",
         scopes or ["aiops:diagnose", "aiops:search", "aiops:validate"],
         _JWT_SECRET,
+        audience="a2a",  # F4-3: o A2A rejeita token de audiência MCP
     )
     return {"Authorization": f"Bearer {token}"}
 
@@ -198,9 +199,11 @@ class TestA2ADiscovery:
         body = self._client.get("/a2a/agent-card.json").json()
         schemes = body.get("securitySchemes", {})
         assert "oauth2" in schemes
-        scopes = schemes["oauth2"]["flows"]["clientCredentials"]["scopes"]
-        assert "aiops:diagnose" in scopes
-        assert "aiops:search" in scopes
+        flow = schemes["oauth2"]["flows"]["authorizationCode"]
+        assert flow["authorizationUrl"] == "/auth/authorize"
+        assert flow["tokenUrl"] == "/auth/token"
+        assert "aiops:diagnose" in flow["scopes"]
+        assert "aiops:search" in flow["scopes"]
 
     def test_agent_card_skills_have_io_modes(self):
         body = self._client.get("/a2a/agent-card.json").json()
@@ -391,7 +394,9 @@ class TestA2AClientEndToEnd:
     @pytest.mark.asyncio
     async def test_send_task_diagnose_returns_completed(self):
         client = A2AClient(
-            token=issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET)
+            token=issue_token(
+                "assistant-agent", ["aiops:diagnose"], _JWT_SECRET, audience="a2a"
+            )
         )
         result = await client.send_task(
             agent_url=_BASE_URL,
@@ -403,7 +408,9 @@ class TestA2AClientEndToEnd:
     @pytest.mark.asyncio
     async def test_send_task_search_returns_results(self):
         client = A2AClient(
-            token=issue_token("assistant-agent", ["aiops:search"], _JWT_SECRET)
+            token=issue_token(
+                "assistant-agent", ["aiops:search"], _JWT_SECRET, audience="a2a"
+            )
         )
         result = await client.send_task(
             agent_url=_BASE_URL,
@@ -417,7 +424,9 @@ class TestA2AClientEndToEnd:
     @pytest.mark.asyncio
     async def test_send_task_unknown_skill_raises(self):
         client = A2AClient(
-            token=issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET)
+            token=issue_token(
+                "assistant-agent", ["aiops:diagnose"], _JWT_SECRET, audience="a2a"
+            )
         )
         with pytest.raises(ValueError, match="A2A error -32601"):
             await client.send_task(
@@ -429,7 +438,9 @@ class TestA2AClientEndToEnd:
     @pytest.mark.asyncio
     async def test_task_id_passed_explicitly(self):
         client = A2AClient(
-            token=issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET)
+            token=issue_token(
+                "assistant-agent", ["aiops:diagnose"], _JWT_SECRET, audience="a2a"
+            )
         )
         result = await client.send_task(
             agent_url=_BASE_URL,
@@ -442,7 +453,9 @@ class TestA2AClientEndToEnd:
     @pytest.mark.asyncio
     async def test_bearer_token_propagated_in_header(self):
         """Verifica que A2AClient injeta Authorization: Bearer no header."""
-        token = issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET)
+        token = issue_token(
+            "assistant-agent", ["aiops:diagnose"], _JWT_SECRET, audience="a2a"
+        )
         client = A2AClient(token=token)
         # O header chega: search exige aiops:search e este token não tem.
         with pytest.raises(ValueError, match="A2A error -32003"):
@@ -475,19 +488,28 @@ class TestA2AFullSimulation:
         monkeypatch.setattr("agents.a2a_client.httpx.AsyncClient", patched_cls)
 
     def _get_token(self, client_id: str, scopes: list[str]) -> str:
-        """Simula OAuth PKCE: register → access_token."""
+        """OAuth PKCE real (F4-1): authorize (challenge) → token (verifier)."""
         verifier = generate_verifier()
         challenge = derive_challenge(verifier)
         resp = self._http.post(
-            "/auth/token/register",
+            "/auth/authorize",
             json={
                 "client_id": client_id,
                 "scopes": scopes,
-                "code_verifier": verifier,
                 "code_challenge": challenge,
+                "audience": "a2a",  # F4-3
             },
         )
-        assert resp.status_code == 200, f"OAuth falhou: {resp.json()}"
+        assert resp.status_code == 200, f"OAuth authorize falhou: {resp.json()}"
+        resp = self._http.post(
+            "/auth/token",
+            json={
+                "client_id": client_id,
+                "code": resp.json()["code"],
+                "code_verifier": verifier,
+            },
+        )
+        assert resp.status_code == 200, f"OAuth token falhou: {resp.json()}"
         return resp.json()["access_token"]
 
     def test_assistant_agent_full_flow(self):
@@ -496,10 +518,10 @@ class TestA2AFullSimulation:
         card_resp = self._http.get("/a2a/agent-card.json")
         assert card_resp.status_code == 200
         card = card_resp.json()
-        token_url = card["securitySchemes"]["oauth2"]["flows"]["clientCredentials"][
+        token_url = card["securitySchemes"]["oauth2"]["flows"]["authorizationCode"][
             "tokenUrl"
         ]
-        assert token_url == "/auth/token/register"
+        assert token_url == "/auth/token"
 
         # Step 2: Obter token via OAuth PKCE
         token = self._get_token("assistant-agent", ["aiops:diagnose", "aiops:search"])
@@ -646,7 +668,9 @@ class TestA2AFullSimulation:
     async def test_a2aclient_full_flow_with_token(self):
         """A2AClient completo: discover → token → send_task (sem HTTP real)."""
         # Token pré-emitido (simula o que o agente teria obtido via OAuth)
-        token = issue_token("assistant-agent", ["aiops:diagnose"], _JWT_SECRET)
+        token = issue_token(
+            "assistant-agent", ["aiops:diagnose"], _JWT_SECRET, audience="a2a"
+        )
 
         client = A2AClient(token=token)
 

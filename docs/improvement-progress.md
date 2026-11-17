@@ -344,3 +344,160 @@ Cada bug: teste de regressão escrito ANTES do fix, visto falhar, corrigido, vis
 ### Testes adicionados na fase
 - 20 testes (9 F3-1 [reescritos+novos] + 1 F3-2 + 2 F3-3 + 6 F3-4 + 3 F3-5)
   + 3 un-skipped (payload validation).
+
+---
+
+## Fase 4 — Segurança antes de exposição de rede — DONE (2026-11-17)
+
+Fase iniciada em uma sessão (F4-1..F4-4 no working tree, 1 teste vermelho,
+F4-5 não iniciada) e concluída em outra. Cada item: teste de regressão +
+descrição do que o diff realmente faz.
+
+### F4-1 PKCE real (authorize/token separados) — done
+- `POST /auth/token/register` (verifier E challenge na mesma request) REMOVIDO.
+  Substituído por dois endpoints em `auth/server.py`:
+  1. `POST /auth/authorize` — recebe só `code_challenge` (S256 obrigatório),
+     valida allow-list fechada (401) e scopes (403), emite `code` de uso único
+     (`secrets.token_urlsafe(32)`, TTL 300 s) vinculado a
+     client+scopes+challenge+audience via `_token_store.save_code`.
+     `AuthorizeRequest` NÃO tem campo `code_verifier` — challenge na request de
+     token e verifier na de authorize são rejeitados pelo schema.
+  2. `POST /auth/token` — `pop_code` CONSOME o code (replay → 400), exige o
+     mesmo `client_id` do vínculo, exige `code_verifier` que confira com o
+     challenge armazenado; scopes vêm do code, não da request.
+- `auth/pkce.py`: `verify_challenge` usa `hmac.compare_digest` (antes `==`).
+- `auth/token_store.py`: Protocol ganhou `save_code`/`pop_code`;
+  `InMemoryTokenStore` implementa com expiração absoluta e pop atômico.
+  `save_challenge`/`pop_challenge` mantidos sem callers em produção (API legada
+  coberta só por teste) — candidatos a remoção na Fase 5.
+- Metadata coerente: discovery publica `authorization_endpoint`,
+  `token_endpoint=/auth/token`, `grant_types_supported=["authorization_code"]`
+  (antes `client_credentials`). Agent Card A2A anuncia flow `authorizationCode`
+  com `authorizationUrl`/`tokenUrl`.
+- **Decisão registrada:** `token_endpoint_auth_methods_supported` continua
+  `["none"]` — cliente público com PKCE como prova de posse; não há
+  client_secret no /token. Segredo por cliente existe só no modo header (F4-2).
+- Testes: `tests/test_pkce_flow.py` (15): fluxo completo; verifier
+  errado/ausente → 400; challenge no /token rejeitado; replay do code; code
+  vinculado ao client; code desconhecido; 401/403/400 do authorize;
+  `/auth/token/register` → 404/405; discovery anuncia two-step;
+  `compare_digest`; store one-shot + TTL. Adaptados: `test_oauth_mcp.py`
+  (4 `test_register_*` → two-step), `test_a2a_simulation.py` (`_get_token`
+  two-step; asserts do agent card).
+
+### F4-2 Autenticação de cliente no modo header — done (opção "segredo por cliente")
+- **Decisão registrada:** implementado SEGREDO por cliente; o default
+  `auth_method` segue `"header"` (`config/loader.py`, `config/defaults.yaml`) —
+  mudar o default quebraria o uso local sem ganho, já que header agora exige
+  credencial.
+- `config/loader.py`: `OAuthClientConfig.secret: str = ""` (vazio = cliente não
+  autentica, fail-closed). `config/defaults.yaml`: `secret: ""` nos 3 clientes +
+  comentário de como configurar (YAML local ou env
+  `AIOPS_MCP__OAUTH__ALLOWED_CLIENTS` JSON).
+- `interfaces/mcp/sse.py` `_authenticate`: além de `X-Client-Id` na allow-list,
+  exige `X-Client-Secret`; `hmac.compare_digest`; secret configurado vazio OU
+  header ausente OU mismatch → 401.
+- **Impacto operacional:** com o YAML padrão NENHUM cliente autentica no modo
+  header até configurar segredo — fail-closed deliberado, documentado.
+- Docs: README / README.pt-BR (nova subseção de autenticação MCP/A2A cobrindo
+  `oauth21`, `header`, `federated` e vínculo de sessão), `.env.example` (bloco
+  MCP/A2A com `AIOPS_MCP__OAUTH__JWT_SECRET` e `ALLOWED_CLIENTS`). Corrigido
+  erro pré-existente nos READMEs: o prefixo de env é `AIOPS_` + `__` entre
+  níveis (`AIOPS_MCP__OAUTH__JWT_SECRET`), não `AIOPS__MCP__...`.
+- Testes: `tests/test_header_client_auth.py` (5): sem secret → 401; errado →
+  401; correto passa (≠401); cliente sem secret configurado → 401; id
+  desconhecido → 401.
+
+### F4-3 JWT iss/aud + RS256 real + kid/kty no OIDC — done
+- `auth/jwt_validator.py`: `issue_token` ganha `issuer`/`audience` e emite
+  `iss`/`aud`; `validate_token` aceita e repassa ao `jwt.decode`; `TokenClaims.aud`.
+- Audiência escolhida no `/authorize` (`"mcp"` | `"a2a"`, 400 fora disso),
+  guardada no code e emitida no `/token` com `issuer=_base_url or
+  "aiops-agent"`. Introspecção aceita ambas as audiências mas exige `iss`.
+- MCP exige `audience="mcp"` (`sse.py`); A2A exige `audience="a2a"` (`a2a.py`)
+  → token MCP não vale no A2A e vice-versa.
+- **Decisão registrada: RS256 implementado de verdade (não removido do
+  metadata).** `_signing_algorithm()` → RS256 quando o par RSA está
+  configurado; `_signing_key_ready()` aceita HMAC ≥32 bytes OU RSA → RSA +
+  secret curto não estoura mais `InvalidKeyError`/500 (503 só sem nenhuma
+  chave). JWKS publica a chave realmente usada. Consumidores validam RS256
+  quando há `public_key_path` (sse) / `app.state.a2a_jwt_public_pem` (a2a).
+- `auth/oidc_validator.py`: kid desconhecido → `invalidate_cache` + refresh
+  ÚNICO do JWKS e, se ainda ausente, rejeita; sem fallback `keys[0]` (kid
+  ausente só com JWKS de 1 chave); algoritmo escolhido pelo `kty` (RSA/EC,
+  outro → rejeita).
+- Nota: em produção `create_app` passa `base_url=""` → `iss` emitido é o
+  fallback `"aiops-agent"`; coerente com a validação, mas não é a URL pública
+  (pendência menor para a Fase 5/composition root).
+- Regressões da sessão anterior corrigidas aqui: `test_introspect_valid_token`
+  emitia token com `iss` default enquanto o servidor valida `iss=base_url`
+  (teste alinhado ao contrato, não o contrário); `test_a2a_simulation.py`
+  emitia 8 tokens com `aud` default `mcp` contra rota que exige `a2a` → 22
+  falhas; `_bearer()`/`_get_token()`/one-liners agora pedem `audience="a2a"`.
+- Testes: `tests/test_jwt_audience.py` (7); `TestKidHardening` em
+  `test_oidc_validator.py` (5). Ajustados: `test_oauth_mcp.py`,
+  `test_jwks_endpoint.py`, `test_federated_skill_invocation.py`.
+
+### F4-4 Databricks: SQL parametrizado — done
+- `tools/databricks_connector.py` `_execute_query(sql, parameters)`:
+  marcadores nomeados `:name` + `StatementParameterListItem` da Statement
+  Execution API, tipo inferido (BOOLEAN/INT/DOUBLE/TIMESTAMP/STRING). Valores do
+  usuário NUNCA no texto SQL; identificadores de tabela/coluna vêm da config e
+  são concatenados (não parametrizáveis).
+- Parametrizados: `search`, `tail`, metrics `query`, `find_traces`, `get_trace`.
+  Escape manual `replace("'", "''")` removido (inclusive a variável órfã
+  `safe_svc` que sobrou em `find_traces` — F841). `get_alerts` sem parâmetros:
+  `'active'` é constante do código.
+- Aceite: `rg -n 'f".*(SELECT|LIKE|LIMIT)' tools/databricks_connector.py` → vazio.
+- Testes legados de SQL (13 em `test_databricks_connector.py`) migrados para o
+  contrato parametrizado: helper `_capture(source)` devolve `(sql, params)`;
+  asserts verificam placeholder no texto + valor em `params` + **ausência** do
+  valor no texto. Antes verificavam `"timeout" in sql` — ou seja, exigiam a
+  interpolação que o fix remove.
+- Residual conhecido: curingas LIKE (`%`/`_`) no input não são escapados —
+  afeta semântica de busca, não é injeção.
+- Testes: `tests/test_databricks_parameterized.py` (7): payload de injeção só
+  em params; timestamps; tail; metrics; find_traces; get_trace; `_execute_query`
+  repassa `parameters` ao SDK com tipos corretos.
+
+### F4-5 chmod 0600 na chave privada + sessão MCP vinculada ao cliente — done
+- `auth/keys.py`: `_write_private_key` cria o arquivo já com 0600 via
+  `os.open(O_WRONLY|O_CREAT|O_TRUNC, 0o600)` + `chmod` (sem janela entre criar
+  com umask default e restringir; umask permissivo não afrouxa).
+  `_restrict_private_key_permissions` corrige chave pré-existente frouxa no
+  load, sem tocar o conteúdo. Pública segue legível.
+- `interfaces/mcp/sse.py`: `_resolve_principal` unifica a autenticação de GET
+  `/mcp/sse` e POST `/mcp/messages` (inclusive o fluxo federated, que estava
+  duplicado nos dois handlers); `_bind_session_principal` define
+  `request.scope["user"] = AuthenticatedUser(AccessToken(client_id, scopes,
+  subject=client_id))`. O `SseServerTransport` do SDK registra o principal de
+  quem abriu a sessão e, no POST, compara `authorization_context` — mismatch
+  → 404 "Could not find session" (indistinguível de sessão inexistente; não
+  revela que o `session_id` é válido).
+- **Decisão registrada:** reaproveitar o mecanismo nativo do SDK
+  (`_session_owners`) em vez de manter um mapa paralelo sessão→cliente — um
+  único ponto de verdade, e o 404 uniforme já vem pronto.
+- Testes: `tests/test_mcp_session_binding.py` (4): mesmo cliente → 202; outro
+  cliente autenticado → 404 com corpo idêntico ao de sessão inexistente; sem
+  credencial → 401 antes do lookup; binding depende do client_id (não é
+  constante). `tests/test_jwks_endpoint.py` +3: 0600 na criação; 0600 com umask
+  0o000; chave 0644 pré-existente apertada no load sem mudar conteúdo.
+  (Os testes de sessão não abrem stream SSE real: registram no transporte o
+  mesmo principal que o GET constrói, via `_principal_user`, e exercitam o
+  POST de verdade.)
+
+### Verificação da fase
+- Executada no M1 Docker (`ssh m1-docker`, `/tmp/iago-ci-m5/aiops-agent`,
+  Python 3.12.9, requirements completos) — regra "nada pesado no M5".
+- ruff ✓, ruff format ✓, mypy ✓ (domain/application/core)
+- unit: **783 passed, 11 skipped**; integration/snapshot: **148 passed, 2 skipped**
+- Smokes: V0 exit 3, V1 exit 0, V1+RAG real exit 0 (zero `rag.index_build_failed`).
+  **Diffs de snapshot: nenhum.**
+
+### Testes adicionados na fase
+- 46 testes novos: 15 F4-1 + 5 F4-2 + 12 F4-3 (7 audience + 5 kid hardening) +
+  7 F4-4 + 7 F4-5 (4 session binding + 3 chmod).
+- Reescritos para o contrato novo (sem contagem nova): 13 testes de SQL em
+  `test_databricks_connector.py`; `test_oauth_mcp.py`, `test_a2a_simulation.py`,
+  `test_jwks_endpoint.py`, `test_federated_skill_invocation.py`,
+  `test_oidc_validator.py`.

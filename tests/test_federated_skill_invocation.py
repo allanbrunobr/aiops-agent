@@ -198,6 +198,7 @@ def _send_task(
         "assistant-agent",
         ["aiops:diagnose", "aiops:search", "aiops:validate"],
         _A2A_SECRET,
+        audience="a2a",  # F4-3: skill A2A exige token com audiência a2a
     )
     resp = client.post(
         "/a2a/tasks",

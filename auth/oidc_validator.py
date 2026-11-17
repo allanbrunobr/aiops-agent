@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 import httpx
 import jwt as pyjwt
-from jwt.algorithms import RSAAlgorithm
+from jwt.algorithms import ECAlgorithm, RSAAlgorithm
 
 from auth.jwt_validator import TokenClaims
 
@@ -95,10 +95,16 @@ class OIDCValidator:
         # 2. Busca JWKS com cache TTL
         jwks = await self._fetch_jwks(iss)
 
-        # 3. Seleciona chave pelo kid
+        # 3. Seleciona chave pelo kid; kid desconhecido → refresh ÚNICO do
+        # JWKS (rotação de chaves) e, se ainda ausente, rejeita (F4-3)
         header = pyjwt.get_unverified_header(token)
         kid = header.get("kid")
-        public_key = self._find_key(jwks, kid)
+        try:
+            public_key = self._find_key(jwks, kid)
+        except pyjwt.InvalidTokenError:
+            self.invalidate_cache(iss)
+            jwks = await self._fetch_jwks(iss)
+            public_key = self._find_key(jwks, kid)
 
         # 4. Valida assinatura, exp, aud
         payload = pyjwt.decode(
@@ -157,14 +163,11 @@ class OIDCValidator:
         return jwks
 
     def _find_key(self, jwks: dict, kid: str | None) -> object:
-        """Seleciona a chave pública correta do JWKS pelo kid.
+        """Seleciona a chave pública correta do JWKS pelo kid e kty (F4-3).
 
-        Args:
-            jwks: JWKS dict com campo 'keys'.
-            kid: Key ID do header do token (pode ser None).
-
-        Returns:
-            Objeto de chave pública compatível com PyJWT.
+        kid desconhecido → rejeita (o caller faz refresh único antes de
+        desistir). kid ausente só é aceito com JWKS de uma única chave.
+        O algoritmo é escolhido pelo kty da JWK (RSA ou EC), não assumido.
 
         Raises:
             jwt.InvalidTokenError: Nenhuma chave correspondente no JWKS.
@@ -174,11 +177,19 @@ class OIDCValidator:
             raise pyjwt.InvalidTokenError("JWKS não contém chaves")
 
         if kid:
-            for k in keys:
-                if k.get("kid") == kid:
-                    return RSAAlgorithm.from_jwk(k)
-            # kid não encontrado — tenta primeira chave como fallback
-        return RSAAlgorithm.from_jwk(keys[0])
+            candidates = [k for k in keys if k.get("kid") == kid]
+        else:
+            candidates = keys if len(keys) == 1 else []
+        if not candidates:
+            raise pyjwt.InvalidTokenError(f"kid '{kid}' não encontrado no JWKS")
+
+        jwk = candidates[0]
+        kty = jwk.get("kty")
+        if kty == "RSA":
+            return RSAAlgorithm.from_jwk(jwk)
+        if kty == "EC":
+            return ECAlgorithm.from_jwk(jwk)
+        raise pyjwt.InvalidTokenError(f"kty '{kty}' não suportado")
 
     def invalidate_cache(self, issuer: str | None = None) -> None:
         """Invalida cache JWKS (útil em rotação de chaves).

@@ -9,7 +9,7 @@ Cobertura:
   - validate(): rejeita audience incorreta
   - validate(): usa cache JWKS (apenas 1 chamada HTTP mesmo com 2 validações)
   - validate(): invalida cache após invalidate_cache()
-  - validate(): fallback para primeira chave se kid não encontrado
+  - validate(): kid desconhecido → refresh único do JWKS + rejeição (F4-3)
   - _fetch_jwks(): propaga erro HTTP do IdP
   - TrustedIssuerConfig: scope_claim customizado
 """
@@ -353,3 +353,92 @@ class TestFindKey:
         validator = _make_validator()
         with pytest.raises(pyjwt.InvalidTokenError, match="JWKS não contém chaves"):
             validator._find_key({"keys": []}, kid=None)
+
+
+# ---------------------------------------------------------------------------
+# F4-3: hardening de kid — desconhecido → refresh único + rejeição; kty/alg
+# ---------------------------------------------------------------------------
+
+
+class TestKidHardening:
+    @pytest.mark.unit
+    def test_unknown_kid_raises(self, idp_jwk: dict) -> None:
+        validator = _make_validator()
+        with pytest.raises(pyjwt.InvalidTokenError):
+            validator._find_key({"keys": [idp_jwk]}, "unknown-kid")
+
+    @pytest.mark.unit
+    def test_kid_none_with_multiple_keys_raises(self, idp_jwk: dict) -> None:
+        validator = _make_validator()
+        jwks = {"keys": [idp_jwk, {**idp_jwk, "kid": "other"}]}
+        with pytest.raises(pyjwt.InvalidTokenError):
+            validator._find_key(jwks, None)
+
+    @pytest.mark.unit
+    def test_ec_key_selected_by_kty(self) -> None:
+        import json as _json
+
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from jwt.algorithms import ECAlgorithm
+
+        priv = ec.generate_private_key(ec.SECP256R1())
+        jwk = _json.loads(ECAlgorithm.to_jwk(priv.public_key()))
+        jwk["kid"] = "ec-1"
+        validator = _make_validator()
+        assert validator._find_key({"keys": [jwk]}, "ec-1") is not None
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_unknown_kid_refreshes_jwks_once_then_accepts(
+        self, idp_private_pem: str, idp_jwk: dict
+    ) -> None:
+        validator = _make_validator()
+        token = _make_token(idp_private_pem, kid="rotated-key")
+        old_jwks = {"keys": [idp_jwk]}
+        new_jwks = {"keys": [{**idp_jwk, "kid": "rotated-key"}]}
+
+        responses = []
+        for jwks in (old_jwks, new_jwks):
+            d = MagicMock()
+            d.json.return_value = _make_discovery()
+            d.raise_for_status = MagicMock()
+            j = MagicMock()
+            j.json.return_value = jwks
+            j.raise_for_status = MagicMock()
+            responses.extend([d, j])
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=responses)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            claims = await validator.validate(token)
+
+        assert claims.sub == "assistant-bot"
+        assert mock_client.get.await_count == 4  # discovery+jwks ×2 (refresh único)
+
+    @pytest.mark.asyncio
+    @pytest.mark.unit
+    async def test_unknown_kid_still_rejected_after_refresh(
+        self, idp_private_pem: str, idp_jwks: dict
+    ) -> None:
+        validator = _make_validator()
+        token = _make_token(idp_private_pem, kid="never-exists")
+
+        responses = []
+        for _ in range(2):
+            d = MagicMock()
+            d.json.return_value = _make_discovery()
+            d.raise_for_status = MagicMock()
+            j = MagicMock()
+            j.json.return_value = idp_jwks
+            j.raise_for_status = MagicMock()
+            responses.extend([d, j])
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=responses)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            with pytest.raises(pyjwt.InvalidTokenError):
+                await validator.validate(token)

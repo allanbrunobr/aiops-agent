@@ -30,6 +30,26 @@ from tools.databricks_connector import (
 # --- Helpers ---
 
 
+def _capture(source):
+    """Captura (sql, params) passados a _execute_query.
+
+    F4-4: valores do usuário NUNCA aparecem no texto SQL — vão em `parameters`
+    (marcadores nomeados `:name`). Os testes de SQL verificam estrutura no texto
+    e valores nos params.
+    """
+    calls: list[tuple[str, list]] = []
+
+    def mock_execute(sql, parameters=None):
+        calls.append((sql, list(parameters or [])))
+        return []
+
+    return calls, patch.object(source, "_execute_query", side_effect=mock_execute)
+
+
+def _values(params) -> dict:
+    return {name: value for name, value in params}
+
+
 def _make_log_source(**kwargs) -> DatabricksLogSource:
     """Cria DatabricksLogSource com config minima para testes."""
     defaults = {
@@ -207,13 +227,9 @@ class TestDatabricksLogSourceSearch:
     def test_search_sql_contains_where_clauses(self):
         """search() gera SQL com WHERE clauses para query, service e janela temporal."""
         source = _make_log_source()
-        captured_sql = []
+        calls, patched = _capture(source)
 
-        def mock_execute(sql):
-            captured_sql.append(sql)
-            return []
-
-        with patch.object(source, "_execute_query", side_effect=mock_execute):
+        with patched:
             source.search(
                 query="timeout",
                 service="clusters",
@@ -222,13 +238,15 @@ class TestDatabricksLogSourceSearch:
                 limit=50,
             )
 
-        sql = captured_sql[0]
-        assert "timeout" in sql
-        assert "clusters" in sql
-        assert "2026-03-04T14:00:00" in sql
-        assert "2026-03-04T15:00:00" in sql
-        assert "LIMIT 50" in sql
+        sql, params = calls[0]
+        values = _values(params)
+        assert ":query_pattern" in sql and values["query_pattern"] == "%timeout%"
+        assert ":service" in sql and values["service"] == "clusters"
+        assert values["start_ts"] == datetime(2026, 3, 4, 14, 0)
+        assert values["end_ts"] == datetime(2026, 3, 4, 15, 0)
+        assert "LIMIT :limit" in sql and values["limit"] == 50
         assert "ORDER BY" in sql
+        assert "timeout" not in sql  # valor do usuário fora do texto SQL
 
     @pytest.mark.unit
     def test_search_with_custom_column_mapping(self):
@@ -271,31 +289,23 @@ class TestDatabricksLogSourceSearch:
     def test_search_default_table(self):
         """search() usa system.access.audit como tabela padrao."""
         source = _make_log_source()
-        captured_sql = []
+        calls, patched = _capture(source)
 
-        def mock_execute(sql):
-            captured_sql.append(sql)
-            return []
-
-        with patch.object(source, "_execute_query", side_effect=mock_execute):
+        with patched:
             source.search("test")
 
-        assert "system.access.audit" in captured_sql[0]
+        assert "system.access.audit" in calls[0][0]
 
     @pytest.mark.unit
     def test_search_custom_table(self):
         """search() respeita tabela customizada."""
         source = _make_log_source(table="system.billing.usage")
-        captured_sql = []
+        calls, patched = _capture(source)
 
-        def mock_execute(sql):
-            captured_sql.append(sql)
-            return []
-
-        with patch.object(source, "_execute_query", side_effect=mock_execute):
+        with patched:
             source.search("test")
 
-        assert "system.billing.usage" in captured_sql[0]
+        assert "system.billing.usage" in calls[0][0]
 
 
 # --- Task 4.4: DatabricksLogSource.tail() Tests ---
@@ -325,49 +335,42 @@ class TestDatabricksLogSourceTail:
     def test_tail_sql_has_order_by_and_limit(self):
         """tail() gera SQL com ORDER BY timestamp DESC e LIMIT."""
         source = _make_log_source()
-        captured_sql = []
+        calls, patched = _capture(source)
 
-        def mock_execute(sql):
-            captured_sql.append(sql)
-            return []
-
-        with patch.object(source, "_execute_query", side_effect=mock_execute):
+        with patched:
             source.tail("clusters", lines=25)
 
-        sql = captured_sql[0]
+        sql, params = calls[0]
+        values = _values(params)
         assert "ORDER BY" in sql
         assert "DESC" in sql
-        assert "LIMIT 25" in sql
+        assert "LIMIT :lines" in sql and values["lines"] == 25
 
     @pytest.mark.unit
     def test_tail_filters_by_service(self):
         """tail() filtra pela coluna de servico."""
         source = _make_log_source()
-        captured_sql = []
+        calls, patched = _capture(source)
 
-        def mock_execute(sql):
-            captured_sql.append(sql)
-            return []
-
-        with patch.object(source, "_execute_query", side_effect=mock_execute):
+        with patched:
             source.tail("sql")
 
-        assert "sql" in captured_sql[0]
+        sql, params = calls[0]
+        assert ":service" in sql
+        assert _values(params)["service"] == "sql"
 
     @pytest.mark.unit
     def test_tail_default_lines_50(self):
         """tail() usa 50 como numero padrao de linhas."""
         source = _make_log_source()
-        captured_sql = []
+        calls, patched = _capture(source)
 
-        def mock_execute(sql):
-            captured_sql.append(sql)
-            return []
-
-        with patch.object(source, "_execute_query", side_effect=mock_execute):
+        with patched:
             source.tail("clusters")
 
-        assert "LIMIT 50" in captured_sql[0]
+        sql, params = calls[0]
+        assert "LIMIT :lines" in sql
+        assert _values(params)["lines"] == 50
 
 
 # --- Task 4.5: Error Handling Tests ---
@@ -878,24 +881,22 @@ class TestDatabricksMetricsSourceQuery:
     def test_query_sql_contains_where_clauses(self):
         """query() gera SQL com WHERE clauses para time range e LIKE filter."""
         source = _make_metrics_source()
-        captured_sql = []
+        calls, patched = _capture(source)
 
-        def mock_execute(sql):
-            captured_sql.append(sql)
-            return []
-
-        with patch.object(source, "_execute_query", side_effect=mock_execute):
+        with patched:
             source.query(
                 "cpu", datetime(2026, 3, 4, 14, 0), datetime(2026, 3, 4, 15, 0)
             )
 
-        sql = captured_sql[0]
-        assert "cpu" in sql
-        assert "2026-03-04T14:00:00" in sql
-        assert "2026-03-04T15:00:00" in sql
+        sql, params = calls[0]
+        values = _values(params)
+        assert ":promql_pattern" in sql and values["promql_pattern"] == "%cpu%"
+        assert values["start_ts"] == datetime(2026, 3, 4, 14, 0)
+        assert values["end_ts"] == datetime(2026, 3, 4, 15, 0)
         assert "LIKE" in sql
         assert "ORDER BY" in sql
-        assert "LIMIT 100" in sql
+        assert "LIMIT 100" in sql  # constante do código, não input
+        assert "cpu" not in sql
 
     @pytest.mark.unit
     def test_query_with_custom_column_mapping(self):
@@ -1016,16 +1017,12 @@ class TestDatabricksMetricsSourceAlerts:
     def test_get_alerts_sql_has_active_filter(self):
         """get_alerts(active_only=True) gera SQL com WHERE status='active'."""
         source = _make_metrics_source(alerts_table="custom.alerts")
-        captured_sql = []
+        calls, patched = _capture(source)
 
-        def mock_execute(sql):
-            captured_sql.append(sql)
-            return []
-
-        with patch.object(source, "_execute_query", side_effect=mock_execute):
+        with patched:
             source.get_alerts(active_only=True)
 
-        assert "active" in captured_sql[0].lower()
+        assert "active" in calls[0][0].lower()
 
     @pytest.mark.unit
     def test_get_alerts_uses_custom_status_column(self):
@@ -1040,16 +1037,13 @@ class TestDatabricksMetricsSourceAlerts:
             alerts_table="custom.alerts",
             alerts_column_mapping=custom_mapping,
         )
-        captured_sql = []
+        calls, patched = _capture(source)
 
-        def mock_execute(sql):
-            captured_sql.append(sql)
-            return []
-
-        with patch.object(source, "_execute_query", side_effect=mock_execute):
+        with patched:
             source.get_alerts(active_only=True)
 
-        sql = captured_sql[0]
+        sql, params = calls[0]
+        assert params == []  # 'active' é constante do código, não input do usuário
         assert "alert_state" in sql
         assert "WHERE alert_state = 'active'" in sql
 
@@ -1057,16 +1051,13 @@ class TestDatabricksMetricsSourceAlerts:
     def test_get_alerts_without_active_filter(self):
         """get_alerts(active_only=False) gera SQL sem filtro de status."""
         source = _make_metrics_source(alerts_table="custom.alerts")
-        captured_sql = []
+        calls, patched = _capture(source)
 
-        def mock_execute(sql):
-            captured_sql.append(sql)
-            return []
-
-        with patch.object(source, "_execute_query", side_effect=mock_execute):
+        with patched:
             source.get_alerts(active_only=False)
 
-        sql = captured_sql[0]
+        sql, params = calls[0]
+        assert params == []
         assert "WHERE" not in sql or "active" not in sql.lower()
 
 
@@ -1234,13 +1225,9 @@ class TestDatabricksTraceSourceFindTraces:
     def test_find_traces_sql_contains_where_clauses(self):
         """find_traces() gera SQL com WHERE clauses para service, duration, time."""
         source = _make_trace_source()
-        captured_sql = []
+        calls, patched = _capture(source)
 
-        def mock_execute(sql):
-            captured_sql.append(sql)
-            return []
-
-        with patch.object(source, "_execute_query", side_effect=mock_execute):
+        with patched:
             source.find_traces(
                 service="wh-prod-01",
                 min_duration_ms=1000.0,
@@ -1249,30 +1236,31 @@ class TestDatabricksTraceSourceFindTraces:
                 limit=10,
             )
 
-        sql = captured_sql[0]
-        assert "wh-prod-01" in sql
-        assert "1000.0" in sql
-        assert "2026-03-04T14:00:00" in sql
-        assert "2026-03-04T15:00:00" in sql
-        assert "LIMIT 10" in sql
+        sql, params = calls[0]
+        values = _values(params)
+        assert ":service" in sql and values["service"] == "wh-prod-01"
+        assert ":min_duration" in sql and values["min_duration"] == 1000.0
+        assert values["start_ts"] == datetime(2026, 3, 4, 14, 0)
+        assert values["end_ts"] == datetime(2026, 3, 4, 15, 0)
+        assert "LIMIT :limit" in sql and values["limit"] == 10
         assert "ORDER BY" in sql
+        assert "wh-prod-01" not in sql
 
     @pytest.mark.unit
     def test_find_traces_sql_without_optional_filters(self):
         """find_traces() gera SQL minimo quando filtros opcionais sao None."""
         source = _make_trace_source()
-        captured_sql = []
+        calls, patched = _capture(source)
 
-        def mock_execute(sql):
-            captured_sql.append(sql)
-            return []
-
-        with patch.object(source, "_execute_query", side_effect=mock_execute):
+        with patched:
             source.find_traces("wh-prod-01")
 
-        sql = captured_sql[0]
-        assert "wh-prod-01" in sql
-        assert "LIMIT 20" in sql  # default limit
+        sql, params = calls[0]
+        values = _values(params)
+        assert values["service"] == "wh-prod-01"
+        assert "LIMIT :limit" in sql and values["limit"] == 20  # default limit
+        assert ":min_duration" not in sql and "min_duration" not in values
+        assert ":start_ts" not in sql and ":end_ts" not in sql
 
     @pytest.mark.unit
     def test_find_traces_empty_results(self):
@@ -1384,18 +1372,16 @@ class TestDatabricksTraceSourceGetTrace:
     def test_get_trace_sql_filters_by_trace_id(self):
         """get_trace() gera SQL com WHERE para trace_id."""
         source = _make_trace_source()
-        captured_sql = []
+        calls, patched = _capture(source)
 
-        def mock_execute(sql):
-            captured_sql.append(sql)
-            return []
-
-        with patch.object(source, "_execute_query", side_effect=mock_execute):
+        with patched:
             source.get_trace("qry-001")
 
-        sql = captured_sql[0]
-        assert "qry-001" in sql
+        sql, params = calls[0]
+        values = _values(params)
+        assert ":trace_id" in sql and values["trace_id"] == "qry-001"
         assert "LIMIT 1" in sql
+        assert "qry-001" not in sql
 
 
 class TestDatabricksTraceSourceErrors:

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import secrets
 
 
@@ -46,4 +47,5 @@ def verify_challenge(verifier: str, challenge: str) -> bool:
     Returns:
         True se o par verifier/challenge é válido.
     """
-    return derive_challenge(verifier) == challenge
+    # Comparação constant-time (F4-1) — == vazaria timing sobre o challenge
+    return hmac.compare_digest(derive_challenge(verifier), challenge)

@@ -238,6 +238,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # --------------------------------------------------------
     app.state.config = config
     app.state.a2a_jwt_secret = _jwt_secret if _hmac_ok else ""
+    app.state.a2a_jwt_public_pem = _rsa_public_pem or ""
     app.state.engine = engine
     app.state.retriever = retriever
     log.info("a2a.state.populated", engine=type(app.state.engine).__name__)
@@ -245,11 +246,11 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # --------------------------------------------------------
     # Validação de configuração OAuth
     # --------------------------------------------------------
-    if config.mcp.auth_method == "oauth21" and not _hmac_ok:
+    if config.mcp.auth_method == "oauth21" and not _hmac_ok and not _rsa_ok:
         log.warning(
             "oauth.misconfiguration",
             detail=(
-                "auth_method=oauth21 without a 32-byte jwt_secret. "
+                "auth_method=oauth21 without a 32-byte jwt_secret or RSA key pair. "
                 "The OAuth server was not mounted. "
                 "PyJWT rejects an empty HMAC key; it does not accept every token."
             ),

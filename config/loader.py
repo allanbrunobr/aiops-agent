@@ -141,12 +141,18 @@ class ObservabilityConfig(BaseModel):
 
 
 class OAuthClientConfig(BaseModel):
-    """Configuração de um cliente OAuth autorizado."""
+    """Configuração de um cliente OAuth autorizado.
+
+    secret: segredo do cliente no modo header (X-Client-Secret). Vazio =
+    cliente NÃO autentica no modo header (fail-closed, F4-2). Configure via
+    YAML ou env AIOPS_MCP__OAUTH__ALLOWED_CLIENTS (JSON).
+    """
 
     model_config = ConfigDict(frozen=True)
 
     id: str
     scopes: list[str] = []
+    secret: str = ""
 
 
 class TrustedIssuerConfig(BaseModel):

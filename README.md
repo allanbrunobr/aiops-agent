@@ -282,6 +282,14 @@ To set up a real Slack App, see [`infra/SLACK-SETUP.md`](infra/SLACK-SETUP.md). 
 
 The CLI and the demo load `.env.local` automatically. The CLI also reads `.env`. Copy [`.env.example`](.env.example). The OAuth HMAC secret, when set, is `AIOPS_MCP__OAUTH__JWT_SECRET` and must be at least 32 bytes.
 
+MCP and A2A authentication (`mcp.auth_method` in `config/defaults.yaml`):
+
+- `oauth21`: Bearer JWT issued by the built-in authorization server through a PKCE authorization-code flow — `POST /auth/authorize` (client id, scopes, `code_challenge`, `audience`) returns a one-shot code; `POST /auth/token` (code + `code_verifier`) returns the token. Tokens carry `iss` and an `aud` of `mcp` or `a2a`; the other surface rejects them. Signing is HS256, or RS256 when `private_key_path`/`public_key_path` are set (the JWKS endpoint publishes the key in use).
+- `header` (default): `X-Client-Id` **and** `X-Client-Secret` are required and compared in constant time. The shipped clients have an empty `secret`, so nothing authenticates until you set one (YAML or `AIOPS_MCP__OAUTH__ALLOWED_CLIENTS`).
+- `federated`: Bearer JWT from the OIDC issuers listed in `trusted_issuers`; unknown `kid` is rejected after a single JWKS refresh.
+
+On the SSE transport, `POST /mcp/messages` only accepts messages from the principal that opened the session; another authenticated client gets `404`, as if the session did not exist.
+
 Build the optional Rust extension with the same interpreter you use to run tests:
 
 ```bash
@@ -304,7 +312,7 @@ maturin build --release --interpreter .venv/bin/python --manifest-path rust/Carg
 
 ### Configuration files
 
-- [`config/defaults.yaml`](config/defaults.yaml): analysis thresholds, Blueprint Engine, webhook, Slack and MCP settings. Values can be overridden by variables with the `AIOPS__` prefix (for example, `AIOPS__MCP__OAUTH__JWT_SECRET`).
+- [`config/defaults.yaml`](config/defaults.yaml): analysis thresholds, Blueprint Engine, webhook, Slack and MCP settings. Values can be overridden by environment variables with the `AIOPS_` prefix and `__` between nesting levels (for example, `AIOPS_MCP__OAUTH__JWT_SECRET`).
 - [`config.yaml`](config.yaml): per-service criticality map, used for the *blast radius* calculation.
 
 ---
@@ -316,7 +324,7 @@ maturin build --release --interpreter .venv/bin/python --manifest-path rust/Carg
 | Slack | `interfaces/http/notifications/slack.py` | Progressive Block Kit, exponential retry and local fallback in `output/`. Guide: [`infra/SLACK-SETUP.md`](infra/SLACK-SETUP.md) |
 | Jira | `tools/jira_tracker.py` | Enabled with `--tracker jira` |
 | Databricks | `tools/databricks_connector.py` | Real data source via `--data-source databricks` |
-| MCP | `interfaces/mcp/` | Tools `diagnose_incident`, `validate_action` and `search_incidents`. stdio and SSE transports, with rate limiting and OAuth 2.1 |
+| MCP | `interfaces/mcp/` | Tools `diagnose_incident`, `validate_action` and `search_incidents`. stdio and SSE transports, with rate limiting, OAuth 2.1 (PKCE) and session binding |
 | A2A | `interfaces/http/routes/a2a.py` | Agent-to-agent API mounted by the HTTP app |
 | Webhooks | `interfaces/http/webhook/` | Normalizers for Grafana, PagerDuty and Databricks, with deduplication |
 

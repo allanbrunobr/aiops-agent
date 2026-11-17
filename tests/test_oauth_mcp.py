@@ -76,7 +76,7 @@ class TestJWT:
         token = issue_token(
             "assistant-agent", ["aiops:diagnose", "aiops:search"], SECRET
         )
-        claims = validate_token(token, SECRET)
+        claims = validate_token(token, SECRET, audience="mcp")
         assert claims.sub == "assistant-agent"
         assert "aiops:diagnose" in claims.scopes
         assert "aiops:search" in claims.scopes
@@ -84,7 +84,7 @@ class TestJWT:
     def test_expired_token_raises(self):
         token = issue_token("agent", ["aiops:search"], SECRET, ttl=-1)
         with pytest.raises(pyjwt.ExpiredSignatureError):
-            validate_token(token, SECRET)
+            validate_token(token, SECRET, audience="mcp")
 
     def test_wrong_secret_raises(self):
         token = issue_token("agent", ["aiops:search"], SECRET)
@@ -92,7 +92,7 @@ class TestJWT:
         wrong = "wrong-secret-but-long-enough-32b!"
         assert len(wrong.encode("utf-8")) >= 32
         with pytest.raises(pyjwt.InvalidTokenError):
-            validate_token(token, wrong)
+            validate_token(token, wrong, audience="mcp")
 
     def test_short_hmac_key_is_rejected(self):
         with pytest.raises(pyjwt.InvalidKeyError):
@@ -100,7 +100,7 @@ class TestJWT:
 
     def test_empty_scopes(self):
         token = issue_token("agent", [], SECRET)
-        claims = validate_token(token, SECRET)
+        claims = validate_token(token, SECRET, audience="mcp")
         assert claims.scopes == []
 
     def test_token_claims_frozen(self):
@@ -172,16 +172,26 @@ class TestAuthServer:
     def client(self):
         self._client = TestClient(_make_auth_app())
 
-    def test_register_valid_client(self):
+    def test_two_step_flow_valid_client(self):
+        """F4-1: authorize (challenge) → token (verifier) em requests separadas."""
         verifier = generate_verifier()
         challenge = derive_challenge(verifier)
         resp = self._client.post(
-            "/auth/token/register",
+            "/auth/authorize",
             json={
                 "client_id": "assistant-agent",
                 "scopes": ["aiops:diagnose"],
-                "code_verifier": verifier,
                 "code_challenge": challenge,
+            },
+        )
+        assert resp.status_code == 200
+        code = resp.json()["code"]
+        resp = self._client.post(
+            "/auth/token",
+            json={
+                "client_id": "assistant-agent",
+                "code": code,
+                "code_verifier": verifier,
             },
         )
         assert resp.status_code == 200
@@ -190,9 +200,9 @@ class TestAuthServer:
         assert body["token_type"] == "Bearer"
         assert "aiops:diagnose" in body["scope"]
 
-    def test_register_unknown_client_returns_401(self):
+    def test_authorize_unknown_client_returns_401(self):
         resp = self._client.post(
-            "/auth/token/register",
+            "/auth/authorize",
             json={
                 "client_id": "unknown-agent",
                 "scopes": ["aiops:search"],
@@ -201,12 +211,12 @@ class TestAuthServer:
         )
         assert resp.status_code == 401
 
-    def test_register_disallowed_scope_returns_403(self):
+    def test_authorize_disallowed_scope_returns_403(self):
         verifier = generate_verifier()
         challenge = derive_challenge(verifier)
         # databricks-mcp só tem aiops:search, tenta aiops:diagnose
         resp = self._client.post(
-            "/auth/token/register",
+            "/auth/authorize",
             json={
                 "client_id": "databricks-mcp",
                 "scopes": ["aiops:diagnose"],
@@ -215,9 +225,9 @@ class TestAuthServer:
         )
         assert resp.status_code == 403
 
-    def test_register_unsupported_pkce_method_returns_400(self):
+    def test_authorize_unsupported_pkce_method_returns_400(self):
         resp = self._client.post(
-            "/auth/token/register",
+            "/auth/authorize",
             json={
                 "client_id": "assistant-agent",
                 "scopes": ["aiops:search"],
@@ -228,7 +238,11 @@ class TestAuthServer:
         assert resp.status_code == 400
 
     def test_introspect_valid_token(self):
-        token = issue_token("assistant-agent", ["aiops:search"], SECRET)
+        # F4-3: o servidor emite e valida iss == base_url; um token "válido"
+        # é aquele emitido por este servidor, logo o teste deve usar o mesmo iss.
+        token = issue_token(
+            "assistant-agent", ["aiops:search"], SECRET, issuer="http://testserver"
+        )
         resp = self._client.post("/auth/token/introspect", json={"token": token})
         assert resp.status_code == 200
         body = resp.json()

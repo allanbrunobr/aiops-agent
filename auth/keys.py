@@ -11,6 +11,7 @@ Expõe:
 from __future__ import annotations
 
 import base64
+import os
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
@@ -100,12 +101,39 @@ def load_or_generate_keypair(
     if priv.exists() and pub.exists():
         private_pem = priv.read_text()
         public_pem = pub.read_text()
+        # F4-5: chave privada pré-existente com permissão frouxa é corrigida
+        # no load (idempotente); o conteúdo não é tocado.
+        _restrict_private_key_permissions(priv)
     else:
         private_pem, public_pem = generate_rsa_keypair()
         priv.parent.mkdir(parents=True, exist_ok=True)
         pub.parent.mkdir(parents=True, exist_ok=True)
-        priv.write_text(private_pem)
+        _write_private_key(priv, private_pem)
         pub.write_text(public_pem)
 
     jwk = public_key_to_jwk(public_pem, kid=kid)
     return private_pem, public_pem, jwk
+
+
+_PRIVATE_KEY_MODE = 0o600
+
+
+def _write_private_key(path: Path, pem: str) -> None:
+    """Grava a chave privada já com modo 0600 (F4-5).
+
+    Cria o arquivo com a permissão restrita no próprio open() — não há
+    janela entre criar com umask default e aplicar chmod depois. O(TRUNC)
+    cobre o caso de arquivo pré-existente parcial.
+    """
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, _PRIVATE_KEY_MODE)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(pem)
+    # O modo passado ao open() é filtrado pelo umask; chmod garante 0600
+    # mesmo com umask permissivo.
+    os.chmod(path, _PRIVATE_KEY_MODE)
+
+
+def _restrict_private_key_permissions(path: Path) -> None:
+    """Aplica 0600 a uma chave privada existente se estiver mais aberta."""
+    if (path.stat().st_mode & 0o777) != _PRIVATE_KEY_MODE:
+        os.chmod(path, _PRIVATE_KEY_MODE)

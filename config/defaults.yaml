@@ -42,17 +42,23 @@ mcp:
     - diagnose_incident
     - validate_action
     - search_incidents
-  auth_method: header               # "header" (X-Client-Id), "oauth21" (Bearer JWT) ou "none"
+  auth_method: header               # "header" (X-Client-Id + X-Client-Secret), "oauth21" (Bearer JWT), "federated" (OIDC) ou "none"
   oauth:
     jwt_secret: ""                  # via env: AIOPS_MCP__OAUTH__JWT_SECRET (mínimo 32 bytes)
     token_ttl: 3600
     allowed_clients:
+      # secret: obrigatório no modo header (X-Client-Secret). Vazio = cliente
+      # não autentica (fail-closed). Defina via YAML local ou env
+      # AIOPS_MCP__OAUTH__ALLOWED_CLIENTS='[{"id":...,"scopes":[...],"secret":...}]'
       - id: assistant-agent
         scopes: [aiops:diagnose, aiops:search]
+        secret: ""
       - id: databricks-mcp
         scopes: [aiops:search]
+        secret: ""
       - id: sre-orchestrator
         scopes: [aiops:diagnose, aiops:search, aiops:validate]
+        secret: ""
   rate_limits:
     diagnose: 10                    # diagnose_incident: 10 chamadas/min (caro: LLM + FAISS + safety)
     search: 60                      # search_incidents: 60 chamadas/min (barato: RAG read-only)

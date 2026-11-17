@@ -184,7 +184,7 @@
       "title": "PKCE real (authorize/token separados)",
       "description": "O fluxo real é um ÚNICO POST /auth/token/register que recebe code_verifier E code_challenge na MESMA request (auth/server.py:107-110, validação em :174); pop_challenge (auth/token_store.py:20,40) só é chamado em testes — produção só faz save_challenge após emitir (:180), challenge nunca é consumido. Fix: separar /authorize (recebe só challenge S256, vinculado ao code) de /token (exige verifier, valida via auth/pkce.py e CONSOME o challenge com pop_challenge); trocar == por hmac.compare_digest em auth/pkce.py:48. Testes: fluxo completo com verifier correto passa; verifier errado/ausente falha; challenge na request de token rejeitado; replay do mesmo code rejeitado.",
       "acceptance": "Testes de fluxo PKCE verdes.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado com ajuste: não existem endpoints /authorize e /token hoje (nomes citados eram os do fix, não os atuais); verifier já é obrigatório e validado, mas a prova ocorre na mesma request, sem exchange separado."
     },
     {
@@ -193,7 +193,7 @@
       "title": "Autenticação de cliente no modo header",
       "description": "auth/server.py:238 anuncia token_endpoint_auth_methods_supported=['none']; modo header é o DEFAULT (config/loader.py:205) e autentica só por X-Client-Id sem segredo (interfaces/mcp/sse.py:141-148). Fix: segredo por cliente no modo header (env/config, comparação constant-time) OU mudar default para oauth21. Documentar no README/.env.example.",
       "acceptance": "Request sem segredo válido no modo header → 401; testes verdes.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado com mitigação parcial: EXISTE allow-list de client_ids pré-registrados (oauth.allowed_clients → sse.py:71-79); header desconhecido ou lista vazia → 401. Mas qualquer um que saiba um client_id do YAML passa, sem segredo."
     },
     {
@@ -202,7 +202,7 @@
       "title": "JWT iss/aud + decisão RS256 + kid/JWKS correto",
       "description": "auth/jwt_validator.py:91: jwt.decode sem audience/issuer; payload emitido (:61-66) nem contém iss/aud. Mesmo segredo MCP/A2A (interfaces/http/app.py:214 copia mcp.oauth.jwt_secret para a2a_jwt_secret; routes/a2a.py:91,109 valida com ele) → token MCP vale no A2A. Fix: emitir e validar iss+aud por audiência (MCP ≠ A2A). auth/server.py:242-244: RS256 anunciado + JWKS publicado mas issue_token (:183-188) sempre HS256 (default em jwt_validator.py:44); _rsa_private_pem nunca usado para assinar. RSA configurado + secret curto → _reject_short_hmac_key lança InvalidKeyError não capturado no handler register → 500 (app.py:176-177 passa jwt_secret=''; guard de server.py:141 é pulado). Decisão: implementar RS256 de verdade OU remover do metadata/JWKS (não anunciar o que não implementa); tratar o caminho RSA+secret curto sem 500. auth/oidc_validator.py:176-180: kid não encontrado → primeira chave do JWKS (keys[0]); RSAAlgorithm.from_jwk mesmo para ES256 (decode aceita RS256+ES256, :106); sem refresh on-miss. Fix: kid desconhecido → rejeitar após refresh único do JWKS; selecionar algoritmo pelo kty/alg da JWK. Testes: cross-audience rejeitado; kid desconhecido rejeitado.",
       "acceptance": "Testes novos verdes; metadata coerente com o que é emitido.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado em todas as sub-alegações, com atualização: chave HMAC curta hoje é REJEITADA (MIN_HMAC_KEY_BYTES=32, jwt_validator.py:17-27) — o bug residual é o 500 não tratado, não 'aceita chave curta'."
     },
     {
@@ -211,7 +211,7 @@
       "title": "Databricks: SQL parametrizado em vez de f-string",
       "description": "tools/databricks_connector.py:277-282 (safe_query=query.replace(\"'\",\"''\") interpolado em LIKE), :302 (LIMIT), :449-463 (metrics), :627-648 (traces): SQL por f-string. A API Databricks suporta parâmetros nomeados — usar em TODOS os queries. Teste: input com aspas/SQL injection → query parametrizada sem erro e sem escape manual.",
       "acceptance": "rg -n 'f\".*(SELECT|LIKE|LIMIT)' tools/databricks_connector.py vazio; testes verdes.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado: nenhum query usa parameters= (_execute_query :145-152 só passa statement). Pontos extras além dos citados: tail (:329-335), get_alerts (:498-504), get_trace (:675-680). Curingas LIKE (%/_) não escapados; nomes de tabela/colunas vêm de config sem sanitização."
     },
     {
@@ -220,7 +220,7 @@
       "title": "Higiene: chmod 0600 na chave privada + sessão MCP vinculada",
       "description": "auth/keys.py:102: chave privada (PKCS8 sem criptografia) escrita sem chmod 0600 — aplicar. interfaces/mcp/sse.py:217-245: POST /mcp/messages JÁ re-autentica o cliente (POST anônimo foi corrigido), mas não vincula session_id ao cliente autenticado — qualquer cliente autenticado pode postar na sessão de outro. Fix: vincular sessão→client_id na criação (GET /sse, :203-206) e validar no POST. Testes: permissão do arquivo; POST com sessão de outro cliente → rejeitado.",
       "acceptance": "Testes novos verdes; scripts/ci-local.sh completo verde ao fim da Fase 4.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado com atualização: a parte 'POST aceita qualquer corpo' já foi corrigida (re-autenticação no handler); o problema residual é o vínculo sessão→cliente. Nenhum os.chmod/fchmod no caminho da chave (grep no repo)."
     },
     {

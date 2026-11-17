@@ -34,6 +34,7 @@ class TokenClaims:
     sub: str  # agent-id (ex: "assistant-agent")
     scopes: list[str] = field(default_factory=list)
     exp: int = 0
+    aud: str = ""
 
 
 def issue_token(
@@ -42,15 +43,19 @@ def issue_token(
     secret: str,
     ttl: int = 3600,
     algorithm: str = "HS256",
+    issuer: str = "aiops-agent",
+    audience: str = "mcp",
 ) -> str:
     """Emite um JWT assinado com os claims do agente.
 
     Args:
         agent_id: Identificador único do agente (sub claim).
         scopes: Lista de scopes autorizados (ex: ["aiops:diagnose", "aiops:search"]).
-        secret: Chave secreta para assinatura HS256.
+        secret: Chave HS256 (str) ou chave privada RSA PEM para RS256.
         ttl: Tempo de vida em segundos (padrão 3600).
         algorithm: Algoritmo de assinatura (padrão HS256).
+        issuer: Claim iss (F4-3).
+        audience: Claim aud — audiência do token, "mcp" ou "a2a" (F4-3).
 
     Returns:
         JWT string compacto.
@@ -62,6 +67,8 @@ def issue_token(
     payload = {
         "sub": agent_id,
         "scope": " ".join(scopes),
+        "iss": issuer,
+        "aud": audience,
         "exp": int(time.time()) + ttl,
         "iat": int(time.time()),
     }
@@ -72,28 +79,40 @@ def validate_token(
     token: str,
     secret: str,
     algorithm: str = "HS256",
+    audience: str | list[str] | None = None,
+    issuer: str | None = None,
 ) -> TokenClaims:
     """Valida e decodifica um JWT, retornando os claims.
 
     Args:
         token: JWT string (sem prefixo "Bearer ").
-        secret: Chave secreta usada na assinatura.
+        secret: Chave HS256 (str) ou chave pública RSA PEM para RS256.
         algorithm: Algoritmo esperado (padrão HS256).
+        audience: Se informado, exige aud correspondente (F4-3 — MCP ≠ A2A).
+        issuer: Se informado, exige iss correspondente.
 
     Returns:
-        TokenClaims com sub, scopes e exp.
+        TokenClaims com sub, scopes, exp e aud.
 
     Raises:
         jwt.ExpiredSignatureError: Token expirado.
+        jwt.InvalidAudienceError: aud não corresponde à audiência esperada.
         jwt.InvalidTokenError: Token inválido (assinatura, formato, etc.).
         jwt.InvalidKeyError: HMAC key missing or shorter than 32 bytes.
     """
     _reject_short_hmac_key(secret, algorithm)
-    payload = jwt.decode(token, secret, algorithms=[algorithm])
+    payload = jwt.decode(
+        token,
+        secret,
+        algorithms=[algorithm],
+        audience=audience,
+        issuer=issuer,
+    )
     raw_scope = payload.get("scope", "")
     scopes = raw_scope.split() if raw_scope else []
     return TokenClaims(
         sub=payload["sub"],
         scopes=scopes,
         exp=int(payload.get("exp", 0)),
+        aud=str(payload.get("aud", "")),
     )

@@ -125,18 +125,44 @@ class DatabricksConnection:
             )
         return self._client
 
-    def _execute_query(self, sql: str) -> list[dict]:
+    def _execute_query(
+        self,
+        sql: str,
+        parameters: list[tuple[str, object]] | None = None,
+    ) -> list[dict]:
         """Executa query SQL via Databricks Statement Execution API.
 
-        Retorna lista de dicts com os resultados. Todas as excecoes
-        sao capturadas e convertidas em DatabricksConnectorError.
+        Valores do usuário vão em `parameters` (marcadores nomeados :name),
+        NUNCA interpolados no texto SQL (F4-4). Identificadores de tabela/
+        coluna vêm da config e são concatenados (não parametrizáveis em SQL).
+        Retorna lista de dicts; exceções viram DatabricksConnectorError.
         """
         try:
             client = self._get_client()
+            sdk_params = None
+            if parameters:
+                from databricks.sdk.service.sql import StatementParameterListItem
+
+                sdk_params = []
+                for name, value in parameters:
+                    if isinstance(value, bool):
+                        ptype, pval = "BOOLEAN", str(value).lower()
+                    elif isinstance(value, int):
+                        ptype, pval = "INT", str(value)
+                    elif isinstance(value, float):
+                        ptype, pval = "DOUBLE", str(value)
+                    elif isinstance(value, datetime):
+                        ptype, pval = "TIMESTAMP", value.isoformat()
+                    else:
+                        ptype, pval = "STRING", str(value)
+                    sdk_params.append(
+                        StatementParameterListItem(name=name, type=ptype, value=pval)
+                    )
             response = client.statement_execution.execute_statement(
                 warehouse_id=self.warehouse_id,
                 statement=sql,
                 wait_timeout=f"{self.timeout_seconds}s",
+                parameters=sdk_params,
             )
 
             if response.status and response.status.state:
@@ -259,27 +285,36 @@ class DatabricksLogSource(DatabricksConnection, LogSource):
             msg_col = self.column_mapping["message"]
 
             where_clauses = []
+            params: list[tuple[str, object]] = []
             if query:
-                safe_query = query.replace("'", "''")
-                where_clauses.append(f"CAST({msg_col} AS STRING) LIKE '%{safe_query}%'")
+                where_clauses.append(
+                    "CAST(" + msg_col + " AS STRING) LIKE :query_pattern"
+                )
+                params.append(("query_pattern", "%" + query + "%"))
             if service:
-                safe_svc = service.replace("'", "''")
-                where_clauses.append(f"{svc_col} = '{safe_svc}'")
+                where_clauses.append(svc_col + " = :service")
+                params.append(("service", service))
             if start:
-                where_clauses.append(f"{ts_col} >= '{start.isoformat()}'")
+                where_clauses.append(ts_col + " >= :start_ts")
+                params.append(("start_ts", start))
             if end:
-                where_clauses.append(f"{ts_col} <= '{end.isoformat()}'")
+                where_clauses.append(ts_col + " <= :end_ts")
+                params.append(("end_ts", end))
 
             where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
             sql = (
-                f"SELECT * FROM {self.table} "
-                f"{where_sql} "
-                f"ORDER BY {ts_col} DESC "
-                f"LIMIT {limit}"
+                "SELECT * FROM "
+                + self.table
+                + " "
+                + where_sql
+                + " ORDER BY "
+                + ts_col
+                + " DESC LIMIT :limit"
             )
+            params.append(("limit", int(limit)))
 
-            rows = self._execute_query(sql)
+            rows = self._execute_query(sql, params)
         except DatabricksConnectorError:
             raise
         except Exception as e:
@@ -303,16 +338,20 @@ class DatabricksLogSource(DatabricksConnection, LogSource):
             ts_col = self.column_mapping["timestamp"]
             svc_col = self.column_mapping["service"]
 
-            safe_svc = service.replace("'", "''")
-
             sql = (
-                f"SELECT * FROM {self.table} "
-                f"WHERE {svc_col} = '{safe_svc}' "
-                f"ORDER BY {ts_col} DESC "
-                f"LIMIT {lines}"
+                "SELECT * FROM "
+                + self.table
+                + " WHERE "
+                + svc_col
+                + " = :service"
+                + " ORDER BY "
+                + ts_col
+                + " DESC LIMIT :lines"
             )
 
-            rows = self._execute_query(sql)
+            rows = self._execute_query(
+                sql, [("service", service), ("lines", int(lines))]
+            )
         except DatabricksConnectorError:
             raise
         except Exception as e:
@@ -415,27 +454,33 @@ class DatabricksMetricsSource(DatabricksConnection, MetricsSource):
             svc_col = self.column_mapping["service"]
             metric_col = self.column_mapping["metric_name"]
 
-            safe_promql = promql.replace("'", "''")
-
             where_clauses = [
-                f"{ts_col} >= '{start.isoformat()}'",
-                f"{ts_col} <= '{end.isoformat()}'",
+                ts_col + " >= :start_ts",
+                ts_col + " <= :end_ts",
                 (
-                    f"(CAST({metric_col} AS STRING) LIKE '%{safe_promql}%'"
-                    f" OR CAST({svc_col} AS STRING) LIKE '%{safe_promql}%')"
+                    "(CAST(" + metric_col + " AS STRING) LIKE :promql_pattern"
+                    " OR CAST(" + svc_col + " AS STRING) LIKE :promql_pattern)"
                 ),
+            ]
+            params: list[tuple[str, object]] = [
+                ("start_ts", start),
+                ("end_ts", end),
+                ("promql_pattern", "%" + promql + "%"),
             ]
 
             where_sql = "WHERE " + " AND ".join(where_clauses)
 
             sql = (
-                f"SELECT * FROM {self.table} "
-                f"{where_sql} "
-                f"ORDER BY {ts_col} DESC "
-                f"LIMIT 100"
+                "SELECT * FROM "
+                + self.table
+                + " "
+                + where_sql
+                + " ORDER BY "
+                + ts_col
+                + " DESC LIMIT 100"
             )
 
-            rows = self._execute_query(sql)
+            rows = self._execute_query(sql, params)
         except DatabricksConnectorError:
             raise
         except Exception as e:
@@ -465,15 +510,25 @@ class DatabricksMetricsSource(DatabricksConnection, MetricsSource):
 
             status_col = self.alerts_column_mapping.get("status", "status")
 
+            # 'active' é constante do código, não input do usuário;
+            # identificadores vêm da config (concatenação, não f-string SQL)
             where_sql = ""
             if active_only:
-                where_sql = f"WHERE {status_col} = 'active'"
+                where_sql = "WHERE " + status_col + " = 'active'"
 
             sql = (
-                f"SELECT {alert_col}, {svc_col}, {severity_col} "
-                f"FROM {self.alerts_table} "
-                f"{where_sql} "
-                f"ORDER BY {severity_col}"
+                "SELECT "
+                + alert_col
+                + ", "
+                + svc_col
+                + ", "
+                + severity_col
+                + " FROM "
+                + self.alerts_table
+                + " "
+                + where_sql
+                + " ORDER BY "
+                + severity_col
             )
 
             rows = self._execute_query(sql)
@@ -596,27 +651,33 @@ class DatabricksTraceSource(DatabricksConnection, TraceSource):
             duration_col = self.column_mapping["duration_ms"]
             start_col = self.column_mapping["start_time"]
 
-            safe_svc = service.replace("'", "''")
-
-            where_clauses = [f"{svc_col} = '{safe_svc}'"]
+            where_clauses = [svc_col + " = :service"]
+            params: list[tuple[str, object]] = [("service", service)]
 
             if min_duration_ms is not None:
-                where_clauses.append(f"{duration_col} >= {min_duration_ms}")
+                where_clauses.append(duration_col + " >= :min_duration")
+                params.append(("min_duration", float(min_duration_ms)))
             if start:
-                where_clauses.append(f"{start_col} >= '{start.isoformat()}'")
+                where_clauses.append(start_col + " >= :start_ts")
+                params.append(("start_ts", start))
             if end:
-                where_clauses.append(f"{start_col} <= '{end.isoformat()}'")
+                where_clauses.append(start_col + " <= :end_ts")
+                params.append(("end_ts", end))
 
             where_sql = "WHERE " + " AND ".join(where_clauses)
 
             sql = (
-                f"SELECT * FROM {self.table} "
-                f"{where_sql} "
-                f"ORDER BY {start_col} DESC "
-                f"LIMIT {limit}"
+                "SELECT * FROM "
+                + self.table
+                + " "
+                + where_sql
+                + " ORDER BY "
+                + start_col
+                + " DESC LIMIT :limit"
             )
+            params.append(("limit", int(limit)))
 
-            rows = self._execute_query(sql)
+            rows = self._execute_query(sql, params)
         except DatabricksConnectorError:
             raise
         except Exception as e:
@@ -640,11 +701,15 @@ class DatabricksTraceSource(DatabricksConnection, TraceSource):
         try:
             tid_col = self.column_mapping["trace_id"]
 
-            safe_tid = trace_id.replace("'", "''")
+            sql = (
+                "SELECT * FROM "
+                + self.table
+                + " WHERE "
+                + tid_col
+                + " = :trace_id LIMIT 1"
+            )
 
-            sql = f"SELECT * FROM {self.table} WHERE {tid_col} = '{safe_tid}' LIMIT 1"
-
-            rows = self._execute_query(sql)
+            rows = self._execute_query(sql, [("trace_id", trace_id)])
         except DatabricksConnectorError:
             raise
         except Exception as e:

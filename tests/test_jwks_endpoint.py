@@ -168,6 +168,46 @@ class TestLoadOrGenerateKeypair:
         assert priv1 == priv2
         assert pub1 == pub2
 
+    @pytest.mark.unit
+    def test_private_key_written_with_0600(self, tmp_path: Path) -> None:
+        """F4-5: chave privada nunca nasce legível por grupo/outros."""
+        priv_path = tmp_path / "private.pem"
+        pub_path = tmp_path / "public.pem"
+        load_or_generate_keypair(priv_path, pub_path)
+        assert (priv_path.stat().st_mode & 0o777) == 0o600
+        # A pública é pública — não precisa (nem deve) ser restrita
+        assert (pub_path.stat().st_mode & 0o044) != 0
+
+    @pytest.mark.unit
+    def test_private_key_written_with_0600_despite_permissive_umask(
+        self, tmp_path: Path
+    ) -> None:
+        """F4-5: umask 0o000 não pode afrouxar a chave privada."""
+        import os
+
+        priv_path = tmp_path / "private.pem"
+        pub_path = tmp_path / "public.pem"
+        old = os.umask(0o000)
+        try:
+            load_or_generate_keypair(priv_path, pub_path)
+        finally:
+            os.umask(old)
+        assert (priv_path.stat().st_mode & 0o777) == 0o600
+
+    @pytest.mark.unit
+    def test_existing_loose_private_key_is_tightened_on_load(
+        self, tmp_path: Path
+    ) -> None:
+        """F4-5: chave pré-existente com 0644 é corrigida ao carregar, sem
+        alterar o conteúdo."""
+        priv_path = tmp_path / "private.pem"
+        pub_path = tmp_path / "public.pem"
+        priv1, _, _ = load_or_generate_keypair(priv_path, pub_path)
+        priv_path.chmod(0o644)
+        priv2, _, _ = load_or_generate_keypair(priv_path, pub_path)
+        assert priv1 == priv2
+        assert (priv_path.stat().st_mode & 0o777) == 0o600
+
 
 # ---------------------------------------------------------------------------
 # Testes: JWKS endpoint e discovery
@@ -306,7 +346,7 @@ class TestRS256TokenFlow:
             ttl=60,
             algorithm="RS256",
         )
-        claims = validate_token(token, public_pem, algorithm="RS256")
+        claims = validate_token(token, public_pem, algorithm="RS256", audience="mcp")
         assert claims.sub == "partnera-agent"
         assert "aiops:diagnose" in claims.scopes
 

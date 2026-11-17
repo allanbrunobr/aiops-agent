@@ -282,11 +282,21 @@ A CLI e a demo carregam `.env.local` automaticamente. A CLI também lê `.env`. 
 | `DATABRICKS_HOST` / `DATABRICKS_TOKEN` / `DATABRICKS_WAREHOUSE_ID` | `--data-source databricks` | Apenas com Databricks |
 | `JIRA_URL` / `JIRA_EMAIL` / `JIRA_API_TOKEN` / `JIRA_PROJECT_KEY` | `--tracker jira` | Apenas com Jira |
 
+O segredo HMAC do OAuth, quando definido, é `AIOPS_MCP__OAUTH__JWT_SECRET` e precisa ter pelo menos 32 bytes.
+
+Autenticação do MCP e do A2A (`mcp.auth_method` em `config/defaults.yaml`):
+
+- `oauth21`: Bearer JWT emitido pelo servidor de autorização embutido via fluxo authorization-code com PKCE — `POST /auth/authorize` (client id, scopes, `code_challenge`, `audience`) devolve um code de uso único; `POST /auth/token` (code + `code_verifier`) devolve o token. Os tokens carregam `iss` e `aud` igual a `mcp` ou `a2a`; a outra superfície os rejeita. Assinatura HS256, ou RS256 quando `private_key_path`/`public_key_path` estão configurados (o endpoint JWKS publica a chave em uso).
+- `header` (padrão): `X-Client-Id` **e** `X-Client-Secret` são obrigatórios e comparados em tempo constante. Os clientes de fábrica têm `secret` vazio, então nada autentica até você definir um (YAML ou `AIOPS_MCP__OAUTH__ALLOWED_CLIENTS`).
+- `federated`: Bearer JWT dos emissores OIDC listados em `trusted_issuers`; `kid` desconhecido é rejeitado após um único refresh do JWKS.
+
+No transporte SSE, `POST /mcp/messages` só aceita mensagens do principal que abriu a sessão; outro cliente autenticado recebe `404`, como se a sessão não existisse.
+
 > Nunca versione arquivos `.env*` com credenciais reais. O `.gitignore` já exclui esses arquivos.
 
 ### Arquivos de configuração
 
-- [`config/defaults.yaml`](config/defaults.yaml): limiares de análise, Blueprint Engine, webhook, Slack e MCP. Valores podem ser sobrescritos por variáveis com prefixo `AIOPS__` (por exemplo, `AIOPS__MCP__OAUTH__JWT_SECRET`).
+- [`config/defaults.yaml`](config/defaults.yaml): limiares de análise, Blueprint Engine, webhook, Slack e MCP. Valores podem ser sobrescritos por variáveis de ambiente com prefixo `AIOPS_` e `__` entre os níveis (por exemplo, `AIOPS_MCP__OAUTH__JWT_SECRET`).
 - [`config.yaml`](config.yaml): mapa de criticidade por serviço, usado no cálculo de *blast radius*.
 
 ---
@@ -298,7 +308,7 @@ A CLI e a demo carregam `.env.local` automaticamente. A CLI também lê `.env`. 
 | Slack | `interfaces/http/notifications/slack.py` | Block Kit progressivo, retry exponencial e fallback local em `output/`. Guia: [`infra/SLACK-SETUP.md`](infra/SLACK-SETUP.md) |
 | Jira | `tools/jira_tracker.py` | Ativada com `--tracker jira` |
 | Databricks | `tools/databricks_connector.py` | Fonte de dados real via `--data-source databricks` |
-| MCP | `interfaces/mcp/` | Ferramentas `diagnose_incident`, `validate_action` e `search_incidents`. Transportes stdio e SSE, com rate limiting e OAuth 2.1 |
+| MCP | `interfaces/mcp/` | Ferramentas `diagnose_incident`, `validate_action` e `search_incidents`. Transportes stdio e SSE, com rate limiting, OAuth 2.1 (PKCE) e vínculo de sessão |
 | A2A | `interfaces/http/routes/a2a.py` | API agent-to-agent montada pela aplicação HTTP |
 | Webhooks | `interfaces/http/webhook/` | Normalizadores para Grafana, PagerDuty e Databricks, com deduplicação |
 
