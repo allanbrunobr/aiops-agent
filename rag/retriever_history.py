@@ -19,8 +19,11 @@ class ObservabilityRetrieverWithHistory(ObservabilityRetriever):
         self,
         indexer: ObservabilityIndexer,
         db_path: str = "data/incident_memory.db",
+        reranker: object | None = None,
     ) -> None:
-        super().__init__(indexer)
+        # F6-2: a subclasse não aceitava reranker — era impossível ligar o
+        # DomainReranker no retriever que a CLI V0 realmente usa.
+        super().__init__(indexer, reranker=reranker)
         self.db_path = db_path
 
     def get_similar_past_incidents(

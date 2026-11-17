@@ -24,6 +24,33 @@ except ImportError:
     _RUST_AVAILABLE = False
 
 
+_rust_params_ok: bool | None = None
+
+
+def _rust_supports_params() -> bool:
+    """A extensão instalada aceita ``percentile_threshold``/``max_hops``?
+
+    Extensão compilada antes de F6-1 só aceita ``(spans)``: detecta uma vez,
+    avisa e usa o Python. Recompile com ``scripts/build_rust.sh``.
+    """
+    global _rust_params_ok
+    if _rust_params_ok is None:
+        sig = getattr(_rust.filter_traces, "__text_signature__", "") or ""
+        _rust_params_ok = "percentile_threshold" in sig
+        if not _rust_params_ok:
+            import structlog
+
+            structlog.get_logger("pipeline.trace_filter").warning(
+                "rust.extension_stale",
+                function="filter_traces",
+                detail=(
+                    "_aiops_rust compilado antes de F6-1 não aceita parâmetros; "
+                    "usando fallback Python. Recompile: scripts/build_rust.sh"
+                ),
+            )
+    return _rust_params_ok
+
+
 @dataclass
 class SlowCallPath:
     """Um call path lento extraído dos traces."""
@@ -53,7 +80,7 @@ class TraceFilter:
         F6-1: antes só os defaults (p95/3 hops) iam para o Rust; qualquer config
         custom caía no Python sem aviso, e os dois paths divergiam.
         """
-        if _RUST_AVAILABLE:
+        if _RUST_AVAILABLE and _rust_supports_params():
             return self._filter_rust(spans)
         return self._filter_python(spans)
 

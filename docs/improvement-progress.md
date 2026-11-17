@@ -734,3 +734,43 @@ M1 com o mesmo cenário (`--no-llm --no-rag`), a paridade **não existe**:
   nenhum** (snapshots usam os defaults, que já iam para o Rust).
 - Nota: `cargo fmt --check` reporta diffs em 20 arquivos pré-existentes — fica
   para F6-4 (clippy/fmt no CI), num commit só de formatação.
+
+### F6-2 Features mortas: reranker/CoT — done (decisão: WIRE, não delete)
+- **Decisão registrada:** ambos têm 30+27 testes unitários, implementação completa
+  e valor claro (fusão de sinais de domínio; query expansion no ReAct). Deletar
+  seria jogar fora trabalho testado; o que faltava era o wiring.
+- `config/loader.py`: `RagConfig` (`reranker_enabled=True`, `cross_encoder_enabled
+  =False`, `cot_enabled=True`, `service_criticality_map`) + bloco `rag` em
+  `defaults.yaml`. O mapa de criticidade vivia em `config.yaml` na RAIZ, que
+  **nenhum código lia** (o README dizia que alimentava o blast radius — falso);
+  arquivo removido, mapa migrado, README/README.pt-BR corrigidos.
+- `app/builders.py`: `build_reranker(config)` e `build_rag(config)` → por default
+  `CoTObservabilityRetriever` com `DomainReranker` (Tier 1). Tier 2
+  (cross-encoder, baixa modelo HF) é opt-in. `config=None` mantém compat.
+  Call sites: `v1_runner`, `http/app.py`, `v0_pipeline.step_rag` (via
+  `build_reranker`, pois o V0 usa `ObservabilityRetrieverWithHistory`, que agora
+  aceita `reranker=`).
+- `rag/cot_retriever.py`: bug latente corrigido — chamava
+  `self.reranker.rerank(query, raw)` (args invertidos → `AttributeError` ao
+  ativar) e DEPOIS de `search()` já ter reranqueado (duplo rerank). Agora passa o
+  reranker à base e deixa `search()` reranquear uma vez.
+- **Efeito observável:** V0+RAG agora mostra scores de fusão (0.58/0.57) na
+  query de amostra em vez do score FAISS puro; `DiagnosisAgent` passa a usar
+  `search_with_cot` (histórico + expansão) porque o retriever default é CoT.
+  Snapshots inalterados (rodam com `--no-rag`).
+- **Guard de extensão stale (F6-1 follow-up):** `metric_filter`/`trace_filter`
+  detectam via `__text_signature__` se o `.so` instalado aceita os novos
+  parâmetros; `.so` antigo → warning `rust.extension_stale` uma vez + fallback
+  Python. Necessário porque o M5 (arm64) tem a extensão pré-F6-1 e não pode
+  compilar (regra "nada pesado"); sem o guard, qualquer teste com `Aggregator()`
+  explodia com `TypeError`.
+- Testes: `tests/test_rag_wiring.py` (10): bloco `rag` no YAML/modelo, override
+  por env, validação do mapa, `build_rag` default = CoT+reranker, switches,
+  criticidade do config no reranker, CoT reranqueia 1× com assinatura correta,
+  `WithHistory` aceita reranker. `test_reranker_integration.py` ajustado
+  (`config.yaml` → `defaults.yaml:rag`); `test_config_drift.py` cobre `rag`.
+
+### Verificação (F6-2)
+- M1 (Rust recompilado): ruff/format/mypy ✓; unit **878 passed**; integration/
+  snapshot **148 passed**; smokes V0 exit 3 / V1 exit 0 / V1+RAG exit 0 / V0+RAG
+  exit 3 com reranker ativo. **Diffs de snapshot: nenhum.**

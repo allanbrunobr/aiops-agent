@@ -16,7 +16,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from config.loader import AppConfig, SlackConfig, WebhookConfig, load_config
+from config.loader import AppConfig, RagConfig, SlackConfig, WebhookConfig, load_config
 
 _DEFAULTS = Path(__file__).resolve().parent.parent / "config" / "defaults.yaml"
 
@@ -31,6 +31,7 @@ def test_yaml_sections_have_no_unknown_keys():
     data = _yaml()
     assert set(data["slack"]) <= set(SlackConfig.model_fields)
     assert set(data["webhook"]) <= set(WebhookConfig.model_fields)
+    assert set(data["rag"]) <= set(RagConfig.model_fields)
     assert "webhook_url" not in data["slack"]
 
 

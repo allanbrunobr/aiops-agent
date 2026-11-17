@@ -278,6 +278,40 @@ class LLMConfig(BaseModel):
     model_name: str = "claude-sonnet-4-20250514"
 
 
+class RagConfig(BaseModel):
+    """RAG: reranking por sinais de domínio e Chain-of-Thought (F6-2).
+
+    ``DomainReranker`` e ``CoTObservabilityRetriever`` existiam e eram testados
+    mas nunca eram instanciados em produção. Agora ``app.builders.build_rag``
+    monta o retriever a partir daqui.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    reranker_enabled: bool = True  # Tier 1: fusão de sinais (barato, sem ML extra)
+    cross_encoder_enabled: bool = False  # Tier 2: baixa modelo HF — opt-in
+    cot_enabled: bool = True  # histórico de buscas + query expansion no ReAct
+    # Criticidade por serviço (0..1) usada pelo reranker; desconhecidos = 0.5.
+    # Antes vivia em config.yaml na raiz, que nenhum código lia.
+    service_criticality_map: dict[str, float] = {
+        "payment-svc": 1.0,
+        "auth-svc": 0.9,
+        "api-gateway": 0.8,
+        "database": 0.95,
+        "cache": 0.7,
+        "debug-svc": 0.1,
+    }
+
+    @field_validator("service_criticality_map")
+    @classmethod
+    def criticality_in_unit_interval(cls, v: dict[str, float]) -> dict[str, float]:
+        """Every criticality must be within [0, 1]."""
+        bad = {k: x for k, x in v.items() if not 0.0 <= x <= 1.0}
+        if bad:
+            raise ValueError(f"criticality must be in [0, 1]: {bad}")
+        return v
+
+
 class AppConfig(BaseSettings):
     """Configuracao raiz do AIOps Agent."""
 
@@ -298,6 +332,7 @@ class AppConfig(BaseSettings):
     notifications: NotificationsConfig = NotificationsConfig()
     mcp: McpConfig = McpConfig()
     llm: LLMConfig = LLMConfig()
+    rag: RagConfig = RagConfig()
 
     @classmethod
     def settings_customise_sources(

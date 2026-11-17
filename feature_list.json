@@ -275,7 +275,7 @@
       "title": "Features mortas: reranker/CoT — wire ou delete",
       "description": "Reranker nunca wired em produção (main.py:373 cria retriever sem reranker); Tier 2 cross-encoder nunca ativa (nenhum caller passa use_tier2). CoTObservabilityRetriever/DomainReranker nunca instanciados fora de testes; rag/cot_retriever.py:53 chama self.reranker.rerank(query, raw) vs assinatura rerank(results, query, top_k) → AttributeError ao ativar; duplo rerank (search já reranqueia). Para CADA feature: ou wire com teste de integração, ou delete com nota no CHANGELOG. Registrar decisão. Não deixar código morto com bug latente.",
       "acceptance": "rg confirma: features wired com testes OU removidas; decisões registradas.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado. Precisão: a subclasse ObservabilityRetrieverWithHistory (rag/retriever_history.py:18-24) nem aceita parâmetro reranker; app/builders.py:50 também cria retriever sem reranker; agents/diagnoser.py:116-117,413-414 só faz isinstance dos tipos CoT."
     },
     {

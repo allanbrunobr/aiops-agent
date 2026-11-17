@@ -364,7 +364,11 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
 
     console.print("  Model: [dim]all-MiniLM-L6-v2 (384 dimensions)[/dim]")
 
-    retriever = ObservabilityRetrieverWithHistory(indexer)
+    # F6-2: reranker por sinais de domínio (config.rag) — antes a CLI criava o
+    # retriever sem reranker e o DomainReranker nunca rodava em produção.
+    from app.builders import build_reranker
+
+    retriever = ObservabilityRetrieverWithHistory(indexer, reranker=build_reranker())
 
     # Demo query
     console.print("\n  [dim]Sample query: 'connection pool timeout'[/dim]")

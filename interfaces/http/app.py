@@ -128,7 +128,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     from app.builders import build_engine, build_rag
 
     engine = build_engine(config)
-    _, retriever = build_rag()
+    _, retriever = build_rag(config)
 
     # --------------------------------------------------------
     # MCP SSE — montado somente se habilitado e transporte = sse

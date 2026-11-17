@@ -313,7 +313,7 @@ maturin build --release --interpreter .venv/bin/python --manifest-path rust/Carg
 ### Configuration files
 
 - [`config/defaults.yaml`](config/defaults.yaml): analysis thresholds, Blueprint Engine, webhook, Slack and MCP settings. Values can be overridden by environment variables with the `AIOPS_` prefix and `__` between nesting levels (for example, `AIOPS_MCP__OAUTH__JWT_SECRET`).
-- [`config.yaml`](config.yaml): per-service criticality map, used for the *blast radius* calculation.
+- `rag` block in `config/defaults.yaml`: domain reranker (`reranker_enabled`, Tier 1 signal fusion), optional cross-encoder (`cross_encoder_enabled`, downloads a Hugging Face model), Chain-of-Thought retriever (`cot_enabled`) and the per-service `service_criticality_map` consumed by the reranker.
 
 ---
 

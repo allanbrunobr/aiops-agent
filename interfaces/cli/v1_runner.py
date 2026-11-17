@@ -173,7 +173,7 @@ def run_v1(args: argparse.Namespace) -> int:
         try:
             console.print(Rule("[bold]Stage 3: RAG Indexing[/bold]", style="cyan"))
             # Indexa apos aggregator ter processado — por ora, sem report pre-pipeline
-            indexer, retriever = build_rag()
+            indexer, retriever = build_rag(app_config)
 
             # Injeta retriever no metadata do estado
             state = dataclasses.replace(

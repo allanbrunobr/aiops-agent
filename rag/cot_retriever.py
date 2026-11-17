@@ -27,8 +27,12 @@ class CoTObservabilityRetriever(ObservabilityRetriever):
     """Retriever com rastreamento de contexto Chain-of-Thought por sessão de diagnóstico."""
 
     def __init__(self, indexer, reranker=None):
-        super().__init__(indexer)
-        self.reranker = reranker
+        # O reranker vai para a base: ObservabilityRetriever.search() já aplica
+        # rerank(results, query, top_k=) com fallback seguro. F6-2: antes esta
+        # classe guardava o reranker e chamava rerank(query, raw) — argumentos
+        # invertidos → AttributeError ao ativar — e ainda por cima DEPOIS de
+        # search() já ter reranqueado (duplo rerank).
+        super().__init__(indexer, reranker=reranker)
         self.search_history: list[SearchContext] = []
         self.current_iteration: int = 0
 
@@ -47,12 +51,8 @@ class CoTObservabilityRetriever(ObservabilityRetriever):
         expander = QueryExpander()
         expanded_query = expander.expand_query(query, self.search_history)
 
-        # Realiza a busca — com reranker se disponível, caso contrário FAISS direto
-        if self.reranker is not None:
-            raw = self.search(expanded_query, top_k=top_k)
-            results = self.reranker.rerank(query, raw)
-        else:
-            results = self.search(expanded_query, top_k=top_k)
+        # search() já reranqueia quando há reranker (uma vez, assinatura correta)
+        results = self.search(expanded_query, top_k=top_k)
 
         # Extrai entidades da query original
         entities = self._extract_entities(query)

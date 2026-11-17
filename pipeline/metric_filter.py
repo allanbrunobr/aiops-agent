@@ -24,6 +24,34 @@ except ImportError:
     _RUST_AVAILABLE = False
 
 
+_rust_params_ok: bool | None = None
+
+
+def _rust_supports_params() -> bool:
+    """A extensão instalada aceita ``sigma_threshold``/``baseline_ratio``?
+
+    Uma extensão compilada ANTES de F6-1 só aceita ``(metrics)``. Em vez de
+    quebrar com TypeError no hot path, detectamos uma vez, avisamos e usamos o
+    Python (que honra os parâmetros). Recompile com ``scripts/build_rust.sh``.
+    """
+    global _rust_params_ok
+    if _rust_params_ok is None:
+        sig = getattr(_rust.filter_metrics, "__text_signature__", "") or ""
+        _rust_params_ok = "sigma_threshold" in sig
+        if not _rust_params_ok:
+            import structlog
+
+            structlog.get_logger("pipeline.metric_filter").warning(
+                "rust.extension_stale",
+                function="filter_metrics",
+                detail=(
+                    "_aiops_rust compilado antes de F6-1 não aceita thresholds; "
+                    "usando fallback Python. Recompile: scripts/build_rust.sh"
+                ),
+            )
+    return _rust_params_ok
+
+
 @dataclass
 class MetricAnomaly:
     """Uma anomalia detectada em uma métrica."""
@@ -53,7 +81,7 @@ class MetricFilter:
         F6-1: antes só os defaults (3.0/0.5) iam para o Rust; qualquer config
         custom caía no Python sem aviso, e os dois paths divergiam.
         """
-        if _RUST_AVAILABLE:
+        if _RUST_AVAILABLE and _rust_supports_params():
             return self._detect_rust(metrics)
         return self._detect_python(metrics)
 

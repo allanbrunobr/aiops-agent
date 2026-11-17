@@ -297,7 +297,7 @@ No transporte SSE, `POST /mcp/messages` só aceita mensagens do principal que ab
 ### Arquivos de configuração
 
 - [`config/defaults.yaml`](config/defaults.yaml): limiares de análise, Blueprint Engine, webhook, Slack e MCP. Valores podem ser sobrescritos por variáveis de ambiente com prefixo `AIOPS_` e `__` entre os níveis (por exemplo, `AIOPS_MCP__OAUTH__JWT_SECRET`).
-- [`config.yaml`](config.yaml): mapa de criticidade por serviço, usado no cálculo de *blast radius*.
+- Bloco `rag` em `config/defaults.yaml`: reranker por sinais de domínio (`reranker_enabled`, Tier 1), cross-encoder opcional (`cross_encoder_enabled`, baixa um modelo Hugging Face), retriever Chain-of-Thought (`cot_enabled`) e o `service_criticality_map` por serviço consumido pelo reranker.
 
 ---
 

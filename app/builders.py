@@ -6,7 +6,9 @@ mas delega para estes builders quando há duplicação real entre eles.
 Builders incluídos:
     - build_engine:             instancia BlueprintEngine com store/creds opcionais.
     - build_pipeline:           re-export de build_incident_response_pipeline.
-    - build_rag:                par (indexer, retriever) com configuração default.
+    - build_rag:                par (indexer, retriever) conforme config.rag
+                                (CoT + DomainReranker — F6-2).
+    - build_reranker:           DomainReranker a partir de config.rag, ou None.
     - build_detector_agent:     DetectionAgent com thresholds de ``config``.
     - build_diagnoser_agent:    DiagnosisAgent com modelo de ``config.llm``.
     - build_agent_orchestrator: AgentOrchestrator (Estágio 2) com memória,
@@ -33,8 +35,9 @@ if TYPE_CHECKING:
     from application.ports.llm_client import LLMClient
     from application.ports.reporter import Reporter
     from blueprint.nodes import PipelineDefinition
-    from config.loader import AppConfig
+    from config.loader import AppConfig, RagConfig
     from rag.memory import IncidentMemoryDB
+    from rag.reranker import DomainReranker
 
 
 def build_engine(
@@ -56,11 +59,52 @@ def build_pipeline(config: AppConfig) -> PipelineDefinition:
     return build_incident_response_pipeline(config)
 
 
-def build_rag() -> tuple[ObservabilityIndexer, ObservabilityRetriever]:
-    """Cria par (indexer, retriever) com configuração padrão."""
+def build_reranker(config: AppConfig | None = None) -> DomainReranker | None:
+    """DomainReranker a partir de ``config.rag`` (F6-2); ``None`` se desligado.
+
+    Tier 1 (fusão de sinais) não carrega nada além do próprio módulo. Tier 2
+    (cross-encoder) só com ``cross_encoder_enabled`` — baixa um modelo HF.
+    """
+    rag_cfg = _rag_config(config)
+    if not rag_cfg.reranker_enabled:
+        return None
+    from rag.reranker import DomainReranker
+
+    return DomainReranker(
+        service_criticality_map=dict(rag_cfg.service_criticality_map),
+        use_cross_encoder=rag_cfg.cross_encoder_enabled,
+    )
+
+
+def build_rag(
+    config: AppConfig | None = None,
+) -> tuple[ObservabilityIndexer, ObservabilityRetriever]:
+    """Cria par (indexer, retriever) conforme ``config.rag``.
+
+    - ``cot_enabled`` → ``CoTObservabilityRetriever`` (histórico de buscas +
+      query expansion, consumido pelo ``DiagnosisAgent`` no tool
+      ``search_similar``); senão ``ObservabilityRetriever``.
+    - ``reranker_enabled`` → ``DomainReranker`` injetado no retriever.
+
+    ``config=None`` mantém compat com os call sites antigos: usa ``RagConfig()``
+    (defaults: reranker + CoT ligados, cross-encoder desligado).
+    """
+    rag_cfg = _rag_config(config)
     indexer = ObservabilityIndexer()
-    retriever = ObservabilityRetriever(indexer)
-    return indexer, retriever
+    reranker = build_reranker(config)
+    if rag_cfg.cot_enabled:
+        from rag.cot_retriever import CoTObservabilityRetriever
+
+        return indexer, CoTObservabilityRetriever(indexer, reranker=reranker)
+    return indexer, ObservabilityRetriever(indexer, reranker=reranker)
+
+
+def _rag_config(config: AppConfig | None) -> RagConfig:
+    from config.loader import RagConfig as _RagConfig
+
+    if config is None:
+        return _RagConfig()
+    return getattr(config, "rag", None) or _RagConfig()
 
 
 # ---------------------------------------------------------------------------
