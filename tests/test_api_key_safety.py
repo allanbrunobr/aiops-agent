@@ -164,14 +164,22 @@ class TestPostmortemNoApiKeys:
         )
 
     def test_postmortem_template_has_no_env_interpolation(self) -> None:
-        """Source code de step_postmortem() NÃO deve referenciar api_key ou os.environ."""
+        """Source code do postmortem NÃO deve referenciar api_key ou os.environ.
+
+        F5-2: o template vive em application.use_cases.postmortem
+        (render_postmortem_markdown); step_postmortem é só a casca de I/O.
+        Inspeciona os dois para a guarda continuar significativa.
+        """
+        from application.use_cases.postmortem import render_postmortem_markdown
         from main import step_postmortem
 
-        source = inspect.getsource(step_postmortem)
+        source = inspect.getsource(step_postmortem) + inspect.getsource(
+            render_postmortem_markdown
+        )
         forbidden_patterns = ["os.environ", "api_key", "ANTHROPIC_API_KEY", "API_KEY"]
         for pattern in forbidden_patterns:
             assert pattern not in source, (
-                f"step_postmortem() contém referência a '{pattern}' — risco de key interpolation"
+                f"postmortem contém referência a '{pattern}' — risco de key interpolation"
             )
 
 

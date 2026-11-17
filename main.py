@@ -37,8 +37,6 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
-import enum
-import json
 import os
 import sys
 import time
@@ -47,7 +45,6 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
@@ -57,10 +54,24 @@ from adapters.reporter import RichConsoleReporter
 from agents.detector import DetectionAgent
 from agents.diagnoser import DiagnosisAgent
 from agents.mitigator import MitigationAgent
+
+# ---------------------------------------------------------------------------
+# Compat (F5-2): nomes que a suíte de testes ainda importa de ``main``.
+# Os módulos definitivos são os de ``interfaces/cli``, ``core`` e
+# ``application``; este bloco é removido em F5-4 junto com o engine V0.
+# Um import por linha com ``noqa`` próprio: ``ruff --fix`` não remove.
+# ---------------------------------------------------------------------------
+from application.use_cases.postmortem import ACTION_ITEMS_MAP  # noqa: E402, F401
+from application.use_cases.postmortem import get_action_items as _get_action_items  # noqa: E402, F401
+from application.use_cases.postmortem import json_default as _json_default  # noqa: E402, F401
+from application.use_cases.postmortem import (  # noqa: E402
+    serialize_health_snapshot as _serialize_health_snapshot,  # noqa: F401
+)
+from application.use_cases.postmortem import serialize_result as _serialize_result  # noqa: E402, F401
 from config.env import load_local_env
 from config.loader import AppConfig, load_config
-from core.secrets import API_KEY_PATTERNS  # noqa: F401  (compat: tests importam de main)
-from core.secrets import contains_api_key_pattern as _contains_api_key_pattern  # noqa: F401
+from core.secrets import API_KEY_PATTERNS  # noqa: E402, F401
+from core.secrets import contains_api_key_pattern as _contains_api_key_pattern  # noqa: E402, F401
 from core.secrets import sanitize_secrets as _sanitize_secrets
 
 # Modulos do projeto
@@ -68,18 +79,30 @@ from data.models import SimulatedIncident
 from data.registry import get_scenario
 from data.sample_incident import create_incident
 from domain.incident_state import IncidentState
-from interfaces.cli.args import (  # noqa: F401 — compat: tests importam de main
-    _CliParser,
+from interfaces.cli.args import (
+    _CliParser,  # noqa: E402, F401
     _validate_args,
     build_arg_parser,
 )
 from interfaces.cli.console import console
-from interfaces.cli.exit_codes import (  # noqa: F401 — compat: tests importam de main
+from interfaces.cli.data_sources import (
+    _create_databricks_sources,
+    step_fetch_databricks_data,
+)
+from interfaces.cli.exit_codes import (
     EXIT_APPROVAL_NEEDED,
     EXIT_CODE_LABELS,
     EXIT_ERROR,
     EXIT_REGRESSION,
     EXIT_SUCCESS,
+)
+from interfaces.cli.postmortem import step_postmortem
+from interfaces.cli.trackers import (  # noqa: E402, F401
+    TRACKER_REGISTRY,
+    _attach_postmortem_to_tracker,
+    _create_jira_tracker,
+    _resolve_tracker,
+    step_tracking,
 )
 from pipeline.aggregator import AggregatedReport, Aggregator
 from pipeline.context_compressor import ContextCompressor
@@ -875,189 +898,6 @@ def step_remediation_validation(result):
 
 
 # Mapa de action items por tipo de incidente — usado tanto no postmortem markdown quanto JSON.
-ACTION_ITEMS_MAP = {
-    "connection pool": [
-        "Add connection pool size validation to CI/CD pipeline",
-        "Implement config change canary deployment (gradual rollout)",
-        "Add alerting for connection pool utilization > 80%",
-        "Review and update runbook for connection pool incidents",
-        "Add integration test for config changes affecting pool size",
-    ],
-    "memory": [
-        "Add memory usage alerting and auto-scaling policies",
-        "Investigate memory leak root cause in affected service",
-        "Add heap dump collection to incident response runbook",
-        "Review memory limits and resource quotas for affected services",
-    ],
-    "cpu": [
-        "Add CPU usage alerting and auto-scaling policies",
-        "Profile application for CPU hotspots under load",
-        "Review resource limits and request quotas",
-        "Add load testing to CI/CD pipeline",
-    ],
-    "timeout": [
-        "Review and adjust timeout configurations across services",
-        "Add circuit breaker patterns for inter-service calls",
-        "Implement retry policies with exponential backoff",
-        "Add timeout monitoring and alerting dashboards",
-    ],
-    "unknown": [
-        "Investigate unidentified fault type and document findings",
-        "Add monitoring for newly discovered failure pattern",
-        "Escalate to engineering team for root cause analysis",
-        "Create runbook entry for this incident type",
-    ],
-    "default": [
-        "Review deployment process and add canary rollout",
-        "Update incident response runbook with new pattern",
-        "Add automated rollback triggers for similar incidents",
-        "Implement pre-deployment validation checks",
-    ],
-}
-
-
-def _get_action_items(pattern_matched: str) -> list[str]:
-    """Retorna action items com base no tipo de incidente."""
-    return ACTION_ITEMS_MAP.get(pattern_matched, ACTION_ITEMS_MAP["default"])
-
-
-def _json_default(obj):
-    """Encoder fallback para json.dumps — serializa tipos nao-nativos."""
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    if isinstance(obj, enum.Enum):
-        return obj.value
-    if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
-        return dataclasses.asdict(obj)
-    if isinstance(obj, dict):
-        return dict(obj)
-    return str(obj)
-
-
-def _serialize_health_snapshot(snapshot) -> dict:
-    """Serializa HealthSnapshot incluindo a property health_score."""
-    if snapshot is None:
-        return {}
-    d = dataclasses.asdict(snapshot)
-    d["health_score"] = snapshot.health_score
-    # datetime precisa de conversao
-    if isinstance(d.get("timestamp"), datetime):
-        d["timestamp"] = d["timestamp"].isoformat()
-    return d
-
-
-def _serialize_result(result: dict, incident) -> dict:
-    """Converte result dict completo para estrutura JSON-safe.
-
-    Monta dict com secoes: meta, detection, diagnosis, mitigation,
-    safety_validation, remediation_validation, verification,
-    action_items, timeline, config.
-    """
-    stages = result.get("stages", {})
-
-    # Meta
-    now = datetime.now()
-    meta = {
-        "generated_at": now.isoformat(),
-        "scenario": result.get("scenario_name", "unknown"),
-        "llm_model": result.get("llm_model", "unknown"),
-        "config_source": result.get("config_source", "defaults"),
-        "success": result.get("success", False),
-        "duration_minutes": round(
-            (incident.fix_time - incident.deploy_time).total_seconds() / 60, 1
-        ),
-    }
-
-    # Detection
-    detection = stages.get("detection", {})
-
-    # Diagnosis
-    diagnosis = stages.get("diagnosis", {})
-
-    # Mitigation
-    mitigation_raw = stages.get("mitigation", {})
-    mitigation = {}
-    if mitigation_raw:
-        action = mitigation_raw.get("action")
-        if action is not None:
-            mitigation["action"] = (
-                dataclasses.asdict(action)
-                if dataclasses.is_dataclass(action)
-                else action
-            )
-        mitigation["pattern_matched"] = mitigation_raw.get("pattern_matched", "default")
-
-    # Safety validation
-    safety_validation = stages.get("safety_validation", {})
-
-    # Remediation validation
-    remediation_validation = stages.get("remediation_validation", {})
-
-    # Verification — com snapshots que possuem health_score property
-    verification_raw = stages.get("verification", {})
-    verification = {}
-    if verification_raw:
-        verification["result"] = verification_raw.get("result", "N/A")
-        verification["health_delta"] = verification_raw.get("health_delta", "N/A")
-        verification["message"] = verification_raw.get("message", "N/A")
-        pre = verification_raw.get("pre_snapshot")
-        post = verification_raw.get("post_snapshot")
-        if pre is not None:
-            verification["pre_snapshot"] = _serialize_health_snapshot(pre)
-        if post is not None:
-            verification["post_snapshot"] = _serialize_health_snapshot(post)
-
-    # Action items
-    pattern_matched = (
-        mitigation_raw.get("pattern_matched", "default")
-        if mitigation_raw
-        else "default"
-    )
-    action_items = _get_action_items(pattern_matched)
-
-    # Timeline
-    timeline = {
-        "incident_timeline": {
-            "deploy_time": incident.deploy_time.isoformat(),
-            "spike_start": incident.spike_start.isoformat(),
-            "detection_time": incident.detection_time.isoformat(),
-            "fix_time": incident.fix_time.isoformat(),
-        },
-        "state_transitions": result.get("timeline", []),
-    }
-
-    # Config
-    config = {}
-    tc = result.get("threshold_config")
-    if tc is not None:
-        config["thresholds"] = (
-            tc.thresholds.model_dump()
-            if hasattr(tc, "thresholds")
-            else dataclasses.asdict(tc)
-        )
-    config["source"] = result.get("config_source", "defaults")
-
-    # Tracking (Story 6.3)
-    tracking = stages.get("tracking", {})
-
-    serialized = {
-        "meta": meta,
-        "detection": detection,
-        "diagnosis": diagnosis,
-        "mitigation": mitigation,
-        "safety_validation": safety_validation,
-        "remediation_validation": remediation_validation,
-        "verification": verification,
-        "action_items": action_items,
-        "timeline": timeline,
-        "config": config,
-    }
-    if tracking:
-        serialized["tracking"] = tracking
-
-    return serialized
-
-
 def step_predict(
     result: dict, report, *, slack_fire=None, correlation_id: str = ""
 ) -> None:
@@ -1132,185 +972,6 @@ def step_predict(
         result["stages"]["prediction"] = None
 
     console.print()
-
-
-def step_postmortem(
-    result,
-    incident,
-    output_dir: str = "output",
-    output_format: str = "markdown",
-    tracker_url: str | None = None,
-    tracker_issue_key: str | None = None,
-):
-    """Etapa 5: Gera postmortem em markdown e/ou JSON."""
-    console.print(Rule("[bold]Stage 5: Postmortem Generation[/bold]", style="cyan"))
-    console.print()
-
-    diagnosis = result.get("stages", {}).get("diagnosis", {})
-    mitigation = result.get("stages", {}).get("mitigation", {})
-    verification = result.get("stages", {}).get("verification", {})
-
-    scenario_name = result.get("scenario_name", "payment-pool-exhaustion")
-    now = datetime.now()
-    llm_model = result.get("llm_model", "unknown")
-    postmortem = f"""# Postmortem - Incident {now.strftime("%Y-%m-%d")}
-
-## Summary
-
-- **Date**: {now.strftime("%Y-%m-%d %H:%M")}
-- **Scenario**: {scenario_name}
-- **LLM Model**: {llm_model}
-- **Duration**: ~{(incident.fix_time - incident.deploy_time).total_seconds() / 60:.0f} minutes
-- **Severity**: {result.get("stages", {}).get("detection", {}).get("severity", "UNKNOWN")}
-- **Impact**: Service degradation detected via automated analysis
-- **Resolution**: {"Resolved" if result.get("success") else "Requires manual intervention"}
-
-## Root Cause
-
-{diagnosis.get("root_cause", "Unable to determine root cause")}
-
-**Confidence**: {diagnosis.get("confidence", "unknown")}
-
-## Evidence
-
-"""
-    for i, ev in enumerate(diagnosis.get("evidence", []), 1):
-        postmortem += f"{i}. {ev}\n"
-
-    postmortem += f"""
-## Timeline
-
-| Time | Event |
-|------|-------|
-| {incident.deploy_time.strftime("%H:%M:%S")} | Deployment or configuration change applied |
-| {incident.spike_start.strftime("%H:%M:%S")} | {diagnosis.get("root_cause", "Anomaly detected")[:80]} |
-| {incident.detection_time.strftime("%H:%M:%S")} | Automated detection triggered |
-| {incident.fix_time.strftime("%H:%M:%S")} | Mitigation applied |
-
-### State Machine Transitions
-
-"""
-    for t in result.get("timeline", []):
-        postmortem += f"- **{t['time']}** {t['from']} -> {t['to']}: {t['reason']}\n"
-
-    postmortem += """
-## Mitigation Applied
-
-"""
-    if mitigation:
-        action = mitigation.get("action")
-        if action:
-            postmortem += f"- **Action**: {action.description}\n"
-            postmortem += f"- **Command**: `{action.command}`\n"
-            postmortem += f"- **Risk Level**: {action.risk_level}\n"
-            postmortem += f"- **Rollback**: `{action.rollback_command or 'N/A'}`\n"
-
-    # Safety validation section
-    safety_validation = result.get("stages", {}).get("safety_validation", {})
-    if safety_validation:
-        postmortem += f"""
-## Pre-Execution Safety Check
-
-- **Risk Level**: {safety_validation.get("risk_level", "N/A")}
-- **Risk Score**: {safety_validation.get("risk_score", "N/A")}/100
-- **Approval Status**: {safety_validation.get("approval_status", "N/A")}
-- **Requires Human**: {"Yes" if safety_validation.get("requires_human") else "No"}
-- **Blast Radius**: {safety_validation.get("blast_radius_scope", "N/A")}
-- **Recommendation**: {safety_validation.get("recommendation", "N/A")}
-"""
-
-    # Remediation validation section
-    remediation_validation = result.get("stages", {}).get("remediation_validation", {})
-    if remediation_validation:
-        postmortem += f"""
-## Remediation CVE/Version Validation
-
-- **Risk**: {remediation_validation.get("risk", "N/A")}
-- **Is Safe**: {"Yes" if remediation_validation.get("is_safe") else "No"}
-- **Blocked Patterns**: {", ".join(remediation_validation.get("blocked_patterns", [])) or "None"}
-- **Warnings**: {", ".join(remediation_validation.get("warnings", [])) or "None"}
-- **Recommendation**: {remediation_validation.get("recommendation", "N/A")}
-"""
-
-    postmortem += f"""
-## TNR Verification
-
-- **Result**: {verification.get("result", "N/A")}
-- **Health Delta**: {verification.get("health_delta", "N/A")}
-- **Message**: {verification.get("message", "N/A")}
-
-## Action Items
-
-"""
-
-    # Gera action items dinâmicos com base no pattern_matched da mitigação.
-    pattern_matched = (
-        mitigation.get("pattern_matched", "default") if mitigation else "default"
-    )
-    items = _get_action_items(pattern_matched)
-    for i, item in enumerate(items, 1):
-        postmortem += f"{i}. [ ] {item}\n"
-
-    # Incident Tracking section (Story 6.3)
-    if tracker_url and tracker_issue_key:
-        browse_url = f"{tracker_url}/browse/{tracker_issue_key}"
-        postmortem += f"""
-## Incident Tracking
-
-- **Jira Issue**: [{tracker_issue_key}]({browse_url})
-
-"""
-
-    confidence = diagnosis.get("confidence", "unknown")
-    postmortem += f"""
-## Lessons Learned
-
-- Automated detection identified the incident promptly
-- Heuristic diagnosis provided {confidence}-confidence assessment
-- TNR verification validated the mitigation outcome
-- Incident response pipeline completed all stages successfully
-
----
-
-*Generated by AIOps Agent - Agentic Incident Response System*
-*Papers: STRATUS (NeurIPS 2025), OpsAgent (Nankai 2025), RCACopilot (EuroSys 2024), Acon (Microsoft 2025), AOI (Columbia 2025), TAMO (Shandong 2025), "When AIOps Become AI Oops" (RSAC Labs 2025)*
-"""
-
-    # Salva postmortem nos formatos solicitados
-    out = Path(output_dir)
-    out.mkdir(parents=True, exist_ok=True)
-    timestamp_str = now.strftime("%Y-%m-%d_%H%M%S")
-
-    markdown_path = None
-    json_path = None
-
-    # Markdown output
-    if output_format in ("markdown", "both"):
-        markdown_path = out / f"postmortem_{timestamp_str}.md"
-        markdown_path.write_text(postmortem)
-        console.print(f"  Postmortem (markdown) saved to: [bold]{markdown_path}[/bold]")
-
-    # JSON output
-    if output_format in ("json", "both"):
-        serialized = _serialize_result(result, incident)
-        json_path = out / f"postmortem_{timestamp_str}.json"
-        json_path.write_text(
-            json.dumps(serialized, default=_json_default, indent=2, ensure_ascii=False)
-        )
-        console.print(f"  Postmortem (JSON) saved to: [bold]{json_path}[/bold]")
-
-    # Preview (mostra markdown se disponivel)
-    if output_format in ("markdown", "both"):
-        console.print()
-        console.print(
-            Panel(
-                Markdown(postmortem[:1500] + "\n\n*... (truncated for display)*"),
-                title="Postmortem Preview",
-                border_style="dim",
-            )
-        )
-
-    return markdown_path, json_path
 
 
 def print_summary(
@@ -1505,280 +1166,6 @@ def print_summary(
         console.print(
             f"    {t['time']} {icon} {t['from']} -> [bold]{t['to']}[/bold]: {t['reason'][:60]}"
         )
-
-
-def _create_databricks_sources():
-    """Factory que cria conectores Databricks a partir de env vars.
-
-    Requer DATABRICKS_HOST, DATABRICKS_TOKEN e DATABRICKS_WAREHOUSE_ID.
-    Retorna tupla (log_source, metrics_source, trace_source) ou None
-    se alguma env var estiver ausente.
-    """
-    host = os.environ.get("DATABRICKS_HOST")
-    token = os.environ.get("DATABRICKS_TOKEN")
-    warehouse_id = os.environ.get("DATABRICKS_WAREHOUSE_ID")
-
-    missing = []
-    if not host:
-        missing.append("DATABRICKS_HOST")
-    if not token:
-        missing.append("DATABRICKS_TOKEN")
-    if not warehouse_id:
-        missing.append("DATABRICKS_WAREHOUSE_ID")
-
-    if missing:
-        console.print(
-            f"[red]Missing required env vars for Databricks: {', '.join(missing)}[/red]"
-        )
-        console.print("[dim]Set them in .env or export before running.[/dim]")
-        return None
-
-    # Lazy import — NFR19: simulated mode nao deve importar este modulo
-    from tools.databricks_connector import (
-        DatabricksLogSource,
-        DatabricksMetricsSource,
-        DatabricksTraceSource,
-    )
-
-    log_source = DatabricksLogSource(host=host, token=token, warehouse_id=warehouse_id)
-    metrics_source = DatabricksMetricsSource(
-        host=host, token=token, warehouse_id=warehouse_id
-    )
-    trace_source = DatabricksTraceSource(
-        host=host, token=token, warehouse_id=warehouse_id
-    )
-
-    return log_source, metrics_source, trace_source
-
-
-# --- Tracker Registry (Story 6.3) ---
-
-
-def _create_jira_tracker():
-    """Factory que cria JiraIncidentTracker a partir de env vars.
-
-    Lazy-import para evitar carregar requests quando tracker nao e usado.
-    Retorna instancia de JiraIncidentTracker ou None se configuracao ausente.
-    """
-    try:
-        from tools.jira_tracker import JiraIncidentTracker
-
-        return JiraIncidentTracker()
-    except Exception as e:
-        console.print(
-            f"[yellow]Warning: Could not initialize Jira tracker: {e}[/yellow]"
-        )
-        return None
-
-
-TRACKER_REGISTRY: dict[str, object] = {
-    "jira": _create_jira_tracker,
-}
-
-
-def _resolve_tracker(tracker_name: str | None):
-    """Resolve nome de tracker para instancia de IncidentTracker.
-
-    Retorna None se tracker_name e None ou "none".
-    Retorna instancia do tracker se factory funcionar, ou None com warning.
-    """
-    if tracker_name is None or tracker_name == "none":
-        return None
-
-    factory = TRACKER_REGISTRY.get(tracker_name)
-    if factory is None:
-        console.print(
-            f"[yellow]Warning: Unknown tracker '{tracker_name}'. Skipping.[/yellow]"
-        )
-        return None
-
-    return factory()
-
-
-def step_tracking(result, tracker) -> str | None:
-    """Etapa 5b: Cria issue no tracker externo apos diagnostico.
-
-    Extrai titulo, severidade e descricao do resultado do diagnostico
-    e cria um incidente no tracker. Erros nao interrompem o pipeline.
-    Retorna issue_key ou None se falhar.
-    """
-    console.print(Rule("[bold]Stage 5b: Incident Tracking[/bold]", style="cyan"))
-    console.print()
-
-    diagnosis = result.get("stages", {}).get("diagnosis", {})
-    detection = result.get("stages", {}).get("detection", {})
-
-    root_cause = diagnosis.get("root_cause", "AIOps detected incident")
-    severity = detection.get("severity", "medium")
-    evidence = diagnosis.get("evidence", [])
-
-    # Titulo: primeiros 100 chars do root cause
-    title = root_cause[:100] if len(root_cause) > 100 else root_cause
-
-    # Descricao: root cause completo + evidencias
-    description_parts = [f"Root Cause: {root_cause}", "", "Evidence:"]
-    for ev in evidence:
-        description_parts.append(f"- {ev}")
-    description = "\n".join(description_parts)
-
-    try:
-        issue_key = tracker.create_incident(title, severity, description)
-        console.print(f"  Tracked as: [bold]{issue_key}[/bold]")
-        console.print(f"  URL: [dim]{tracker.url}/browse/{issue_key}[/dim]")
-        return issue_key
-    except Exception as e:
-        console.print(
-            f"[yellow]  Warning: Tracker incident creation failed: {e}[/yellow]"
-        )
-        console.print(
-            "[dim]  Pipeline continues — postmortem will still be generated.[/dim]"
-        )
-        return None
-
-
-def _attach_postmortem_to_tracker(tracker, issue_key: str, result) -> str | None:
-    """Anexa postmortem como comentario no tracker.
-
-    Extrai timeline, root cause e action items do resultado do pipeline
-    e cria comentario de postmortem no issue existente. Erros nao interrompem.
-    Retorna comment_id ou None se falhar.
-    """
-    diagnosis = result.get("stages", {}).get("diagnosis", {})
-    mitigation = result.get("stages", {}).get("mitigation", {})
-
-    root_cause = diagnosis.get("root_cause", "Unable to determine root cause")
-
-    # Mapeia timeline do pipeline para formato do tracker
-    timeline = []
-    for entry in result.get("timeline", []):
-        timeline.append(
-            {
-                "time": entry.get("time", "?"),
-                "event": f"{entry.get('from', '?')} -> {entry.get('to', '?')}: {entry.get('reason', '')}",
-            }
-        )
-
-    # Action items do pattern matched
-    pattern_matched = (
-        mitigation.get("pattern_matched", "default") if mitigation else "default"
-    )
-    action_items = _get_action_items(pattern_matched)
-
-    try:
-        comment_id = tracker.create_postmortem(
-            issue_key, timeline, root_cause, action_items
-        )
-        console.print(f"  Postmortem attached to {issue_key} (comment: {comment_id})")
-        return comment_id
-    except Exception as e:
-        console.print(f"[yellow]  Warning: Postmortem attachment failed: {e}[/yellow]")
-        return None
-
-
-def step_fetch_databricks_data(
-    log_source,
-    metrics_source,
-    trace_source,
-) -> tuple[SimulatedIncident, str]:
-    """Etapa 1 (Databricks): Busca dados reais via conectores.
-
-    Cada conector e chamado individualmente com try/except para fallback
-    gracioso — falha em um nao impede os outros.
-
-    Args:
-        log_source: Conector de logs (LogSource).
-        metrics_source: Conector de metricas (MetricsSource).
-        trace_source: Conector de traces (TraceSource).
-
-    Returns:
-        Tupla (SimulatedIncident com dados reais, "databricks-live").
-    """
-    import uuid as _uuid
-
-    from data.models import LogEntry, MetricPoint, Span
-
-    console.print(Rule("[bold]Stage 1: Databricks Data Fetch[/bold]", style="cyan"))
-    console.print()
-
-    now = datetime.now()
-
-    # --- Logs ---
-    logs: list[LogEntry] = []
-    try:
-        raw_logs = log_source.search(query="*", service="", start=None, end=None)
-        for d in raw_logs:
-            ts = datetime.fromisoformat(d["timestamp"]) if d.get("timestamp") else now
-            logs.append(
-                LogEntry(
-                    timestamp=ts,
-                    level=d.get("level", "INFO"),
-                    service=d.get("service", "unknown"),
-                    message=d.get("message", ""),
-                )
-            )
-        console.print(f"  [green]Logs:[/green] {len(logs)} entries fetched")
-    except Exception as exc:
-        console.print(
-            f"  [yellow]Logs:[/yellow] fetch failed ({exc}), using empty list"
-        )
-
-    # --- Metrics ---
-    metrics: list[MetricPoint] = []
-    try:
-        raw_metrics = metrics_source.query(promql="", start=None, end=None)
-        for d in raw_metrics:
-            ts = datetime.fromisoformat(d["timestamp"]) if d.get("timestamp") else now
-            metrics.append(
-                MetricPoint(
-                    timestamp=ts,
-                    service=d.get("service", "unknown"),
-                    metric_name=d.get("metric", ""),
-                    value=float(d.get("value", 0.0)),
-                )
-            )
-        console.print(f"  [green]Metrics:[/green] {len(metrics)} points fetched")
-    except Exception as exc:
-        console.print(
-            f"  [yellow]Metrics:[/yellow] fetch failed ({exc}), using empty list"
-        )
-
-    # --- Traces ---
-    traces: list[Span] = []
-    try:
-        raw_traces = trace_source.find_traces(service="", min_duration_ms=0.0)
-        for d in raw_traces:
-            traces.append(
-                Span(
-                    trace_id=d.get("trace_id", ""),
-                    span_id=str(_uuid.uuid4()),
-                    parent_span_id=None,
-                    service=d.get("service", "unknown"),
-                    operation=d.get("operation", ""),
-                    start_time=now,
-                    duration_ms=float(d.get("duration_ms", 0.0)),
-                    status=d.get("status", "unknown"),
-                    attributes=d.get("attributes", {}),
-                )
-            )
-        console.print(f"  [green]Traces:[/green] {len(traces)} spans fetched")
-    except Exception as exc:
-        console.print(
-            f"  [yellow]Traces:[/yellow] fetch failed ({exc}), using empty list"
-        )
-
-    incident = SimulatedIncident(
-        logs=logs,
-        metrics=metrics,
-        traces=traces,
-        deploy_time=now,
-        spike_start=now,
-        detection_time=now,
-        fix_time=now,
-        actual_root_cause="unknown (live data)",
-        actual_fix="unknown (live data)",
-    )
-    console.print()
-    return incident, "databricks-live"
 
 
 def create_incident_state(
