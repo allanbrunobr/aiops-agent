@@ -198,6 +198,13 @@ def build_agent_orchestrator(
         client = create_anthropic_llm_client(
             api_key=os.environ.get("ANTHROPIC_API_KEY", "")
         )
+    # F6-3 (NFR6): orçamento de chamadas aplicado onde elas acontecem. Antes,
+    # BlueprintEngine.increment_llm_calls existia mas ninguém o chamava.
+    from adapters.llm.counting_client import CountingLLMClient
+
+    max_calls = getattr(getattr(config, "blueprint", None), "max_llm_calls", 15)
+    if not isinstance(client, CountingLLMClient):
+        client = CountingLLMClient(client, max_calls=max_calls)
     return AgentOrchestrator(
         client=client,
         model=resolve_llm_model(config),

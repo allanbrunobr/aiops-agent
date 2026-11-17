@@ -12,7 +12,11 @@ import numpy as np
 
 from rag.indexer import IndexedChunk, ObservabilityIndexer
 
-_query_cache: dict[str, np.ndarray] = {}
+# Cache de embeddings de query. F6-3: chave inclui o modelo (trocar o modelo
+# de embedding não pode devolver vetores do modelo anterior) e o tamanho é
+# limitado (antes crescia sem teto durante toda a vida do processo).
+_query_cache: dict[tuple[str, str], np.ndarray] = {}
+_QUERY_CACHE_MAX = 512
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +78,11 @@ class ObservabilityRetriever:
             and source_filter is None  # reranking não combinado com source_filter
         )
 
-        key = hashlib.md5(query.encode()).hexdigest()
+        model_name = str(getattr(self.indexer, "model_name", "unknown"))
+        key = (model_name, hashlib.md5(query.encode()).hexdigest())
         if key not in _query_cache:
+            if len(_query_cache) >= _QUERY_CACHE_MAX:
+                _query_cache.pop(next(iter(_query_cache)))  # FIFO: mais antigo
             _query_cache[key] = np.array(
                 self.indexer.model.encode([query], normalize_embeddings=True),
                 dtype=np.float32,

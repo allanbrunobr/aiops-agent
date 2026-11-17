@@ -774,3 +774,41 @@ M1 com o mesmo cenário (`--no-llm --no-rag`), a paridade **não existe**:
 - M1 (Rust recompilado): ruff/format/mypy ✓; unit **878 passed**; integration/
   snapshot **148 passed**; smokes V0 exit 3 / V1 exit 0 / V1+RAG exit 0 / V0+RAG
   exit 3 com reranker ativo. **Diffs de snapshot: nenhum.**
+
+### F6-3 Caches com chave de modelo + engine reentrante + limites wireados — done
+- **Orçamento LLM (NFR6) real:** `adapters/llm/counting_client.py` —
+  `CountingLLMClient` envolve o `LLMClient` e bloqueia a chamada que
+  ultrapassaria `blueprint.max_llm_calls` ANTES de ir ao provider
+  (`LLMBudgetExceeded`). `build_agent_orchestrator` aplica o wrapper (sem
+  double-wrap). `BlueprintEngine.increment_llm_calls`/`PipelineRunContext`
+  removidos: existiam e eram testados, mas nenhum caminho de produção os
+  chamava — o engine não vê as chamadas, que acontecem dentro do orchestrator.
+  `LLMCallLimitExceeded` vira alias de `LLMBudgetExceeded` (os `except` em
+  `v1_runner` seguem válidos). **Decisão registrada:** o engine PROPAGA a
+  exceção (cláusula própria antes do `except Exception`) — antes cairia em
+  fallback/skip e mascararia o estouro de orçamento como diagnóstico heurístico.
+- **Engine reentrante:** `results` é lista local por run e vai em
+  `state.metadata["_node_results"]`; `self.results` aponta para o run mais
+  recente (compat para `test_v1_safety_wiring` e leitura pós-abort). Antes,
+  A2A/MCP compartilhavam o engine de `app.state` e dois runs concorrentes
+  misturavam NodeResults.
+- **Caches em memória com chave de modelo + teto:** `rag/retriever._query_cache`
+  → `(model_name, md5(query))`, FIFO 512; `rag/indexer._embedding_cache` →
+  `(model_name, texto)`, FIFO 100k aplicado após montar o índice (evictar
+  durante a inserção removeria entradas do próprio lote). O cache em DISCO já
+  validava `model_name`; o problema era só em memória.
+- **Decisões registradas (documentar, não implementar):** `pipeline_timeout_
+  seconds` continua verificado ENTRE nodes (interromper um node em execução
+  exigiria threads/cancelamento; o orçamento efetivo do node agentic é o
+  `max_llm_calls`); `LifecycleObserver` NÃO é morto — Slack/demo/webhook runner
+  recebem eventos das composition roots (que têm o loop async), não do engine
+  síncrono. Docstrings de `engine.run` e `core/lifecycle.py` agora dizem isso.
+- Testes: `test_llm_budget.py` (8), `test_engine_reentrancy.py` (3, inclui runs
+  concorrentes com `Barrier`), `test_rag_cache_keys.py` (4). `TestLLMCallLimit`
+  de `test_engine.py` removido (superseded). `test_builders_agents.py` ajustado
+  (cliente agora vem envolto).
+
+### Verificação (F6-3)
+- M1: ruff/format/mypy ✓; unit **893 passed**; integration/snapshot **148
+  passed**; smokes V0 exit 3 / V1 exit 0 / V1+RAG exit 0. **Diffs de snapshot:
+  nenhum.**

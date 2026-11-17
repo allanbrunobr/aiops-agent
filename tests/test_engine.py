@@ -12,9 +12,7 @@ from adapters.credentials import EnvCredentialProvider
 from adapters.persistence.in_memory_store import InMemoryStore
 from blueprint.engine import (
     BlueprintEngine,
-    LLMCallLimitExceeded,
     PipelineAborted,
-    PipelineRunContext,
 )
 from blueprint.nodes import (
     BlueprintNode,
@@ -333,41 +331,6 @@ class TestPipelineTimeout:
 
         with pytest.raises(PipelineAborted, match="timeout"):
             engine.run(pipeline, state)
-
-
-class TestLLMCallLimit:
-    """Testes de limite de chamadas LLM."""
-
-    def test_exceeding_limit_raises(self):
-        """Exceder limite de chamadas LLM deve gerar excecao."""
-        engine = _make_engine(
-            blueprint={
-                "enabled": True,
-                "pipeline_timeout_seconds": 90,
-                "max_llm_calls": 2,
-            }
-        )
-        ctx = PipelineRunContext()
-
-        engine.increment_llm_calls(ctx, 1)
-        engine.increment_llm_calls(ctx, 1)
-        with pytest.raises(LLMCallLimitExceeded):
-            engine.increment_llm_calls(ctx, 1)
-
-    def test_within_limit_ok(self):
-        """Chamadas dentro do limite nao devem gerar excecao."""
-        engine = _make_engine(
-            blueprint={
-                "enabled": True,
-                "pipeline_timeout_seconds": 90,
-                "max_llm_calls": 15,
-            }
-        )
-        ctx = PipelineRunContext()
-
-        for _ in range(15):
-            engine.increment_llm_calls(ctx, 1)
-        # Nao deve ter gerado excecao
 
 
 class TestPipelineIsolation:

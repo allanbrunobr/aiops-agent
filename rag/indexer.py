@@ -20,8 +20,11 @@ import numpy as np
 # Cache de modelos para evitar recarga entre instâncias (evaluate cria nova instância por volume)
 _model_cache: dict[str, object] = {}
 
-# Cache de embeddings para evitar re-encode entre volumes do evaluate_scale
-_embedding_cache: dict[str, np.ndarray] = {}
+# Cache de embeddings para evitar re-encode entre volumes do evaluate_scale.
+# F6-3: chave (model_name, texto) — um texto codificado por outro modelo não
+# pode ser reutilizado — e teto de entradas (antes crescia sem limite).
+_embedding_cache: dict[tuple[str, str], np.ndarray] = {}
+_EMBEDDING_CACHE_MAX = 100_000
 
 
 @dataclass
@@ -137,7 +140,8 @@ class ObservabilityIndexer:
         unique_texts = list(dict.fromkeys(texts))  # preserva ordem, sem duplicatas
 
         # Codifica apenas textos ainda não em cache (evita re-encode entre volumes)
-        uncached = [t for t in unique_texts if t not in _embedding_cache]
+        mn = self.model_name
+        uncached = [t for t in unique_texts if (mn, t) not in _embedding_cache]
         if uncached:
             new_embs = self.model.encode(
                 uncached,
@@ -147,12 +151,17 @@ class ObservabilityIndexer:
                 num_workers=0,
             )
             for t, emb in zip(uncached, new_embs):
-                _embedding_cache[t] = emb
+                _embedding_cache[(mn, t)] = emb
 
         # Constrói índice FAISS apenas sobre embeddings únicos (menos vetores = treino+busca mais rápidos)
         unique_embs = np.array(
-            [_embedding_cache[t] for t in unique_texts], dtype=np.float32
+            [_embedding_cache[(mn, t)] for t in unique_texts], dtype=np.float32
         )
+
+        # Teto do cache aplicado DEPOIS de montar o índice: evictar durante a
+        # inserção removeria entradas deste mesmo lote antes da leitura acima.
+        while len(_embedding_cache) > _EMBEDDING_CACHE_MAX:
+            _embedding_cache.pop(next(iter(_embedding_cache)))  # FIFO: mais antigo
 
         # Mapeia posição no índice FAISS → índices de chunks (para retrieval correto)
         unique_to_idx = {t: i for i, t in enumerate(unique_texts)}

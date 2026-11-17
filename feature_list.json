@@ -284,7 +284,7 @@
       "title": "Caches com chave de modelo + engine reentrante + limites wireados",
       "description": "rag/retriever.py:14,76: _query_cache keyed só por md5(query); _embedding_cache por texto (rag/indexer.py:24,114-127) → trocar modelo de embedding retorna vetores stale; crescimento ilimitado. Fix: incluir model_name na chave + limite LRU. blueprint/engine.py:78: results resetado por run → não reentrante; fix: results por run (local/retornado). blueprint/engine.py:49-56: increment_llm_calls (limite 15) nunca chamado pelo engine (só testes) → wire no node agentic ou remover. blueprint/engine.py:82-89: timeout só entre nodes → documentar ou implementar por-node. core/lifecycle.py:37: LifecycleObserver definido mas engine não emite eventos → wire ou remover. Testes: troca de modelo invalida cache; runs concorrentes não compartilham results.",
       "acceptance": "Testes novos verdes; nenhum cache sem chave de modelo.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado. Nuances: o cache em DISCO valida model_name (load_index) — o problema é só nos caches em memória; LifecycleObserver não é 100% morto: observers Slack/metrics recebem eventos construídos manualmente fora do engine (main.py:985,1811,2006; interfaces/demo/server.py:333,394,422,441,461) — a decisão wire/remover deve considerar isso."
     },
     {

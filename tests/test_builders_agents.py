@@ -83,7 +83,11 @@ def test_orchestrator_wires_memory_router_client(monkeypatch, tmp_path):
             _config(), client=client, memory_db=memory, seed_skills=False
         )
     factory.assert_not_called()  # cliente injetado: não cria o Anthropic
-    assert orch.client is client
+    # F6-3: o builder envolve o cliente com o orçamento de chamadas (NFR6)
+    from adapters.llm.counting_client import CountingLLMClient
+
+    assert isinstance(orch.client, CountingLLMClient)
+    assert orch.client._inner is client
     assert orch.memory_db is memory
     assert orch.model == "cfg-model"
     assert orch.skill_router.db is memory
@@ -99,7 +103,10 @@ def test_orchestrator_creates_anthropic_client_when_none(monkeypatch, tmp_path):
         factory.return_value = MagicMock(name="anthropic")
         orch = build_agent_orchestrator(_config(), memory_db=memory, seed_skills=False)
     factory.assert_called_once_with(api_key="sk-ant-test")
-    assert orch.client is factory.return_value
+    from adapters.llm.counting_client import CountingLLMClient
+
+    assert isinstance(orch.client, CountingLLMClient)
+    assert orch.client._inner is factory.return_value
 
 
 @pytest.mark.unit

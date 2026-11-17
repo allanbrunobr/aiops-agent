@@ -6,10 +6,11 @@ aplicando regras de on_failure (ABORT, SKIP, FALLBACK).
 
 from __future__ import annotations
 
+import dataclasses
 import time
-from dataclasses import dataclass
 from typing import Any
 
+from adapters.llm.counting_client import LLMBudgetExceeded
 from blueprint.nodes import (
     NodeResult,
     NodeType,
@@ -26,15 +27,13 @@ class PipelineAborted(Exception):
     """Pipeline abortado por falha em node com on_failure=ABORT."""
 
 
-class LLMCallLimitExceeded(Exception):
-    """Limite de chamadas LLM excedido."""
-
-
-@dataclass
-class PipelineRunContext:
-    """Contexto de execucao de um run do pipeline — rastreia chamadas LLM."""
-
-    llm_calls: int = 0
+# F6-3 (NFR6): o orçamento de chamadas LLM é aplicado onde elas acontecem —
+# ``adapters.llm.counting_client.CountingLLMClient``, injetado pelo
+# ``app.builders.build_agent_orchestrator``. Antes existia aqui um
+# ``increment_llm_calls(ctx)`` que nenhum caminho de produção chamava (o engine
+# não vê as chamadas; elas ocorrem dentro do orchestrator). Alias mantido para
+# os call sites que fazem ``except LLMCallLimitExceeded``.
+LLMCallLimitExceeded = LLMBudgetExceeded
 
 
 class BlueprintEngine:
@@ -46,18 +45,9 @@ class BlueprintEngine:
         self.config = config
         self.store = store
         self.creds = creds
+        # Resultados do run MAIS RECENTE (compat para quem lê após run/abort).
+        # A lista autoritativa de cada run vai em state.metadata["_node_results"].
         self.results: list[NodeResult] = []
-
-    def increment_llm_calls(self, ctx: PipelineRunContext, count: int = 1) -> None:
-        """Incrementa contador de chamadas LLM e levanta excecao se limite excedido."""
-        ctx.llm_calls += count
-        max_calls = getattr(
-            getattr(self.config, "blueprint", None), "max_llm_calls", 15
-        )
-        if ctx.llm_calls > max_calls:
-            raise LLMCallLimitExceeded(
-                f"LLM call limit exceeded: {ctx.llm_calls} > {max_calls}"
-            )
 
     def run(self, pipeline: PipelineDefinition, state: IncidentState) -> IncidentState:
         """Executa o pipeline completo.
@@ -71,7 +61,17 @@ class BlueprintEngine:
 
         Raises:
             PipelineAborted: Se um node com on_failure=ABORT falhar.
-            LLMCallLimitExceeded: Se exceder limite de chamadas LLM.
+            LLMCallLimitExceeded: Se exceder o orçamento de chamadas LLM
+                (aplicado pelo ``CountingLLMClient`` do orchestrator; o engine
+                apenas propaga — não cai em fallback).
+
+        Limitações documentadas (F6-3):
+            - ``pipeline_timeout_seconds`` é verificado ENTRE nodes; um node em
+              execução não é interrompido. O orçamento efetivo do node agentic
+              é ``max_llm_calls``.
+            - O engine é síncrono e não emite ``LifecycleEvent``; os observers
+              (Slack, demo, webhook runner) são alimentados pelas composition
+              roots, que têm o loop async. Ver ``core/lifecycle.py``.
         """
         log.info(
             "pipeline.started",
@@ -79,7 +79,10 @@ class BlueprintEngine:
             node_count=len(pipeline.nodes),
         )
 
-        self.results = []
+        # F6-3: lista LOCAL por run → reentrante (A2A/MCP compartilham o engine
+        # de app.state). ``self.results`` aponta para o run mais recente.
+        results: list[NodeResult] = []
+        self.results = results
 
         pipeline_start = time.monotonic()
         timeout_s = getattr(
@@ -118,13 +121,28 @@ class BlueprintEngine:
                         duration_ms=(time.monotonic() - start) * 1000,
                     )
 
-                self.results.append(result)
+                results.append(result)
                 log.info(
                     "node.completed",
                     node_id=node.id,
                     duration_ms=round(result.duration_ms, 1),
                 )
 
+            except LLMBudgetExceeded as exc:
+                # Orçamento esgotado é condição do RUN, não falha do node: não
+                # cai em fallback/skip — sobe para a composition root (exit 1).
+                results.append(
+                    NodeResult(
+                        node_id=node.id,
+                        success=False,
+                        duration_ms=(time.monotonic() - start) * 1000,
+                        error=str(exc),
+                    )
+                )
+                log.error(
+                    "pipeline.llm_budget_exceeded", node_id=node.id, error=str(exc)
+                )
+                raise
             except Exception as exc:
                 duration = (time.monotonic() - start) * 1000
                 log.error(
@@ -135,7 +153,7 @@ class BlueprintEngine:
                 )
 
                 if node.on_failure == OnFailure.ABORT:
-                    self.results.append(
+                    results.append(
                         NodeResult(
                             node_id=node.id,
                             success=False,
@@ -150,7 +168,7 @@ class BlueprintEngine:
                 elif node.on_failure == OnFailure.FALLBACK and node.fallback:
                     try:
                         state = node.fallback(state)
-                        self.results.append(
+                        results.append(
                             NodeResult(
                                 node_id=node.id,
                                 success=True,
@@ -160,7 +178,7 @@ class BlueprintEngine:
                         )
                         log.info("node.fallback_succeeded", node_id=node.id)
                     except Exception as fb_exc:
-                        self.results.append(
+                        results.append(
                             NodeResult(
                                 node_id=node.id,
                                 success=False,
@@ -173,7 +191,7 @@ class BlueprintEngine:
                         ) from fb_exc
 
                 elif node.on_failure == OnFailure.SKIP:
-                    self.results.append(
+                    results.append(
                         NodeResult(
                             node_id=node.id,
                             success=False,
@@ -187,8 +205,12 @@ class BlueprintEngine:
         log.info(
             "pipeline.completed",
             pipeline=pipeline.name,
-            nodes_run=len(self.results),
-            all_success=all(r.success for r in self.results),
+            nodes_run=len(results),
+            all_success=all(r.success for r in results),
+        )
+
+        state = dataclasses.replace(
+            state, metadata={**state.metadata, "_node_results": list(results)}
         )
 
         if self.store is not None:
