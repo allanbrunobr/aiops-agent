@@ -56,7 +56,7 @@ Each ABC has a simulated implementation for the prototype:
 
 All simulated sources receive data from `data/sample_incident.py:create_incident()` and perform in-memory filtering.
 
-**Note**: `IncidentTracker` has no simulated implementation — it's the only ABC without one. The prototype generates postmortems directly in `main.py:step_postmortem()` instead.
+**Note**: `IncidentTracker` has no simulated implementation — it's the only ABC without one. The prototype generates postmortems directly in `interfaces/cli/postmortem.py:step_postmortem()` instead (template and JSON serialization in `application/use_cases/postmortem.py`).
 
 ---
 
@@ -84,7 +84,7 @@ Each tool method receives the live `AggregatedReport` object via `self.report` a
 
 ## Pipeline Stage Contracts
 
-Each `step_*()` function in `main.py` writes to `result["stages"]`:
+Each `step_*()` function in `interfaces/cli/v0_pipeline.py` (V0 CLI engine) writes to `result["stages"]`:
 
 | Stage Key | Type | Producer | Consumers |
 |-----------|------|----------|-----------|

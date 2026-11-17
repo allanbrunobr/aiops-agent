@@ -32,6 +32,7 @@ from core.secrets import sanitize_secrets as _sanitize_secrets
 from data.models import SimulatedIncident
 from data.registry import get_scenario
 from data.sample_incident import create_incident
+from domain.confidence import confidence_to_score
 from interfaces.cli.console import console
 from interfaces.cli.data_sources import (
     _create_databricks_sources,
@@ -527,13 +528,14 @@ def step_agents(
     affected = ", ".join(detection.get("affected_services", []))
     _transition("DETECTING", "DIAGNOSING", f"Investigando incidente em {affected}")
     if use_llm:
-        _outcome = _orchestrator.run(report, retriever)
+        # Detecção já feita acima com config.thresholds — não detectar de novo
+        _outcome = _orchestrator.run(report, retriever, detection=detection)
         diagnosis = _outcome.diagnosis
         # Propaga atributos usados no REFLECT+WRITE do Estágio 1
         diagnoser.tools_used = _outcome.tools_used
         diagnoser.iteration_count = _outcome.iterations
     else:
-        diagnosis = diagnoser._heuristic_diagnosis(report)
+        diagnosis = diagnoser.heuristic_diagnosis(report)
         diagnoser.tools_used = []
         diagnoser.iteration_count = 0
     result["stages"]["diagnosis"] = diagnosis
@@ -1043,10 +1045,7 @@ def run_v0(args: argparse.Namespace) -> int:
             or (getattr(_fix_action, "command", None) if _fix_action else None)
             or ""
         )
-        _conf_for_slack = _diag_for_slack.get("confidence") or 0.0
-        _CONF_MAP_SLACK = {"high": 0.85, "medium": 0.5, "low": 0.25}
-        if not isinstance(_conf_for_slack, (int, float)):
-            _conf_for_slack = _CONF_MAP_SLACK.get(str(_conf_for_slack).lower(), 0.0)
+        _conf_for_slack = confidence_to_score(_diag_for_slack.get("confidence"))
         _slack_fire(
             "diagnosis.completed",
             cid=_pipeline_cid,
@@ -1154,12 +1153,7 @@ def run_v0(args: argparse.Namespace) -> int:
 
         # Envia mensagem final ao Slack
         _diag = result.get("stages", {}).get("diagnosis", {})
-        _conf_raw = _diag.get("confidence") or 0.0
-        _CONF_MAP = {"high": 0.85, "medium": 0.5, "low": 0.25}
-        if isinstance(_conf_raw, (int, float)):
-            _conf = float(_conf_raw)
-        else:
-            _conf = _CONF_MAP.get(str(_conf_raw).lower(), 0.0)
+        _conf = confidence_to_score(_diag.get("confidence"))
         _mitigation_action = (
             result.get("stages", {}).get("mitigation", {}).get("action")
         )

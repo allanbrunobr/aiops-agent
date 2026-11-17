@@ -262,11 +262,20 @@ class AgentOrchestrator:
     # Public
     # ------------------------------------------------------------------
 
-    def run(self, report, retriever) -> AgentOutcome:
-        """Execução completa: detect → plan → execute → safety → learn."""
+    def run(self, report, retriever, *, detection: dict | None = None) -> AgentOutcome:
+        """Execução completa: detect → plan → execute → safety → learn.
+
+        Args:
+            detection: resultado já computado de ``DetectionAgent.detect``.
+                Quando o chamador já detectou (CLI V0, que usa os thresholds de
+                ``config``), passar aqui evita detectar duas vezes — e com
+                thresholds diferentes (F5-2). ``None`` mantém o comportamento
+                antigo: detecta com ``DetectionAgent`` default.
+        """
         # ── DETECT (determinístico — não muda) ────────────────────────
-        detector = DetectionAgent(reporter=self.reporter)
-        detection = detector.detect(report)
+        if detection is None:
+            detector = DetectionAgent(reporter=self.reporter)
+            detection = detector.detect(report)
 
         if not detection.get("is_incident"):
             return AgentOutcome(
@@ -578,7 +587,7 @@ class AgentOrchestrator:
             response = self.client.create_message(**kwargs)
             return json.loads(response.content[0].text)
         except Exception:  # noqa: BLE001
-            return DiagnosisAgent()._heuristic_diagnosis(report)
+            return DiagnosisAgent().heuristic_diagnosis(report)
 
     def _reflect_final(
         self,

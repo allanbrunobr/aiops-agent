@@ -8,9 +8,10 @@
 
 ```
 aiops-agent/
-├── main.py                            # ENTRY POINT — CLI pipeline orchestrator (731 lines)
-│                                      #   Usage: python main.py [--no-llm] [--no-rag]
-│                                      #   Contains all step_*() functions and print_summary()
+├── main.py                            # ENTRY POINT — thin CLI (parse args, load env, dispatch)
+│                                      #   Usage: python main.py [--no-llm] [--no-rag] [--pipeline-v1]
+│                                      #   step_*()/run_v0 live in interfaces/cli/v0_pipeline.py,
+│                                      #   run_v1 in interfaces/cli/v1_runner.py
 ├── requirements.txt                   # 9 dependencies with version constraints
 ├── CLAUDE.md                          # Claude Code AI agent guidance
 ├── ARCHITECTURE - AIOPS-AGENT.md      # 78KB academic architecture document (14 sections)
@@ -98,7 +99,7 @@ Layer 2: pipeline/      → processes data into AggregatedReport
 Layer 2.5: rag/         → indexes report for semantic search
 Layer 3: agents/        → consumes report + retriever for diagnosis
 Layer 4: safety/        → validates agent-proposed actions
-         main.py        → orchestrates all layers sequentially
+         interfaces/cli/ → orchestrates all layers (main.py is the thin entrypoint)
 ```
 
 All imports flow downward (lower layer → consumed by higher layer). The sole lateral exception is `agents/mitigator.py → safety/tnr.py`.

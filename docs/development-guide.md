@@ -83,24 +83,24 @@ When adding tests:
 
 ## Output
 
-Postmortems are saved to `output/postmortem_YYYY-MM-DD_HHMMSS.md`. The `output/` directory is auto-created by `main.py`.
+Postmortems are saved to `output/postmortem_YYYY-MM-DD_HHMMSS.md`. The `output/` directory is auto-created by `step_postmortem()` (`interfaces/cli/postmortem.py`).
 
 ---
 
 ## Adding New Pipeline Stages
 
-1. Create a `step_*()` function in `main.py` following existing pattern
+1. Create a `step_*()` function in `interfaces/cli/v0_pipeline.py` following the existing pattern (V0 engine; the V1 equivalent is a node in `blueprint/`)
 2. Stage numbering: primary stages increment (6, 7...), sub-stages use letter suffix (4d, 4e...)
 3. Write output to `result["stages"]["stage_name"]` dict
-4. Update `step_postmortem()` to include the new stage in generated postmortems
-5. Update `print_summary()` to display the new stage in terminal output
+4. Update `render_postmortem_markdown()` in `application/use_cases/postmortem.py` to include the new stage in generated postmortems
+5. Update `print_summary()` in `interfaces/cli/display.py` to display the new stage in terminal output
 6. Stage numbers in function names and `Rule()` display headers must stay in sync
 
 ## Adding New Data Sources
 
 1. Subclass the appropriate ABC in `tools/interfaces.py` (`MetricsSource`, `LogSource`, `TraceSource`, or `IncidentTracker`)
 2. Implement all abstract methods
-3. Wire it in `main.py` (replace the `Simulated*` source)
+3. Wire it in `interfaces/cli/data_sources.py` (replace the `Simulated*` source)
 4. Dependency direction: `data/` → `pipeline/` → `rag/` → `agents/` → `safety/`
 
 ## Adding New Safety Validators
@@ -120,7 +120,7 @@ Postmortems are saved to `output/postmortem_YYYY-MM-DD_HHMMSS.md`. The `output/`
 - Docstrings and comments: Brazilian Portuguese (PT-BR)
 - LLM prompts, CLI output, variable names: English
 - Terminal output: always use `rich` (Console, Panel, Table, Tree) — never bare `print()`
-- Only `main.py` and `agents/*` create `console = Console()` at module level
+- Only `interfaces/cli/console.py` creates the CLI `Console`; every CLI module imports that instance. Agents never touch Rich — they emit events through the `Reporter` port
 - Files: `snake_case.py` | Classes: `PascalCase` | Methods: `snake_case` | Constants: `UPPER_SNAKE_CASE`
 
 ---

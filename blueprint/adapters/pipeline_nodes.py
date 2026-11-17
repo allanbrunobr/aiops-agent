@@ -154,12 +154,10 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
     """Cria node agentic que usa AgentOrchestrator (Estágio 2) ou fallback heurístico."""
 
     def execute(state: IncidentState) -> IncidentState:
-        import os
-
-        from adapters.llm.anthropic_client import create_anthropic_llm_client
-        from agents.orchestrator import AgentOrchestrator
-        from agents.skill_router import SkillRouter
-        from rag.memory import IncidentMemoryDB
+        # Lazy: app.builders importa rag.indexer (ML) e blueprint.pipelines
+        # (que importa este módulo) — import no topo criaria ciclo e violaria
+        # o isolamento de ML da coleta de testes.
+        from app.builders import build_agent_orchestrator, build_detector_agent
 
         report_data = state.aggregated_report or {}
         report_obj = report_data.get("_report_obj")
@@ -170,23 +168,12 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
 
         _ensure_rag_index(state, report_obj)
         retriever = state.metadata.get("_retriever")
-        model = os.environ.get("AIOPS_LLM_MODEL", "claude-sonnet-4-20250514")
 
-        memory_db = IncidentMemoryDB()
-        skill_router = SkillRouter(memory_db)
-        skill_router.seed_default_skills()
-
-        client = create_anthropic_llm_client(
-            api_key=os.environ.get("ANTHROPIC_API_KEY", "")
-        )
-        orchestrator = AgentOrchestrator(
-            client=client,
-            model=model,
-            memory_db=memory_db,
-            skill_router=skill_router,
-            config=config,
-        )
-        outcome = orchestrator.run(report_obj, retriever)
+        # F5-1/F5-2: detecção com os thresholds de config (paridade com a CLI)
+        # e orchestrator via builder único — antes o node repetia o wiring.
+        detection = build_detector_agent(config).detect(report_obj)
+        orchestrator = build_agent_orchestrator(config)
+        outcome = orchestrator.run(report_obj, retriever, detection=detection)
 
         return dataclasses.replace(
             state,
@@ -203,7 +190,7 @@ def make_diagnoser_fallback(
 ) -> Callable[[IncidentState], IncidentState]:
     """Cria funcao de fallback heuristico para o DiagnosisAgent.
 
-    Usa a mesma logica de _heuristic_diagnosis() do DiagnosisAgent,
+    Usa a mesma logica de heuristic_diagnosis() do DiagnosisAgent,
     sem chamar a API do Claude.
     """
 
@@ -227,7 +214,7 @@ def make_diagnoser_fallback(
             )
 
         _ensure_rag_index(state, report_obj)
-        diagnosis = diagnoser._heuristic_diagnosis(report_obj)
+        diagnosis = diagnoser.heuristic_diagnosis(report_obj)
 
         # Fallback também propõe ação — sem isso as safety layers skipam
         # no modo --no-llm (F2-1)

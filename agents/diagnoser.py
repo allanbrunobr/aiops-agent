@@ -167,7 +167,7 @@ class DiagnosisAgent:
             except Exception as e:
                 self.reporter.emit(LLM_CALL_FAILED, error=str(e))
                 # Fallback: diagnóstico baseado em heurística
-                diagnosis = self._heuristic_diagnosis(report)
+                diagnosis = self.heuristic_diagnosis(report)
                 mode = "heuristic"
                 self._emit_diagnosis_completed(diagnosis, mode)
                 return diagnosis
@@ -251,7 +251,7 @@ class DiagnosisAgent:
                 )
 
         if not diagnosis:
-            diagnosis = self._heuristic_diagnosis(report)
+            diagnosis = self.heuristic_diagnosis(report)
             mode = "heuristic"
 
         self._emit_diagnosis_completed(diagnosis, mode)
@@ -873,7 +873,15 @@ class DiagnosisAgent:
         return "\n".join(lines)
 
     def _heuristic_diagnosis(self, report) -> dict:
-        """Diagnóstico fallback baseado em heurística (sem LLM)."""
+        """Alias legado de :meth:`heuristic_diagnosis` (mantido para testes)."""
+        return self.heuristic_diagnosis(report)
+
+    def heuristic_diagnosis(self, report) -> dict:
+        """Diagnóstico determinístico sem LLM — API pública (F5-2).
+
+        Usado como fallback pelo próprio agente, pelo ``AgentOrchestrator``,
+        pelo node de fallback do Blueprint e pelo modo ``--no-llm`` da CLI.
+        """
         # Encontra o serviço mais afetado
         service_errors = {}
         for tpl in report.log_templates:

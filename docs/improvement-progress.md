@@ -574,3 +574,88 @@ F5-1 (status do plano) e F5-2 (god-file), por fim F5-4 (remoção do V0).
 - Aceite `rg '.env.local' --type py`: lógica de parsing só em `config/env.py`;
   ocorrências restantes são comentários/docstrings e o rótulo de status do
   webhook server. Nenhum `getattr(config.webhook, ...)` restante.
+
+### F5-2 Quebrar o god-file `main.py` — done
+
+Executado em 8 commits, um por passo lógico, sem misturar movimentação com
+comportamento (regra do plano). Estratégia: **o que F5-4 vai apagar vai em
+bloco para um único módulo legado, sem reescrita; o que precisa sobreviver ao
+V0 ganha casa definitiva agora.**
+
+| # | Commit | Conteúdo |
+|---|--------|----------|
+| 1 | `2a1198f` | Deleções: `_run_v0` (stub), `get_pipeline` + `core/pipeline_protocol.py` (zero consumidores), chamada morta `step_predict(report, memory_db=)` (TypeError engolido por `except: pass`) |
+| 2 | `0a7a6af` | `interfaces/cli/{console,exit_codes,args}.py`, `core/secrets.py`. `--tracker` choices passam a vir de `TRACKER_CHOICES` estático (parser não depende das factories) |
+| 3+4 | `0a3b35e` | `application/use_cases/postmortem.py` (template md + serialização JSON, puro, mypy-checado; `now` injetado), `interfaces/cli/{postmortem,trackers,data_sources}.py` |
+| 5+6 | `7852646` | `interfaces/cli/display.py` (banner, summary, results), `interfaces/cli/v1_runner.py` (`create_incident_state`, `run_v1`) |
+| 7 | `96df3d9` | `interfaces/cli/v0_pipeline.py`: `step_*` + `run_v0` verbatim; `main.py` vira entrypoint fino; patches de teste retargetados |
+| 8 | (este) | Deduplicações: `DiagnosisAgent.heuristic_diagnosis` público (alias `_heuristic_diagnosis` mantido), `domain/confidence.py` (3 cópias → 1), `AgentOrchestrator.run(..., detection=)` |
+
+- **Achados além do plano (verificados):** a chamada morta de `step_predict`
+  tinha assinatura errada e nunca imprimiu nada; em modo LLM o V0 detectava
+  2× **com thresholds diferentes** (CLI com `config.thresholds`, orchestrator
+  com `DetectionAgent()` default) — corrigido por `run(detection=...)`; o mapa
+  de confiança existia 3× (V0 ×2 + MCP), com semânticas sutilmente distintas
+  para numéricos/desconhecidos.
+- **Decisão registrada:** o template de postmortem foi para `application/`
+  (não para `interfaces/cli/`) porque é lógica pura e o V1 precisa dele em
+  F5-4 (o template do node V1 em `pipeline_nodes.py` é mais pobre). Protegido
+  por `tests/snapshots/postmortem_structure.txt` — inalterado.
+- **Decisão registrada:** `get_pipeline`/`PipelineProtocol` removidos já em
+  F5-2 (F5-4 os listava): `make_pipeline(main_v1).run(args) ≡ main_v1(args)` e
+  o ramo V0 da factory era o stub morto.
+- **Compat block** em `main.py`: um import por linha com `noqa: F401` próprio
+  — na primeira tentativa `ruff --fix` apagou os não marcados e 9 nomes
+  sumiram; o bloco inteiro é removido em F5-4.
+- Testes: `test_exit_codes.py`/`test_llm_model_config.py` patcham
+  `interfaces.cli.v0_pipeline.*` (canário `test_main_returns_one_on_exception`
+  segue dando 1); `test_api_key_safety.py` inspeciona
+  `render_postmortem_markdown` além de `step_postmortem` (senão passaria
+  vazio). **Bug latente exposto:** dois testes de `test_llm_model_config.py`
+  mockavam `DetectionAgent` com `MagicMock()` cru — truthy em
+  `.get("is_incident")`; com `run(detection=...)` isso levava ao caminho LLM
+  com cliente Anthropic real (hang de rede, pegou a suíte no M1). Corrigido
+  para devolver `{"is_incident": False}`.
+- Docs atualizadas: `architecture.md`, `api-contracts-internal.md`,
+  `development-guide.md`, `source-tree-analysis.md`, `data-models.md`
+  (referências `main.py:step_*` → novos caminhos).
+- Testes novos: `test_confidence.py` (9), `test_orchestrator_detection.py` (3).
+- `main.py`: **2582 → 129 linhas** (meta < 300). `interfaces/cli/v0_pipeline.py`
+  tem ~1230 — intencional, é o que F5-4 apaga.
+
+### F5-1 Plano de refatoração: status + fase 5 — done
+- Conforme verification_note, 2b/2c/2d/2e/3/4 já estavam executadas; faltava
+  só a fase 5 parcial. `docs/refactoring-execution-plan.md` ganhou tabela
+  **Status (2026-11-17)** com evidência por fase (comandos de aceite) e nota
+  na fase 5.
+- `app/builders.py` ganha `build_detector_agent`, `build_diagnoser_agent`,
+  `build_agent_orchestrator` e `resolve_llm_model` (env `AIOPS_LLM_MODEL` >
+  `config.llm.model_name` — antes o default `claude-sonnet-4-20250514` estava
+  hardcoded em 3 call sites, ignorando `LLMConfig`). Imports de `agents.*`
+  lazy: o módulo é importado por composition roots sem agentes e os testes do
+  V0 patcham as classes em `interfaces.cli.v0_pipeline`.
+- `blueprint/adapters/pipeline_nodes.py` `make_diagnoser_node` usa os
+  builders: **o V1 passa a detectar com `config.thresholds`** (antes só defaults
+  via orchestrator) e reutiliza a detecção — paridade com a CLI, pré-requisito
+  de F5-4. Import de `app.builders` lazy dentro do node (ciclo
+  `builders → pipelines → nodes` + isolamento de ML na coleta).
+- **Decisão registrada:** o V0 (`v0_pipeline.py`) NÃO migra para os builders —
+  será apagado em F5-4 e seus testes dependem de patchar as classes naquele
+  namespace.
+- Testes: `test_builders_agents.py` (8): env vs config do modelo; thresholds no
+  detector; kwargs do diagnoser; orchestrator com cliente/memória injetados
+  (não cria Anthropic) e sem (cria com `ANTHROPIC_API_KEY`); node V1 detecta
+  com config e passa `detection=` ao orchestrator.
+
+### Verificação (F5-1 + F5-2)
+- M1 Docker: ruff ✓, ruff format ✓, mypy ✓ (17 arquivos); unit **823 passed,
+  11 skipped**; integration/snapshot **148 passed, 2 skipped**; smokes V0 exit 3
+  / V1 exit 0 / V1+RAG real exit 0 (zero `rag.index_build_failed`).
+  **Diffs de snapshot: nenhum.**
+- `pytest-timeout` instalado no venv do M1 (`--timeout=120`) após o hang
+  descrito acima — recomenda-se adicionar ao CI (F6).
+- Aceite F5-2: `wc -l main.py` = 129 (< 300) ✓; `rg "from anthropic|import
+  anthropic"` só em `adapters/llm/anthropic_client.py` ✓; `rg "_heuristic_
+  diagnosis"` fora de `agents/diagnoser.py`/tests: só docstrings em
+  `data/unknown_fault_scenario.py` ✓; mapa `{"high": 0.85, ...}` só em
+  `domain/confidence.py` ✓.

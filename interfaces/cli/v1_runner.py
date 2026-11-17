@@ -18,6 +18,7 @@ from rich.rule import Rule
 from config.env import load_local_env
 from data.registry import get_scenario
 from data.sample_incident import create_incident
+from domain.confidence import confidence_to_score
 from domain.incident_state import IncidentState
 from interfaces.cli.console import console
 from interfaces.cli.display import display_results, save_postmortem_v1
@@ -226,9 +227,7 @@ def run_v1(args: argparse.Namespace) -> int:
             cid=_cid,
             data={
                 "root_cause": diagnosis.get("root_cause", ""),
-                "confidence": float(_conf_v1)
-                if isinstance(_conf_v1, (int, float))
-                else 0.0,
+                "confidence": confidence_to_score(_conf_v1),
                 "proposed_fix": diagnosis.get("proposed_fix")
                 or diagnosis.get("fix_command", ""),
                 "risk_level": state.safety_verdict or "unknown",

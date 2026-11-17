@@ -19,6 +19,7 @@ import structlog
 
 from blueprint.engine import PipelineAborted
 from domain.alert import NormalizedAlert
+from domain.confidence import CONFIDENCE_SCORES, confidence_to_score
 from domain.incident import MitigationAction
 from safety.orchestrator import SafetyOrchestrator
 
@@ -27,8 +28,9 @@ log = structlog.get_logger()
 # Severidades válidas conforme schema do MCP tool
 VALID_SEVERITIES = {"critical", "high", "medium", "low"}
 
-# Confiança textual do diagnóstico → score numérico (F5-3 unifica as cópias)
-_CONFIDENCE_SCORES = {"high": 0.85, "medium": 0.5, "low": 0.25}
+# Confiança textual do diagnóstico → score numérico: fonte única em
+# domain.confidence (F5-2). Alias mantido para quem ainda importar daqui.
+_CONFIDENCE_SCORES = CONFIDENCE_SCORES
 
 
 # ============================================================================
@@ -660,8 +662,8 @@ async def handle_diagnose_incident(
         # Extrai campos do IncidentState retornado pelo engine
         diagnosis = result.diagnosis or {}
         evidence_chain = list(diagnosis.get("evidence", []))
-        confidence = _CONFIDENCE_SCORES.get(
-            str(diagnosis.get("confidence", "medium")).lower(), 0.5
+        confidence = confidence_to_score(
+            diagnosis.get("confidence", "medium"), default=0.5
         )
         proposed_action = result.proposed_action or {}
         proposed_fix = proposed_action.get("description", "")

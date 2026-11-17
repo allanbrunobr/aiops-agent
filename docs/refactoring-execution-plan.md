@@ -9,6 +9,21 @@ the repository to a cleaner, more testable state that aligns with the accepted A
 Assumed current baseline: `main` at `84e0ec8`, PR #9 merged, `LLMClient` introduced
 as a test seam and containment boundary per ADR 0002.
 
+## Status (2026-11-17)
+
+Verified against the tree with the acceptance commands of each phase (see
+`docs/improvement-progress.md`, F5-1):
+
+| Phase | Status | Evidence |
+|-------|--------|----------|
+| 2b LLM seam | done | `anthropic` imported only in `adapters/llm/anthropic_client.py`; no `.messages.create` outside the adapter |
+| 2c Reporter port | done | `application/ports/reporter.py` + `adapters/reporter/`; no Rich in `agents/` |
+| 2d Ports and persistence | done | `application/ports/incident_store.py`, `adapters/persistence/in_memory_store.py` |
+| 2e Retire legacy shims | done | no `core.models`/`core.protocols`/`core.store` imports |
+| 3 Domain purity | done | no Pydantic in `domain/`; ADR 0003 accepted |
+| 4 Interface layout | done | `interfaces/{http,mcp,demo,cli}`; `main.py` is a thin entrypoint delegating to `interfaces/cli/` |
+| 5 Composition builders | done | `app/builders.py` (`build_engine`, `build_pipeline`, `build_rag`, agent builders); entrypoints keep their own composition root |
+
 ## Execution Rules
 
 - One PR per phase. Do not mix file moves with behavioral changes.
@@ -205,10 +220,16 @@ adapters stay independent of the input framework.
 - Extract pure builders:
   - `build_diagnoser_agent(...)`
   - `build_detector_agent(...)`
+  - `build_agent_orchestrator(...)`
   - `build_pipeline(...)`
   - `build_rag(...)`
 - Keep each entrypoint with its own composition root: CLI, HTTP, MCP and demo.
 - Do not centralize HTTP middleware, CLI parsing, MCP handshake or demo assets.
+
+**Note (2026-11-17):** the agent builders are consumed by the Blueprint node
+(`blueprint/adapters/pipeline_nodes.py`), which is the surviving path. The V0
+CLI engine (`interfaces/cli/v0_pipeline.py`) keeps its inline wiring on purpose:
+it is deleted whole in F5-4, and its tests patch the agent classes in that module.
 
 **Acceptance criteria:**
 

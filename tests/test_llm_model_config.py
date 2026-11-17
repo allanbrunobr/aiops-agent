@@ -108,8 +108,12 @@ class TestAiopsLlmModelEnvVar:
             patch("interfaces.cli.v0_pipeline.MitigationAgent"),
             patch("interfaces.cli.v0_pipeline.TNRSafetyGuard"),
         ):
-            # Setup mocks
-            MockDetector.return_value = MagicMock()
+            # Setup mocks. detect() precisa devolver um dict REAL: desde F5-2 o
+            # orchestrator reutiliza esta detecção (não detecta de novo), e um
+            # MagicMock é truthy em .get("is_incident") — levaria ao caminho LLM
+            # com cliente Anthropic real (hang de rede). Sem incidente, o
+            # step_agents retorna cedo; DiagnosisAgent já foi construído antes.
+            MockDetector.return_value.detect.return_value = {"is_incident": False}
             mock_diagnoser_instance = MagicMock()
             mock_diagnoser_instance.reflect.return_value = {
                 "lesson": "test",
@@ -184,10 +188,14 @@ class TestAiopsLlmModelEnvVar:
 
         with (
             patch("interfaces.cli.v0_pipeline.DiagnosisAgent") as MockDiag,
-            patch("interfaces.cli.v0_pipeline.DetectionAgent"),
+            patch("interfaces.cli.v0_pipeline.DetectionAgent") as MockDet,
             patch("interfaces.cli.v0_pipeline.MitigationAgent"),
             patch("interfaces.cli.v0_pipeline.TNRSafetyGuard"),
         ):
+            # Sem incidente: o orchestrator reutiliza esta detecção (F5-2) e o
+            # step retorna cedo com result["llm_model"] preenchido — sem tocar
+            # o cliente Anthropic real.
+            MockDet.return_value.detect.return_value = {"is_incident": False}
             _inst = MockDiag.return_value
             _inst.reflect.return_value = {
                 "lesson": "test",
