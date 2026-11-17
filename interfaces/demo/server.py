@@ -58,14 +58,10 @@ from interfaces.demo.scenarios import SCENARIOS, DemoScenarioConfig, get_scenari
 
 logger = logging.getLogger("interfaces.demo.server")
 
-# Carrega .env.local se existir (credenciais locais não versionadas)
-_env_local = Path(__file__).parent.parent.parent / ".env.local"
-if _env_local.exists():
-    for _line in _env_local.read_text().splitlines():
-        if _line.startswith("#") or "=" not in _line:
-            continue
-        _k, _v = _line.split("=", 1)
-        os.environ.setdefault(_k.strip(), _v.strip())
+# Carrega .env / .env.local se existirem (loader único — F5-3)
+from config.env import load_local_env
+
+load_local_env()
 
 from core.lifecycle import LifecycleEvent
 

@@ -133,7 +133,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch(
                 "main.step_generate_data", return_value=(mock_incident, "test-scenario")
@@ -175,7 +175,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch("main.step_generate_data", side_effect=RuntimeError("stage failure")),
             redirect_stdout(io.StringIO()),
@@ -249,7 +249,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch(
                 "main.step_generate_data", return_value=(mock_incident, "test-scenario")
@@ -346,7 +346,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch(
                 "main.step_generate_data", return_value=(mock_incident, "test-scenario")
@@ -444,7 +444,7 @@ class TestMainExitCodes:
 
         with (
             patch("sys.argv", test_args),
-            patch("main.load_dotenv"),
+            patch("main.load_local_env"),
             patch("main.print_banner"),
             patch(
                 "main.step_generate_data", return_value=(mock_incident, "test-scenario")

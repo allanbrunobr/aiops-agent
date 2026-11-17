@@ -76,13 +76,38 @@ class BlueprintConfig(BaseModel):
 
 
 class WebhookConfig(BaseModel):
-    """Stub — preenchido em Story 2.1 (Alert Ingestion)."""
+    """Servidor webhook (interfaces/http/webhook).
+
+    F5-3: os campos operacionais eram lidos via ``getattr(config.webhook, ...,
+    default)`` e não existiam no modelo nem no YAML — o fallback era SEMPRE
+    usado e qualquer valor no YAML era descartado por ``extra="ignore"``.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     enabled: bool = False
     host: str = "127.0.0.1"
     port: int = 47890
+    max_payload_bytes: int = 1_048_576  # acima disso o webhook responde 413
+    dedup_window_seconds: int = 300  # janela de dedup por fingerprint do alerta
+    max_concurrent_pipelines: int = 3  # PipelineRunner: execuções simultâneas
+    max_queued_alerts: int = 10  # PipelineRunner: fila antes de 503
+
+    @field_validator("max_payload_bytes", "max_concurrent_pipelines")
+    @classmethod
+    def positive(cls, v: int) -> int:
+        """Must be > 0."""
+        if v <= 0:
+            raise ValueError("must be > 0")
+        return v
+
+    @field_validator("dedup_window_seconds", "max_queued_alerts")
+    @classmethod
+    def non_negative(cls, v: int) -> int:
+        """Must be >= 0 (0 disables dedup / queueing)."""
+        if v < 0:
+            raise ValueError("must be >= 0")
+        return v
 
 
 class SlackConfig(BaseModel):

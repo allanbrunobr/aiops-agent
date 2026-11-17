@@ -19,8 +19,10 @@ log = structlog.get_logger()
 
 webhook_router = APIRouter(tags=["webhook"])
 
-# Tamanho maximo de payload padrao (1MB) — configuravel via WebhookConfig
+# Defaults usados apenas quando o app roda SEM AppConfig em app.state (testes
+# mínimos). Com config presente, os valores vêm tipados de WebhookConfig (F5-3).
 DEFAULT_MAX_PAYLOAD_BYTES = 1_048_576
+DEFAULT_DEDUP_WINDOW_SECONDS = 300
 
 
 def identify_source(
@@ -83,11 +85,11 @@ async def receive_webhook(request: Request) -> WebhookResponse:
     credentials: CredentialProvider | None = getattr(
         request.app.state, "credentials", None
     )
-    max_payload = DEFAULT_MAX_PAYLOAD_BYTES
-    if config and hasattr(config, "webhook"):
-        max_payload = getattr(
-            config.webhook, "max_payload_bytes", DEFAULT_MAX_PAYLOAD_BYTES
-        )
+    max_payload = (
+        config.webhook.max_payload_bytes
+        if config is not None
+        else DEFAULT_MAX_PAYLOAD_BYTES
+    )
 
     # 1. Verificacao de tamanho via Content-Length header
     content_length = request.headers.get("content-length")
@@ -254,9 +256,11 @@ async def receive_webhook(request: Request) -> WebhookResponse:
     # 6. Deduplicacao
     dedup_store: DedupStore | None = getattr(request.app.state, "dedup_store", None)
     if dedup_store is not None:
-        dedup_window = 300
-        if config and hasattr(config, "webhook"):
-            dedup_window = getattr(config.webhook, "dedup_window_seconds", 300)
+        dedup_window = (
+            config.webhook.dedup_window_seconds
+            if config is not None
+            else DEFAULT_DEDUP_WINDOW_SECONDS
+        )
 
         fingerprint = generate_fingerprint(alert)
         is_dup, original_cid = dedup_store.is_duplicate(fingerprint)

@@ -23,15 +23,25 @@ safety:
 blueprint:
   enabled: true
 
-# Servidor webhook (stub — habilitado no épico 2)
+# Servidor webhook (interfaces/http/webhook)
 webhook:
   host: "127.0.0.1"
   port: 47890
+  max_payload_bytes: 1048576       # 1 MiB — acima disso o webhook responde 413
+  dedup_window_seconds: 300        # Janela de deduplicação por fingerprint do alerta
+  max_concurrent_pipelines: 3      # PipelineRunner: diagnósticos simultâneos
+  max_queued_alerts: 10            # PipelineRunner: alertas em fila antes de 503
 
-# Notificações Slack (stub — habilitado no épico 3)
+# Notificações Slack (interfaces/http/notifications/slack.py)
+# O token vem SEMPRE do ambiente (SLACK_BOT_TOKEN), nunca deste arquivo.
 slack:
   enabled: false
-  webhook_url: ""
+  channel: ""                      # Ex.: "aiops-alerts" (sem '#'); fallback: env SLACK_CHANNEL
+  max_retries: 3
+  initial_backoff_s: 1.0
+  backoff_multiplier: 2.0
+  fallback_dir: "output"           # Diagnóstico salvo aqui se o envio falhar
+  dry_run: false                   # true = só loga, não chama a API
 
 # MCP Toolshed — servidor de ferramentas para agentes externos
 mcp:

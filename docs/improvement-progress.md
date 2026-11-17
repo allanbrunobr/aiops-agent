@@ -501,3 +501,76 @@ descrição do que o diff realmente faz.
   `test_databricks_connector.py`; `test_oauth_mcp.py`, `test_a2a_simulation.py`,
   `test_jwks_endpoint.py`, `test_federated_skill_invocation.py`,
   `test_oidc_validator.py`.
+
+---
+
+## Fase 5 — Convergência arquitetural — EM ANDAMENTO (2026-11-17)
+
+Ordem executada: F5-3 primeiro (config drift + loader de env são pré-requisito
+para mover código de `main.py` sem carregar os parsers duplicados junto), depois
+F5-1 (status do plano) e F5-2 (god-file), por fim F5-4 (remoção do V0).
+
+### F5-3 Composition root + config drift — done
+- **Loader único de env**: `config/env.py` `load_local_env(root=None)` via
+  `python-dotenv` (já em `requirements.txt`). Substitui 5 parsers manuais
+  divergentes: `main.py` (V0 e V1), `interfaces/demo/server.py`,
+  `infra/run_webhook_server.py`, `infra/test_slack_notification.py`.
+  Precedência preservada do V0 (`load_dotenv()` + `setdefault`): ambiente do
+  processo > `.env` > `.env.local`; nenhum arquivo sobrescreve variável já
+  definida.
+- **Mudanças de comportamento intencionais (documentadas):** (a) `.env` passa a
+  ser carregado por TODOS os entrypoints — antes só o CLI V0 o lia; (b) valores
+  entre aspas no `.env.local` perdem as aspas (semântica dotenv; o parser
+  manual as mantinha literalmente — era bug latente para tokens com aspas).
+- `tests/test_exit_codes.py`: 5 `patch("main.load_dotenv")` →
+  `patch("main.load_local_env")`.
+- **Config drift fechado** (`config/loader.py`, `config/defaults.yaml`):
+  - `slack.webhook_url` (campo fantasma, descartado por `extra="ignore"`)
+    REMOVIDO; bloco `slack` do YAML agora espelha `SlackConfig` (channel,
+    max_retries, initial_backoff_s, backoff_multiplier, fallback_dir, dry_run)
+    com comentário explícito: token NUNCA vem do YAML.
+  - `WebhookConfig` ganha `max_payload_bytes`, `dedup_window_seconds`,
+    `max_concurrent_pipelines`, `max_queued_alerts` + validators (>0 / >=0).
+    Antes: `router.py` lia os dois primeiros via `getattr(..., default)` — o
+    fallback era SEMPRE usado e qualquer valor no YAML era descartado;
+    `run_webhook_server.py` hardcodava 3/10; `tests/epic2/conftest.py` já
+    referenciava os campos num fixture nunca executado (teria dado
+    AttributeError).
+  - `interfaces/http/webhook/router.py`: lê `config.webhook.*` tipado; as
+    constantes `DEFAULT_*` ficam só para app SEM config em `app.state`.
+  - `infra/run_webhook_server.py`: `PipelineRunner(max_concurrent=config.webhook
+    .max_concurrent_pipelines, max_queued=config.webhook.max_queued_alerts)`.
+- `tools/slack_setup.py`: `config.slack` deixa de ser "reservado para uso
+  futuro" — repassa max_retries/backoff/fallback_dir/dry_run ao `SlackNotifier`;
+  canal: `config.slack.channel` > `SLACK_CHANNEL`; token sempre do ambiente;
+  falha de init vira `log.warning("slack.notifier_init_failed")` em vez de
+  `except: return None` mudo. `main_v1` passa `app_config`.
+  **Decisão registrada:** `config.slack.enabled` continua NÃO consultado pela CLI
+  (token+canal é o opt-in, contrato do README); `enabled` governa o observer do
+  HTTP app (`interfaces/http/app.py`). Residual: `main()` V0 ainda chama
+  `_setup_slack()` sem config — V0 será removido em F5-4, não vale tocar.
+- `.env.example`: bloco Jira (`JIRA_URL/EMAIL/API_TOKEN/PROJECT_KEY`) adicionado;
+  `SLACK_API_BASE_URL` e `AIOPS_MCP__OAUTH__JWT_SECRET` já constavam (F3-4/F4).
+- **Composition root — estado honesto:** `app/builders.py` é usado por TODO
+  entrypoint que instancia o engine (CLI V1, HTTP app → MCP SSE e A2A, webhook
+  server). Demo não instancia o engine (tem simulação própria, `DemoAnalyzer`);
+  MCP stdio (`run_stdio`) é dev-only e não constrói engine (limitação
+  pré-existente, já listada em F6-5/F3). CLI V0 segue inline até F5-4.
+- `MitigationAction`: já era tipo único (`domain/incident.py`; `safety/tnr.py`
+  re-exporta) — nada a fazer, conforme verification_note.
+- Testes: `tests/test_config_env.py` (5): .env antes de .env.local sem
+  override; ambiente vence; arquivos ausentes = no-op; comentários/espaços/aspas;
+  raiz default. `tests/test_slack_setup.py` (7): sem token/canal → None;
+  valores de config repassados; precedência canal config > env; compat sem
+  config; falha de init logada. `tests/test_config_drift.py` (8): YAML sem
+  chave desconhecida em slack/webhook; campos operacionais do YAML; override
+  por env; 4 validações; bloco slack espelha defaults.
+
+### Verificação (F5-3)
+- M1 Docker: ruff ✓, ruff format ✓, mypy ✓; unit **803 passed, 11 skipped**;
+  integration/snapshot **148 passed, 2 skipped**; smokes V0 exit 3 / V1 exit 0;
+  `create_webhook_app()` monta com `max_concurrent=3, max_queued=10` vindos do
+  YAML. **Diffs de snapshot: nenhum.**
+- Aceite `rg '.env.local' --type py`: lógica de parsing só em `config/env.py`;
+  ocorrências restantes são comentários/docstrings e o rótulo de status do
+  webhook server. Nenhum `getattr(config.webhook, ...)` restante.

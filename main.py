@@ -48,7 +48,6 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from dotenv import load_dotenv
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
@@ -60,6 +59,7 @@ from adapters.reporter import RichConsoleReporter
 from agents.detector import DetectionAgent
 from agents.diagnoser import DiagnosisAgent
 from agents.mitigator import MitigationAgent
+from config.env import load_local_env
 from config.loader import AppConfig, load_config
 
 # Modulos do projeto
@@ -2009,7 +2009,6 @@ def main_v1(args: argparse.Namespace) -> int:
     """
     import asyncio
     import os
-    from pathlib import Path as _Path
 
     from adapters.credentials import EnvCredentialProvider
     from adapters.persistence.in_memory_store import InMemoryStore
@@ -2018,14 +2017,7 @@ def main_v1(args: argparse.Namespace) -> int:
     from config.loader import load_config as load_app_config
     from core.logging import configure_logging, get_logger
 
-    # Carrega .env.local se existir (sem dependencia de python-dotenv)
-    _env_file = _Path(".env.local")
-    if _env_file.exists():
-        for _line in _env_file.read_text().splitlines():
-            _line = _line.strip()
-            if _line and not _line.startswith("#") and "=" in _line:
-                _k, _, _v = _line.partition("=")
-                os.environ.setdefault(_k.strip(), _v.strip())
+    load_local_env()
 
     log = get_logger("main")
 
@@ -2043,7 +2035,7 @@ def main_v1(args: argparse.Namespace) -> int:
     from core.lifecycle import LifecycleEvent
     from tools.slack_setup import setup_slack_notifier
 
-    _slack_notifier = setup_slack_notifier()
+    _slack_notifier = setup_slack_notifier(app_config)
     if _slack_notifier is not None:
         _slack_channel = os.environ.get("SLACK_CHANNEL", "").lstrip("#")
         log.info("slack.notifier_created", channel=_slack_channel)
@@ -2230,15 +2222,8 @@ def main() -> int:
     # Validate mutual exclusion rules
     _validate_args(parser, args)
 
-    # Load .env e .env.local
-    load_dotenv()
-    _env_local = Path(".env.local")
-    if _env_local.exists():
-        for _ln in _env_local.read_text().splitlines():
-            _ln = _ln.strip()
-            if _ln and not _ln.startswith("#") and "=" in _ln:
-                _ek, _, _ev = _ln.partition("=")
-                os.environ.setdefault(_ek.strip(), _ev.strip())
+    # Load .env e .env.local (loader único — F5-3)
+    load_local_env()
 
     # Verifica API key se vai usar LLM
     use_llm = not args.no_llm

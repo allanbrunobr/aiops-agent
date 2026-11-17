@@ -15,14 +15,10 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-# Load .env.local before any import that uses os.environ
-env_file = project_root / ".env.local"
-if env_file.exists():
-    for line in env_file.read_text().splitlines():
-        line = line.strip()
-        if line and not line.startswith("#") and "=" in line:
-            key, _, value = line.partition("=")
-            os.environ.setdefault(key.strip(), value.strip())
+# Load .env / .env.local before any import that uses os.environ (F5-3: single loader)
+from config.env import load_local_env
+
+_loaded_env = load_local_env(project_root)
 
 
 import structlog
@@ -90,8 +86,8 @@ def create_webhook_app() -> FastAPI:
     )
 
     app.state.pipeline_runner = PipelineRunner(
-        max_concurrent=3,
-        max_queued=10,
+        max_concurrent=config.webhook.max_concurrent_pipelines,
+        max_queued=config.webhook.max_queued_alerts,
         store=store,
         engine=engine,
         config=config,
@@ -125,7 +121,8 @@ if __name__ == "__main__":
     print("  Listening:    http://127.0.0.1:47890")
     print("  Health:       http://localhost:47890/health")
     print("  Webhook:      POST http://localhost:47890/webhook")
-    print(f"  .env.local:   {'loaded' if env_file.exists() else 'NOT FOUND'}")
+    _env_local_loaded = any(p.name == ".env.local" for p in _loaded_env)
+    print(f"  .env.local:   {'loaded' if _env_local_loaded else 'NOT FOUND'}")
     print(
         f"  GRAFANA_TOKEN: {'set' if os.environ.get('GRAFANA_WEBHOOK_TOKEN') else 'MISSING'}"
     )
