@@ -71,26 +71,31 @@ class LogParser:
         config.profiling_enabled = False
         config.drain_sim_th = 0.4
         config.drain_depth = 4
+        self._miner_config = config
         self.miner = TemplateMiner(config=config)
         self.templates: dict[int, LogTemplate] = {}
-
-    # Amostragem para lotes muito grandes: Drain3 converge após ~5K logs.
-    # Não afeta diagnóstico em cenários reais (≤500 logs). Mantém consistência
-    # de tokens porque o cap de 40 chars já garante saída uniforme.
-    _SAMPLE_THRESHOLD = 5_000
 
     def parse(self, logs: list) -> list[LogTemplate]:
         """Processa lista de LogEntry e retorna templates agregados.
 
-        Delega para implementação Rust quando disponível. Para lotes >5K logs,
-        aplica amostragem estratificada antes de passar ao Drain3 — os templates
-        convergem bem antes desse volume.
-        Fallback para Python com cap de 500 amostras quando Rust não disponível.
+        Rust (Drain3 reimplementado + Rayon) quando a extensão existe; Python
+        (drain3 oficial) caso contrário. **Ambos processam TODOS os logs** e
+        **ambos são sem estado entre chamadas** — F6-1 unificou a semântica:
+
+        - o fallback Python amostrava no máximo 500 logs (``logs[::step]``); o
+          cenário default tem 503, então já perdia entradas e divergia do Rust;
+        - o Python acumulava ``self.templates`` entre chamadas (contagens
+          somavam), o Rust não. Agora cada ``parse`` começa limpo nos dois.
+
+        O resultado da última chamada fica em ``self.templates`` (para
+        ``to_text()`` sem argumentos).
         """
         if _RUST_AVAILABLE:
-            # Rust processa todos os logs sem cap de amostragem
-            return self._rust_parse(logs)
-        return self._python_drain3_parse(logs)
+            templates = self._rust_parse(logs)
+        else:
+            templates = self._python_drain3_parse(logs)
+        self.templates = {i: t for i, t in enumerate(templates)}
+        return templates
 
     def _rust_parse(self, logs: list) -> list[LogTemplate]:
         """Delega processamento para implementação Rust via PyO3.
@@ -127,17 +132,16 @@ class LogParser:
         return result
 
     def _python_drain3_parse(self, logs: list) -> list[LogTemplate]:
-        """Implementação Python com amostragem sistemática (fallback).
+        """Implementação Python pura (fallback quando _aiops_rust não existe).
 
-        Cap de 500 amostras mantido intencionalmente para controlar custo O(N).
-        Usado apenas quando _aiops_rust não está disponível.
+        Processa todos os logs com um TemplateMiner NOVO por chamada — mesma
+        semântica do Rust (sem amostragem, sem estado acumulado). O custo é
+        O(N) no Drain3; para o volume do pipeline (centenas a poucos milhares
+        de logs) é desprezível, e amostrar aqui era perder entradas que o Rust
+        processa.
         """
-        # Amostragem sistemática para limitar custo O(N) do Drain3 em volumes grandes.
-        # Templates convergem com ~10K amostras; além disso é redundante.
-        _MAX = 500
-        if len(logs) > _MAX:
-            step = len(logs) // _MAX
-            logs = logs[::step]
+        self.miner = TemplateMiner(config=self._miner_config)
+        self.templates = {}
         for log in logs:
             msg = log.message
             result = self.miner.add_log_message(msg)
@@ -229,9 +233,23 @@ class LogParser:
 
             tpl.relevance_score = round(score, 2)
 
-    def get_error_templates(self) -> list[LogTemplate]:
-        """Retorna apenas templates de ERROR/FATAL, ordenados por relevância."""
-        return [t for t in self.parse([]) if t.level in ("ERROR", "FATAL")]
+    def get_error_templates(
+        self, templates: list[LogTemplate] | None = None
+    ) -> list[LogTemplate]:
+        """Retorna apenas templates de ERROR/FATAL, ordenados por relevância.
+
+        F6-1: antes chamava ``self.parse([])`` — com Rust devolvia sempre ``[]``
+        (sem estado) e com Python devolvia os acumulados. Agora filtra a lista
+        passada ou, por default, o resultado do último ``parse()``.
+        """
+        source = (
+            templates
+            if templates is not None
+            else sorted(
+                self.templates.values(), key=lambda t: t.relevance_score, reverse=True
+            )
+        )
+        return [t for t in source if t.level in ("ERROR", "FATAL")]
 
     def to_text(
         self, templates: list[LogTemplate] | None = None, top_k: int = 20

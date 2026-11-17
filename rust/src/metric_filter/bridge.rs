@@ -15,12 +15,31 @@ use super::types::MetricPointData;
 /// Chamado por pipeline/metric_filter.py quando _RUST_AVAILABLE = True.
 /// Retorna lista de dicts com campos equivalentes ao MetricAnomaly Python.
 #[pyfunction]
-pub fn filter_metrics(py: Python<'_>, metrics: &Bound<'_, PyList>) -> PyResult<Py<PyList>> {
+#[pyo3(signature = (metrics, sigma_threshold = 3.0, baseline_ratio = 0.5))]
+pub fn filter_metrics(
+    py: Python<'_>,
+    metrics: &Bound<'_, PyList>,
+    sigma_threshold: f64,
+    baseline_ratio: f64,
+) -> PyResult<Py<PyList>> {
+    // F6-1: parâmetros espelham MetricFilter(sigma_threshold, baseline_ratio).
+    // Antes a ponte hardcodava 3.0/0.5 e o Python caía em fallback silencioso
+    // para qualquer outro valor.
+    if !(sigma_threshold > 0.0) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "sigma_threshold must be > 0",
+        ));
+    }
+    if !(baseline_ratio > 0.0 && baseline_ratio < 1.0) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "baseline_ratio must be in (0, 1)",
+        ));
+    }
     // ── Fase 1: extrair dados enquanto segura o GIL ───────────────────────────
     let points = extract_metric_points(py, metrics)?;
 
     // ── Fase 2: processar 3-sigma sem GIL ────────────────────────────────────
-    let anomalies = py.detach(|| detect_anomalies(points, 3.0, 0.5));
+    let anomalies = py.detach(|| detect_anomalies(points, sigma_threshold, baseline_ratio));
 
     // ── Fase 3: construir dicts Python enquanto segura o GIL ─────────────────
     build_python_result(py, anomalies)

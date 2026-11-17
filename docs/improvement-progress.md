@@ -688,3 +688,49 @@ M1 com o mesmo cenário (`--no-llm --no-rag`), a paridade **não existe**:
   (único módulo), `main.py` tem 129 linhas, e nada mais depende dele — o
   bloqueio não impede a Fase 6.
 - Decisão do usuário: seguir para a Fase 6 (opção 3 de 3 apresentadas).
+---
+
+## Fase 6 — Paridade Rust/Python, features mortas, caches, testes Rust — EM ANDAMENTO (2026-11-17)
+
+### F6-1 Paridade Rust↔Python — done
+- **Ponte PyO3 parametrizada** (`rust/src/metric_filter/bridge.rs`,
+  `rust/src/trace_filter/bridge.rs`): `filter_metrics(metrics, sigma_threshold=3.0,
+  baseline_ratio=0.5)` e `filter_traces(spans, percentile_threshold=95.0,
+  max_hops=3)` via `#[pyo3(signature=...)]`, com validação (`ValueError` para
+  sigma ≤ 0, ratio ∉ (0,1), percentil ∉ [0,100], hops = 0). O núcleo Rust
+  (`detect_anomalies`/`filter_slow_traces`) já era paramétrico — só a ponte
+  hardcodava os defaults.
+- `pipeline/metric_filter.py` / `pipeline/trace_filter.py`: Rust para QUALQUER
+  threshold (antes: `if _RUST_AVAILABLE and sigma == 3.0 and ratio == 0.5` →
+  config custom caía no Python sem aviso, com algoritmo potencialmente
+  divergente). **Decisão registrada:** implementar os parâmetros no Rust em vez
+  de só avisar — o aviso deixaria dois caminhos vivos para a mesma config.
+- `pipeline/telemetry_sanitizer.py`: `_use_rust()` — com `custom_patterns` o
+  Rust (padrões base em `OnceLock`, estáticos) é ignorado e o Python assume,
+  com **um** `log.warning("sanitizer.rust_fallback_custom_patterns")`. Antes o
+  path Rust (single E batch) ignorava os padrões custom: payload casado só por
+  padrão custom passava como CLEAN. **Decisão registrada:** fallback+warning em
+  vez de passar os padrões ao Rust — exigiria recompilar regex por chamada no
+  hot path e `custom_patterns` não tem nenhum uso em produção hoje.
+- `pipeline/log_parser.py`: semântica unificada — **ambos processam todos os
+  logs** (o fallback amostrava ≤500 via `logs[::step]`; o cenário default tem
+  503, então já perdia entradas) e **ambos são sem estado entre chamadas**
+  (Python acumulava `self.templates` → contagens dobravam no 2º `parse`).
+  `get_error_templates()` não chama mais `self.parse([])` (Rust devolvia `[]`,
+  Python os acumulados); filtra a lista passada ou o último `parse`.
+  `_SAMPLE_THRESHOLD`/docstring de stride obsoletos removidos.
+- Testes: `tests/rust/test_parity.py` (28): mesmo input → mesmo output nos dois
+  paths para 4 combinações de thresholds de métrica e 4 de trace; spy confirma
+  que config custom chega ao Rust; ponte rejeita parâmetros inválidos; 7 amostras
+  de taint iguais nos dois paths; custom pattern honrado (single+batch), warning
+  único, Rust usado sem custom; log parser: 503/503 no fallback, mesmas contagens,
+  stateless nos dois, `get_error_templates`/`to_text` funcionam nos dois.
+
+### Verificação (F6-1)
+- M1 Docker, extensão Rust compilada (`maturin develop --release`): `cargo test`
+  15 passed; `tests/rust` 65 passed (3 slow deselected); ruff/format/mypy ✓;
+  unit **869 passed** (com Rust instalado os `importorskip` entram); integration/
+  snapshot **148 passed**; smokes V0 exit 3 / V1 exit 0. **Diffs de snapshot:
+  nenhum** (snapshots usam os defaults, que já iam para o Rust).
+- Nota: `cargo fmt --check` reporta diffs em 20 arquivos pré-existentes — fica
+  para F6-4 (clippy/fmt no CI), num commit só de formatação.

@@ -33,6 +33,8 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
 
+from core.logging import get_logger
+
 try:
     import _aiops_rust as _rust
 
@@ -40,6 +42,8 @@ try:
 except ImportError:
     _rust = None
     _RUST_AVAILABLE = False
+
+log = get_logger("pipeline.sanitizer")
 
 
 # ============================================================================
@@ -197,10 +201,36 @@ class TelemetrySanitizer:
         self._suspicious_patterns = [
             re.compile(p, re.IGNORECASE) for p in SUSPICIOUS_EMBEDDED_CONTENT
         ]
+        self._has_custom_patterns = bool(custom_patterns)
         if custom_patterns:
             self._adversarial_patterns.extend(
                 re.compile(p, re.IGNORECASE) for p in custom_patterns
             )
+
+    # F6-1: a extensão Rust compila os padrões base em OnceLock (estáticos) e
+    # não conhece ``custom_patterns``. Antes, o path Rust IGNORAVA os padrões
+    # extras silenciosamente — um payload casado só por padrão custom passava
+    # como CLEAN. Com padrões custom, usamos o Python (semântica completa) e
+    # avisamos uma vez; sem custom, Rust.
+    _custom_fallback_warned: bool = False
+
+    def _use_rust(self) -> bool:
+        if not _RUST_AVAILABLE:
+            return False
+        if not self._has_custom_patterns:
+            return True
+        if not self._custom_fallback_warned:
+            log.warning(
+                "sanitizer.rust_fallback_custom_patterns",
+                detail=(
+                    "custom_patterns definidos: usando detecção Python "
+                    "(a extensão Rust só conhece os padrões base)"
+                ),
+                custom_patterns=len(self._adversarial_patterns)
+                - len(ADVERSARIAL_REWARD_HACKING_PATTERNS),
+            )
+            self._custom_fallback_warned = True
+        return False
 
     def sanitize_logs(self, logs: list) -> tuple[list, SanitizationReport]:
         """
@@ -220,7 +250,7 @@ class TelemetrySanitizer:
         sanitized_logs = []
 
         # Pré-computa taint levels em batch usando Rust+Rayon (paralelo)
-        if _RUST_AVAILABLE and logs:
+        if logs and self._use_rust():
             messages = [log.message for log in logs]
             taint_strs = _rust.detect_taint_batch(messages)
             taint_cache = {i: TaintLevel(t) for i, t in enumerate(taint_strs)}
@@ -545,7 +575,7 @@ class TelemetrySanitizer:
         if not text:
             return TaintLevel.CLEAN
 
-        if _RUST_AVAILABLE:
+        if self._use_rust():
             return TaintLevel(_rust.detect_taint_single(text))
 
         # Fallback Python

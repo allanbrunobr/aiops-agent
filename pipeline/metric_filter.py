@@ -47,18 +47,23 @@ class MetricFilter:
         self.baseline_ratio = baseline_ratio  # % dos dados usados como baseline
 
     def detect_anomalies(self, metrics: list) -> list[MetricAnomaly]:
-        """Detecta anomalias em todas as métricas."""
-        if (
-            _RUST_AVAILABLE
-            and self.sigma_threshold == 3.0
-            and self.baseline_ratio == 0.5
-        ):
+        """Detecta anomalias em todas as métricas.
+
+        Rust quando a extensão existe — com OS MESMOS thresholds desta instância.
+        F6-1: antes só os defaults (3.0/0.5) iam para o Rust; qualquer config
+        custom caía no Python sem aviso, e os dois paths divergiam.
+        """
+        if _RUST_AVAILABLE:
             return self._detect_rust(metrics)
         return self._detect_python(metrics)
 
     def _detect_rust(self, metrics: list) -> list[MetricAnomaly]:
-        """Delegação para implementação Rust (3-sigma com defaults)."""
-        raw = _rust.filter_metrics(metrics)
+        """Delegação para implementação Rust (N-sigma paramétrico)."""
+        raw = _rust.filter_metrics(
+            metrics,
+            sigma_threshold=self.sigma_threshold,
+            baseline_ratio=self.baseline_ratio,
+        )
         result = []
         for r in raw:
             ts = datetime.fromtimestamp(r["timestamp"])

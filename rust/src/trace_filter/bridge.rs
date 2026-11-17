@@ -15,12 +15,31 @@ use super::types::SpanData;
 /// Chamado por pipeline/trace_filter.py quando _RUST_AVAILABLE = True.
 /// Retorna lista de dicts com campos equivalentes ao SlowCallPath Python.
 #[pyfunction]
-pub fn filter_traces(py: Python<'_>, spans: &Bound<'_, PyList>) -> PyResult<Py<PyList>> {
+#[pyo3(signature = (spans, percentile_threshold = 95.0, max_hops = 3))]
+pub fn filter_traces(
+    py: Python<'_>,
+    spans: &Bound<'_, PyList>,
+    percentile_threshold: f64,
+    max_hops: usize,
+) -> PyResult<Py<PyList>> {
+    // F6-1: parâmetros espelham TraceFilter(percentile_threshold, max_hops).
+    // Antes a ponte hardcodava 95.0/3 e o Python caía em fallback silencioso
+    // para qualquer outro valor.
+    if !(percentile_threshold >= 0.0 && percentile_threshold <= 100.0) {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "percentile_threshold must be in [0, 100]",
+        ));
+    }
+    if max_hops == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "max_hops must be >= 1",
+        ));
+    }
     // ── Fase 1: extrair dados enquanto segura o GIL ───────────────────────────
     let span_data = extract_spans(py, spans)?;
 
     // ── Fase 2: processar p95 + DFS sem GIL ──────────────────────────────────
-    let slow_paths = py.detach(|| filter_slow_traces(span_data, 95.0, 3));
+    let slow_paths = py.detach(|| filter_slow_traces(span_data, percentile_threshold, max_hops));
 
     // ── Fase 3: construir dicts Python enquanto segura o GIL ─────────────────
     build_python_result(py, slow_paths)

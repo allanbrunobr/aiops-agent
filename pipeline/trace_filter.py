@@ -47,14 +47,23 @@ class TraceFilter:
         self.max_hops = max_hops
 
     def filter_slow_traces(self, spans: list) -> list[SlowCallPath]:
-        """Identifica traces lentos e extrai call paths."""
-        if _RUST_AVAILABLE and self.percentile_threshold == 95.0 and self.max_hops == 3:
+        """Identifica traces lentos e extrai call paths.
+
+        Rust quando a extensão existe — com OS MESMOS parâmetros desta instância.
+        F6-1: antes só os defaults (p95/3 hops) iam para o Rust; qualquer config
+        custom caía no Python sem aviso, e os dois paths divergiam.
+        """
+        if _RUST_AVAILABLE:
             return self._filter_rust(spans)
         return self._filter_python(spans)
 
     def _filter_rust(self, spans: list) -> list[SlowCallPath]:
-        """Delegação para implementação Rust (p95 + max_hops=3)."""
-        raw = _rust.filter_traces(spans)
+        """Delegação para implementação Rust (percentil + max_hops paramétricos)."""
+        raw = _rust.filter_traces(
+            spans,
+            percentile_threshold=self.percentile_threshold,
+            max_hops=self.max_hops,
+        )
         return [
             SlowCallPath(
                 trace_id=r["trace_id"],
