@@ -1,0 +1,51 @@
+{
+  "receiver": "aiops-agent",
+  "status": "firing",
+  "alerts": [
+    {
+      "status": "firing",
+      "labels": {
+        "alertname": "HighErrorRate",
+        "service": "payment-svc",
+        "severity": "critical",
+        "namespace": "production",
+        "environment": "production"
+      },
+      "annotations": {
+        "summary": "Error rate above 5% for payment-svc",
+        "description": "Connection pool exhausted after config deploy reduced max_connections from 200 to 50"
+      },
+      "startsAt": "2026-03-12T14:23:00.000Z",
+      "endsAt": "0001-01-01T00:00:00Z",
+      "generatorURL": "http://grafana:3000/alerting/grafana/high-error-rate/view",
+      "fingerprint": "a1b2c3d4e5f60718",
+      "dashboardURL": "http://grafana:3000/d/service-overview",
+      "panelURL": "http://grafana:3000/d/service-overview?viewPanel=4",
+      "silenceURL": "http://grafana:3000/alerting/silence/new?alertmanager=grafana&matcher=alertname%3DHighErrorRate",
+      "values": {
+        "error_rate": 45.2,
+        "B": 45.2
+      },
+      "valueString": "[ var='B' labels={service=payment-svc} value=45.2 ]"
+    }
+  ],
+  "groupLabels": {
+    "alertname": "HighErrorRate"
+  },
+  "commonLabels": {
+    "alertname": "HighErrorRate",
+    "service": "payment-svc",
+    "severity": "critical"
+  },
+  "commonAnnotations": {
+    "summary": "Error rate above 5% for payment-svc"
+  },
+  "externalURL": "http://grafana:3000/",
+  "version": "1",
+  "groupKey": "{}:{alertname=\"HighErrorRate\"}",
+  "truncatedAlerts": 0,
+  "orgId": 1,
+  "title": "[FIRING:1] HighErrorRate (payment-svc production)",
+  "state": "alerting",
+  "message": "**Firing**\n\nValue: B=45.2\nLabels:\n - alertname = HighErrorRate\n - service = payment-svc\nAnnotations:\n - summary = Error rate above 5% for payment-svc\nSource: http://grafana:3000/alerting/grafana/high-error-rate/view\nSilence: http://grafana:3000/alerting/silence/new?alertmanager=grafana&matcher=alertname%3DHighErrorRate"
+}

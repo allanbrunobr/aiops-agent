@@ -123,6 +123,14 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.include_router(health_router)
 
     # --------------------------------------------------------
+    # Composition root — engine e retriever compartilhados (MCP + A2A)
+    # --------------------------------------------------------
+    from app.builders import build_engine, build_rag
+
+    engine = build_engine(config)
+    _, retriever = build_rag()
+
+    # --------------------------------------------------------
     # MCP SSE — montado somente se habilitado e transporte = sse
     # --------------------------------------------------------
 
@@ -153,6 +161,8 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
             pre_validator=pre_validator,
             tnr=tnr,
             version_validator=version_validator,
+            engine=engine,
+            retriever=retriever,
         )
 
     # --------------------------------------------------------
@@ -212,14 +222,24 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     log.info("a2a.router.mounted")
 
     # --------------------------------------------------------
-    # app.state — engine e retriever para handlers A2A
+    # Knowledge + Admin (F3-5: rotas antes órfãs, agora montadas)
     # --------------------------------------------------------
-    from app.builders import build_engine, build_rag
+    from interfaces.http.routes.admin import router as admin_router
+    from interfaces.http.routes.knowledge import router as knowledge_router
+    from rag.knowledge_store import KnowledgeStore
 
+    app.state.knowledge_store = KnowledgeStore()
+    app.include_router(knowledge_router)
+    app.include_router(admin_router)
+    log.info("knowledge_admin.routers.mounted")
+
+    # --------------------------------------------------------
+    # app.state — engine e retriever para handlers A2A (mesmos do MCP)
+    # --------------------------------------------------------
     app.state.config = config
     app.state.a2a_jwt_secret = _jwt_secret if _hmac_ok else ""
-    app.state.engine = build_engine(config)
-    _, app.state.retriever = build_rag()
+    app.state.engine = engine
+    app.state.retriever = retriever
     log.info("a2a.state.populated", engine=type(app.state.engine).__name__)
 
     # --------------------------------------------------------

@@ -8,10 +8,11 @@ This test simulates the full flow without requiring Docker services running:
   4. Verifies the Slack message content matches expectations
 
 Prerequisites:
-  - The Slack mock server must be running: python docker/slack-mock/slack_mock_server.py
+  - The Slack mock server must be running: python infra/slack-mock/slack_mock_server.py
   - The aiops-agent webhook server must be running
 
-For fully isolated tests (no servers needed), use test_webhook_normalizer_unit.py instead.
+For fully isolated tests (no servers needed), use test_webhook_pipeline_flow.py
+(webhook → pipeline real → Slack fake em processo) ou test_webhook_normalizer_unit.py.
 
 Run:
   pytest tests/integration/test_webhook_to_slack_flow.py -v
@@ -33,7 +34,7 @@ SLACK_MOCK_URL = "http://localhost:47892"
 
 SAMPLE_PAYLOAD_PATH = (
     Path(__file__).parent.parent.parent
-    / "docker"
+    / "infra"
     / "grafana_webhook_payload_example.json"
 )
 
@@ -82,7 +83,7 @@ def slack_mock_client():
 
 
 @pytest.mark.skip(
-    reason="Requer serviços externos: Slack mock server + webhook server (docker/). Use test_webhook_normalizer_unit.py para testes isolados."
+    reason="Requer serviços externos: Slack mock server + webhook server (infra/). Use test_webhook_pipeline_flow.py para o fluxo isolado em processo."
 )
 class TestWebhookToSlackFlow:
     """End-to-end integration test for the alert pipeline."""
@@ -101,7 +102,7 @@ class TestWebhookToSlackFlow:
         """A firing Grafana alert should result in a Slack message."""
         # 1. Send webhook to aiops-agent
         response = httpx.post(WEBHOOK_URL, json=grafana_payload, timeout=10.0)
-        assert response.status_code == 200, f"Webhook rejected: {response.text}"
+        assert response.status_code == 202, f"Webhook rejected: {response.text}"
 
         # 2. Give the agent a moment to process and post to Slack
         time.sleep(2)
@@ -143,7 +144,7 @@ class TestWebhookToSlackFlow:
             alert["endsAt"] = "2026-03-12T14:35:00.000Z"
 
         response = httpx.post(WEBHOOK_URL, json=grafana_payload, timeout=10.0)
-        assert response.status_code == 200
+        assert response.status_code == 202
 
         time.sleep(2)
 
@@ -154,9 +155,13 @@ class TestWebhookToSlackFlow:
         )
 
 
-@pytest.mark.skip(reason="Requer arquivo docker/grafana_webhook_payload_example.json.")
+@pytest.mark.integration
 class TestWebhookPayloadValidation:
-    """Validate the normalizer handles various Grafana payload shapes."""
+    """Validate the normalizer handles various Grafana payload shapes.
+
+    F3-3: o fixture agora existe em infra/grafana_webhook_payload_example.json
+    (o diretório docker/ virou infra/) — testes rodando sem skip.
+    """
 
     def test_payload_has_required_fields(self, grafana_payload: dict):
         """Verify our example payload has all expected Grafana fields."""

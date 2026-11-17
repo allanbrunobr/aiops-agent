@@ -32,8 +32,17 @@ sys.path[:] = [_PROJECT_ROOT] + [
     p for p in sys.path if Path(p).resolve() != Path(_DEMO_DIR).resolve() and p != ""
 ]
 
+import hmac
+
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import (
+    Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -60,23 +69,31 @@ if _env_local.exists():
 
 from core.lifecycle import LifecycleEvent
 
-# Slack notifier — inicializado se SLACK_BOT_TOKEN e SLACK_CHANNEL estiverem disponíveis
-try:
-    from adapters.credentials import EnvCredentialProvider
-    from interfaces.http.notifications.slack import SlackNotifier
 
-    _slack_token = os.environ.get("SLACK_BOT_TOKEN")
-    _slack_channel = os.environ.get("SLACK_CHANNEL", "#aiops-alerts")
-    if _slack_token:
-        _slack: SlackNotifier | None = SlackNotifier(
-            channel=_slack_channel,
+def _build_slack_notifier():
+    """Slack do demo: dry-run por padrão; real só com opt-in explícito (F3-4).
+
+    Bastar SLACK_BOT_TOKEN no ambiente (ou no .env.local auto-carregado) NÃO
+    dispara mais envio real — é preciso AIOPS_DEMO_SLACK_REAL=1.
+    """
+    try:
+        from adapters.credentials import EnvCredentialProvider
+        from interfaces.http.notifications.slack import SlackNotifier
+
+        if not os.environ.get("SLACK_BOT_TOKEN"):
+            return None
+        real_optin = os.environ.get("AIOPS_DEMO_SLACK_REAL") == "1"
+        return SlackNotifier(
+            channel=os.environ.get("SLACK_CHANNEL", "#aiops-alerts"),
             creds=EnvCredentialProvider(),
+            dry_run=not real_optin,
         )
-    else:
-        _slack = None
-except Exception as _exc:
-    logger.warning("SlackNotifier init falhou: %s", _exc)
-    _slack = None
+    except Exception as exc:
+        logger.warning("SlackNotifier init falhou: %s", exc)
+        return None
+
+
+_slack = _build_slack_notifier()
 
 # Diretório de arquivos estáticos
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -96,6 +113,25 @@ _slack_warning_wall_time: float = (
     0.0  # timestamp wall-clock do último prediction.warning
 )
 _incident_start_wall_time: float = 0.0  # wall-clock quando incidente atingiu CRITICAL
+
+
+# ------------------------------------------------------------------ #
+# Auth dos endpoints de mutação (F3-4)                                #
+# ------------------------------------------------------------------ #
+
+
+async def require_demo_token(x_demo_token: str = Header(default="")) -> None:
+    """Protege endpoints de mutação quando AIOPS_DEMO_TOKEN está configurado.
+
+    Sem a env var o demo roda em modo dev aberto (bind default 127.0.0.1,
+    warning no startup). Com a env var, o header X-Demo-Token é obrigatório
+    e comparado em tempo constante.
+    """
+    expected = os.environ.get("AIOPS_DEMO_TOKEN", "")
+    if not expected:
+        return
+    if not x_demo_token or not hmac.compare_digest(x_demo_token, expected):
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Demo-Token")
 
 
 # ------------------------------------------------------------------ #
@@ -134,7 +170,7 @@ async def list_scenarios() -> JSONResponse:
     return JSONResponse(content=get_scenarios_list())
 
 
-@app.post("/demo/start/{scenario_name}")
+@app.post("/demo/start/{scenario_name}", dependencies=[Depends(require_demo_token)])
 async def start_scenario(scenario_name: str) -> JSONResponse:
     """Inicia o cenário especificado."""
     global _engine, _tick_task, _current_corpus_name
@@ -173,7 +209,7 @@ async def start_scenario(scenario_name: str) -> JSONResponse:
     return JSONResponse(content={"status": "started", "scenario": scenario_name})
 
 
-@app.post("/demo/stop")
+@app.post("/demo/stop", dependencies=[Depends(require_demo_token)])
 async def stop_scenario() -> JSONResponse:
     """Para o cenário e volta para IDLE."""
     global _tick_task
@@ -188,7 +224,7 @@ async def stop_scenario() -> JSONResponse:
     return JSONResponse(content={"status": "stopped"})
 
 
-@app.post("/demo/reset")
+@app.post("/demo/reset", dependencies=[Depends(require_demo_token)])
 async def reset_scenario() -> JSONResponse:
     """Para e reinicia o cenário atual do zero."""
     await stop_scenario()
@@ -212,7 +248,7 @@ async def get_status() -> JSONResponse:
     )
 
 
-@app.patch("/demo/speed")
+@app.patch("/demo/speed", dependencies=[Depends(require_demo_token)])
 async def update_speed(body: dict) -> JSONResponse:
     """Atualiza o speed_factor em tempo real sem reiniciar o cenário.
 
@@ -226,7 +262,7 @@ async def update_speed(body: dict) -> JSONResponse:
     return JSONResponse(content={"status": "ok", "speed_factor": float(speed_factor)})
 
 
-@app.post("/demo/compare/enable")
+@app.post("/demo/compare/enable", dependencies=[Depends(require_demo_token)])
 async def enable_comparison() -> JSONResponse:
     """Ativa modo de comparação (dois motores: preditivo vs tradicional)."""
     if _engine is None:
@@ -241,7 +277,7 @@ async def enable_comparison() -> JSONResponse:
     return JSONResponse(content={"status": "comparison_enabled"})
 
 
-@app.post("/demo/compare/disable")
+@app.post("/demo/compare/disable", dependencies=[Depends(require_demo_token)])
 async def disable_comparison() -> JSONResponse:
     """Desativa modo de comparação."""
     if _engine:
@@ -566,6 +602,18 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
+    if not os.environ.get("AIOPS_DEMO_TOKEN"):
+        logger.warning(
+            "demo.auth_disabled — AIOPS_DEMO_TOKEN não configurado; endpoints de "
+            "mutação abertos (modo dev). Não exponha este servidor fora de localhost."
+        )
+    if (
+        os.environ.get("SLACK_BOT_TOKEN")
+        and os.environ.get("AIOPS_DEMO_SLACK_REAL") != "1"
+    ):
+        logger.info(
+            "demo.slack_dry_run — envio real desabilitado (opt-in: AIOPS_DEMO_SLACK_REAL=1)"
+        )
     logger.info("Demo server ready on http://%s:%d/demo/", args.host, args.port)
     uvicorn.run(app, host=args.host, port=args.port)
 

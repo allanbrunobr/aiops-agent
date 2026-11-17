@@ -12,6 +12,7 @@ Baseado em: A2A Protocol v0.3 + IETF draft-klrc-aiagent-auth-00.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from typing import Any
@@ -271,7 +272,9 @@ async def _handle_diagnose(task_id: str, data: dict, request: Request) -> list[d
 
         config = getattr(request.app.state, "config", None)
         pipeline = build_pipeline(config)
-        result = engine.run(pipeline, state)
+        # engine.run é síncrono e pode levar até pipeline_timeout_seconds —
+        # roda em thread para não bloquear o event loop (F3-2)
+        result = await asyncio.to_thread(engine.run, pipeline, state)
 
         return [
             {

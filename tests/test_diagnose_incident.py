@@ -1,43 +1,86 @@
 """
-Testes para a ferramenta MCP diagnose_incident (Story 5.2).
+Testes para a ferramenta MCP diagnose_incident (Story 5.2 + F3-1).
 
-Verifica normalização, dispatch para BlueprintEngine, e tratamento de erros.
+Verifica normalização, dispatch para BlueprintEngine com o contrato REAL
+run(pipeline, state) → IncidentState, e tratamento de erros.
+
+F3-1: os mocks antigos usavam run(alert) com resultado de atributos planos,
+mascarando o TypeError da assinatura errada e campos inexistentes no estado.
 """
 
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 import pytest
 
+from domain.alert import NormalizedAlert
+from domain.incident_state import IncidentState
+
+
+def _make_alert(correlation_id: str = "inc-test") -> NormalizedAlert:
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    return NormalizedAlert(
+        source="test",
+        source_id="s1",
+        correlation_id=correlation_id,
+        title="Test",
+        description="Test alert",
+        severity="critical",
+        alert_type="TestAlert",
+        timestamp=now,
+        detection_timestamp=now,
+    )
+
+
+def _make_result_state() -> IncidentState:
+    """IncidentState real como o BlueprintEngine.run retorna."""
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    return IncidentState(
+        incident_id="inc-test",
+        correlation_id="inc-test",
+        alert=_make_alert(),
+        received_at=now,
+        started_at=now,
+        diagnosis={
+            "root_cause": "Connection pool exhausted after config deploy",
+            "evidence": ["error_rate spike", "slow traces", "pool metrics"],
+            "confidence": "high",
+            "affected_services": ["payment-svc"],
+        },
+        proposed_action={
+            "description": "Rollback config change",
+            "command": "kubectl rollout undo deployment/payment-svc",
+            "risk_level": "LOW",
+            "rollback": None,
+        },
+        safety_verdict="APPROVED",
+        safety_reasons=["PreValidator: LOW — auto_approved"],
+    )
+
 
 class _MockEngine:
-    """BlueprintEngine mock que retorna diagnóstico estruturado."""
+    """BlueprintEngine mock com o contrato real run(pipeline, state)."""
 
-    def run(self, alert):
-        class Result:
-            diagnosis = "Connection pool exhausted after config deploy"
-            evidence_chain = ["error_rate spike", "slow traces", "pool metrics"]
-            confidence = 0.87
-            proposed_fix = "kubectl rollout undo deployment/payment-svc"
-            risk_assessment = {"risk": "LOW", "blast_radius": 1}
-            mode = "heuristic"
-
-        return Result()
+    def run(self, pipeline, state):
+        assert hasattr(pipeline, "nodes"), "engine.run deve receber PipelineDefinition"
+        assert isinstance(state, IncidentState), "engine.run deve receber IncidentState"
+        return _make_result_state()
 
 
 class _MockEngineWithError:
     """BlueprintEngine que levanta exceção."""
 
-    def run(self, alert):
+    def run(self, pipeline, state):
         raise RuntimeError("Pipeline failed: FAISS not loaded")
 
 
 class _MockNormalizerRegistry:
-    """Normalizer registry mock."""
+    """Normalizer registry mock que retorna NormalizedAlert real."""
 
     def normalize(self, source, payload):
-        return payload  # retorna payload diretamente como "normalizado"
+        return _make_alert()
 
 
 @pytest.mark.unit
@@ -46,7 +89,6 @@ class TestHandleDiagnoseIncident:
 
     @pytest.mark.asyncio
     async def test_valid_alert_returns_diagnosis(self):
-        """Verifica que alerta válido retorna diagnóstico estruturado."""
         from interfaces.mcp.tools import handle_diagnose_incident
 
         result_json = await handle_diagnose_incident(
@@ -62,16 +104,21 @@ class TestHandleDiagnoseIncident:
         )
         data = json.loads(result_json)
 
-        assert "diagnosis" in data
-        assert "evidence_chain" in data
-        assert "confidence" in data
-        assert "proposed_fix" in data
-        assert "risk_assessment" in data
-        assert "correlation_id" in data
+        assert data["diagnosis"]["root_cause"] == (
+            "Connection pool exhausted after config deploy"
+        )
+        assert data["evidence_chain"] == [
+            "error_rate spike",
+            "slow traces",
+            "pool metrics",
+        ]
+        assert data["confidence"] == pytest.approx(0.85)
+        assert data["proposed_fix"] == "Rollback config change"
+        assert data["risk_assessment"]["safety_verdict"] == "APPROVED"
+        assert data["correlation_id"]
 
     @pytest.mark.asyncio
     async def test_response_has_required_fields(self):
-        """Verifica que todos os campos obrigatórios estão na resposta."""
         from interfaces.mcp.tools import handle_diagnose_incident
 
         result_json = await handle_diagnose_incident(
@@ -97,19 +144,19 @@ class TestHandleDiagnoseIncident:
             "mode",
             "latency_ms",
             "correlation_id",
+            "telemetry_source",
         ]
         for field in required_fields:
             assert field in data, f"Missing field: {field}"
 
     @pytest.mark.asyncio
     async def test_invalid_severity_returns_validation_error(self):
-        """Verifica que severidade inválida retorna erro RFC 7807."""
         from interfaces.mcp.tools import handle_diagnose_incident
 
         result_json = await handle_diagnose_incident(
             arguments={
                 "source": "pagerduty",
-                "severity": "extreme",  # inválido
+                "severity": "extreme",
                 "title": "Test",
                 "description": "Test",
             },
@@ -124,14 +171,12 @@ class TestHandleDiagnoseIncident:
 
     @pytest.mark.asyncio
     async def test_missing_required_field_returns_error(self):
-        """Verifica que campo obrigatório faltando retorna erro."""
         from interfaces.mcp.tools import handle_diagnose_incident
 
         result_json = await handle_diagnose_incident(
             arguments={
                 "source": "pagerduty",
                 "severity": "critical",
-                # Faltando title e description
             },
             engine=_MockEngine(),
             normalizer_registry=None,
@@ -142,7 +187,6 @@ class TestHandleDiagnoseIncident:
 
     @pytest.mark.asyncio
     async def test_engine_unavailable_returns_error(self):
-        """Verifica que engine=None retorna erro gracioso."""
         from interfaces.mcp.tools import handle_diagnose_incident
 
         result_json = await handle_diagnose_incident(
@@ -162,7 +206,6 @@ class TestHandleDiagnoseIncident:
 
     @pytest.mark.asyncio
     async def test_pipeline_exception_returns_error_with_correlation_id(self):
-        """Verifica que exceção do pipeline retorna RFC 7807 com correlation_id."""
         from interfaces.mcp.tools import handle_diagnose_incident
 
         result_json = await handle_diagnose_incident(
@@ -182,25 +225,17 @@ class TestHandleDiagnoseIncident:
         assert data["correlation_id"] == "test-corr-123"
 
     @pytest.mark.asyncio
-    async def test_engine_run_called_with_normalized_alert(self):
-        """Verifica que BlueprintEngine.run() é chamado (mesmo caminho que webhook)."""
+    async def test_engine_run_called_with_pipeline_and_state(self):
+        """F3-1: engine.run recebe (pipeline, IncidentState) — não o alerta cru."""
+        from blueprint.nodes import PipelineDefinition
         from interfaces.mcp.tools import handle_diagnose_incident
 
         run_calls = []
 
         class TrackingEngine:
-            def run(self, alert):
-                run_calls.append(alert)
-
-                class Result:
-                    diagnosis = "test"
-                    evidence_chain = []
-                    confidence = 0.5
-                    proposed_fix = ""
-                    risk_assessment = {}
-                    mode = "heuristic"
-
-                return Result()
+            def run(self, pipeline, state):
+                run_calls.append((pipeline, state))
+                return _make_result_state()
 
         await handle_diagnose_incident(
             arguments={
@@ -215,10 +250,14 @@ class TestHandleDiagnoseIncident:
         )
 
         assert len(run_calls) == 1
+        pipeline, state = run_calls[0]
+        assert isinstance(pipeline, PipelineDefinition)
+        assert isinstance(state, IncidentState)
+        assert isinstance(state.alert, NormalizedAlert)
+        assert state.no_llm is True
 
     @pytest.mark.asyncio
     async def test_nollm_mode_in_response(self):
-        """Verifica que mode='heuristic' é incluído na resposta."""
         from interfaces.mcp.tools import handle_diagnose_incident
 
         result_json = await handle_diagnose_incident(
@@ -233,5 +272,35 @@ class TestHandleDiagnoseIncident:
             incident_store=None,
         )
         data = json.loads(result_json)
-        assert "mode" in data
-        assert data["mode"] in ("heuristic", "llm")
+        assert data["mode"] == "heuristic"
+        assert data["telemetry_source"] == "simulated-sample"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_diagnose_incident_real_engine_deterministic():
+    """F3-1 E2E: engine real + pipeline real → diagnóstico em modo determinístico."""
+    from app.builders import build_engine
+    from config.loader import AppConfig
+    from interfaces.mcp.tools import handle_diagnose_incident
+
+    engine = build_engine(AppConfig())
+    result_json = await handle_diagnose_incident(
+        arguments={
+            "source": "grafana",
+            "severity": "critical",
+            "title": "Payment service down",
+            "description": "Connection pool exhausted after deploy",
+        },
+        engine=engine,
+        normalizer_registry=None,
+        incident_store=None,
+    )
+    data = json.loads(result_json)
+
+    assert data.get("type") != "pipeline_error", data.get("detail")
+    assert data["diagnosis"]["root_cause"]
+    assert data["mode"] == "heuristic"
+    assert data["telemetry_source"] == "simulated-sample"
+    assert data["proposed_fix"]
+    assert data["risk_assessment"]["safety_verdict"] in ("APPROVED", "NEEDS_REVIEW")

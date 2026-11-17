@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from datetime import datetime, timezone
 from typing import Any
 
 import structlog
 
 from application.ports.incident_store import IncidentStore
+from core.lifecycle import LifecycleEvent
 from domain.alert import NormalizedAlert
 from domain.incident_state import IncidentState
 
@@ -25,12 +27,18 @@ class PipelineRunner:
         max_concurrent: int = 3,
         max_queued: int = 10,
         store: IncidentStore | None = None,
+        engine: Any = None,
+        config: Any = None,
+        notifier: Any = None,
     ) -> None:
         self._slots_free = max_concurrent
         self._queue: asyncio.Queue[NormalizedAlert] = asyncio.Queue(maxsize=max_queued)
         self._max_concurrent = max_concurrent
         self._max_queued = max_queued
         self._store = store
+        self._engine = engine
+        self._config = config
+        self._notifier = notifier
         self._active_count: int = 0
         self._active_lock = asyncio.Lock()
         self._admit_lock = asyncio.Lock()
@@ -145,11 +153,17 @@ class PipelineRunner:
         alert: NormalizedAlert,
         bound_log: Any,
     ) -> None:
-        """Executa o pipeline de diagnostico propriamente dito.
+        """Executa o pipeline V1 real para o alerta (F3-3).
 
-        Stub V1 — sera substituido pela integracao com BlueprintEngine.
-        Cria IncidentState e persiste no store.
+        O webhook traz metadados do alerta, não séries de telemetria — o PoC
+        usa o sample simulado como fonte (sinalizado no estado e nos logs).
+        O engine roda em thread para não bloquear o event loop. Ao final:
+        estado persistido, postmortem gerado e notificação Slack (se wired).
         """
+        from app.builders import build_pipeline
+        from data.sample_incident import create_incident
+
+        incident = create_incident()
         state = IncidentState(
             incident_id=alert.correlation_id,
             correlation_id=alert.correlation_id,
@@ -157,15 +171,88 @@ class PipelineRunner:
             received_at=datetime.now(timezone.utc),
             started_at=alert.timestamp,
             state="DETECTING",
+            no_llm=True,
+            no_rag=True,
+            metadata={
+                "raw_incident_data": {
+                    "logs": incident.logs,
+                    "metrics": incident.metrics,
+                    "traces": incident.traces,
+                },
+                "telemetry_source": "simulated-sample",
+            },
         )
 
         if self._store is not None:
             self._store.save(alert.correlation_id, state)
-            bound_log.info("pipeline.state_saved", incident_id=state.incident_id)
 
-        # Placeholder — pipeline real sera integrado quando
-        # BlueprintEngine estiver conectado aos nodes de processamento
-        bound_log.info("pipeline.stub_executed")
+        if self._engine is None:
+            bound_log.warning(
+                "pipeline.engine_unavailable",
+                detail="runner sem engine — estado inicial salvo, diagnóstico não executado",
+            )
+            return
+
+        cid = alert.correlation_id
+        if self._notifier is not None:
+            await self._notifier.on_event(
+                LifecycleEvent(
+                    event_type="pipeline.started",
+                    node_name=None,
+                    correlation_id=cid,
+                    timestamp=datetime.now(timezone.utc),
+                    data={"source": alert.source, "service": alert.service},
+                )
+            )
+
+        pipeline = build_pipeline(self._config)
+        t0 = time.monotonic()
+        try:
+            final = await asyncio.to_thread(self._engine.run, pipeline, state)
+        except Exception as exc:
+            if self._notifier is not None:
+                await self._notifier.on_event(
+                    LifecycleEvent(
+                        event_type="pipeline.failed",
+                        node_name=None,
+                        correlation_id=cid,
+                        timestamp=datetime.now(timezone.utc),
+                        data={"error": str(exc)},
+                    )
+                )
+            raise
+        duration_ms = (time.monotonic() - t0) * 1000
+
+        if self._store is not None:
+            self._store.save(cid, final)
+            bound_log.info("pipeline.state_saved", incident_id=final.incident_id)
+
+        diagnosis = final.diagnosis or {}
+        bound_log.info(
+            "pipeline.executed",
+            root_cause=diagnosis.get("root_cause"),
+            safety_verdict=final.safety_verdict,
+            telemetry_source="simulated-sample",
+            duration_ms=round(duration_ms, 1),
+        )
+
+        if self._notifier is not None:
+            await self._notifier.on_event(
+                LifecycleEvent(
+                    event_type="pipeline.completed",
+                    node_name=None,
+                    correlation_id=cid,
+                    timestamp=datetime.now(timezone.utc),
+                    data={
+                        "diagnosis": diagnosis,
+                        "root_cause": diagnosis.get("root_cause", ""),
+                        "postmortem": final.postmortem_md or "",
+                        "safety_verdict": final.safety_verdict,
+                        "service": alert.service,
+                        "duration_ms": round(duration_ms, 1),
+                    },
+                )
+            )
 
     async def _queue_worker(self) -> None:
         """Task cancelável de start/stop.

@@ -64,11 +64,39 @@ def create_webhook_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Wire dependencies into app.state
-    app.state.config = AppConfig()
+    # Wire dependencies into app.state (F3-3: runner com engine/store/notifier reais)
+    from adapters.persistence.in_memory_store import InMemoryStore
+    from app.builders import build_engine
+    from interfaces.http.notifications.slack import SlackNotifier
+
+    config = AppConfig()
+    app.state.config = config
     app.state.credentials = EnvCredentialProvider()
     app.state.dedup_store = DedupStore()
-    app.state.pipeline_runner = PipelineRunner(max_concurrent=3, max_queued=10)
+
+    store = InMemoryStore()
+    app.state.incident_store = store
+    engine = build_engine(config, store=store)
+
+    # Slack: dry-run por padrão; envio real só com token E opt-in explícito
+    # (AIOPS_WEBHOOK_SLACK_REAL=1) — mesmo princípio do demo (F3-4)
+    slack_real = os.environ.get("AIOPS_WEBHOOK_SLACK_REAL") == "1" and bool(
+        os.environ.get("SLACK_BOT_TOKEN")
+    )
+    notifier = SlackNotifier(
+        channel=os.environ.get("SLACK_CHANNEL", "#incidents"),
+        creds=app.state.credentials,
+        dry_run=not slack_real,
+    )
+
+    app.state.pipeline_runner = PipelineRunner(
+        max_concurrent=3,
+        max_queued=10,
+        store=store,
+        engine=engine,
+        config=config,
+        notifier=notifier,
+    )
 
     # Mount the webhook router
     app.include_router(webhook_router)

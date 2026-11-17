@@ -139,7 +139,7 @@
       "title": "MCP diagnose_incident quebrado (wiring + assinatura)",
       "description": "Dois bugs: interfaces/http/app.py:144-152 (create_app chama mount_sse SEM engine/retriever → engine_unavailable/faiss_unavailable) e interfaces/mcp/tools.py:672 (engine.run(normalized_alert) com 1 arg vs assinatura run(pipeline, state) de blueprint/engine.py:58 → TypeError). Fix: wiring completo no create_app via builders + montar IncidentState a partir do NormalizedAlert. Teste de integração: tool diagnose_incident via MCP retorna diagnóstico em modo determinístico.",
       "acceptance": "Teste de integração MCP verde.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado. Nuances: o TypeError é capturado por except Exception (tools.py:711) → vira JSON 'pipeline_error' (500), não crash; testes (tests/test_diagnose_incident.py:17,32) usam mock com run(self, alert), mascarando o mismatch. app.state.engine/retriever existem (app.py:210-216) mas só servem ao A2A — nada chega ao mount_sse."
     },
     {
@@ -148,7 +148,7 @@
       "title": "A2A: engine.run síncrono bloqueia event loop",
       "description": "interfaces/http/routes/a2a.py:261 chama engine.run() síncrono dentro de rota async (até pipeline_timeout_seconds=90). Fix: await asyncio.to_thread(engine.run, ...). Teste: request concorrente de health responde enquanto diagnóstico roda.",
       "acceptance": "Teste de concorrência verde.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado: async handle_task (:117) → _handle_diagnose (:226) → engine.run síncrono (:261); zero to_thread/run_in_executor no caminho. Timeout (default 90s, config/loader.py:70) só é checado entre nodes (engine.py:82-89) — node lento pode bloquear o loop além disso."
     },
     {
@@ -157,7 +157,7 @@
       "title": "Webhook → pipeline: implementar o runner (ou rotular stub)",
       "description": "interfaces/http/webhook/pipeline_runner.py:143-168: _execute_pipeline é stub explícito (docstring 'Stub V1', termina em pipeline.stub_executed; nunca chama BlueprintEngine). infra/run_webhook_server.py:72 cria runner SEM store → nem o save de estado ocorre. Grafana provisioning aponta para esse endpoint (infra/grafana/provisioning/alerting/contact-points.yaml:11-14). O router do webhook NÃO tem nenhuma referência a Slack/notifier — o fluxo Grafana→Slack não existe nem em código, não só por wiring. (_queue_worker dormir 3600s é POR DESIGN: a fila é drenada por _release_slot_or_continue, :103-114 — não é bug de fila parada.) PREFIRA implementar de verdade: reusar BlueprintEngine V1 + builders, store persistente, e wiring de notificação Slack pós-postmortem. Alternativa aceitável: rotular explicitamente como stub (README + resposta do webhook + warning). Corrigir também tests/integration/test_webhook_to_slack_flow.py: referencia diretório docker/ inexistente (virou infra/) E um fixture JSON que não existe em lugar nenhum; testes afetados estão @pytest.mark.skip (:77,:146). Teste de integração: POST webhook Grafana válido → pipeline executa → postmortem → Slack mock recebe.",
       "acceptance": "Teste de integração webhook→Slack mock verde; decisão (implementar vs rotular) registrada em docs/improvement-progress.md.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado, 1 sub-alegação enganosa corrigida: '_queue_worker só dorme' não é fila parada (design documentado no docstring :171-175). Escopo real: stub + store ausente + Slack inexistente no router + teste quebrado/skipado."
     },
     {
@@ -166,7 +166,7 @@
       "title": "Demo: auth nos endpoints de mutação + Slack opt-in",
       "description": "interfaces/demo/server.py: ZERO auth em todos os endpoints incl. POST /demo/start/{scenario}; dispara Slack real se SLACK_BOT_TOKEN presente (:58-70). Fix: token simples (env AIOPS_DEMO_TOKEN, header) nos endpoints de mutação; Slack real só com opt-in explícito (AIOPS_DEMO_SLACK_REAL=1), default mock/dry-run. Atualizar .env.example e README.",
       "acceptance": "POST sem token → 401; com token → funciona; Slack real só com opt-in.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado (13 endpoints, zero auth/middleware). Mitigante: bind default 127.0.0.1 (:487), sobrescrevível via --host. Slack: dry_run default False (interfaces/http/notifications/slack.py:52); .env.local é auto-carregado (:43-51) → bastar o token no ambiente para envio real."
     },
     {
@@ -175,7 +175,7 @@
       "title": "Rotas órfãs knowledge/admin: montar ou deletar",
       "description": "interfaces/http/routes/knowledge.py e routes/admin.py nunca são montadas; get_knowledge_store lança NotImplementedError (knowledge.py:47-49). Decisão: montar com implementação mínima OU deletar. Não deixar código morto com rota fantasma. Registrar decisão.",
       "acceptance": "rg confirma: rotas montadas e funcionais OU arquivos removidos; CI completo verde ao fim da Fase 3.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado: include_router em produção só health/auth/a2a (app.py:119,189,205) e webhook (run_webhook_server.py:75). knowledge.py só montada em tests/test_knowledge_api.py:21 (com dependency_overrides); admin.py não importada por nenhum arquivo do repo."
     },
     {

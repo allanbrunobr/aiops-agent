@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 
 import structlog
 
+from blueprint.engine import PipelineAborted
 from domain.alert import NormalizedAlert
 from domain.incident import MitigationAction
 from safety.orchestrator import SafetyOrchestrator
@@ -25,6 +26,9 @@ log = structlog.get_logger()
 
 # Severidades válidas conforme schema do MCP tool
 VALID_SEVERITIES = {"critical", "high", "medium", "low"}
+
+# Confiança textual do diagnóstico → score numérico (F5-3 unifica as cópias)
+_CONFIDENCE_SCORES = {"high": 0.85, "medium": 0.5, "low": 0.25}
 
 
 # ============================================================================
@@ -623,18 +627,49 @@ async def handle_diagnose_incident(
             normalizer_registry=normalizer_registry,
         )
 
-        # Executa pipeline via BlueprintEngine.run()
-        result = engine.run(normalized_alert)
+        # F3-1: monta IncidentState a partir do alerta normalizado e executa
+        # o pipeline real via BlueprintEngine.run(pipeline, state). Modo
+        # determinístico (no_llm/no_rag); o alerta MCP não traz telemetria,
+        # então a fonte é o sample simulado do PoC — sinalizado na resposta.
+        from app.builders import build_pipeline
+        from data.sample_incident import create_incident
+        from domain.incident_state import IncidentState
+
+        incident = create_incident()
+        state = IncidentState(
+            incident_id=correlation_id,
+            correlation_id=correlation_id,
+            alert=normalized_alert,
+            received_at=datetime.now(timezone.utc),
+            started_at=normalized_alert.timestamp,
+            no_llm=True,
+            no_rag=True,
+            metadata={
+                "raw_incident_data": {
+                    "logs": incident.logs,
+                    "metrics": incident.metrics,
+                    "traces": incident.traces,
+                }
+            },
+        )
+        pipeline = build_pipeline(getattr(engine, "config", None))
+        result = engine.run(pipeline, state)
 
         elapsed_ms = (time.monotonic() - start_time) * 1000
 
-        # Extrai campos do resultado do engine
-        diagnosis = getattr(result, "diagnosis", str(result))
-        evidence_chain = getattr(result, "evidence_chain", [])
-        confidence = float(getattr(result, "confidence", 0.5))
-        proposed_fix = getattr(result, "proposed_fix", "")
-        risk_assessment = getattr(result, "risk_assessment", {})
-        mode = getattr(result, "mode", "heuristic")
+        # Extrai campos do IncidentState retornado pelo engine
+        diagnosis = result.diagnosis or {}
+        evidence_chain = list(diagnosis.get("evidence", []))
+        confidence = _CONFIDENCE_SCORES.get(
+            str(diagnosis.get("confidence", "medium")).lower(), 0.5
+        )
+        proposed_action = result.proposed_action or {}
+        proposed_fix = proposed_action.get("description", "")
+        risk_assessment = {
+            "safety_verdict": result.safety_verdict,
+            "safety_reasons": list(result.safety_reasons),
+        }
+        mode = "heuristic"
 
         log.info(
             "mcp.diagnose_incident.completed",
@@ -653,11 +688,30 @@ async def handle_diagnose_incident(
                 "proposed_fix": proposed_fix,
                 "risk_assessment": risk_assessment,
                 "mode": mode,
+                "telemetry_source": "simulated-sample",
                 "latency_ms": round(elapsed_ms, 1),
                 "correlation_id": correlation_id,
             }
         )
 
+    except PipelineAborted as exc:
+        elapsed_ms = (time.monotonic() - start_time) * 1000
+        log.warning(
+            "mcp.diagnose_incident.safety_blocked",
+            client_id=client_id,
+            correlation_id=correlation_id,
+            reason=str(exc),
+        )
+        return json.dumps(
+            {
+                "type": "safety_blocked",
+                "title": "Proposed action blocked by safety layers",
+                "detail": str(exc),
+                "status": 403,
+                "correlation_id": correlation_id,
+                "latency_ms": round(elapsed_ms, 1),
+            }
+        )
     except Exception as exc:
         elapsed_ms = (time.monotonic() - start_time) * 1000
         log.error(

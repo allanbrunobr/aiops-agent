@@ -207,6 +207,14 @@ Open **http://localhost:47891/demo/**.
 
 > Use the virtualenv interpreter (`.venv/bin/python`). With the system Python, dependencies such as `structlog` may be missing. In that case the log shows `SlackNotifier init falhou` and the demo pipeline may be incomplete.
 
+**Security defaults:** the demo binds to `127.0.0.1`. Mutation endpoints
+(`start`/`stop`/`reset`/`compare`/`speed`) are open in dev mode; set
+`AIOPS_DEMO_TOKEN` to require the `X-Demo-Token` header on them (recommended
+before exposing the server beyond localhost). Slack notifications are
+**dry-run by default** — real sends require both `SLACK_BOT_TOKEN` and the
+explicit opt-in `AIOPS_DEMO_SLACK_REAL=1`. The webhook server follows the same
+opt-in pattern via `AIOPS_WEBHOOK_SLACK_REAL=1`.
+
 ### Scenarios
 
 | Scenario | Simulated duration | Behavior |

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
@@ -43,9 +43,16 @@ class PatternCreateResponse(BaseModel):
     duplicate_warning: str | None = None
 
 
-def get_knowledge_store():
-    """Placeholder — substituído pelo composition root em server/app.py."""
-    raise NotImplementedError("Store must be injected via app.dependency_overrides")
+def get_knowledge_store(request: Request):
+    """Provider real: KnowledgeStore injetado pelo composition root (F3-5).
+
+    create_app popula app.state.knowledge_store; testes podem sobrescrever
+    via app.state ou dependency_overrides desta função.
+    """
+    store = getattr(request.app.state, "knowledge_store", None)
+    if store is None:
+        raise HTTPException(status_code=503, detail="Knowledge store not initialized")
+    return store
 
 
 @router.post("/patterns", response_model=PatternCreateResponse, status_code=201)

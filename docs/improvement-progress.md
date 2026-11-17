@@ -168,8 +168,13 @@ Cada bug: teste de regressão escrito ANTES do fix, visto falhar, corrigido, vis
   warning estruturado (RAG não é camada de safety).
 - Testes: `tests/test_v1_rag_index.py` (2): índice construído + search retorna
   chunks do incidente corrente (faiss/model mockados); no_rag=True não indexa.
-- Verificado end-to-end: smoke V1 COM RAG real (`--no-llm --pipeline-v1`,
-  sem --no-rag) exit 0 com modelo carregado.
+- Verificação end-to-end: o primeiro smoke V1 com RAG saiu 0, mas por
+  DEGRADAÇÃO GRACIOSA — o .venv local (Python 3.13) não tinha faiss/torch/
+  sentence-transformers (requirements.txt pin torch<2.5, sem wheel cp313),
+  e o build lazy logou `rag.index_build_failed` sem quebrar o pipeline.
+  **Correção de ambiente (aprovada pelo usuário):** .venv recriado com
+  Python 3.12 + requirements.txt completo + dev group; smoke re-verificado
+  com índice REAL construído (ver Fase 3, nota de ambiente).
 
 ### F2-3 TNR de teatro → simulação declarada com dados reais — done
 - **PRÉ** derivado da telemetria: `health_snapshot_from_report(report)` em
@@ -237,3 +242,105 @@ Cada bug: teste de regressão escrito ANTES do fix, visto falhar, corrigido, vis
 
 ### Testes adicionados na fase
 - 34 testes (3 F2-1 + 2 F2-2 + 6 F2-3 + 4 F2-4 + 19 F2-5).
+
+---
+
+## Fase 3 — MCP/HTTP/demo/webhook funcionais — DONE (2026-11-17)
+
+### F3-1 MCP diagnose_incident quebrado — done
+- `create_app`: engine/retriever construídos UMA vez (composition root no topo)
+  e passados ao `mount_sse` (engine=, retriever=) — antes só existiam em
+  app.state para o A2A; o MCP nascia sem eles (engine_unavailable).
+- `handle_diagnose_incident`: monta IncidentState a partir do NormalizedAlert
+  e chama `engine.run(pipeline, state)` (assinatura real — antes
+  `engine.run(alert)` → TypeError mascarado por except). Extrai campos do
+  IncidentState (diagnosis/evidence/proposed_action/safety_verdict) em vez de
+  atributos inexistentes; confiança textual→numérica via _CONFIDENCE_SCORES.
+- **Decisão registrada (regra 9):** o alerta MCP não traz telemetria; o PoC
+  usa o sample simulado como fonte, em modo determinístico (no_llm/no_rag),
+  com `"telemetry_source": "simulated-sample"` explícito na resposta.
+- `PipelineAborted` → resposta estruturada `safety_blocked` (403), não 500.
+- Testes: `tests/test_diagnose_incident.py` reescrito com o contrato REAL
+  (mocks antigos mascaravam o bug): 8 unit + 1 integration com engine real.
+
+### F3-2 A2A engine.run bloqueia event loop — done
+- `await asyncio.to_thread(engine.run, pipeline, state)` em `_handle_diagnose`.
+- Teste: `tests/test_a2a_concurrency.py` — ticker assíncrono progride DURANTE
+  run bloqueante de 0.5s (falhava antes do fix: loop preso).
+
+### F3-3 Webhook → pipeline: IMPLEMENTADO (não rotulado) — done
+- **Decisão registrada:** implementar de verdade (preferência do plano).
+  `PipelineRunner` ganha engine/config/notifier; `_execute_pipeline` executa
+  o BlueprintEngine V1 real em thread, persiste estado final no store,
+  gera postmortem e emite eventos LifecycleEvent (pipeline.started/completed/
+  failed) ao notifier Slack. Stub removido.
+- Telemetria: sample simulado sinalizado (`telemetry_source` no metadata/log)
+  — webhook traz metadados do alerta, não séries.
+- `infra/run_webhook_server.py`: wiring completo — InMemoryStore +
+  build_engine(config, store) + SlackNotifier **dry-run por padrão**; envio
+  real só com SLACK_BOT_TOKEN E AIOPS_WEBHOOK_SLACK_REAL=1.
+- Fixture criado: `infra/grafana_webhook_payload_example.json` (o diretório
+  docker/ virou infra/; o JSON não existia em lugar nenhum).
+- `tests/integration/test_webhook_to_slack_flow.py`: caminho corrigido,
+  classe TestWebhookPayloadValidation UN-skipped (3 testes rodando), asserts
+  200→202 (semântica async real do endpoint); classe live-server segue skip
+  (requer Docker) com reason atualizado.
+- Teste novo: `tests/integration/test_webhook_pipeline_flow.py` (2): fluxo
+  isolado completo Grafana payload → 202 → pipeline real → postmortem →
+  Slack fake recebe pipeline.completed com root_cause/postmortem/payment-svc;
+  webhook sem auth → 401.
+- `_queue_worker` dormir 3600s NÃO era bug (fila drenada por
+  `_release_slot_or_continue` sob o mesmo lock) — documentado, sem mudança.
+
+### F3-4 Demo: auth mutação + Slack opt-in — done
+- `require_demo_token` (Depends) nos 6 endpoints de mutação (start/stop/reset/
+  compare enable/disable + PATCH speed): com AIOPS_DEMO_TOKEN configurado,
+  header X-Demo-Token obrigatório (hmac.compare_digest); sem a env var, modo
+  dev aberto (bind default 127.0.0.1) com warning no startup.
+- **Decisão registrada:** enforcement opt-in via env para não quebrar o uso
+  local do dashboard (UI não envia token); exposição além de localhost exige
+  configurar o token (documentado no README).
+- Slack: `_build_slack_notifier()` — dry-run por padrão; real só com
+  SLACK_BOT_TOKEN E AIOPS_DEMO_SLACK_REAL=1 (antes bastar o token no ambiente
+  / .env.local auto-carregado disparava envio real).
+- `.env.example` + README atualizados (também com AIOPS_WEBHOOK_SLACK_REAL e
+  SLACK_API_BASE_URL do mock).
+- Testes: `tests/test_demo_auth.py` (6): 401 sem/com token errado, 200 com
+  token, modo dev aberto, dry-run default + opt-in, None sem token.
+
+### F3-5 Rotas órfãs knowledge/admin: MONTADAS — done
+- **Decisão registrada:** montar (não deletar) — as implementações reais
+  existem: `rag/knowledge_store.py` (JSON store) e `ValidationRunner` com
+  3 cenários isolados. Código morto com rota fantasma eliminado pelo wiring.
+- `knowledge.py`: placeholder NotImplementedError substituído por provider
+  real (Request → app.state.knowledge_store; 503 se não inicializado;
+  dependency_overrides dos testes existentes seguem funcionando).
+- `create_app`: app.state.knowledge_store = KnowledgeStore() + include_router
+  knowledge e admin.
+- Testes: `tests/test_knowledge_admin_mounted.py` (2 integration): GET/POST
+  patterns funcionais com store isolado (tmp_path); POST admin/validate/knowledge
+  executa os 3 cenários e retorna relatório.
+
+### Nota de ambiente (descoberta durante a Fase 3)
+- O .venv local era Python 3.13 com deps mínimas — requirements.txt pin
+  torch<2.5 (sem wheel cp313), então faiss/torch/sentence-transformers
+  NUNCA estiveram instalados; smokes com RAG degradavam graciosamente.
+- **Ação (aprovada pelo usuário):** .venv recriado com `uv venv --python 3.12
+  --clear` + requirements.txt completo + dev group + maturin. Ambiente
+  canônico agora: 3.12.14 / ST 3.4.1 / torch 2.4.1 / faiss ok.
+- Re-verificação real: smoke V1 COM RAG (`--no-llm --pipeline-v1`) exit 0,
+  "Successfully loaded faiss", ZERO rag.index_build_failed → F2-2 confirmado
+  end-to-end com índice real. Cenários de validação admin (FAISS+embeddings)
+  passam em subprocesso (3/3).
+- Lição: o teste admin que chamava a rota em processo carregaria ML no
+  sys.modules do pytest e violaria TestMLIsolation → roda em subprocesso.
+
+### Verificação da fase
+- ruff ✓, mypy ✓, unit: **753 passed, 10 skipped**; integration/snapshot:
+  **148 passed** (venv 3.12 canônico)
+- Smokes: V0 exit 3, V1 exit 0, V1+RAG real exit 0. **Diffs de snapshot: nenhum.**
+- CI completo (`scripts/ci-local.sh`): registrado no commit da fase.
+
+### Testes adicionados na fase
+- 20 testes (9 F3-1 [reescritos+novos] + 1 F3-2 + 2 F3-3 + 6 F3-4 + 3 F3-5)
+  + 3 un-skipped (payload validation).
