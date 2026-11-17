@@ -659,3 +659,32 @@ V0 ganha casa definitiva agora.**
   diagnosis"` fora de `agents/diagnoser.py`/tests: só docstrings em
   `data/unknown_fault_scenario.py` ✓; mapa `{"high": 0.85, ...}` só em
   `domain/confidence.py` ✓.
+
+### F5-4 Aposentar o V0 — BLOCKED (decisão do usuário, 2026-11-17)
+
+O aceite exige "golden/snapshots equivalentes ANTES da remoção". Medido no
+M1 com o mesmo cenário (`--no-llm --no-rag`), a paridade **não existe**:
+
+| | V0 (default) | V1 (`--pipeline-v1`) |
+|---|---|---|
+| Exit code | **3** (human gate, `requires_human`) | **0** ("resolvido") |
+| Postmortem | 92 linhas, 11 seções (Root Cause, Mitigation, Safety, CVE, TNR…) | 26 linhas, 5 seções |
+| Flags honradas | todas | ignora `--data-source`, `--tracker`, `--output-format`, `--rebuild-rag`, `--output-dir` |
+| Só no V0 | estágio preditivo, cache FAISS em disco, memória episódica (`IncidentRecord`), evolução de skills, Slack progressivo (5 eventos vs 2), tabela-resumo | — |
+
+- `tests/conftest.py::_run_pipeline` espelha o V0 manualmente e alimenta 15/17
+  snapshots + golden validation; `test_exit_codes.py` testa os exit codes do V0.
+- Remover o V0 hoje quebraria o contrato público de exit codes do README
+  (3 = safety blocked) e removeria 6 features sem substituto — viola a regra 4
+  ("não quebre o V0 até paridade").
+- **Diagnóstico:** F5-4 não é remoção mecânica; é portar o V0 para o V1.
+  Sub-features propostas para um épico próprio: 4a human gate + exit codes no
+  `run_v1`; 4b postmortem rico via `application/use_cases/postmortem.py` (já
+  extraído em F5-2 para isso); 4c `--tracker`/`--data-source`/`--output-format`
+  /`--rebuild-rag`/`--output-dir`; 4d Slack progressivo + preditivo + memória/
+  skills; 4e `conftest._run_pipeline` → V1 e snapshots regenerados com diff
+  justificado; 4f remoção de `v0_pipeline.py`, flag e compat block.
+- **Estado deixado:** o V0 está isolado em `interfaces/cli/v0_pipeline.py`
+  (único módulo), `main.py` tem 129 linhas, e nada mais depende dele — o
+  bloqueio não impede a Fase 6.
+- Decisão do usuário: seguir para a Fase 6 (opção 3 de 3 apresentadas).

@@ -229,7 +229,7 @@
       "title": "Executar fases restantes do plano de refatoração existente",
       "description": "PRÉ-REQUISITO: Fases 2 e 3 concluídas. VERIFICAÇÃO 2026-11-17: as fases 2b (LLM seam), 2c (Reporter), 2d (ports/persistence) e 3 (domain purity) de docs/refactoring-execution-plan.md JÁ ESTÃO EXECUTADAS no código (anthropic só em adapters/llm/anthropic_client.py:22; zero Rich em agents/; application/ports/{reporter,incident_store}.py existem; domain/ sem Pydantic + docs/adr/0003-domain-purity.md). 2e e 4 também done. Resta APENAS a fase 5 (composition builders) PARCIAL: app/builders.py existe (build_engine/build_pipeline/build_rag) mas build_diagnoser_agent/build_detector_agent do plano não existem. Escopo: (a) atualizar o status das fases no próprio plano (documento não tem marcadores de status); (b) executar o que falta da fase 5 seguindo os acceptance criteria do plano. Um PR/commit por fase, sem misturar file moves com comportamento. Não mexer no Pydantic de domain/ sem ADR (regra do plano).",
       "acceptance": "Status das fases refletido no plano; critérios de aceite da fase 5 satisfeitos (rg/pytest definidos lá); CI verde.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Parcialmente confirmado: a alegação de fases pendentes 2b/2c/2d/3 está DESATUALIZADA — já executadas no código. Re-escopado para fase 5 parcial + atualização do documento."
     },
     {
@@ -238,7 +238,7 @@
       "title": "Quebrar o god-file main.py (2247 linhas)",
       "description": "12 funções step_* misturam negócio + Rich UI (step_generate_data:138, step_sanitize:179, step_pipeline:223, step_compression:272, step_rag:318, step_agents:413, step_safety_validation:647, step_remediation_validation:717, step_predict:951, step_postmortem:1019, step_tracking:1508, step_fetch_databricks_data:1578). Destino: lógica → use cases em application/; Rich → adapter Reporter (adapters/reporter/rich_console.py já existe); CLI fina → interfaces/cli/. Remover duplicações: mapa de confiança {'high':0.85,'medium':0.5,'low':0.25} 2× (main.py:2109 _CONF_MAP_SLACK, :2202 _CONF_MAP); chamada dupla detector.detect no MESMO fluxo V0+LLM (main.py:508 detecta → :522 chama _orchestrator.run(report, retriever) que detecta de novo em agents/orchestrator.py:265 — passar a detecção adiante); acesso a privado diagnoser._heuristic_diagnosis (main.py:528) → método público. _run_v0 (main.py:1944-1953) é stub que retorna EXIT_ERROR, referenciado pela factory (:1941) mas inalcançável via CLI → remover junto com a factory (ver F5-4). NOTA: mitigação/TNR NÃO são mais duplicados (main.py:543-559 reusa resultados do orchestrator); não há state machine em AgentOrchestrator — a timeline _transition é inline em step_agents (main.py:497-504) e migra junto com ele. Smoke V0/V1 deve seguir funcionando após cada passo.",
       "acceptance": "main.py < 300 linhas ao final (CLI + wiring); smokes V0/V1 verdes; snapshots equivalentes.",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Parcialmente confirmado: são 12 step_* (não ~15); 'state machine duplicada' era exagero (orchestrator não tem state machine); duplicação de mitigação/TNR já corrigida no repo. Duplo detector.detect e acesso privado confirmados no mesmo fluxo."
     },
     {
