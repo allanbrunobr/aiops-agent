@@ -339,8 +339,11 @@ class TestExecuteStep:
             tool_args={},
             expected_signal="",
         )
-        with patch("agents.orchestrator.DiagnosisAgent") as MockDiag:
-            MockDiag.return_value._execute_tool.side_effect = RuntimeError("boom")
+        # F6-5: o orchestrator reutiliza UMA instância de DiagnosisAgent
+        # (orch._diagnoser) em vez de recriá-la a cada step — patcha-se a instância.
+        with patch.object(
+            orch._diagnoser, "_execute_tool", side_effect=RuntimeError("boom")
+        ):
             result = orch._execute_step(step, MagicMock(), None)
         assert "Tool execution failed" in result
 

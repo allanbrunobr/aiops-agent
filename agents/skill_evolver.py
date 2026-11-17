@@ -9,10 +9,11 @@ Fluxo:
 
 from __future__ import annotations
 
-import json
 import logging
+import os
 
 from application.ports.llm_client import LLMClient
+from core.llm_json import extract_json_object
 from rag.memory import DiagnosticSkill, IncidentMemoryDB
 
 logger = logging.getLogger(__name__)
@@ -45,10 +46,20 @@ class SkillEvolver:
     """Decide quando e como evoluir uma DiagnosticSkill com baixa performance."""
 
     def __init__(
-        self, client: LLMClient | None, memory_db: IncidentMemoryDB | None
+        self,
+        client: LLMClient | None,
+        memory_db: IncidentMemoryDB | None,
+        model: str | None = None,
     ) -> None:
         self.client = client
         self.memory_db = memory_db
+        # F6-5: o modelo vinha hardcoded (claude-haiku-4-5-20251001). Agora segue
+        # a mesma resolução do resto do sistema (env AIOPS_LLM_MODEL > config.llm).
+        if model is None:
+            from config.loader import LLMConfig
+
+            model = os.environ.get("AIOPS_LLM_MODEL") or LLMConfig().model_name
+        self.model = model
 
     def should_evolve(self, skill: DiagnosticSkill) -> bool:
         """Retorna True se a skill deve ser reescrita.
@@ -84,12 +95,11 @@ class SkillEvolver:
 
         try:
             response = self.client.create_message(
-                model="claude-haiku-4-5-20251001",
+                model=self.model,
                 max_tokens=1024,
                 messages=[{"role": "user", "content": prompt}],
             )
-            raw = response.content[0].text.strip()
-            data = json.loads(raw)
+            data = extract_json_object(response.content[0].text)
             new_prompt = data.get("new_system_prompt", "").strip()
             if not new_prompt:
                 return None

@@ -521,9 +521,13 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
                             },
                         )
                     )
-            except Exception:
-                # Degradação graciosa — continua sem histórico
-                pass
+            except Exception as exc:
+                # Degradação graciosa — continua sem histórico, mas registra o motivo
+                import logging as _logging
+
+                _logging.getLogger(__name__).warning(
+                    "rag.history_chunks_failed: %s", exc
+                )
 
         return chunks
 

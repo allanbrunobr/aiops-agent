@@ -13,6 +13,7 @@ dados adicionais, até convergir em um diagnóstico.
 from __future__ import annotations
 
 import json
+import logging
 import os
 
 from adapters.llm.anthropic_client import create_anthropic_llm_client
@@ -29,9 +30,11 @@ from application.ports.reporter import (
     Reporter,
 )
 from config.loader import LLMConfig as _LLMConfig
+from core.llm_json import extract_json_object
 
 # Modelo padrão lido do AppConfig.llm.model_name — evita string hardcoded no agente.
 _DEFAULT_MODEL: str = _LLMConfig().model_name
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """You are an expert SRE agent performing Root Cause Analysis on a production incident.
 
@@ -538,8 +541,9 @@ class DiagnosisAgent:
                     }
                 ],
             )
-            return json.loads(response.content[0].text)
-        except Exception:
+            return extract_json_object(response.content[0].text)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("diagnoser.reflection_failed: %s", exc)
             return {
                 "lesson": "Reflection unavailable",
                 "score": 0.5,

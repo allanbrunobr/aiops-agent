@@ -126,7 +126,10 @@ class TraceFilter:
         # Calcula p95 threshold
         all_durations = list(trace_durations.values())
         threshold = float(np.percentile(all_durations, self.percentile_threshold))
-        baseline_mean = float(np.mean([d for d in all_durations if d < threshold]))
+        below = [d for d in all_durations if d < threshold]
+        # F6-5: np.mean([]) → nan quando todas as durações são iguais (nada abaixo
+        # do percentil). Rust usa o próprio threshold como baseline nesse caso.
+        baseline_mean = float(np.mean(below)) if below else float(threshold)
 
         # Filtra traces acima do threshold
         slow_paths = []
@@ -135,6 +138,9 @@ class TraceFilter:
                 continue
 
             trace_spans = sorted(traces[trace_id], key=lambda s: s.start_time)
+            # F6-5: call path = DFS parent→child (ordem CAUSAL), como no Rust. Antes o
+            # DFS era computado e descartado; path/operations usavam
+            # trace_spans[:max_hops] por start_time (ordem temporal ≠ causal).
             path = self._extract_call_path(trace_spans)
 
             if path:
@@ -143,8 +149,8 @@ class TraceFilter:
                 slow_paths.append(
                     SlowCallPath(
                         trace_id=trace_id,
-                        path=[s.service for s in trace_spans[: self.max_hops]],
-                        operations=[s.operation for s in trace_spans[: self.max_hops]],
+                        path=[s.service for s in path],
+                        operations=[s.operation for s in path],
                         total_duration_ms=duration,
                         bottleneck_service=bottleneck.service,
                         bottleneck_duration_ms=bottleneck.duration_ms,

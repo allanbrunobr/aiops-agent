@@ -844,3 +844,65 @@ M1 com o mesmo cenário (`--no-llm --no-rag`), a paridade **não existe**:
 ### Verificação (F6-4)
 - M1: `cargo fmt --check` 0 diffs; clippy 0 erros; `cargo test` **56 passed**;
   extensão recompilada; `tests/rust` **65 passed**; unit **893 passed**.
+
+### F6-5 Code smells menores (opportunistic) — done
+- **JSON tolerante de LLM** (`core/llm_json.py`: `extract_json` /
+  `extract_json_object` / `LLMJsonError`): puro → code-fence → primeiro
+  objeto balanceado (respeitando strings). Cinco call sites do
+  `AgentOrchestrator` + reflexão do `DiagnosisAgent` + `SkillEvolver` faziam
+  `json.loads(response.content[0].text)` dentro de `except Exception` mudo:
+  resposta válida em ```` ```json ```` virava "parse failed" silencioso e caía no
+  plano/reflexão default. Agora parseia e, quando falha, **loga o motivo**
+  (`orchestrator.plan_parse_failed`, `step_reflection_failed`, `replan_failed`,
+  `synthesis_failed_using_heuristic`, `final_reflection_failed`) mantendo o
+  fallback. mypy-checado (`core/`).
+- `AgentOrchestrator`: **uma** instância de `DiagnosisAgent` (`self._diagnoser`,
+  com o mesmo reporter) em vez de recriar a cada step e no fallback.
+- `SkillEvolver`: modelo `claude-haiku-4-5-20251001` hardcoded → parâmetro
+  `model` com default `AIOPS_LLM_MODEL` > `config.llm.model_name` (mesma
+  resolução do resto do sistema).
+- `pipeline/trace_filter.py` (Python): `path`/`operations` passam a usar o DFS
+  parent→child (ordem **causal**), como o Rust — o DFS era computado e
+  descartado, e os campos usavam `trace_spans[:max_hops]` por `start_time`.
+  `np.mean([])` → `nan` quando todas as durações são iguais: agora usa o
+  threshold como baseline (mesma regra do Rust). Snapshots inalterados (nas 3
+  fixtures a ordem temporal coincide com a causal).
+- `except Exception: pass` → `warning` estruturado em `interfaces/cli/
+  v0_pipeline.py` (×3: precedentes, write/evolve de skill, memória episódica) e
+  `rag/indexer.py` (chunks históricos). Comportamento best-effort preservado;
+  só deixa de ser mudo.
+- `demo_adversarial_attack` saiu de `pipeline/telemetry_sanitizer.py` (−107
+  linhas de módulo de produção) para `scripts/demo_adversarial_attack.py`
+  (roda standalone, exit 0).
+- `rag/memory.py::find_similar_incidents`: full table scan **documentado** como
+  limitação conhecida do PoC, não otimizado (decisão do plano).
+- Testes: `tests/test_llm_json.py` (14: puro/fence/prosa/braces em strings/
+  erros; orchestrator aceita plano em fence; diagnoser único; modelo do
+  evolver segue env/config; path causal no Python; sem NaN). `test_orchestrator
+  ::TestExecuteStep` ajustado (patcha `orch._diagnoser`).
+
+### Verificação (F6-5)
+- M1: ruff/format/mypy ✓; `cargo fmt/clippy/test` ✓ (56); unit **907 passed**;
+  integration/snapshot **148 passed**; `tests/rust` 65 passed; smokes V0 exit 3
+  / V1 exit 0 / V1+RAG exit 0; demo exit 0. **Diffs de snapshot: nenhum.**
+
+---
+
+## Fechamento — Definition of Done (2026-11-17)
+
+- [x] 32 features: **30 done, 1 blocked (F5-4, diagnóstico e sub-features
+  registrados), 0 pending**.
+- [x] CI completo verde no M1: lint (ruff/format/mypy), unit 907, integration/
+  snapshot 148, rust (fmt/clippy/test 56 + tests/rust 65).
+- [x] Smokes `main.py --no-llm --no-rag` → exit 3 (human gate), `--pipeline-v1`
+  → exit 0, `--pipeline-v1` com RAG real → exit 0. Contrato de exit codes
+  0/1/2/3 preservado.
+- [x] Nenhum `passed=True` em caminho de exceção em `safety/`; nenhum
+  `subprocess`/`os.system` em código de produção (SECURITY.md intacto);
+  `anthropic` só em `adapters/llm/anthropic_client.py`.
+- [x] README/README.pt-BR/CONTRIBUTING/docs atualizados onde o comportamento
+  mudou (webhook, MCP, demo auth, header+secret, RS256/PKCE, env prefix, rag
+  block, config.yaml removido, CI rust).
+- [x] **Zero diffs de snapshot em toda a execução** — nenhuma mudança de output
+  precisou ser justificada.
+- 151 testes novos em 26 arquivos; `main.py` 2582 → 129 linhas.

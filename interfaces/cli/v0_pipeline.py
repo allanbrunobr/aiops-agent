@@ -19,6 +19,7 @@ import traceback
 import uuid
 from datetime import datetime
 
+import structlog as _structlog
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
@@ -62,6 +63,8 @@ from safety.orchestrator import SafetyOrchestrator
 from safety.pre_validator import PreExecutionValidator
 from safety.tnr import TNRSafetyGuard
 from safety.version_validator import VersionValidator
+
+_log = _structlog.get_logger("cli.v0")
 
 
 def step_generate_data(
@@ -387,8 +390,8 @@ def step_rag(report, cache_dir: str = ".aiops-cache/rag", rebuild: bool = False)
             console.print("\n  [bold cyan]Similar past incidents found:[/bold cyan]")
             for p in precedents:
                 console.print(f"    • {p['scenario']}: {p['root_cause']}")
-    except Exception:
-        pass
+    except Exception as exc:  # best-effort: precedentes não bloqueiam o pipeline
+        _log.warning("cli.v0.precedents_failed", error=str(exc))
 
     console.print()
     return retriever
@@ -656,8 +659,8 @@ def step_agents(
                     console.print(
                         f"  [dim]Skill evolved: {_evolved.name} → v{_evolved.version}[/dim]"
                     )
-    except Exception:
-        pass  # write/evolve é best-effort; não bloqueia o pipeline
+    except Exception as exc:  # write/evolve é best-effort; não bloqueia o pipeline
+        _log.warning("cli.v0.skill_memory_write_failed", error=str(exc))
     # ─────────────────────────────────────────────────────────────────────
 
     result["timeline"] = timeline
@@ -1140,8 +1143,8 @@ def run_v0(args: argparse.Namespace) -> int:
                 )
                 db = IncidentMemoryDB()
                 db.save_incident(record)
-        except Exception:
-            pass
+        except Exception as exc:  # memória episódica é best-effort
+            _log.warning("cli.v0.incident_memory_save_failed", error=str(exc))
 
         # Summary
         print_summary(

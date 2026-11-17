@@ -21,6 +21,7 @@ from agents.mitigator import MitigationAgent
 from agents.skill_router import DEFAULT_SKILL, SkillRouter
 from application.ports.llm_client import LLMClient
 from application.ports.reporter import NullReporter, Reporter
+from core.llm_json import LLMJsonError, extract_json_object
 from rag.memory import IncidentMemoryDB
 from safety.tnr import TNRResult, TNRSafetyGuard
 
@@ -257,6 +258,9 @@ class AgentOrchestrator:
         self.skill_router = skill_router
         self.config = config
         self.reporter = reporter or NullReporter()
+        # F6-5: uma instância de DiagnosisAgent por orchestrator — antes era
+        # recriada a cada step (e no fallback), descartando estado/cliente.
+        self._diagnoser = DiagnosisAgent(reporter=self.reporter)
 
     # ------------------------------------------------------------------
     # Public
@@ -416,8 +420,12 @@ class AgentOrchestrator:
                     }
                 ],
             )
-            data = json.loads(response.content[0].text)
-        except Exception:  # noqa: BLE001
+            data = extract_json_object(response.content[0].text)
+        except LLMJsonError as exc:
+            logger.warning("orchestrator.plan_parse_failed: %s", exc)
+            return self._default_plan(report)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("orchestrator.plan_failed: %s", exc)
             return self._default_plan(report)
 
         steps = [
@@ -469,9 +477,10 @@ class AgentOrchestrator:
 
     def _execute_step(self, step: InvestigationStep, report, retriever) -> str:
         """Executa um step do plano reutilizando a infra de tools do DiagnosisAgent."""
-        diagnoser = DiagnosisAgent()
         try:
-            return diagnoser._execute_tool(step.tool, step.tool_args, report, retriever)
+            return self._diagnoser._execute_tool(
+                step.tool, step.tool_args, report, retriever
+            )
         except Exception as exc:  # noqa: BLE001
             return f"Tool execution failed: {exc}"
 
@@ -500,8 +509,9 @@ class AgentOrchestrator:
                     }
                 ],
             )
-            return json.loads(response.content[0].text)
-        except Exception:  # noqa: BLE001
+            return extract_json_object(response.content[0].text)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("orchestrator.step_reflection_failed: %s", exc)
             return {"decision": "continue", "assessment": "Reflection parse failed"}
 
     def _replan(
@@ -533,7 +543,7 @@ class AgentOrchestrator:
                     }
                 ],
             )
-            data = json.loads(response.content[0].text)
+            data = extract_json_object(response.content[0].text)
             steps = [
                 InvestigationStep(
                     step_id=s["step_id"],
@@ -549,7 +559,8 @@ class AgentOrchestrator:
                 hypothesis=data.get("hypothesis", old_plan.hypothesis),
                 steps=steps or old_plan.steps,
             )
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("orchestrator.replan_failed: %s", exc)
             return old_plan  # fallback: mantém plano original
 
     def _synthesize_diagnosis(
@@ -585,9 +596,10 @@ class AgentOrchestrator:
             kwargs["system"] = system_msg
         try:
             response = self.client.create_message(**kwargs)
-            return json.loads(response.content[0].text)
-        except Exception:  # noqa: BLE001
-            return DiagnosisAgent().heuristic_diagnosis(report)
+            return extract_json_object(response.content[0].text)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("orchestrator.synthesis_failed_using_heuristic: %s", exc)
+            return self._diagnoser.heuristic_diagnosis(report)
 
     def _reflect_final(
         self,
@@ -614,8 +626,9 @@ class AgentOrchestrator:
                     }
                 ],
             )
-            return json.loads(response.content[0].text)
-        except Exception:  # noqa: BLE001
+            return extract_json_object(response.content[0].text)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("orchestrator.final_reflection_failed: %s", exc)
             return {"lesson": "Reflection unavailable", "score": 0.5}
 
     def _extract_tags(self, report) -> list[str]:

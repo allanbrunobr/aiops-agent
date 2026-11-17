@@ -302,7 +302,7 @@
       "title": "Code smells menores (opportunistic)",
       "description": "Dentro dos arquivos já tocados nas fases anteriores: agents/orchestrator.py:443 DiagnosisAgent() recriado a cada step (também :556) → reusar instância; agents/orchestrator.py:390,473,504,554,581 json.loads sem tolerar markdown code-fence → helper tolerante com erro explícito; pipeline/trace_filter.py:98-107 DFS computado e descartado (usado só como booleano; campos usam trace_spans[:max_hops] por start_time, ordem temporal ≠ causal) → usar DFS ou remover; pipeline/trace_filter.py:90 np.mean([]) → nan → guardar; agents/skill_evolver.py:84 modelo haiku hardcoded → config; main.py:637-638 e rag/indexer.py:441-443 except Exception: pass → logar erro estruturado; demos (demo_adversarial_attack, pipeline/telemetry_sanitizer.py:661) em módulos de produção → mover para interfaces/demo/ ou scripts/; rag/memory.py:249-276 full table scan na similaridade → documentar como limitação conhecida (não otimizar).",
       "acceptance": "CI completo verde; relatório final por fase em docs/improvement-progress.md (done/skipped/blocked + motivo + testes adicionados + diffs de snapshot justificados).",
-      "status": "pending",
+      "status": "done",
       "verification_note": "Confirmado. Ressalva de alcance: demo_adversarial_attack só executa via __main__ (:727-728), nenhum import de produção — incômodo arquitetural, sem efeito no pipeline. Linhas corrigidas: skill_evolver :84 (não ~90), main.py :637-638 (não 625-637)."
     }
   ]

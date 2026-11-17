@@ -243,6 +243,11 @@ class IncidentMemoryDB:
 
         Returns:
             Lista de IncidentRecord ordenada por similaridade descendente.
+
+        Limitação conhecida (F6-5, documentada, não otimizada): faz full scan da
+        tabela ``incidents`` e pontua em Python. Adequado ao volume do PoC
+        (centenas de incidentes); para milhares, indexar serviços/tags em tabela
+        auxiliar ou mover a pontuação para SQL.
         """
         if not affected_services and not tags:
             return []
