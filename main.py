@@ -2177,44 +2177,11 @@ def main_v1(args: argparse.Namespace) -> int:
     return exit_code
 
 
-def get_pipeline(args: argparse.Namespace):
-    """Factory: retorna a implementação de PipelineProtocol selecionada.
-
-    Seleciona V1 (Blueprint Engine) somente com --pipeline-v1.
-    --data-source databricks não troca o motor. O padrão é o pipeline
-    sequencial de main(), não esta função.
-
-    Args:
-        args: Namespace com flags de execução.
-
-    Returns:
-        CallablePipelineRunner que satisfaz PipelineProtocol.
-    """
-    from core.pipeline_protocol import make_pipeline
-
-    use_v1 = getattr(args, "pipeline_v1", False)
-    if use_v1:
-        return make_pipeline(main_v1)
-    return make_pipeline(_run_v0)
-
-
-def _run_v0(args: argparse.Namespace) -> int:
-    """Executa o pipeline V0 sequencial (step_* functions).
-
-    No fluxo normal, o V0 é executado diretamente em main() quando
-    --pipeline-v1 não está ativo. Esta função é o wrapper que satisfaz
-    PipelineProtocol para composição programática fora de main().
-    """
-    # main() executa o V0 inline. Este wrapper não roda o pipeline.
-    # Devolver sucesso aqui fazia um chamador achar que o incidente foi tratado.
-    return EXIT_ERROR
-
-
 def main() -> int:
     """Entry point principal. Retorna exit code baseado no resultado do pipeline.
 
-    Usa Blueprint Engine V1 para execucao simulated.
-    Mantém path V0 para Databricks e tracker (funcionalidades nao migradas).
+    O pipeline sequencial V0 (step_*) é o default; ``--pipeline-v1`` delega ao
+    Blueprint Engine via ``main_v1``. Databricks e tracker só existem no V0.
     """
     parser = build_arg_parser()
     args = parser.parse_args()
@@ -2237,10 +2204,8 @@ def main() -> int:
         use_llm = False
         args.no_llm = True
 
-    # Roteamento via factory — elimina condicionais inline de seleção de pipeline
-    pipeline = get_pipeline(args)
     if getattr(args, "pipeline_v1", False):
-        return pipeline.run(args)
+        return main_v1(args)
 
     print_banner()
 
@@ -2274,10 +2239,6 @@ def main() -> int:
             console.print(
                 f"[yellow]Slack: falha ao enviar {event_type}: {_fe}[/yellow]"
             )
-
-    # Blueprint Engine V1 esta disponivel via main_v1(args).
-    # O path V0 e mantido como default para compatibilidade com testes existentes.
-    # Para usar o Blueprint Engine diretamente, chame main_v1(args).
 
     # Leitura do modelo LLM configuravel via env var (Story 5.1)
     llm_model = os.environ.get("AIOPS_LLM_MODEL", "claude-sonnet-4-20250514")
@@ -2332,13 +2293,6 @@ def main() -> int:
 
         # 2b. Context Compression
         compressor, compressed_text, compression_stats = step_compression(report)
-
-        # 2c. Predictive Stage (no-op se não disponível)
-        try:
-            _mem_db = IncidentMemoryDB()
-            step_predict(report, memory_db=_mem_db)
-        except Exception:
-            pass
 
         # 3. RAG Indexing
         if not args.no_rag:
