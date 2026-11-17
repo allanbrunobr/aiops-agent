@@ -3,9 +3,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use super::compressor::compress_inner;
-use super::types::{
-    AggregatedReportProxy, LogTemplateProxy, MetricAnomalyProxy, SlowTraceProxy,
-};
+use super::types::{AggregatedReportProxy, LogTemplateProxy, MetricAnomalyProxy, SlowTraceProxy};
 
 /// Função registrada como _aiops_rust.compress_context(report) -> (str, dict)
 ///

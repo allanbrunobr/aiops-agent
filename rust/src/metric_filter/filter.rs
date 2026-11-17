@@ -1,3 +1,4 @@
+use super::types::{MetricAnomalyData, MetricPointData};
 /// Lógica de detecção de anomalias 3-sigma em Rust puro.
 ///
 /// Porta fiel do MetricFilter Python (pipeline/metric_filter.py):
@@ -6,9 +7,7 @@
 ///   - Detecção: |value - mean| / std >= sigma_threshold
 ///   - Classificação de forma: spike / level_shift / steady_increase
 ///   - Deduplicação: mantém o ponto de maior desvio por (service, metric)
-
 use std::collections::HashMap;
-use super::types::{MetricPointData, MetricAnomalyData};
 
 pub fn detect_anomalies(
     metrics: Vec<MetricPointData>,

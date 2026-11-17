@@ -227,7 +227,13 @@ impl Drain3 {
         template
             .iter()
             .zip(new_tokens.iter())
-            .map(|(t, n)| if t == n { t.clone() } else { PARAM_STR.to_string() })
+            .map(|(t, n)| {
+                if t == n {
+                    t.clone()
+                } else {
+                    PARAM_STR.to_string()
+                }
+            })
             .collect()
     }
 
@@ -303,7 +309,9 @@ impl Drain3 {
         }
         let new_idx = self.nodes.len();
         self.nodes.push(Node::new());
-        self.nodes[parent_idx].children.insert(key.to_string(), new_idx);
+        self.nodes[parent_idx]
+            .children
+            .insert(key.to_string(), new_idx);
         new_idx
     }
 }

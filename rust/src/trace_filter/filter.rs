@@ -1,3 +1,4 @@
+use super::types::{SlowCallPathData, SpanData};
 /// Lógica de filtragem de traces por latência p95 em Rust puro.
 ///
 /// Porta fiel do TraceFilter Python (pipeline/trace_filter.py):
@@ -6,9 +7,7 @@
 ///   - Extração de call path via DFS (máx max_hops hops)
 ///   - Identificação de bottleneck (span de maior duração)
 ///   - Deduplicação por padrão de path (mantém o mais lento)
-
 use std::collections::HashMap;
-use super::types::{SlowCallPathData, SpanData};
 
 pub fn filter_slow_traces(
     spans: Vec<SpanData>,
@@ -41,7 +40,11 @@ pub fn filter_slow_traces(
     let threshold = percentile(&all_durations, percentile_threshold);
 
     // Baseline mean = média das durações abaixo do threshold
-    let below: Vec<f64> = all_durations.iter().copied().filter(|&d| d < threshold).collect();
+    let below: Vec<f64> = all_durations
+        .iter()
+        .copied()
+        .filter(|&d| d < threshold)
+        .collect();
     let baseline_mean = if below.is_empty() {
         threshold
     } else {

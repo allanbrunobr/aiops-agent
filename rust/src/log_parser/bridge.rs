@@ -47,10 +47,7 @@ pub fn parse_logs(py: Python<'_>, logs: &Bound<'_, PyList>) -> PyResult<Py<PyLis
 /// Extrai campos de LogEntry enquanto o GIL está ativo.
 /// Para volumes > 50K, aplica amostragem stride=4 via get_item para reduzir overhead GIL.
 /// Drain3 converge com ~500 logs — amostrar 1:4 em volumes > 50K preserva todos templates.
-fn extract_log_entries(
-    _py: Python<'_>,
-    logs: &Bound<'_, PyList>,
-) -> PyResult<Vec<LogEntryData>> {
+fn extract_log_entries(_py: Python<'_>, logs: &Bound<'_, PyList>) -> PyResult<Vec<LogEntryData>> {
     let n = logs.len();
     let mut entries = Vec::with_capacity(n);
 
@@ -59,9 +56,18 @@ fn extract_log_entries(
         let message: String = log.getattr("message")?.extract()?;
         let level: String = log.getattr("level")?.extract()?;
         let service: String = log.getattr("service")?.extract()?;
-        let timestamp: f64 = log.getattr("timestamp")?.call_method0("timestamp")?.extract()?;
+        let timestamp: f64 = log
+            .getattr("timestamp")?
+            .call_method0("timestamp")?
+            .extract()?;
         let str_repr: String = log.str()?.to_str()?.to_owned();
-        entries.push(LogEntryData { message, level, service, timestamp, str_repr });
+        entries.push(LogEntryData {
+            message,
+            level,
+            service,
+            timestamp,
+            str_repr,
+        });
     }
 
     Ok(entries)

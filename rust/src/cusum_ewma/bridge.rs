@@ -4,7 +4,6 @@
 ///   1. Recebe dados Python enquanto segura o GIL
 ///   2. Libera o GIL para processar CUSUM/EWMA em Rust puro
 ///   3. Re-adquire o GIL para construir dicts Python de retorno
-
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
@@ -14,12 +13,7 @@ use super::analyzer::{cusum_detect, ewma_slope};
 ///
 /// Retorna dict: {"change_point_detected": bool, "change_index": int | None}
 #[pyfunction]
-pub fn detect_cusum(
-    py: Python<'_>,
-    values: Vec<f64>,
-    k: f64,
-    h: f64,
-) -> PyResult<Py<PyAny>> {
+pub fn detect_cusum(py: Python<'_>, values: Vec<f64>, k: f64, h: f64) -> PyResult<Py<PyAny>> {
     // Libera GIL para computação CPU-bound
     let result = py.detach(|| cusum_detect(&values, k, h));
 
@@ -38,11 +32,7 @@ pub fn detect_cusum(
 /// Retorna dict: {"slope": float, "eta_minutes": float | None}
 /// Nota: eta_minutes é calculado no Python wrapper com o threshold.
 #[pyfunction]
-pub fn compute_ewma_slope(
-    py: Python<'_>,
-    values: Vec<f64>,
-    span: usize,
-) -> PyResult<Py<PyAny>> {
+pub fn compute_ewma_slope(py: Python<'_>, values: Vec<f64>, span: usize) -> PyResult<Py<PyAny>> {
     // Libera GIL para computação CPU-bound
     let result = py.detach(|| ewma_slope(&values, span));
 

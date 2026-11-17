@@ -57,7 +57,10 @@ impl AggregatedReportProxy {
             .filter(|t| t.level == "ERROR" || t.level == "FATAL")
             .map(|t| t.count)
             .sum();
-        let high_sigma = self.metric_anomalies.iter().any(|a| a.deviation_sigma > 5.0);
+        let high_sigma = self
+            .metric_anomalies
+            .iter()
+            .any(|a| a.deviation_sigma > 5.0);
         if error_count > 1000 || high_sigma {
             "CRITICAL".to_string()
         } else if error_count > 100 {
@@ -110,10 +113,7 @@ impl AggregatedReportProxy {
         }
         service_scores
             .into_iter()
-            .max_by(|a, b| {
-                a.1.partial_cmp(&b.1)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(k, _)| k)
             .unwrap_or_else(|| "unknown".to_string())
     }

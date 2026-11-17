@@ -34,7 +34,9 @@ fn detect_cusum(py: Python<'_>, values: Vec<f64>, k: f64, h: f64) -> PyResult<Py
 #[pyfunction]
 fn compute_ewma_slope(py: Python<'_>, values: Vec<f64>, span: usize) -> PyResult<Py<PyAny>> {
     let slope = py.detach(|| {
-        if values.len() < 2 { return 0.0; }
+        if values.len() < 2 {
+            return 0.0;
+        }
         let alpha = 2.0 / (span as f64 + 1.0);
         let mut prev = values[0];
         let mut last = prev;
@@ -62,8 +64,14 @@ fn _aiops_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // TraceFilter / p95 latency filtering
     m.add_function(wrap_pyfunction!(trace_filter::filter_traces, m)?)?;
     // TelemetrySanitizer / AIOpsShield (batch regex via Rayon)
-    m.add_function(wrap_pyfunction!(telemetry_sanitizer::detect_taint_batch, m)?)?;
-    m.add_function(wrap_pyfunction!(telemetry_sanitizer::detect_taint_single, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        telemetry_sanitizer::detect_taint_batch,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        telemetry_sanitizer::detect_taint_single,
+        m
+    )?)?;
     // CUSUM change-point detection e EWMA slope (Story 1.2)
     m.add_function(wrap_pyfunction!(detect_cusum, m)?)?;
     m.add_function(wrap_pyfunction!(compute_ewma_slope, m)?)?;

@@ -1,7 +1,12 @@
 /// compress_inner() — lógica de compressão sem GIL, espelha ContextCompressor.compress().
-use super::classifier::{classify_log_priority, classify_metric_priority, classify_trace_priority, Priority};
+use super::classifier::{
+    classify_log_priority, classify_metric_priority, classify_trace_priority, Priority,
+};
 use super::render::render_report;
-use super::types::{AggregatedReportProxy, CompressionStatsProxy, LogTemplateProxy, MetricAnomalyProxy, SlowTraceProxy};
+use super::types::{
+    AggregatedReportProxy, CompressionStatsProxy, LogTemplateProxy, MetricAnomalyProxy,
+    SlowTraceProxy,
+};
 
 const TOKEN_BUDGET: usize = 4000;
 
@@ -39,7 +44,11 @@ fn truncate_str(s: &str, max_chars: usize) -> &str {
 /// Formato ultra-compacto de log: apenas template (level/svc omitidos — redundantes com header/marker)
 fn format_log_chunk(tpl: &LogTemplateProxy) -> String {
     let tmpl = truncate_str(&tpl.template, 35);
-    let ellipsis = if tpl.template.chars().count() > 35 { "…" } else { "" };
+    let ellipsis = if tpl.template.chars().count() > 35 {
+        "…"
+    } else {
+        ""
+    };
     format!("\"{}{}\"", tmpl, ellipsis)
 }
 
@@ -53,10 +62,7 @@ fn format_metric_chunk(anomaly: &MetricAnomalyProxy) -> String {
     };
     format!(
         "{}/{} {} {:.0}\u{03c3}",
-        anomaly.service,
-        anomaly.metric_name,
-        atype,
-        anomaly.deviation_sigma
+        anomaly.service, anomaly.metric_name, atype, anomaly.deviation_sigma
     )
 }
 
@@ -130,13 +136,11 @@ fn summarize_chunk(text: &str, ratio: f64) -> String {
 
 /// Comparador para sort descendente por (priority, relevance_score)
 fn cmp_chunk_desc(a: &CompressedChunkInternal, b: &CompressedChunkInternal) -> std::cmp::Ordering {
-    b.priority
-        .cmp(&a.priority)
-        .then_with(|| {
-            b.relevance_score
-                .partial_cmp(&a.relevance_score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        })
+    b.priority.cmp(&a.priority).then_with(|| {
+        b.relevance_score
+            .partial_cmp(&a.relevance_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    })
 }
 
 /// Espelha ContextCompressor._deduplicate_chunks()
@@ -222,7 +226,10 @@ fn enforce_budget(
     let mut sorted = chunks.clone();
     sorted.sort_by(cmp_chunk_desc);
 
-    let critical_total = chunks.iter().filter(|c| c.priority == Priority::Critical).count();
+    let critical_total = chunks
+        .iter()
+        .filter(|c| c.priority == Priority::Critical)
+        .count();
     let mut selected: Vec<CompressedChunkInternal> = Vec::new();
     let mut current_tokens: usize = 0;
     let mut removed: usize = 0;

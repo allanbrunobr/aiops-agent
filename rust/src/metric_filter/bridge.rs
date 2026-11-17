@@ -58,7 +58,10 @@ fn extract_metric_points(
         let value: f64 = m.getattr("value")?.extract()?;
 
         // Extrair timestamp como epoch seconds via dt.timestamp()
-        let timestamp: f64 = m.getattr("timestamp")?.call_method0("timestamp")?.extract()?;
+        let timestamp: f64 = m
+            .getattr("timestamp")?
+            .call_method0("timestamp")?
+            .extract()?;
 
         points.push(MetricPointData {
             timestamp,

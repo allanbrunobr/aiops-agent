@@ -6,7 +6,7 @@ pub struct SpanData {
     pub parent_span_id: Option<String>,
     pub service: String,
     pub operation: String,
-    pub start_time: f64,      // epoch seconds
+    pub start_time: f64, // epoch seconds
     pub duration_ms: f64,
     #[allow(dead_code)]
     pub status: String,
@@ -21,6 +21,6 @@ pub struct SlowCallPathData {
     pub bottleneck_service: String,
     pub bottleneck_duration_ms: f64,
     pub normal_duration_ms: f64,
-    pub timestamp: f64,       // epoch seconds
+    pub timestamp: f64, // epoch seconds
     pub attributes: Vec<(String, String)>,
 }

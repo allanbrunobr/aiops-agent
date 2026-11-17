@@ -2,7 +2,6 @@
 ///
 /// Usa std::sync::OnceLock para compilar uma única vez em runtime.
 /// Equivalente aos ADVERSARIAL_REWARD_HACKING_PATTERNS e TAINTED_LOG_FIELDS do Python.
-
 use regex::Regex;
 use std::sync::OnceLock;
 
@@ -55,16 +54,31 @@ pub fn tainted_field_patterns() -> &'static [Regex] {
     static PATTERNS: OnceLock<Vec<Regex>> = OnceLock::new();
     PATTERNS.get_or_init(|| {
         let fields = [
-            "user-agent", "useragent", "user_agent",
-            "referer", "referrer",
-            "x-forwarded-for", "x-real-ip",
-            "origin", "host",
-            "username", "user_name", "user",
-            "email", "mail",
-            "url", "uri", "path", "request_uri",
-            "query", "q", "search",
-            "item_id", "product_id",
-            "followee_name", "follower_name",
+            "user-agent",
+            "useragent",
+            "user_agent",
+            "referer",
+            "referrer",
+            "x-forwarded-for",
+            "x-real-ip",
+            "origin",
+            "host",
+            "username",
+            "user_name",
+            "user",
+            "email",
+            "mail",
+            "url",
+            "uri",
+            "path",
+            "request_uri",
+            "query",
+            "q",
+            "search",
+            "item_id",
+            "product_id",
+            "followee_name",
+            "follower_name",
         ];
         fields
             .iter()

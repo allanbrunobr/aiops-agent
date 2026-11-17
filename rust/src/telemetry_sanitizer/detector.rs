@@ -1,10 +1,9 @@
+use super::patterns::{adversarial_patterns, suspicious_patterns, tainted_field_patterns};
 /// Detecção de taint em Rust puro usando regex compilados.
 ///
 /// Porta do _detect_taint() Python com suporte a batch paralelo via Rayon.
 /// Performance esperada: muito superior ao re.compile Python (regex crate PCRE-like).
-
 use rayon::prelude::*;
-use super::patterns::{adversarial_patterns, suspicious_patterns, tainted_field_patterns};
 
 /// Nível de taint — espelha TaintLevel do Python.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

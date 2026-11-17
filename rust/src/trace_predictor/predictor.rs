@@ -56,7 +56,11 @@ pub fn detect_latency_drift_inner(
     let threshold = 1.0 + threshold_pct;
     let drift_detected = (p95_ratio >= threshold) || (p99_ratio >= threshold);
 
-    LatencyDriftResult { drift_detected, p95_ratio, p99_ratio }
+    LatencyDriftResult {
+        drift_detected,
+        p95_ratio,
+        p99_ratio,
+    }
 }
 
 #[cfg(test)]
