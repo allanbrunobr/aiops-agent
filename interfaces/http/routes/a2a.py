@@ -105,6 +105,9 @@ def _require_bearer(request: Request) -> Any:
     """
     public_pem = getattr(request.app.state, "a2a_jwt_public_pem", "") or ""
     secret = _configured_hmac_secret(request)
+    issuer = (
+        getattr(request.app.state, "a2a_jwt_issuer", "aiops-agent") or "aiops-agent"
+    )
     if public_pem:
         key, algorithm = public_pem, "RS256"
     elif secret:
@@ -119,7 +122,7 @@ def _require_bearer(request: Request) -> Any:
         raise HTTPException(status_code=401, detail="Bearer token required")
     try:
         return validate_token(
-            header[7:].strip(), key, algorithm=algorithm, audience="a2a"
+            header[7:].strip(), key, algorithm=algorithm, audience="a2a", issuer=issuer
         )
     except pyjwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="JWT has expired")

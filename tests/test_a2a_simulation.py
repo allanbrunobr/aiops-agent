@@ -131,6 +131,9 @@ def _make_auth_a2a_app() -> FastAPI:
     app.include_router(auth_server.router)
     app.include_router(a2a_router)
     app.state.a2a_jwt_secret = _JWT_SECRET
+    # pós-revisão #5: A2A valida iss; o AS deste app emite iss=_BASE_URL
+    # (configure sem issuer explícito deriva de base_url), então alinhamos.
+    app.state.a2a_jwt_issuer = _BASE_URL
     app.state.engine = _MockEngine()
     app.state.retriever = _MockRetriever()
     return app
@@ -667,9 +670,14 @@ class TestA2AFullSimulation:
     @pytest.mark.asyncio
     async def test_a2aclient_full_flow_with_token(self):
         """A2AClient completo: discover → token → send_task (sem HTTP real)."""
-        # Token pré-emitido (simula o que o agente teria obtido via OAuth)
+        # Token pré-emitido (simula o que o agente teria obtido via OAuth);
+        # iss=_BASE_URL porque o AS deste app emite com esse issuer (pós-revisão #5).
         token = issue_token(
-            "assistant-agent", ["aiops:diagnose"], _JWT_SECRET, audience="a2a"
+            "assistant-agent",
+            ["aiops:diagnose"],
+            _JWT_SECRET,
+            audience="a2a",
+            issuer=_BASE_URL,
         )
 
         client = A2AClient(token=token)

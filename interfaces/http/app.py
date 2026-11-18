@@ -196,6 +196,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
                 {"id": c.id, "scopes": c.scopes} for c in _oauth.allowed_clients
             ],
             base_url="",
+            issuer=_oauth.issuer,
             token_store=InMemoryTokenStore(),
             rsa_private_pem=_rsa_private_pem,
             rsa_public_pem=_rsa_public_pem,
@@ -242,6 +243,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.state.config = config
     app.state.a2a_jwt_secret = _jwt_secret if _hmac_ok else ""
     app.state.a2a_jwt_public_pem = _rsa_public_pem or ""
+    app.state.a2a_jwt_issuer = _oauth.issuer
     app.state.engine = engine
     app.state.retriever = retriever
     log.info("a2a.state.populated", engine=type(app.state.engine).__name__)

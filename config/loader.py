@@ -201,6 +201,9 @@ class OAuthConfig(BaseModel):
 
     jwt_secret: str = ""
     token_ttl: int = 3600
+    # Fonte única do claim iss: o AS emite com ele e os resource servers o
+    # exigem (pós-revisão #5). Default mantém os tokens locais válidos.
+    issuer: str = "aiops-agent"
     allowed_clients: list[OAuthClientConfig] = []
 
     # Phase 2 — RS256 assimétrico

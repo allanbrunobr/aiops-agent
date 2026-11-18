@@ -79,6 +79,7 @@ def mount_sse(
     auth_method = "header"
     jwt_secret = ""
     rsa_public_pem = ""
+    issuer = "aiops-agent"
     allowed_header_clients: dict[str, dict] = {}
     _oidc_validator = None
     if config is not None:
@@ -86,6 +87,7 @@ def mount_sse(
         oauth_cfg = getattr(config, "oauth", None)
         if oauth_cfg is not None:
             jwt_secret = getattr(oauth_cfg, "jwt_secret", "") or ""
+            issuer = getattr(oauth_cfg, "issuer", "aiops-agent") or "aiops-agent"
             # F4-3: quando o AS emite RS256, a validação usa a chave pública
             _pub_path = getattr(oauth_cfg, "public_key_path", "") or ""
             if _pub_path:
@@ -164,6 +166,7 @@ def mount_sse(
                     rsa_public_pem or jwt_secret,
                     algorithm="RS256" if rsa_public_pem else "HS256",
                     audience="mcp",
+                    issuer=issuer,
                 )
             except pyjwt.ExpiredSignatureError:
                 return Response(

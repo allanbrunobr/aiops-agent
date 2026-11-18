@@ -43,6 +43,7 @@ _jwt_secret: str = ""
 _token_ttl: int = 3600
 _allowed_clients: dict[str, list[str]] = {}  # client_id → scopes permitidos
 _base_url: str = "http://localhost:8000"
+_issuer: str = ""
 
 # Phase 2 — RS256 assimétrico
 _rsa_private_pem: str | None = None
@@ -56,6 +57,7 @@ def configure(
     token_ttl: int = 3600,
     allowed_clients: list[dict] | None = None,
     base_url: str = "http://localhost:8000",
+    issuer: str = "",
     token_store: TokenStore | None = None,
     rsa_private_pem: str | None = None,
     rsa_public_pem: str | None = None,
@@ -70,13 +72,17 @@ def configure(
         token_ttl: TTL dos tokens em segundos.
         allowed_clients: Lista de dicts com 'id' e 'scopes' dos clientes autorizados.
         base_url: URL base do servidor para o discovery endpoint.
+        issuer: Claim iss dos tokens e issuer anunciado no discovery (RFC 8414).
+            Vazio (padrão) deriva de base_url (comportamento histórico); um valor
+            explícito sobrescreve — fonte única compartilhada com os resource
+            servers via OAuthConfig.issuer (pós-revisão #5).
         token_store: Implementação de TokenStore (padrão: InMemoryTokenStore).
         rsa_private_pem: Chave privada RSA PEM (Phase 2 — RS256). None = usar HS256.
         rsa_public_pem: Chave pública RSA PEM (Phase 2 — RS256). None = usar HS256.
         kid: Key ID para o JWK (Phase 2).
     """
     global _jwt_secret, _token_ttl, _allowed_clients, _base_url, _token_store
-    global _rsa_private_pem, _rsa_public_pem, _kid, _jwk_set
+    global _rsa_private_pem, _rsa_public_pem, _kid, _jwk_set, _issuer
     # HS256 is the signer unless an RSA pair is supplied. A short or empty
     # HMAC key must not be stored: PyJWT warns and still signs keys under 32 bytes.
     if not (rsa_private_pem and rsa_public_pem):
@@ -87,6 +93,7 @@ def configure(
     _jwt_secret = jwt_secret
     _token_ttl = token_ttl
     _base_url = base_url
+    _issuer = issuer or base_url or "aiops-agent"
     _kid = kid
     if token_store is not None:
         _token_store = token_store
@@ -266,7 +273,7 @@ async def token(body: TokenRequest) -> TokenResponse:
         secret=_signing_key(),
         ttl=_token_ttl,
         algorithm=_signing_algorithm(),
-        issuer=_base_url or "aiops-agent",
+        issuer=_issuer,
         audience=entry.get("audience", "mcp"),
     )
     return TokenResponse(
@@ -290,7 +297,7 @@ async def introspect(body: IntrospectRequest) -> dict:
             _verification_key(),
             algorithm=_signing_algorithm(),
             audience=["mcp", "a2a"],
-            issuer=_base_url or "aiops-agent",
+            issuer=_issuer,
         )
         return {
             "active": True,
@@ -320,7 +327,7 @@ async def jwks() -> dict:
 async def discovery() -> dict:
     """Discovery endpoint RFC 8414 — permite que agentes descubram os endpoints."""
     meta: dict = {
-        "issuer": _base_url,
+        "issuer": _issuer,
         "authorization_endpoint": f"{_base_url}/auth/authorize",
         "token_endpoint": f"{_base_url}/auth/token",
         "introspection_endpoint": f"{_base_url}/auth/token/introspect",

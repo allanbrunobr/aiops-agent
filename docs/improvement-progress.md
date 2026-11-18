@@ -1008,3 +1008,52 @@ sequencial preservado.
 run alpha; `seen["long"]==1` em vez de 2) **→ 18 passed depois** (3 novos +
 `test_rag_wiring.py` 9 + `TestCoTRetrieverQueryExpanderPipeline` 6);
 `test_rag_deep_integration.py` completo 55 passed. ruff/format limpos.
+
+### Correção 5 — `iss` validado nos resource servers (+ limitação de impersonação documentada)
+
+**Problema:** `interfaces/mcp/sse.py` e `interfaces/http/routes/a2a.py` chamavam
+`validate_token(..., audience=...)` **sem `issuer=`**, então `auth/jwt_validator.py`
+não checava o `iss`. Um token válido para outro emissor era aceito. Além disso, o
+`issuer` do discovery vinha de `base_url` (vazio em `create_app` → `""`), divergindo
+do `iss` real dos tokens (`"aiops-agent"`) — inconsistência RFC 8414.
+
+**Correção:**
+- `config/loader.py`: novo campo `OAuthConfig.issuer` (default `"aiops-agent"`).
+- `auth/server.py`: `configure(..., issuer="")`; `_issuer = issuer or base_url or
+  "aiops-agent"`. O fallback **preserva o comportamento histórico** (`iss=base_url`
+  quando nenhum issuer explícito é dado) e permite override. `issue_token`,
+  introspection e discovery passam a usar `_issuer` (discovery agora consistente
+  com o `iss` emitido).
+- `interfaces/http/app.py`: `configure(issuer=_oauth.issuer)` e
+  `app.state.a2a_jwt_issuer = _oauth.issuer`.
+- Resource servers validam `iss`: `interfaces/mcp/sse.py` (`audience="mcp"`),
+  `interfaces/http/routes/a2a.py` (`audience="a2a"`) e `interfaces/http/auth.py`
+  (gestão, `audience="a2a"`) passam `issuer=` a `validate_token`.
+
+**Decisão sobre o achado opcional C (`/auth/authorize` sem auth de cliente):**
+DOCUMENTAR, não adicionar autenticação de cliente. `/auth/authorize` é um fluxo de
+*public client* (`token_endpoint_auth_methods_supported: ["none"]`); PKCE protege a
+interceptação do code, **não** a impersonação — quem conhece um `client_id`
+registrado completa o próprio PKCE e recebe um JWT com os scopes daquele client.
+Adicionar `client_secret` no authorize converteria para *confidential clients*,
+quebraria o fluxo public e os 15 testes de PKCE, e ampliaria o escopo além do
+listado. A limitação fica registrada em `SECURITY.md` ("Known limitation —
+public-client impersonation") com a mitigação recomendada (confidential-client
+authenticator ou IdP upstream).
+
+**Alinhamentos de teste (legítimos, não regeneração de snapshot):**
+`tests/test_a2a_simulation.py` — `_make_auth_a2a_app` passa a setar
+`app.state.a2a_jwt_issuer = _BASE_URL` (o AS deste app emite `iss=_BASE_URL`); e
+`test_a2aclient_full_flow_with_token` emite o token simulado com
+`issuer=_BASE_URL`, casando o issuer do AS do app.
+
+**Teste:** `tests/test_issuer_validation.py` (5 testes): A2A token com `iss` errado
+→ 401 / correto → 200; MCP SSE token com `iss` errado → 401 / correto passa a auth
+(404 sem sessão); AS com `issuer` explícito → `iss` do token e `issuer` do discovery
+coerentes, `token_endpoint` derivado de `base_url`.
+**Test-first no M1: 3 failed antes** (A2A wrong-iss → 200; MCP wrong-iss → 404;
+`configure` sem parâmetro `issuer` → `TypeError`) **→ verde depois**. Regressão
+ampla no M1: **143 passed** (`test_a2a_simulation`, `test_jwt_audience`,
+`test_oauth_mcp`, `test_federated_skill_invocation`, `test_issuer_validation`,
+`test_pkce_flow`, `test_jwks_endpoint`, `test_config_drift`). mypy
+`domain application core` Success (18 arquivos). ruff/format limpos.
