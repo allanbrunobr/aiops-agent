@@ -1122,3 +1122,33 @@ menores: `test_confidence` + `test_filter_param_validation` + `test_builders_age
 + `tests/rust/test_parity` **65 passed**; `test_mcp_error_json` + `test_federated_sso`
 + `test_oidc_validator` + `test_issuer_validation` **41 passed**. Paridade Rust
 inalterada (28). ruff/format/mypy (`domain application core`, py312) limpos.
+
+### Verificação final (M1, 2026-11-18 — números reais)
+
+Repo `/tmp/iago-ci-m5/aiops-agent`, venv Python 3.12.9 + extensão Rust compilada +
+`pytest-timeout` (`--timeout=120`). rsync do HEAD antes de cada bateria.
+
+| Check | Comando | Resultado |
+|---|---|---|
+| Unit | `pytest tests/ -m unit --ignore=tests/rust` | **907 passed**, 670 deselected, 0 failed |
+| Integration/snapshot | `pytest tests/ -m "integration or snapshot"` | **152 passed**, 1493 deselected, 0 failed |
+| Snapshot diffs | `diff -r tests/snapshots` (M1 × local) | **ZERO diffs** (nenhum regenerado) |
+| Smoke V0 | `main.py --no-llm --no-rag` | **exit 3** (approval-needed, human gate) |
+| Smoke V1 | `main.py --pipeline-v1 --no-llm --no-rag` | **exit 0** (resolved) |
+| Smoke V1+RAG | `main.py --pipeline-v1 --no-llm` | **exit 0** (resolved, FAISS index, 8.4s) |
+| ruff check | `ruff check .` | All checks passed |
+| ruff format | `ruff format --check .` | 319 files already formatted |
+| mypy | `mypy domain application core` | Success, 18 source files |
+| cargo fmt | `cargo fmt --check` | rc=0 |
+| cargo clippy | `cargo clippy --all-targets -- -D warnings` | 0 warnings |
+| cargo test | `cargo test` | **56 passed**, 0 failed |
+
+Regressão da verificação final: `test_rag_slack_scale.py::test_cot_search_summary_format`
+falhou (`search_history` sem setter após o thread-local do #4) → corrigido no
+follow-up `edfc3cc` (setter preserva a API atribuível); 113 passed nos suites RAG.
+
+**Commits desta revisão (8, base `7f24d3d`):** `cd9d03f` (#1 budget), `d419c68`
+(#2 allowlist), `cd3fbce` (#3 http auth), `c2a2182` (#4 CoT), `326081a` (#5 issuer),
+`fb82768` (#6 registro), `9431979` (#7 menores), `edfc3cc` (#4 setter follow-up).
+Working tree limpo. Push como branch `improvement-plan-2026-11-17` (Passo 7);
+`main` remoto não tocado.
