@@ -956,3 +956,30 @@ metacharacters". Nenhum template de comando de produção usa esses caracteres.
 (7 casos + sanidade). **Test-first no M1: 5 failed antes → 94 passed depois**
 (subconjunto safety: allowlist, safety, fail_closed, tnr_simulation,
 v1_safety_wiring, story_1_7). ruff/format limpos.
+
+### #3 — `knowledge`/`admin` montados sem autenticação (SEGURANÇA)
+
+**Antes:** `interfaces/http/app.py:232-233` montava os routers `knowledge` e
+`admin` sem nenhuma dependência de auth. `POST /api/v1/knowledge/patterns`
+escrevia na base de conhecimento anonimamente e
+`POST /api/v1/admin/validate/knowledge` disparava FAISS+embeddings em thread
+pool (escrita anônima + vetor de DoS). Regressão introduzida na Fase 3 (F3-5);
+a base não montava esses routers e o remoto os deixou desmontados de propósito.
+
+**Fix (decisão):** MANTER montadas (intenção F3-5 — as implementações reais
+existem) mas exigir Bearer JWT no composition root. Novo
+`interfaces/http/auth.py::require_api_bearer` espelha o gate do A2A: RS256 se
+houver par RSA, senão HS256 (chave ≥ 32 bytes), `aud="a2a"`, fail-closed (401
+sem chave configurada / sem token / token inválido / expirado / audiência
+errada). Aplicado via `dependencies=[Depends(require_api_bearer)]` nos dois
+`include_router`. Os testes de unidade do router montam o router isoladamente
+(`_make_app`) e exercitam a lógica sem o gate — não afetados.
+
+**Teste:** `tests/test_knowledge_admin_mounted.py::TestKnowledgeAdminRequireAuth`
+(4 negativos: POST sem token→401 e nada escrito; admin validate sem token→401;
+token `aud=mcp`→401; sem auth configurada→401). O teste funcional existente
+agora configura `a2a_jwt_secret` + token válido.
+**Test-first no M1: gate revertido → 4 failed (200 em vez de 401); gate
+restaurado → 15 passed** (`test_knowledge_admin_mounted.py` 7 +
+`test_knowledge_api.py` 8). `mypy domain application core` limpo (18 arquivos;
+`interfaces/http` está na zona permissiva do CI). ruff/format limpos.

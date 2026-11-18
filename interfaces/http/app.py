@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import structlog
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
 from config.loader import AppConfig
 
@@ -224,14 +224,17 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # --------------------------------------------------------
     # Knowledge + Admin (F3-5: rotas antes órfãs, agora montadas)
     # --------------------------------------------------------
+    from interfaces.http.auth import require_api_bearer
     from interfaces.http.routes.admin import router as admin_router
     from interfaces.http.routes.knowledge import router as knowledge_router
     from rag.knowledge_store import KnowledgeStore
 
     app.state.knowledge_store = KnowledgeStore()
-    app.include_router(knowledge_router)
-    app.include_router(admin_router)
-    log.info("knowledge_admin.routers.mounted")
+    # Correção pós-revisão #3: rotas de gestão exigem Bearer JWT (aud=a2a).
+    # Antes eram montadas sem auth — escrita anônima + DoS via FAISS/embeddings.
+    app.include_router(knowledge_router, dependencies=[Depends(require_api_bearer)])
+    app.include_router(admin_router, dependencies=[Depends(require_api_bearer)])
+    log.info("knowledge_admin.routers.mounted", auth="bearer_required")
 
     # --------------------------------------------------------
     # app.state — engine e retriever para handlers A2A (mesmos do MCP)
