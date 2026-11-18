@@ -906,3 +906,37 @@ M1 com o mesmo cenário (`--no-llm --no-rag`), a paridade **não existe**:
 - [x] **Zero diffs de snapshot em toda a execução** — nenhuma mudança de output
   precisou ser justificada.
 - 151 testes novos em 26 arquivos; `main.py` 2582 → 129 linhas.
+
+---
+
+## Correções pós-revisão 2026-11-18
+
+Revisão read-only dos 19 commits (delegados reviewer + researcher, validação no
+M1) achou bugs reais. Correções abaixo, test-first, sem ampliação de escopo.
+
+### #1 — Orçamento LLM atravessa o orchestrator (BUG principal)
+
+**Antes:** `blueprint/engine.py:131-145` tem `except LLMBudgetExceeded: raise`,
+mas os 5 call sites LLM do `AgentOrchestrator` engoliam a exceção em
+`except Exception` → fallback (plano default / continue / plano antigo /
+`heuristic_diagnosis` / reflexão indisponível). Prova no M1:
+`CountingLLMClient(max_calls=1)` → 2ª chamada caía em `heuristic_diagnosis`, o
+run completava (exit 0/3) em vez de abortar; log
+`orchestrator.synthesis_failed_using_heuristic: LLM call limit exceeded: 2 > 1`.
+O handler `except LLMCallLimitExceeded` em `interfaces/cli/v1_runner.py:216-220`
+era código morto. O teste antigo (`tests/test_llm_budget.py:104`) usava node
+fake e não exercitava o caminho real.
+
+**Fix:** `except LLMBudgetExceeded: raise` antes do `except Exception` nos 5
+handlers (`agents/orchestrator.py`: `_generate_plan`, `_reflect_on_step`,
+`_replan`, `_synthesize_diagnosis`, `_reflect_final`). Import de
+`adapters.llm.counting_client.LLMBudgetExceeded` (mesma precedência do
+`blueprint/engine.py:13`). Filosofia de abort (exit 1) preservada; erros comuns
+do provider continuam degradando graciosamente.
+
+**Teste:** `tests/test_llm_budget_real_path.py` (12 testes) — caminho real via
+`build_agent_orchestrator` + `CountingLLMClient` + report real do Aggregator:
+run propaga sem heurística; os 5 call sites re-levantam orçamento e ainda
+degradam em erro comum; engine aborta fim a fim pelo node diagnoser real.
+**Test-first confirmado no M1: 7 failed / 5 passed antes do fix → 20 passed
+(incl. test_llm_budget.py) depois.** ruff/format limpos.

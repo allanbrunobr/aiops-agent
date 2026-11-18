@@ -15,6 +15,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 
+from adapters.llm.counting_client import LLMBudgetExceeded
 from agents.detector import DetectionAgent
 from agents.diagnoser import DiagnosisAgent
 from agents.mitigator import MitigationAgent
@@ -424,6 +425,10 @@ class AgentOrchestrator:
         except LLMJsonError as exc:
             logger.warning("orchestrator.plan_parse_failed: %s", exc)
             return self._default_plan(report)
+        except LLMBudgetExceeded:
+            # Correção pós-revisão #1: estouro de orçamento NÃO é erro comum —
+            # sobe para o engine abortar o run (exit 1), sem fallback heurístico.
+            raise
         except Exception as exc:  # noqa: BLE001
             logger.warning("orchestrator.plan_failed: %s", exc)
             return self._default_plan(report)
@@ -510,6 +515,8 @@ class AgentOrchestrator:
                 ],
             )
             return extract_json_object(response.content[0].text)
+        except LLMBudgetExceeded:
+            raise  # Correção pós-revisão #1: orçamento estourado aborta o run
         except Exception as exc:  # noqa: BLE001
             logger.warning("orchestrator.step_reflection_failed: %s", exc)
             return {"decision": "continue", "assessment": "Reflection parse failed"}
@@ -559,6 +566,8 @@ class AgentOrchestrator:
                 hypothesis=data.get("hypothesis", old_plan.hypothesis),
                 steps=steps or old_plan.steps,
             )
+        except LLMBudgetExceeded:
+            raise  # Correção pós-revisão #1: orçamento estourado aborta o run
         except Exception as exc:  # noqa: BLE001
             logger.warning("orchestrator.replan_failed: %s", exc)
             return old_plan  # fallback: mantém plano original
@@ -597,6 +606,8 @@ class AgentOrchestrator:
         try:
             response = self.client.create_message(**kwargs)
             return extract_json_object(response.content[0].text)
+        except LLMBudgetExceeded:
+            raise  # Correção pós-revisão #1: orçamento estourado aborta o run
         except Exception as exc:  # noqa: BLE001
             logger.warning("orchestrator.synthesis_failed_using_heuristic: %s", exc)
             return self._diagnoser.heuristic_diagnosis(report)
@@ -627,6 +638,8 @@ class AgentOrchestrator:
                 ],
             )
             return extract_json_object(response.content[0].text)
+        except LLMBudgetExceeded:
+            raise  # Correção pós-revisão #1: orçamento estourado aborta o run
         except Exception as exc:  # noqa: BLE001
             logger.warning("orchestrator.final_reflection_failed: %s", exc)
             return {"lesson": "Reflection unavailable", "score": 0.5}
