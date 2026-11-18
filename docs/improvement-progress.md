@@ -890,7 +890,7 @@ M1 com o mesmo cenário (`--no-llm --no-rag`), a paridade **não existe**:
 
 ## Fechamento — Definition of Done (2026-11-17)
 
-- [x] 32 features: **30 done, 1 blocked (F5-4, diagnóstico e sub-features
+- [x] 32 features: **31 done, 1 blocked (F5-4, diagnóstico e sub-features
   registrados), 0 pending**.
 - [x] CI completo verde no M1: lint (ruff/format/mypy), unit 907, integration/
   snapshot 148, rust (fmt/clippy/test 56 + tests/rust 65).
@@ -903,9 +903,13 @@ M1 com o mesmo cenário (`--no-llm --no-rag`), a paridade **não existe**:
 - [x] README/README.pt-BR/CONTRIBUTING/docs atualizados onde o comportamento
   mudou (webhook, MCP, demo auth, header+secret, RS256/PKCE, env prefix, rag
   block, config.yaml removido, CI rust).
-- [x] **Zero diffs de snapshot em toda a execução** — nenhuma mudança de output
-  precisou ser justificada.
-- 151 testes novos em 26 arquivos; `main.py` 2582 → 129 linhas.
+- [x] **Zero diffs de snapshot da Fase 3 em diante**; 3 diffs justificados na
+  Fase 2 (`11f5138`, regra 8 — ver linha 208: `verification_mode="simulated"` e
+  health deltas do TNR simulado). A execução **não** foi isenta de diffs.
+- 27 arquivos de teste novos, 163 funções `def test_`, **191 testes coletados**
+  (163 sem paridade Rust + 28 em `tests/rust/test_parity.py`), verificado por
+  `git diff --diff-filter=A 65d3e2b..7f24d3d` + `pytest --collect-only` em
+  `7f24d3d`; `main.py` 2582 → 129 linhas.
 
 ---
 
@@ -1057,3 +1061,27 @@ ampla no M1: **143 passed** (`test_a2a_simulation`, `test_jwt_audience`,
 `test_oauth_mcp`, `test_federated_skill_invocation`, `test_issuer_validation`,
 `test_pkce_flow`, `test_jwks_endpoint`, `test_config_drift`). mypy
 `domain application core` Success (18 arquivos). ruff/format limpos.
+
+### #6 — Correções de texto no registro (DoD contradizia o histórico)
+
+Quatro imprecisões no fechamento corrigidas com evidência:
+
+1. **"Zero diffs de snapshot em toda a execução"** (Fechamento DoD) era falso: a
+   Fase 2 (`11f5138`) mudou 3 snapshots, justificados na regra 8 (linha 208:
+   `verification_mode="simulated"` + health deltas do TNR simulado). Corrigido para
+   **"zero diffs da Fase 3 em diante; 3 justificados na Fase 2"**. (A linha de
+   verificação da Fase 6 — "Diffs de snapshot: nenhum" — já era escopada à Fase 6
+   e permanece correta.)
+2. **"151 testes novos em 26 arquivos"** desatualizado. Contagem real verificada por
+   `git diff --diff-filter=A 65d3e2b..7f24d3d -- tests/` + `pytest --collect-only`
+   no conteúdo de `7f24d3d`: **27 arquivos, 163 funções `def test_`, 191 testes
+   coletados** (163 sem paridade Rust + 28 em `tests/rust/test_parity.py`). Nota: a
+   revisão havia estimado 189/161; a coleta direta em `7f24d3d` dá 191/163 —
+   registrado o número verificado. (Os testes das correções pós-revisão são
+   adicionais e não entram nesta contagem do fechamento.)
+3. **"30 done"** → **31 done** (`feature_list.json`: 31 done + 1 blocked = 32).
+4. **`feature_list.json` F5-4 `blocked_reason`**: removido o item falso
+   "V1 ignora `--output-dir`" — `interfaces/cli/v1_runner.py:245-247` respeita
+   (`output_dir = getattr(args, "output_dir", "output")` →
+   `save_postmortem_v1(..., output_dir=output_dir)`). Os demais flags
+   (`--data-source`, `--tracker`, `--output-format`, `--rebuild-rag`) permanecem.
