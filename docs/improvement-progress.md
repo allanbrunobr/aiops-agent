@@ -983,3 +983,28 @@ agora configura `a2a_jwt_secret` + token válido.
 restaurado → 15 passed** (`test_knowledge_admin_mounted.py` 7 +
 `test_knowledge_api.py` 8). `mypy domain application core` limpo (18 arquivos;
 `interfaces/http` está na zona permissiva do CI). ruff/format limpos.
+
+### #4 — CoT retriever compartilhado não-reentrante
+
+**Antes:** `rag/cot_retriever.py:44-71` guardava `search_history` e
+`current_iteration` como estado de INSTÂNCIA. O retriever é montado uma vez em
+`create_app` (`app/builders.py:98`) e o diagnoser chama `reset_context()` por
+diagnose (`agents/diagnoser.py:121`). Runs A2A/MCP concorrentes
+(`asyncio.to_thread(engine.run, ...)` em `interfaces/http/routes/a2a.py:289`)
+compartilham a instância → o `reset_context()` de um run apaga o histórico do
+outro e as buscas se misturam. Mesma classe de bug que F6-3 corrigiu no engine.
+
+**Fix:** estado de expansão agora é POR-RUN via `threading.local()`, exposto
+pelas properties `search_history`/`current_iteration` (setter para o `+= 1`).
+Cada thread de run tem seu próprio histórico; `reset_context()` limpa só o do
+thread corrente. API pública preservada (reset_context/search_with_cot/
+get_search_summary/`search_history[-1]`); testes sequenciais inalterados.
+
+**Teste:** `tests/test_cot_reentrancy.py` (3 testes, threads reais + Barrier por
+iteração, padrão de `tests/test_engine_reentrancy.py`): histórico sem
+contaminação cruzada; `reset_context` isolado por thread; comportamento
+sequencial preservado.
+**Test-first no M1: 2 failed antes** (histórico misturado `beta-svc query-0` no
+run alpha; `seen["long"]==1` em vez de 2) **→ 18 passed depois** (3 novos +
+`test_rag_wiring.py` 9 + `TestCoTRetrieverQueryExpanderPipeline` 6);
+`test_rag_deep_integration.py` completo 55 passed. ruff/format limpos.

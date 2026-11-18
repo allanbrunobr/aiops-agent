@@ -7,6 +7,7 @@ query expansion progressiva durante a investigação de incidentes.
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 
 from rag.retriever import ObservabilityRetriever, SearchResult
@@ -33,13 +34,35 @@ class CoTObservabilityRetriever(ObservabilityRetriever):
         # invertidos → AttributeError ao ativar — e ainda por cima DEPOIS de
         # search() já ter reranqueado (duplo rerank).
         super().__init__(indexer, reranker=reranker)
-        self.search_history: list[SearchContext] = []
-        self.current_iteration: int = 0
+        # Correção pós-revisão #4: estado de expansão POR-RUN (thread-local).
+        # O retriever é montado uma vez em create_app e compartilhado por runs
+        # A2A/MCP concorrentes (asyncio.to_thread(engine.run, ...)); estado de
+        # instância contaminava o histórico entre runs. Cada thread de run tem
+        # seu próprio histórico; reset_context() limpa o do thread corrente.
+        self._local = threading.local()
+
+    @property
+    def search_history(self) -> list[SearchContext]:
+        """Histórico de buscas do run corrente (thread-local)."""
+        hist = getattr(self._local, "search_history", None)
+        if hist is None:
+            hist = []
+            self._local.search_history = hist
+        return hist
+
+    @property
+    def current_iteration(self) -> int:
+        """Contador de iterações do run corrente (thread-local)."""
+        return getattr(self._local, "current_iteration", 0)
+
+    @current_iteration.setter
+    def current_iteration(self, value: int) -> None:
+        self._local.current_iteration = value
 
     def reset_context(self) -> None:
-        """Limpa histórico de buscas e reinicia contador de iterações."""
-        self.search_history = []
-        self.current_iteration = 0
+        """Limpa histórico e contador do run corrente (não afeta outros runs)."""
+        self._local.search_history = []
+        self._local.current_iteration = 0
 
     def search_with_cot(self, query: str, top_k: int = 5) -> list[SearchResult]:
         """Busca com rastreamento de contexto Chain-of-Thought."""
