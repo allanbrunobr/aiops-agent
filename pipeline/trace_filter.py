@@ -108,6 +108,11 @@ class TraceFilter:
 
     def _filter_python(self, spans: list) -> list[SlowCallPath]:
         """Implementação Python pura (fallback)."""
+        # Paridade com a bridge Rust: rejeita parâmetros inválidos (pós-revisão).
+        if not (0 <= self.percentile_threshold <= 100):
+            raise ValueError("percentile_threshold must be in [0, 100]")
+        if self.max_hops < 1:
+            raise ValueError("max_hops must be >= 1")
         # Agrupa spans por trace_id
         traces: dict[str, list] = defaultdict(list)
         for span in spans:

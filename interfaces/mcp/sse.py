@@ -18,6 +18,7 @@ Referência: architecture.md — MCP Transport Decision, Lines 334-341.
 from __future__ import annotations
 
 import hmac
+import json
 
 import jwt as pyjwt
 from fastapi import FastAPI, Request, Response
@@ -239,7 +240,7 @@ def mount_sse(
         except pyjwt.InvalidTokenError as exc:
             return Response(
                 status_code=401,
-                content=f'{{"error":"invalid_token","detail":"{exc}"}}',
+                content=json.dumps({"error": "invalid_token", "detail": str(exc)}),
                 media_type="application/json",
             )
         except Exception:

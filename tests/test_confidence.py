@@ -28,6 +28,21 @@ def test_numeric_is_preserved():
 
 
 @pytest.mark.unit
+def test_numeric_is_clamped_to_unit_interval():
+    """pós-revisão (menores): a docstring promete [0, 1]; numéricos fora do
+    intervalo devem ser clampados, não preservados crus (confidence=5 → 5.0)."""
+    assert confidence_to_score(5) == 1.0
+    assert confidence_to_score(1.5) == 1.0
+    assert confidence_to_score(-2) == 0.0
+    assert confidence_to_score(-0.5) == 0.0
+    assert confidence_to_score(float("inf")) == 1.0
+    assert confidence_to_score(float("-inf")) == 0.0
+    # NaN não é ordenável → default, não um score inventado.
+    assert confidence_to_score(float("nan")) == 0.0
+    assert confidence_to_score(float("nan"), default=0.5) == 0.5
+
+
+@pytest.mark.unit
 def test_unknown_and_none_use_default():
     assert confidence_to_score("maybe") == 0.0
     assert confidence_to_score(None) == 0.0

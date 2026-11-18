@@ -1085,3 +1085,39 @@ Quatro imprecisões no fechamento corrigidas com evidência:
    (`output_dir = getattr(args, "output_dir", "output")` →
    `save_postmortem_v1(..., output_dir=output_dir)`). Os demais flags
    (`--data-source`, `--tracker`, `--output-format`, `--rebuild-rag`) permanecem.
+
+### #7 — Menores (commit separado)
+
+1. **Clamp em `confidence_to_score`** (`domain/confidence.py`): a docstring promete
+   `[0, 1]` mas numéricos eram preservados crus (`confidence=5` → `5.0`). Agora
+   `max(0.0, min(1.0, num))`; `NaN` → `default` (não ordenável); `inf`/`-inf` →
+   `1.0`/`0.0`. Callers (MCP tools, V0/V1 CLI) só exibem score — clamp é seguro.
+   Teste: `tests/test_confidence.py::test_numeric_is_clamped_to_unit_interval`.
+2. **Escape de `exc` no JSON federado** (`interfaces/mcp/sse.py`, ramo
+   `auth_method="federated"` de `_resolve_principal`): `f'{{..."detail":"{exc}"}}'`
+   → `json.dumps({"error": "invalid_token", "detail": str(exc)})`. Mensagem com
+   aspas/newline não quebra mais o JSON. (O ramo oauth21 usa detalhe estático
+   "JWT is invalid" — já seguro.) Teste: `tests/test_mcp_error_json.py` (força
+   `OIDCValidator.validate` a lançar `InvalidTokenError` com caracteres especiais).
+3. **Validação de parâmetros nos fallbacks Python** (`pipeline/metric_filter.py`
+   `_detect_python`, `pipeline/trace_filter.py` `_filter_python`): paridade com as
+   bridges Rust — `sigma_threshold > 0` finito, `baseline_ratio ∈ (0,1)`,
+   `percentile_threshold ∈ [0,100]`, `max_hops ≥ 1`, mesmas mensagens `ValueError`.
+   Teste: `tests/test_filter_param_validation.py` (força `_RUST_AVAILABLE=False`).
+4. **`target-version` py311 → py312** (`pyproject.toml`: `[tool.ruff]` e
+   `[tool.mypy] python_version`), alinhado ao runtime real (venv 3.12). ruff/mypy
+   seguem limpos.
+5. **`build_diagnoser_agent` sem caller de produção — DECISÃO: manter.** É uma
+   factory pública documentada (`app/builders.py` docstring) e testada
+   (`tests/test_builders_agents.py`). Não está wired porque o `AgentOrchestrator`
+   é dono da sua instância de `DiagnosisAgent` (F6-5). Remover apagaria API pública
+   testada; wire mudaria o comportamento do orchestrator fora do escopo listado.
+   Fica como factory disponível para composition roots que precisem de um
+   diagnoser standalone — não é código morto acidental.
+
+**Test-first no M1:** clamp + validação de parâmetros **18 failed antes → verde**;
+escape federado **1 failed antes (`JSONDecodeError`) → verde**. Regressão dos
+menores: `test_confidence` + `test_filter_param_validation` + `test_builders_agents`
++ `tests/rust/test_parity` **65 passed**; `test_mcp_error_json` + `test_federated_sso`
++ `test_oidc_validator` + `test_issuer_validation` **41 passed**. Paridade Rust
+inalterada (28). ruff/format/mypy (`domain application core`, py312) limpos.

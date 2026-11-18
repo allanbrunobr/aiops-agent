@@ -9,6 +9,7 @@ Baseado no paper OpsAgent (Nankai University, Oct 2025):
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
@@ -120,6 +121,11 @@ class MetricFilter:
 
     def _detect_python(self, metrics: list) -> list[MetricAnomaly]:
         """Implementação Python pura (fallback)."""
+        # Paridade com a bridge Rust: rejeita parâmetros inválidos (pós-revisão).
+        if not math.isfinite(self.sigma_threshold) or self.sigma_threshold <= 0:
+            raise ValueError("sigma_threshold must be > 0")
+        if not math.isfinite(self.baseline_ratio) or not (0 < self.baseline_ratio < 1):
+            raise ValueError("baseline_ratio must be in (0, 1)")
         # Agrupa por (service, metric_name)
         grouped: dict[tuple[str, str], list] = defaultdict(list)
         for m in metrics:
