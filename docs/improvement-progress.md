@@ -940,3 +940,19 @@ run propaga sem heurística; os 5 call sites re-levantam orçamento e ainda
 degradam em erro comum; engine aborta fim a fim pelo node diagnoser real.
 **Test-first confirmado no M1: 7 failed / 5 passed antes do fix → 20 passed
 (incl. test_llm_budget.py) depois.** ruff/format limpos.
+
+### #2 — Allowlist: bypass residual por `&` e redirect (SEGURANÇA)
+
+**Antes:** `safety/pre_validator.py:361` bloqueava `&&, ||, ;, |, `, $(, \n, \r`
+mas não o `&` de background nem `<`/`>` (blocklist só tinha `r">\s*/etc/"`).
+Como `SAFE_PATTERNS` casa por prefixo, `kubectl get pods > ~/.bashrc` e
+`kubectl get pods & python miner.py` passavam como "Read-only command".
+
+**Fix:** `&`, `<`, `>` adicionados ao bloqueio de metacaracteres (antes das
+allowlists), mantendo o shlex do local. Mensagem ampla para "shell
+metacharacters". Nenhum template de comando de produção usa esses caracteres.
+
+**Teste:** `tests/test_allowlist_bypass.py::TestAllowlistMetacharBypass`
+(7 casos + sanidade). **Test-first no M1: 5 failed antes → 94 passed depois**
+(subconjunto safety: allowlist, safety, fail_closed, tnr_simulation,
+v1_safety_wiring, story_1_7). ruff/format limpos.

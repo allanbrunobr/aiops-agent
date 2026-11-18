@@ -357,9 +357,16 @@ class PreExecutionValidator:
         """
         cmd_lower = command.lower().strip()
 
-        # 1. Composição/metacaracteres: nenhum comando composto passa
-        if any(op in command for op in ("&&", "||", ";", "|", "`", "$(", "\n", "\r")):
-            return False, "BLOCKED: shell composition operators are not allowed"
+        # 1. Composição/metacaracteres: nenhum comando composto passa.
+        # Correção pós-revisão #2: além dos operadores de composição, bloqueia
+        # o `&` de background e redirecionamento `<`/`>` — antes só `> /etc/`
+        # era bloqueado, então 'kubectl get pods > ~/.bashrc' e
+        # 'kubectl get pods & python miner.py' passavam como read-only.
+        if any(
+            op in command
+            for op in ("&&", "||", ";", "|", "`", "$(", "&", "<", ">", "\n", "\r")
+        ):
+            return False, "BLOCKED: shell metacharacters are not allowed"
         try:
             tokens = shlex.split(cmd_lower)
         except ValueError:
