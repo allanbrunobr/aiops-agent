@@ -1002,7 +1002,8 @@ outro e as buscas se misturam. Mesma classe de bug que F6-3 corrigiu no engine.
 pelas properties `search_history`/`current_iteration` (setter para o `+= 1`).
 Cada thread de run tem seu próprio histórico; `reset_context()` limpa só o do
 thread corrente. API pública preservada (reset_context/search_with_cot/
-get_search_summary/`search_history[-1]`); testes sequenciais inalterados.
+get_search_summary/`search_history[-1]` e atribuição `search_history = [...]` via
+setter); testes sequenciais inalterados.
 
 **Teste:** `tests/test_cot_reentrancy.py` (3 testes, threads reais + Barrier por
 iteração, padrão de `tests/test_engine_reentrancy.py`): histórico sem

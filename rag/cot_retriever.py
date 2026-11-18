@@ -50,6 +50,10 @@ class CoTObservabilityRetriever(ObservabilityRetriever):
             self._local.search_history = hist
         return hist
 
+    @search_history.setter
+    def search_history(self, value: list[SearchContext]) -> None:
+        self._local.search_history = value
+
     @property
     def current_iteration(self) -> int:
         """Contador de iterações do run corrente (thread-local)."""
