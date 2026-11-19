@@ -13,6 +13,8 @@ use super::types::MetricPointData;
 /// Detecta anomalias 3-sigma em uma lista de MetricPoint Python.
 ///
 /// Chamado por pipeline/metric_filter.py quando _RUST_AVAILABLE = True.
+/// Os limiares vêm da configuração (ThresholdsConfig) e são obrigatórios:
+/// não há literal aqui, para não haver uma terceira cópia dos defaults.
 /// Retorna lista de dicts com campos equivalentes ao MetricAnomaly Python.
 #[pyfunction]
 #[pyo3(signature = (metrics, sigma_threshold = 3.0, baseline_ratio = 0.5))]

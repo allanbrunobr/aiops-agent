@@ -29,6 +29,15 @@ class LLMJsonError(ValueError):
         super().__init__(f"LLM response is not JSON: {preview!r}")
 
 
+class LLMBudgetExceeded(Exception):
+    """Orçamento de chamadas LLM do run esgotado (NFR6).
+
+    Definida em ``core`` para que ``agents`` (que não pode importar ``adapters``
+    pela regra de camadas A6/ARQ-15) possa capturá-la nos call sites do
+    orchestrator. ``adapters.llm.counting_client`` a reexporta por compatibilidade.
+    """
+
+
 def _balanced_slice(text: str) -> str | None:
     """Primeiro objeto ``{...}`` ou array ``[...]`` com delimitadores balanceados."""
     start = min((i for i in (text.find("{"), text.find("[")) if i != -1), default=-1)

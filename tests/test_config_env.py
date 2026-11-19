@@ -1,9 +1,11 @@
 """F5-3: loader único de .env/.env.local (config/env.py).
 
 Substitui cinco parsers manuais (CLI V0, CLI V1, demo, webhook server, script
-de Slack) que divergiam entre si. Contrato preservado do CLI V0:
-ambiente do processo > .env > .env.local; nenhum arquivo sobrescreve variável
-já definida.
+de Slack) que divergiam entre si. Contrato (pós-merge, ver
+tests/test_local_env_loader.py): ambiente do processo > .env.local > .env;
+nenhum arquivo sobrescreve variável já definida. `.env.local` são overrides
+locais e vence o `.env` compartilhado — a ordem inversa do V0 era um legado
+que tornava o arquivo de overrides inútil.
 """
 
 from __future__ import annotations
@@ -24,16 +26,17 @@ def _clean_env(monkeypatch):
 
 
 @pytest.mark.unit
-def test_loads_env_then_env_local_without_override(tmp_path):
+def test_loads_env_local_then_env_without_override(tmp_path):
     (tmp_path / ".env").write_text("AIOPS_T_A=from_env\n")
     (tmp_path / ".env.local").write_text("AIOPS_T_A=from_local\nAIOPS_T_B=only_local\n")
 
     loaded = load_local_env(tmp_path)
 
-    assert [p.name for p in loaded] == list(ENV_FILES)
-    # .env é carregado primeiro e .env.local não sobrescreve (semântica do V0:
-    # load_dotenv() + setdefault)
-    assert os.environ["AIOPS_T_A"] == "from_env"
+    assert loaded is True
+    assert ENV_FILES == (".env.local", ".env")
+    # .env.local é carregado primeiro e .env não sobrescreve (override=False):
+    # overrides locais vencem o .env compartilhado.
+    assert os.environ["AIOPS_T_A"] == "from_local"
     assert os.environ["AIOPS_T_B"] == "only_local"
 
 
@@ -49,7 +52,7 @@ def test_process_environment_always_wins(tmp_path, monkeypatch):
 
 @pytest.mark.unit
 def test_missing_files_are_a_noop(tmp_path):
-    assert load_local_env(tmp_path) == []
+    assert load_local_env(tmp_path) is False
     assert "AIOPS_T_A" not in os.environ
 
 

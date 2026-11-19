@@ -12,10 +12,7 @@ from __future__ import annotations
 from typing import Any
 
 from application.ports.llm_client import LLMClient
-
-
-class LLMBudgetExceeded(Exception):
-    """Orçamento de chamadas LLM do run esgotado (NFR6)."""
+from core.llm_json import LLMBudgetExceeded
 
 
 class CountingLLMClient:
@@ -24,6 +21,10 @@ class CountingLLMClient:
     A chamada que ultrapassaria o limite NÃO é enviada ao provider — a exceção
     sobe antes, para não gastar tokens além do orçamento.
     """
+
+    #: Marca de classe lida pelo orchestrator (camada agents) sem importar o
+    #: adapter concreto — evita violação da regra de camadas A6/ARQ-15.
+    is_budget_wrapper = True
 
     def __init__(self, inner: LLMClient, max_calls: int) -> None:
         if max_calls < 1:

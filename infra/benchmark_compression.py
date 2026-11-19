@@ -191,7 +191,7 @@ def generate_logs(count: int, seed: int = 42) -> list[LogEntry]:
             level = "INFO"
         logs.append(LogEntry(ts, level, svc, msg))
 
-    logs.sort(key=lambda log: log.timestamp)
+    logs.sort(key=lambda entry: entry.timestamp)
     return logs
 
 
@@ -294,7 +294,7 @@ def run_benchmark(log_count: int, save_logs: bool = False) -> dict:
     print(f"         Distribution: {dict(sorted(level_counts.items()))}")
 
     # Raw size in tokens
-    raw_text = "\n".join(str(log) for log in logs)
+    raw_text = "\n".join(str(entry) for entry in logs)
     raw_tokens = len(raw_text) // 4
     print(f"         Raw text: {len(raw_text):,} chars = ~{raw_tokens:,} tokens")
 

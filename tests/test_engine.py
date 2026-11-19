@@ -25,6 +25,8 @@ from core.logging import configure_logging
 from domain.alert import NormalizedAlert
 from domain.incident_state import IncidentState
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture(autouse=True)
 def _setup_logging():

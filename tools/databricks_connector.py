@@ -286,7 +286,8 @@ class DatabricksLogSource(DatabricksConnection, LogSource):
 
             where_clauses = []
             params: list[tuple[str, object]] = []
-            if query:
+            # "*" e vazio significam "sem filtro de texto" (antes viravam LIKE '%*%').
+            if query and query.strip() != "*":
                 where_clauses.append(
                     "CAST(" + msg_col + " AS STRING) LIKE :query_pattern"
                 )
@@ -437,8 +438,8 @@ class DatabricksMetricsSource(DatabricksConnection, MetricsSource):
     def query(
         self,
         promql: str,
-        start: datetime,
-        end: datetime,
+        start: datetime | None,
+        end: datetime | None,
         step_seconds: int = 15,
     ) -> list[dict]:
         """Busca metricas por filtro de texto na tabela Databricks.
@@ -454,21 +455,24 @@ class DatabricksMetricsSource(DatabricksConnection, MetricsSource):
             svc_col = self.column_mapping["service"]
             metric_col = self.column_mapping["metric_name"]
 
-            where_clauses = [
-                ts_col + " >= :start_ts",
-                ts_col + " <= :end_ts",
-                (
+            # Janela e filtro opcionais: start/end None faziam None.isoformat()
+            # (exceção engolida → zero métricas). Valores via parâmetros bound.
+            where_clauses = []
+            params: list[tuple[str, object]] = []
+            if start:
+                where_clauses.append(ts_col + " >= :start_ts")
+                params.append(("start_ts", start))
+            if end:
+                where_clauses.append(ts_col + " <= :end_ts")
+                params.append(("end_ts", end))
+            if promql and promql.strip():
+                where_clauses.append(
                     "(CAST(" + metric_col + " AS STRING) LIKE :promql_pattern"
                     " OR CAST(" + svc_col + " AS STRING) LIKE :promql_pattern)"
-                ),
-            ]
-            params: list[tuple[str, object]] = [
-                ("start_ts", start),
-                ("end_ts", end),
-                ("promql_pattern", "%" + promql + "%"),
-            ]
+                )
+                params.append(("promql_pattern", "%" + promql + "%"))
 
-            where_sql = "WHERE " + " AND ".join(where_clauses)
+            where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
             sql = (
                 "SELECT * FROM "
@@ -651,8 +655,12 @@ class DatabricksTraceSource(DatabricksConnection, TraceSource):
             duration_col = self.column_mapping["duration_ms"]
             start_col = self.column_mapping["start_time"]
 
-            where_clauses = [svc_col + " = :service"]
-            params: list[tuple[str, object]] = [("service", service)]
+            where_clauses = []
+            params: list[tuple[str, object]] = []
+            # service vazio significa "todos" (antes virava WHERE service = '').
+            if service:
+                where_clauses.append(svc_col + " = :service")
+                params.append(("service", service))
 
             if min_duration_ms is not None:
                 where_clauses.append(duration_col + " >= :min_duration")
@@ -664,7 +672,7 @@ class DatabricksTraceSource(DatabricksConnection, TraceSource):
                 where_clauses.append(start_col + " <= :end_ts")
                 params.append(("end_ts", end))
 
-            where_sql = "WHERE " + " AND ".join(where_clauses)
+            where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
             sql = (
                 "SELECT * FROM "

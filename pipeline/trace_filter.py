@@ -15,40 +15,22 @@ from datetime import datetime
 
 import numpy as np
 
+from config.loader import ThresholdsConfig
+
+# Defaults vêm de ThresholdsConfig (o YAML sobrescreve na composição).
+_DEFAULTS = ThresholdsConfig()
+
 try:
     import _aiops_rust as _rust
 
-    _RUST_AVAILABLE = True
+    from pipeline.rust_compat import has_params
+
+    _RUST_AVAILABLE = has_params(
+        _rust, "filter_traces", "percentile_threshold", "max_hops"
+    )
 except ImportError:
     _rust = None
     _RUST_AVAILABLE = False
-
-
-_rust_params_ok: bool | None = None
-
-
-def _rust_supports_params() -> bool:
-    """A extensão instalada aceita ``percentile_threshold``/``max_hops``?
-
-    Extensão compilada antes de F6-1 só aceita ``(spans)``: detecta uma vez,
-    avisa e usa o Python. Recompile com ``scripts/build_rust.sh``.
-    """
-    global _rust_params_ok
-    if _rust_params_ok is None:
-        sig = getattr(_rust.filter_traces, "__text_signature__", "") or ""
-        _rust_params_ok = "percentile_threshold" in sig
-        if not _rust_params_ok:
-            import structlog
-
-            structlog.get_logger("pipeline.trace_filter").warning(
-                "rust.extension_stale",
-                function="filter_traces",
-                detail=(
-                    "_aiops_rust compilado antes de F6-1 não aceita parâmetros; "
-                    "usando fallback Python. Recompile: scripts/build_rust.sh"
-                ),
-            )
-    return _rust_params_ok
 
 
 @dataclass
@@ -69,7 +51,11 @@ class SlowCallPath:
 class TraceFilter:
     """Filtra traces por latência e extrai call paths problemáticos."""
 
-    def __init__(self, percentile_threshold: float = 95.0, max_hops: int = 3):
+    def __init__(
+        self,
+        percentile_threshold: float = _DEFAULTS.percentile_threshold,
+        max_hops: int = _DEFAULTS.max_hops,
+    ):
         self.percentile_threshold = percentile_threshold
         self.max_hops = max_hops
 
@@ -80,7 +66,7 @@ class TraceFilter:
         F6-1: antes só os defaults (p95/3 hops) iam para o Rust; qualquer config
         custom caía no Python sem aviso, e os dois paths divergiam.
         """
-        if _RUST_AVAILABLE and _rust_supports_params():
+        if _RUST_AVAILABLE:
             return self._filter_rust(spans)
         return self._filter_python(spans)
 
@@ -91,6 +77,9 @@ class TraceFilter:
             percentile_threshold=self.percentile_threshold,
             max_hops=self.max_hops,
         )
+        by_trace: dict[str, list] = defaultdict(list)
+        for span in spans:
+            by_trace[span.trace_id].append(span)
         return [
             SlowCallPath(
                 trace_id=r["trace_id"],
@@ -100,11 +89,29 @@ class TraceFilter:
                 bottleneck_service=r["bottleneck_service"],
                 bottleneck_duration_ms=r["bottleneck_duration_ms"],
                 normal_duration_ms=r["normal_duration_ms"],
-                timestamp=r["timestamp"],
-                attributes=dict(r["attributes"]),
+                # Como o fallback: start_time do 1º span do trace, com o tzinfo
+                # original (o Rust devolvia naive em hora local, F15).
+                timestamp=min(s.start_time for s in by_trace[r["trace_id"]]),
+                attributes=self._bottleneck_attributes(by_trace[r["trace_id"]], r),
             )
             for r in raw
         ]
+
+    @staticmethod
+    def _bottleneck_attributes(trace_spans: list, r: dict) -> dict:
+        """Atributos originais do span gargalo.
+
+        O Rust devolve os valores como str ('23', 'true'); o fallback Python
+        devolve os tipos do span (23, True). O teste de paridade pegou a
+        diferença. Usa o span que o próprio Rust apontou como gargalo.
+        """
+        for span in trace_spans:
+            if (
+                span.service == r["bottleneck_service"]
+                and span.duration_ms == r["bottleneck_duration_ms"]
+            ):
+                return span.attributes
+        return dict(r["attributes"])
 
     def _filter_python(self, spans: list) -> list[SlowCallPath]:
         """Implementação Python pura (fallback)."""

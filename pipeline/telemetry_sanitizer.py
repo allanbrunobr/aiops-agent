@@ -27,6 +27,7 @@ Ref: "When AIOps Become AI Oops: Subverting LLM-driven IT Operations
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from dataclasses import dataclass, field, replace
@@ -200,6 +201,8 @@ class TelemetrySanitizer:
         self._suspicious_patterns = [
             re.compile(p, re.IGNORECASE) for p in SUSPICIOUS_EMBEDDED_CONTENT
         ]
+        # O caminho Rust não recebe padrões customizados: com eles, o
+        # sanitizador usa o caminho Python, que os conhece (ARQ-12).
         self._has_custom_patterns = bool(custom_patterns)
         if custom_patterns:
             self._adversarial_patterns.extend(
@@ -462,8 +465,12 @@ class TelemetrySanitizer:
                 from safety.audit import SafetyAuditor
 
                 SafetyAuditor.log_error("sanitizer", correlation_id, exc)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 — auditoria nunca derruba a validação
+                logging.getLogger(__name__).warning(
+                    "audit log_error failed for layer %s",
+                    "sanitizer",
+                    exc_info=True,
+                )
 
         # Combina relatórios
         combined = SanitizationReport(
@@ -514,6 +521,18 @@ class TelemetrySanitizer:
     # ========================================================================
     # Internal methods
     # ========================================================================
+
+    def sanitize_text(self, text: str) -> str:
+        """Sanitiza texto livre com as mesmas regras do campo `message` de log.
+
+        Usado pelas ferramentas MCP (validate_action e search_incidents):
+        neutraliza payload adversarial, redige PII (email, IP, URL) e, em modo
+        estrito, abstrai conteúdo user-generated.
+        """
+        if not isinstance(text, str):
+            text = str(text)
+        entry = _TextEntry(message=text)
+        return self._sanitize_log_entry(entry).sanitized
 
     def _sanitize_log_entry(self, log, precomputed_taint=None) -> SanitizationResult:
         """Sanitiza uma única entrada de log."""
@@ -712,6 +731,13 @@ class TelemetrySanitizer:
     def get_abstraction_map(self) -> dict[str, str]:
         """Retorna o mapa de abstrações (para debugging)."""
         return dict(self._abstraction_map)
+
+
+@dataclass
+class _TextEntry:
+    """Entrada mínima para sanitizar texto solto pelo mesmo caminho dos logs."""
+
+    message: str
 
 
 def _clone_log_entry(log, new_message: str):

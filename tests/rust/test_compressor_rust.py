@@ -18,6 +18,9 @@ import pytest
 from pipeline.aggregator import AggregatedReport
 from pipeline.context_compressor import CompressionStats, ContextCompressor
 
+pytestmark = pytest.mark.rust
+
+
 # ---------------------------------------------------------------------------
 # Fixtures: dados sintéticos determinísticos
 # ---------------------------------------------------------------------------

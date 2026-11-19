@@ -107,6 +107,12 @@ BLOCKED_COMMANDS = [
     r"\$\(",  # substituição de comando
 ]
 
+# Encadeamento, redirecionamento e quebra de linha. A allow-list abaixo
+# classifica UM comando; com qualquer destes caracteres o texto pode conter
+# outro comando depois do prefixo aprovado ("kubectl get pods; kubectl apply
+# -f http://..."). Nenhum comando de mitigação legítimo precisa deles.
+SHELL_METACHARACTERS = re.compile(r"[;&|<>\n\r]")
+
 # Padrões que indicam risco elevado
 HIGH_RISK_PATTERNS = [
     (r"kubectl\s+delete\s+pod", "Deleting pods causes temporary service disruption"),
@@ -372,13 +378,25 @@ class PreExecutionValidator:
         except ValueError:
             return False, "BLOCKED: malformed command (unbalanced quotes)"
         if not tokens:
-            return False, "BLOCKED: empty command"
+            # Comando vazio = fallback de revisão manual (propose_safe): não há
+            # ação perigosa a bloquear, o agente defere ao humano. PENDING_APPROVAL
+            # (requires_human), não BLOCKED — antes derrubava o pipeline (NOVO-01).
+            return False, "REVIEW: empty command — manual review required"
         normalized = " ".join(tokens)
 
         # 2. Blocklist de comandos perigosos
         for pattern in BLOCKED_COMMANDS:
             if re.search(pattern, cmd_lower):
                 return False, f"BLOCKED: matches dangerous pattern '{pattern}'"
+
+        # Defesa em profundidade: o tuple de composição acima já cobre este
+        # conjunto (e mais: backtick e `$(`); o regex da main fica como cinto
+        # extra antes das allowlists.
+        if SHELL_METACHARACTERS.search(command):
+            return False, (
+                "BLOCKED: shell metacharacter (; & | < > or newline) — "
+                "command chaining and redirection are not allowed"
+            )
 
         # 3. Alto risco (ancorado no comando real)
         for pattern, description in HIGH_RISK_PATTERNS:

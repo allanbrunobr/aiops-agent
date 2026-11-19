@@ -11,7 +11,7 @@ from typing import Any, Callable
 
 from rich.rule import Rule
 
-from application.use_cases.postmortem import get_action_items
+from application.use_cases.postmortem import _no_incident, get_action_items
 from interfaces.cli.console import console
 
 
@@ -66,12 +66,19 @@ def step_tracking(result: dict[str, Any], tracker: Any) -> str | None:
     console.print(Rule("[bold]Stage 5b: Incident Tracking[/bold]", style="cyan"))
     console.print()
 
+    if _no_incident(result):
+        # Janela saudável não abre issue (pré-PR em 2b4f094).
+        console.print("  [dim]No incident detected; no issue created.[/dim]")
+        return None
+
     diagnosis = result.get("stages", {}).get("diagnosis", {})
     detection = result.get("stages", {}).get("detection", {})
 
-    root_cause = diagnosis.get("root_cause", "AIOps detected incident")
-    severity = detection.get("severity", "medium")
-    evidence = diagnosis.get("evidence", [])
+    # root_cause/severity podem vir None (diagnóstico falho): o fallback
+    # precisa ser `or`, não o default de .get (len(None) derrubava o run).
+    root_cause = diagnosis.get("root_cause") or "AIOps detected incident"
+    severity = detection.get("severity") or "medium"
+    evidence = diagnosis.get("evidence") or []
 
     # Titulo: primeiros 100 chars do root cause
     title = root_cause[:100] if len(root_cause) > 100 else root_cause
@@ -109,7 +116,7 @@ def _attach_postmortem_to_tracker(
     diagnosis = result.get("stages", {}).get("diagnosis", {})
     mitigation = result.get("stages", {}).get("mitigation", {})
 
-    root_cause = diagnosis.get("root_cause", "Unable to determine root cause")
+    root_cause = diagnosis.get("root_cause") or "Unable to determine root cause"
 
     # Mapeia timeline do pipeline para formato do tracker
     timeline = []

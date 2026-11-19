@@ -125,4 +125,4 @@ The `step_*()` functions above live in `interfaces/cli/v0_pipeline.py` (V0 CLI e
 
 ---
 
-> **See also**: [API Contracts](api-contracts-internal.md) | [Project Context](./../_bmad-output/project-context.md)
+> **See also**: [API Contracts](api-contracts-internal.md) | [Code Conventions](../CONTRIBUTING.md#code-conventions)

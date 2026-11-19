@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-- **Type:** Monolith (standalone CLI)
+- **Type:** Monolith with several entrypoints (CLI `main.py`, webhook server, MCP server, demo dashboard)
 - **Language:** Python 3.12
 - **Architecture:** Sequential pipeline + multi-agent state machine
 - **Entry Point:** `main.py`

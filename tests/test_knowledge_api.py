@@ -6,6 +6,8 @@ Cobre POST /api/v1/knowledge/patterns e GET /api/v1/knowledge/patterns.
 """
 
 import pytest
+
+pytestmark = pytest.mark.unit
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 

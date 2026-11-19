@@ -13,6 +13,7 @@ use super::types::SpanData;
 /// Filtra traces lentos (>p95) e extrai call paths.
 ///
 /// Chamado por pipeline/trace_filter.py quando _RUST_AVAILABLE = True.
+/// Os limiares vêm da configuração (ThresholdsConfig) e são obrigatórios.
 /// Retorna lista de dicts com campos equivalentes ao SlowCallPath Python.
 #[pyfunction]
 #[pyo3(signature = (spans, percentile_threshold = 95.0, max_hops = 3))]

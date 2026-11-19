@@ -6,9 +6,12 @@ Cobre endpoints PATCH /accuracy e GET /metrics/accuracy.
 """
 
 import dataclasses
-import datetime
 
 import pytest
+
+pytestmark = pytest.mark.unit
+import datetime
+
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 

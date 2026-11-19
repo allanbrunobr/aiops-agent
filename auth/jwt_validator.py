@@ -43,8 +43,9 @@ def issue_token(
     secret: str,
     ttl: int = 3600,
     algorithm: str = "HS256",
-    issuer: str = "aiops-agent",
-    audience: str = "mcp",
+    *,
+    issuer: str = "",
+    audience: str | None = None,
 ) -> str:
     """Emite um JWT assinado com os claims do agente.
 
@@ -67,11 +68,14 @@ def issue_token(
     payload = {
         "sub": agent_id,
         "scope": " ".join(scopes),
-        "iss": issuer,
-        "aud": audience,
         "exp": int(time.time()) + ttl,
         "iat": int(time.time()),
     }
+    # aud/iss só quando configurados (SEC-11); vazio mantém o formato anterior.
+    if issuer:
+        payload["iss"] = issuer
+    if audience:
+        payload["aud"] = audience
     return jwt.encode(payload, secret, algorithm=algorithm)
 
 
@@ -79,8 +83,9 @@ def validate_token(
     token: str,
     secret: str,
     algorithm: str = "HS256",
-    audience: str | list[str] | None = None,
+    *,
     issuer: str | None = None,
+    audience: str | None = None,
 ) -> TokenClaims:
     """Valida e decodifica um JWT, retornando os claims.
 
@@ -101,12 +106,21 @@ def validate_token(
         jwt.InvalidKeyError: HMAC key missing or shorter than 32 bytes.
     """
     _reject_short_hmac_key(secret, algorithm)
+    # Com issuer/audience configurados, os claims são obrigatórios e conferidos.
+    # Sem eles, a verificação é desligada (SEC-11: vazio = comportamento anterior,
+    # tokens com aud/iss arbitrários continuam válidos se a assinatura conferir).
+    required = (["iss"] if issuer else []) + (["aud"] if audience else [])
     payload = jwt.decode(
         token,
         secret,
         algorithms=[algorithm],
-        audience=audience,
-        issuer=issuer,
+        issuer=issuer or None,
+        audience=audience or None,
+        options={
+            "require": required,
+            "verify_aud": audience is not None,
+            "verify_iss": issuer is not None,
+        },
     )
     raw_scope = payload.get("scope", "")
     scopes = raw_scope.split() if raw_scope else []

@@ -403,7 +403,7 @@ descrição do que o diff realmente faz.
   `oauth21`, `header`, `federated` e vínculo de sessão), `.env.example` (bloco
   MCP/A2A com `AIOPS_MCP__OAUTH__JWT_SECRET` e `ALLOWED_CLIENTS`). Corrigido
   erro pré-existente nos READMEs: o prefixo de env é `AIOPS_` + `__` entre
-  níveis (`AIOPS_MCP__OAUTH__JWT_SECRET`), não `AIOPS__MCP__...`.
+  níveis (`AIOPS_MCP__OAUTH__JWT_SECRET`), e não `__` logo após o prefixo.
 - Testes: `tests/test_header_client_auth.py` (5): sem secret → 401; errado →
   401; correto passa (≠401); cliente sem secret configurado → 401; id
   desconhecido → 401.

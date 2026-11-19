@@ -10,6 +10,7 @@ mascarando o TypeError da assinatura errada e campos inexistentes no estado.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from datetime import datetime, timezone
 
@@ -34,39 +35,33 @@ def _make_alert(correlation_id: str = "inc-test") -> NormalizedAlert:
     )
 
 
-def _make_result_state() -> IncidentState:
-    """IncidentState real como o BlueprintEngine.run retorna."""
-    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    return IncidentState(
-        incident_id="inc-test",
-        correlation_id="inc-test",
-        alert=_make_alert(),
-        received_at=now,
-        started_at=now,
-        diagnosis={
-            "root_cause": "Connection pool exhausted after config deploy",
-            "evidence": ["error_rate spike", "slow traces", "pool metrics"],
-            "confidence": "high",
-            "affected_services": ["payment-svc"],
-        },
-        proposed_action={
-            "description": "Rollback config change",
-            "command": "kubectl rollout undo deployment/payment-svc",
-            "risk_level": "LOW",
-            "rollback": None,
-        },
-        safety_verdict="APPROVED",
-        safety_reasons=["PreValidator: LOW — auto_approved"],
-    )
-
-
 class _MockEngine:
-    """BlueprintEngine mock com o contrato real run(pipeline, state)."""
+    """BlueprintEngine fake com o contrato REAL: run(pipeline, state) -> IncidentState.
+
+    Antes o fake tinha `run(self, alert)`, a mesma assinatura errada da
+    produção — por isso o defeito ARQ-02 passava verde.
+    """
 
     def run(self, pipeline, state):
         assert hasattr(pipeline, "nodes"), "engine.run deve receber PipelineDefinition"
         assert isinstance(state, IncidentState), "engine.run deve receber IncidentState"
-        return _make_result_state()
+        return dataclasses.replace(
+            state,
+            diagnosis={
+                "root_cause": "Connection pool exhausted after config deploy",
+                "evidence": ["error_rate spike", "slow traces", "pool metrics"],
+                "confidence": "high",
+                "affected_services": ["payment-svc"],
+            },
+            proposed_action={
+                "description": "Rollback config change",
+                "command": "kubectl rollout undo deployment/payment-svc",
+                "risk_level": "LOW",
+                "rollback": None,
+            },
+            safety_verdict="APPROVED",
+            safety_reasons=["PreValidator: LOW — auto_approved"],
+        )
 
 
 class _MockEngineWithError:
@@ -235,7 +230,7 @@ class TestHandleDiagnoseIncident:
         class TrackingEngine:
             def run(self, pipeline, state):
                 run_calls.append((pipeline, state))
-                return _make_result_state()
+                return dataclasses.replace(state, diagnosis={"root_cause": "test"})
 
         await handle_diagnose_incident(
             arguments={
@@ -252,8 +247,10 @@ class TestHandleDiagnoseIncident:
         assert len(run_calls) == 1
         pipeline, state = run_calls[0]
         assert isinstance(pipeline, PipelineDefinition)
+        assert pipeline.nodes  # pipeline real de incident response
         assert isinstance(state, IncidentState)
         assert isinstance(state.alert, NormalizedAlert)
+        assert state.alert.title == "Job failure"
         assert state.no_llm is True
 
     @pytest.mark.asyncio

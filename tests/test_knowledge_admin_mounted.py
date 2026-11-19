@@ -18,7 +18,9 @@ _SECRET = "knowledge-admin-test-secret-key-32bytes!"
 
 
 def _auth_headers() -> dict[str, str]:
-    token = issue_token("admin-client", ["aiops:diagnose"], _SECRET, audience="a2a")
+    token = issue_token(
+        "admin-client", ["aiops:diagnose"], _SECRET, audience="a2a", issuer="aiops-agent"
+    )
     return {"Authorization": f"Bearer {token}"}
 
 

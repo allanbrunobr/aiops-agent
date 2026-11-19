@@ -11,15 +11,11 @@ História 5.6: Montagem condicional com base em config.mcp.enabled.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import structlog
 from fastapi import Depends, FastAPI
 
 from config.loader import AppConfig
-
-if TYPE_CHECKING:
-    from rag.knowledge_store import KnowledgeStore
 
 log = structlog.get_logger()
 
@@ -187,20 +183,30 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     _rsa_ok = bool(_rsa_private_pem and _rsa_public_pem)
     if _hmac_ok or _rsa_ok:
         import auth.server as auth_server
+        from auth.client_secrets import load_client_secret_hashes
         from auth.token_store import InMemoryTokenStore
+
+        # Hashes fora do repositório (fail-closed se ausente/inválido).
+        _secret_hashes = load_client_secret_hashes(_oauth.client_secrets_file)
 
         auth_server.configure(
             jwt_secret=_jwt_secret if _hmac_ok else "",
             token_ttl=_oauth.token_ttl,
             allowed_clients=[
-                {"id": c.id, "scopes": c.scopes} for c in _oauth.allowed_clients
+                {
+                    "id": c.id,
+                    "scopes": c.scopes,
+                    "secret_sha256": c.secret_sha256 or _secret_hashes.get(c.id, ""),
+                }
+                for c in _oauth.allowed_clients
             ],
             base_url="",
-            issuer=_oauth.issuer,
             token_store=InMemoryTokenStore(),
             rsa_private_pem=_rsa_private_pem,
             rsa_public_pem=_rsa_public_pem,
             kid=_oauth.kid,
+            issuer=_oauth.issuer,
+            audience=_oauth.audience,
         )
         app.include_router(auth_server.router)
         log.info("oauth.server.mounted", clients=len(_oauth.allowed_clients))
@@ -243,7 +249,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.state.config = config
     app.state.a2a_jwt_secret = _jwt_secret if _hmac_ok else ""
     app.state.a2a_jwt_public_pem = _rsa_public_pem or ""
+    # Mesmos aud/iss do servidor OAuth (vazio = não exige).
     app.state.a2a_jwt_issuer = _oauth.issuer
+    app.state.a2a_jwt_audience = _oauth.audience
     app.state.engine = engine
     app.state.retriever = retriever
     log.info("a2a.state.populated", engine=type(app.state.engine).__name__)
@@ -331,26 +339,3 @@ async def handle_prediction_event(
             event_type=event_type,
             exc_info=True,
         )
-
-
-# ------------------------------------------------------------------ #
-# Estado global para injeção de dependência (server/dependencies.py)  #
-# ------------------------------------------------------------------ #
-
-from dataclasses import dataclass as _dataclass
-
-
-@_dataclass
-class AppState:
-    """Estado global da aplicação para injeção de dependência FastAPI."""
-
-    config: AppConfig | None = None
-    store: object = None  # IncidentStore
-    engine: object = None  # BlueprintEngine
-    knowledge_store: KnowledgeStore | None = None
-
-
-app_state = AppState()
-
-# Compatibilidade retroativa — referenciado por server/handlers/false_positive.py
-knowledge_store: KnowledgeStore | None = None

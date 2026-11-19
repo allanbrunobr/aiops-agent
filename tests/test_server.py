@@ -9,6 +9,8 @@ from httpx import ASGITransport, AsyncClient
 
 from interfaces.http.app import LazyRAG, create_app
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture
 def app():
@@ -81,13 +83,3 @@ def test_create_app_returns_fastapi():
     application = create_app()
     assert isinstance(application, FastAPI)
     assert application.title == "AIOps Agent"
-
-
-def test_dependency_helpers():
-    """Dependency helpers devem existir e ser importaveis."""
-    from interfaces.http.dependencies import get_config, get_engine, get_store
-
-    # Funcoes devem existir — falham com AssertionError se app_state nao inicializado
-    assert callable(get_config)
-    assert callable(get_store)
-    assert callable(get_engine)

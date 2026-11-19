@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 """
 Testes para Story 4.6: Bundled Test Scenarios.
 Cobre ValidationRunner, ScenarioResult, ValidationReport.

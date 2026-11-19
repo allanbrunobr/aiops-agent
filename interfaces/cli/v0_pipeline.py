@@ -28,7 +28,8 @@ from adapters.reporter import RichConsoleReporter
 from agents.detector import DetectionAgent
 from agents.diagnoser import DiagnosisAgent
 from agents.mitigator import MitigationAgent
-from config.loader import AppConfig, load_config
+from application.use_cases.postmortem import _no_incident
+from config.loader import AppConfig, SafetyConfig, load_config, resolve_llm_model
 from core.secrets import sanitize_secrets as _sanitize_secrets
 from data.models import SimulatedIncident
 from data.registry import get_scenario
@@ -39,7 +40,7 @@ from interfaces.cli.data_sources import (
     _create_databricks_sources,
     step_fetch_databricks_data,
 )
-from interfaces.cli.display import print_banner, print_summary
+from interfaces.cli.display import _requires_human, print_banner, print_summary
 from interfaces.cli.exit_codes import (
     EXIT_APPROVAL_NEEDED,
     EXIT_CODE_LABELS,
@@ -65,6 +66,7 @@ from safety.tnr import TNRSafetyGuard
 from safety.version_validator import VersionValidator
 
 _log = _structlog.get_logger("cli.v0")
+_persist_log = _structlog.get_logger("main.persistence")
 
 
 def step_generate_data(
@@ -562,27 +564,34 @@ def step_agents(
         # Reutiliza mitigation já computada dentro do orchestrator (evita duplicata)
         mitigation = _outcome.mitigation
     else:
-        mitigation = mitigator.propose(diagnosis)
+        # propose_safe degrada uma falha do mitigator para revisão manual
+        # (command="", risk HIGH) em vez de derrubar o pipeline (NOVO-01).
+        mitigation = mitigator.propose_safe(diagnosis)
     result["stages"]["mitigation"] = mitigation
 
-    # 4. VERIFYING (TNR)
+    # 4. VERIFYING (TNR) — measured-only (D5): sem medição pós-ação real o
+    # resultado é NOT_VERIFIED, não um delta inventado (F09).
     _transition("MITIGATING", "VERIFYING", "Verificando impacto (TNR)...")
     if use_llm:
-        # Reutiliza resultado TNR já computado dentro do orchestrator (evita duplicata)
-        _tnr_regression = not _outcome.tnr_passed
+        # Reutiliza resultado TNR já computado dentro do orchestrator
+        _tnr_value = _outcome.tnr_result or (
+            "success" if _outcome.tnr_passed else "not_verified"
+        )
+        _tnr_regression = _tnr_value == "regression"
         _tnr_msg = _outcome.tnr_message
         result["stages"]["verification"] = {
-            "result": "success" if _outcome.tnr_passed else "regression",
+            "result": _tnr_value,
             "health_delta": _outcome.tnr_health_delta,
             "message": _tnr_msg,
             "verification_mode": _outcome.tnr_verification_mode,
         }
     else:
-        tnr_result = mitigator.simulate_tnr_verification(mitigation, tnr_guard, report)
-        _tnr_regression = tnr_result.result.value == "regression"
+        tnr_result = mitigator.verify_with_tnr(mitigation, tnr_guard)
+        _tnr_value = tnr_result.result.value
+        _tnr_regression = _tnr_value == "regression"
         _tnr_msg = tnr_result.message
         result["stages"]["verification"] = {
-            "result": tnr_result.result.value,
+            "result": _tnr_value,
             "health_delta": tnr_result.health_delta,
             "message": _tnr_msg,
             "verification_mode": tnr_result.verification_mode,
@@ -594,11 +603,12 @@ def step_agents(
             "message": "Rollback executado, retornando ao diagnostico"
         }
     else:
-        _transition(
-            "VERIFYING",
-            "RESOLVED",
-            f"TNR check passed; human approval still pending: {_tnr_msg}",
+        _label = (
+            "TNR check passed; mitigation proposed, safety gate decides next"
+            if _tnr_value == "success"
+            else "Mitigation proposed (not executed); safety gate decides next"
         )
+        _transition("VERIFYING", "RESOLVED", f"{_label}: {_tnr_msg}")
         result["success"] = True
 
     # ── Skill Evolution: REFLECT + WRITE ─────────────────────────────────
@@ -669,8 +679,84 @@ def step_agents(
     return result
 
 
-def step_safety_validation(result):
-    """Etapa 4b: Pre-Execution Safety Validation."""
+def _record_safety_decision(result, safety_result, remediation_result) -> bool:
+    """Grava em result['stages']['safety_decision'] o veredito combinado.
+
+    O postmortem (markdown E JSON) e o exit code consultam este veredito:
+    uma camada que aprova não anula a que bloqueia (F03).
+    """
+    blocked_by = []
+    if safety_result is not None and safety_result.requires_human:
+        blocked_by.append("pre_validator")
+    if remediation_result is not None and not remediation_result.is_safe:
+        blocked_by.append("version_validator")
+    requires_human = _requires_human(safety_result, remediation_result)
+    result.setdefault("stages", {})["safety_decision"] = {
+        "requires_human": requires_human,
+        "blocked_by": blocked_by,
+    }
+    return requires_human
+
+
+def step_skill_learning(memory_db, skill, *, tnr_result: str, reflection: dict,
+                        tools_used: list, iteration_count: int, use_llm: bool, client):
+    """Fases WRITE + EVOLVE do ciclo de skills: grava o outcome e, se a skill
+    estiver fraca, propõe uma reescrita (pendente de revisão humana).
+
+    Extraída de main.py (F5-2) e re-exportada por main para os consumidores do
+    CLI e para os testes de aprendizado de skills.
+
+    Returns:
+        A skill candidata proposta, ou None.
+    """
+    import datetime as _dt
+
+    from rag.memory import SkillOutcome
+
+    skill_id = getattr(skill, "skill_id", "default")
+    tnr_passed = tnr_result == "success"
+    outcome = SkillOutcome(
+        outcome_id=str(uuid.uuid4()),
+        skill_id=skill_id,
+        incident_id=str(uuid.uuid4()),
+        tnr_passed=tnr_passed,
+        reflection_score=float(reflection.get("score", 0.5)),
+        reflection_lesson=str(reflection.get("lesson", "")),
+        tools_used=tools_used,
+        iteration_count=iteration_count,
+        timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+    )
+    memory_db.save_skill_outcome(outcome)
+
+    # Atualiza utility_score/total_uses (EMA). Sem LLM a "reflexão" é um
+    # placeholder (0.5) — não há sinal para aprender (F16).
+    if use_llm and skill is not None:
+        memory_db.update_skill_score(skill_id, tnr_passed, outcome.reflection_score)
+        skill = memory_db.get_skill(skill_id) or skill
+
+    # ── Fase EVOLVE — reescreve skills fracas (pendente de revisão) ──
+    from agents.skill_evolver import SkillEvolver
+
+    if skill is None:
+        return None
+    evolver = SkillEvolver(client=client, memory_db=memory_db)
+    if not evolver.should_evolve(skill):
+        return None
+    evolved = evolver.evolve(skill)
+    if evolved:
+        console.print(
+            f"  [dim]Skill rewrite proposed for {evolved.name} "
+            f"(v{evolved.version}) — pending human review[/dim]"
+        )
+    return evolved
+
+
+def step_safety_validation(result, config: AppConfig | None = None):
+    """Etapa 4b: Pre-Execution Safety Validation.
+
+    Usa ``safety.require_human_approval`` e ``safety.blast_radius_limit`` da
+    config (antes fixava auto-aprovação e limite 3, ignorando o YAML — F03/F13).
+    """
     console.print(
         Rule("[bold]Stage 4b: Pre-Execution Safety Validation[/bold]", style="cyan")
     )
@@ -683,9 +769,10 @@ def step_safety_validation(result):
         console.print("  [dim]No mitigation to validate (skipping)[/dim]\n")
         return None
 
+    safety_cfg = getattr(config, "safety", None) or SafetyConfig()
     pre_validator = PreExecutionValidator(
-        auto_approve_low_risk=True,
-        max_blast_radius=3,
+        auto_approve_low_risk=not safety_cfg.require_human_approval,
+        max_blast_radius=safety_cfg.blast_radius_limit,
         require_rollback_plan=True,
     )
     orchestrator = SafetyOrchestrator(pre_validator=pre_validator)
@@ -908,6 +995,50 @@ def step_predict(
     console.print()
 
 
+def step_persist_incident(
+    result,
+    report,
+    scenario_name: str,
+    elapsed_sec: float,
+    db: IncidentMemoryDB | None = None,
+) -> bool:
+    """Etapa 5d: persiste o incidente na memória institucional (Story 7.3).
+
+    Best-effort: falha não derruba o pipeline, mas é registrada em log. Usa
+    ``confidence_to_score`` (aceita confiança textual "medium"/"high" — antes
+    ``float("medium")`` levantava ValueError e todo save falhava, F07).
+
+    Returns:
+        True se gravou; False se não havia root_cause ou se a gravação falhou.
+    """
+    diagnosis = result.get("stages", {}).get("diagnosis", {})
+    root_cause = diagnosis.get("root_cause") or ""
+    if not root_cause:
+        return False
+    try:
+        detection = result.get("stages", {}).get("detection", {})
+        record = IncidentRecord.new(
+            scenario=scenario_name,
+            root_cause=root_cause,
+            affected_services=list(detection.get("affected_services", [])),
+            diagnosis_confidence=confidence_to_score(diagnosis.get("confidence")),
+            resolution_time_sec=elapsed_sec,
+            tags=_extract_fault_tags(report),
+            evidence_summary="; ".join(
+                str(e) for e in diagnosis.get("evidence", [])[:5]
+            ),
+        )
+        (db if db is not None else IncidentMemoryDB()).save_incident(record)
+        return True
+    except Exception as exc:  # noqa: BLE001 — best-effort, mas registrado
+        _persist_log.warning(
+            "persistence.save_incident_failed",
+            scenario=scenario_name,
+            error=repr(exc),
+        )
+        return False
+
+
 def run_v0(args: argparse.Namespace) -> int:
     """Composition root do engine V0: executa os ``step_*`` em sequência.
 
@@ -922,8 +1053,8 @@ def run_v0(args: argparse.Namespace) -> int:
     import asyncio as _asyncio
     from datetime import timezone as _tz2
 
+    from app.slack_setup import setup_slack_notifier as _setup_slack
     from core.lifecycle import LifecycleEvent as _LifecycleEvent
-    from tools.slack_setup import setup_slack_notifier as _setup_slack
 
     _notifier = _setup_slack()
     if _notifier is not None:
@@ -949,12 +1080,13 @@ def run_v0(args: argparse.Namespace) -> int:
                 f"[yellow]Slack: falha ao enviar {event_type}: {_fe}[/yellow]"
             )
 
-    # Leitura do modelo LLM configuravel via env var (Story 5.1)
-    llm_model = os.environ.get("AIOPS_LLM_MODEL", "claude-sonnet-4-20250514")
-
     # Carrega configuracao via YAML (Pydantic Settings)
     threshold_config = load_config(config_path=args.config)
     config_source = args.config or "config/defaults.yaml"
+
+    # Modelo LLM: AIOPS_LLM_MODEL (legado) > llm.model_name do YAML > padrão
+    # (A4/ARQ-08/F5-09 — antes só a env var era lida e o YAML não tinha efeito)
+    llm_model = resolve_llm_model(threshold_config)
 
     # Resolve tracker (Story 6.3) — antes do pipeline para falhar rapido em config invalida
     tracker = _resolve_tracker(args.tracker)
@@ -1035,10 +1167,15 @@ def run_v0(args: argparse.Namespace) -> int:
         )
 
         # 4b. Pre-Execution Safety Validation
-        safety_result = step_safety_validation(result)
+        safety_result = step_safety_validation(result, config=threshold_config)
 
         # 4c. Remediation Version/CVE Validation
         remediation_result = step_remediation_validation(result)
+
+        # 4d. Veredito combinado: qualquer camada que bloqueia exige humano.
+        requires_human = _record_safety_decision(
+            result, safety_result, remediation_result
+        )
 
         # 4e. Notificação Slack: diagnóstico + correção proposta
         _diag_for_slack = result.get("stages", {}).get("diagnosis", {})
@@ -1053,22 +1190,23 @@ def run_v0(args: argparse.Namespace) -> int:
             or ""
         )
         _conf_for_slack = confidence_to_score(_diag_for_slack.get("confidence"))
-        _slack_fire(
-            "diagnosis.completed",
-            cid=_pipeline_cid,
-            data={
-                "root_cause": _diag_for_slack.get("root_cause", ""),
-                "proposed_fix": _proposed_fix_slack,
-                "risk_level": safety_result.risk_level.value
-                if safety_result
-                else "unknown",
-                "requires_human": safety_result.requires_human
-                if safety_result
-                else False,
-                "confidence": float(_conf_for_slack),
-                "evidence": list(_diag_for_slack.get("evidence", []))[:5],
-            },
-        )
+        # Sem incidente não há diagnóstico nem correção a anunciar: o Slack
+        # postava "Diagnóstico + Correção Proposta" com Root Cause em branco.
+        if not _no_incident(result):
+            _slack_fire(
+                "diagnosis.completed",
+                cid=_pipeline_cid,
+                data={
+                    "root_cause": _diag_for_slack.get("root_cause") or "",
+                    "proposed_fix": _proposed_fix_slack,
+                    "risk_level": safety_result.risk_level.value
+                    if safety_result
+                    else "unknown",
+                    "requires_human": requires_human,
+                    "confidence": float(_conf_for_slack),
+                    "evidence": list(_diag_for_slack.get("evidence", []))[:5],
+                },
+            )
 
         # Armazena nome do cenário e config no resultado para postmortem e summary.
         result["scenario_name"] = scenario_name
@@ -1084,11 +1222,7 @@ def run_v0(args: argparse.Namespace) -> int:
             exit_code = EXIT_REGRESSION
 
         # Check safety requires human (exit code 3) — only if no regression
-        if (
-            exit_code == EXIT_SUCCESS
-            and safety_result is not None
-            and safety_result.requires_human
-        ):
+        if exit_code == EXIT_SUCCESS and requires_human:
             exit_code = EXIT_APPROVAL_NEEDED
 
         # 5b. Incident Tracking (Story 6.3)
@@ -1122,29 +1256,9 @@ def run_v0(args: argparse.Namespace) -> int:
             _attach_postmortem_to_tracker(tracker, tracker_issue_key, result)
 
         # 5d. Persiste incidente na memória institucional (Story 7.3)
-        try:
-            diagnosis = result.get("stages", {}).get("diagnosis", {})
-            root_cause = diagnosis.get("root_cause") or ""
-            if root_cause:
-                detection = result.get("stages", {}).get("detection", {})
-                affected_services = list(detection.get("affected_services", []))
-                confidence = float(diagnosis.get("confidence") or 0.0)
-                elapsed_total_local = time.time() - t_total
-                tags = _extract_fault_tags(report)
-                evidence = "; ".join(str(e) for e in diagnosis.get("evidence", [])[:5])
-                record = IncidentRecord.new(
-                    scenario=scenario_name,
-                    root_cause=root_cause,
-                    affected_services=affected_services,
-                    diagnosis_confidence=confidence,
-                    resolution_time_sec=elapsed_total_local,
-                    tags=tags,
-                    evidence_summary=evidence,
-                )
-                db = IncidentMemoryDB()
-                db.save_incident(record)
-        except Exception as exc:  # memória episódica é best-effort
-            _log.warning("cli.v0.incident_memory_save_failed", error=str(exc))
+        step_persist_incident(
+            result, report, scenario_name, time.time() - t_total
+        )
 
         # Summary
         print_summary(
@@ -1183,7 +1297,7 @@ def run_v0(args: argparse.Namespace) -> int:
             "pipeline.completed",
             cid=_pipeline_cid,
             data={
-                "root_cause": _diag.get("root_cause", ""),
+                "root_cause": _diag.get("root_cause") or "",
                 "confidence": _conf,
                 "proposed_fix": _fix,
                 "risk_level": safety_result.risk_level.value
@@ -1192,6 +1306,7 @@ def run_v0(args: argparse.Namespace) -> int:
                 "blast_radius": _br,
                 "evidence": list(_diag.get("evidence", []))[:5],
                 "total_duration_ms": int(elapsed_total * 1000),
+                "no_incident": _no_incident(result),
             },
         )
 
@@ -1228,6 +1343,7 @@ __all__ = [
     "step_agents",
     "step_safety_validation",
     "step_remediation_validation",
+    "_record_safety_decision",
     "step_predict",
     "_extract_fault_tags",
 ]

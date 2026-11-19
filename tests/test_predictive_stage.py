@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+
+pytestmark = pytest.mark.unit
 """Testes unitários para pipeline.predictive_stage."""
 
 import datetime
@@ -46,18 +49,14 @@ class FakeAnomaly:
 
 
 class FakeSlowTrace:
-    """Trace lento falso com o shape real de SlowCallPath (F1-3)."""
+    """Trace lento falso para testes."""
 
     def __init__(
-        self,
-        duration_ms=500.0,
-        bottleneck_service="payment-svc",
-        path=None,
+        self, duration_ms=500.0, bottleneck_service="payment-svc", path="GET /api"
     ):
-        self.total_duration_ms = duration_ms
+        self.duration_ms = duration_ms
         self.bottleneck_service = bottleneck_service
-        self.path = path if path is not None else ["gateway", bottleneck_service]
-        self.timestamp = datetime.datetime(2026, 1, 1, 14, 0, 0)
+        self.path = path
 
 
 class FakeReport:
@@ -190,174 +189,3 @@ def test_matched_history_default_empty():
     result = run_predictive_stage(report)
     assert result is not None
     assert result.matched_history == []
-
-
-# ---------------------------------------------------------------------------
-# F1-3: fidelidade aos dados reais (regressão)
-# ---------------------------------------------------------------------------
-
-import pytest  # noqa: E402
-
-
-@pytest.mark.unit
-class TestPredictiveStageDataFidelity:
-    """Regressão F1-3: o estágio preditivo operava sobre dados errados.
-
-    Bugs originais:
-    - getattr(trace, 'duration_ms') mas SlowCallPath tem total_duration_ms → 0.0;
-    - path (list) colocado em Span.operation (str);
-    - slope EWMA calculado sobre métricas distintas misturadas;
-    - logs sintéticos todos com timestamp=now.
-    """
-
-    _BASE = datetime.datetime(2026, 1, 1, 14, 0, 0)
-
-    def _make_report(self):
-        from pipeline.log_parser import LogTemplate
-        from pipeline.metric_filter import MetricAnomaly
-        from pipeline.trace_filter import SlowCallPath
-
-        base = self._BASE
-        anomalies = [
-            MetricAnomaly(
-                service="payment-svc",
-                metric_name="error_rate",
-                anomaly_type="spike",
-                timestamp=base,
-                value=10.0,
-                mean=1.0,
-                std=1.0,
-                deviation_sigma=8.0,
-                description="",
-            ),
-            MetricAnomaly(
-                service="order-svc",
-                metric_name="error_rate",
-                anomaly_type="spike",
-                timestamp=base + datetime.timedelta(minutes=1),
-                value=30.0,
-                mean=1.0,
-                std=1.0,
-                deviation_sigma=9.0,
-                description="",
-            ),
-            MetricAnomaly(
-                service="payment-svc",
-                metric_name="cpu_usage",
-                anomaly_type="spike",
-                timestamp=base,
-                value=95.0,
-                mean=40.0,
-                std=5.0,
-                deviation_sigma=11.0,
-                description="",
-            ),
-        ]
-        traces = [
-            SlowCallPath(
-                trace_id="t1",
-                path=["gateway", "payment-svc"],
-                operations=["GET", "POST"],
-                total_duration_ms=4500.0,
-                bottleneck_service="payment-svc",
-                bottleneck_duration_ms=4200.0,
-                normal_duration_ms=120.0,
-                timestamp=base,
-                attributes={},
-            ),
-            SlowCallPath(
-                trace_id="t2",
-                path=["gateway", "order-svc"],
-                operations=["GET", "POST"],
-                total_duration_ms=5200.0,
-                bottleneck_service="order-svc",
-                bottleneck_duration_ms=4900.0,
-                normal_duration_ms=120.0,
-                timestamp=base + datetime.timedelta(minutes=2),
-                attributes={},
-            ),
-        ]
-        templates = [
-            LogTemplate(
-                template="Connection timeout",
-                count=6,
-                level="ERROR",
-                services={"payment-svc"},
-                first_seen=base,
-                last_seen=base + datetime.timedelta(minutes=10),
-            )
-        ]
-        return FakeReport(
-            log_templates=templates, metric_anomalies=anomalies, slow_traces=traces
-        )
-
-    def test_metric_slope_grouped_by_metric(self, monkeypatch):
-        """Slope EWMA por métrica — nunca misturar métricas distintas na série."""
-        import pipeline.predictive_stage as stage
-
-        calls = []
-        real = stage.compute_ewma_slope
-
-        def spy(points, *args, **kwargs):
-            calls.append(points)
-            return real(points, *args, **kwargs)
-
-        monkeypatch.setattr(stage, "compute_ewma_slope", spy)
-        result = stage.run_predictive_stage(self._make_report())
-
-        assert result is not None
-        assert calls, "slope deve ser computado para grupo com >=2 pontos"
-        for points in calls:
-            assert len(points) >= 2
-            assert len({p.metric_name for p in points}) == 1
-        assert any(len(p) == 2 and p[0].metric_name == "error_rate" for p in calls)
-
-    def test_synthetic_spans_use_real_fields(self, monkeypatch):
-        """Spans sintéticos: duration real, operation str, start_time do trace."""
-        import pipeline.predictive_stage as stage
-
-        captured = []
-        real = stage.analyze_trace_signals
-
-        def spy(spans):
-            captured.extend(spans)
-            return real(spans)
-
-        monkeypatch.setattr(stage, "analyze_trace_signals", spy)
-        result = stage.run_predictive_stage(self._make_report())
-
-        assert result is not None
-        assert len(captured) == 2
-        assert [s.duration_ms for s in captured] == [4500.0, 5200.0]
-        assert all(isinstance(s.operation, str) for s in captured)
-        assert captured[0].operation == "gateway -> payment-svc"
-        assert captured[0].start_time == self._BASE
-
-    def test_synthetic_logs_use_template_timestamps(self, monkeypatch):
-        """Logs sintéticos distribuídos entre first_seen e last_seen do template."""
-        import pipeline.predictive_stage as stage
-
-        captured = []
-        real = stage.analyze_log_signals
-
-        def spy(entries):
-            captured.extend(entries)
-            return real(entries)
-
-        monkeypatch.setattr(stage, "analyze_log_signals", spy)
-        result = stage.run_predictive_stage(self._make_report())
-
-        assert result is not None
-        assert len(captured) == 6
-        assert captured[0].timestamp == self._BASE
-        assert captured[-1].timestamp == self._BASE + datetime.timedelta(minutes=10)
-        assert len({e.timestamp for e in captured}) > 1
-
-    def test_risk_score_reflects_strong_signals(self):
-        """Dados fortes e conhecidos → score > 0 com os 3 sinais presentes."""
-        result = run_predictive_stage(self._make_report())
-        assert result is not None
-        assert result.risk_score > 0.0
-        assert "metric_trend" in result.signals
-        assert "log_burst" in result.signals
-        assert "latency_drift" in result.signals

@@ -78,8 +78,14 @@ class CoTObservabilityRetriever(ObservabilityRetriever):
         expander = QueryExpander()
         expanded_query = expander.expand_query(query, self.search_history)
 
-        # search() já reranqueia quando há reranker (uma vez, assinatura correta)
-        results = self.search(expanded_query, top_k=top_k)
+        # F5-12: pede à base os resultados BRUTOS (use_reranking=False) e
+        # reranqueia UMA vez aqui, com a assinatura correta rerank(results,
+        # query, top_k) e a query ORIGINAL (não a expandida). Com index vazio a
+        # base retorna [] e o rerank é pulado — evita duplo rerank e a
+        # assinatura invertida rerank(query, raw) do bug P3-9.
+        results = self.search(expanded_query, top_k=top_k, use_reranking=False)
+        if self.reranker is not None and results:
+            results = self.reranker.rerank(results, query, top_k=top_k)
 
         # Extrai entidades da query original
         entities = self._extract_entities(query)

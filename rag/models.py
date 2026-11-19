@@ -16,6 +16,9 @@ class KnowledgePattern:
     tags: list[str] = field(default_factory=list)
     confidence: float = 0.0
     is_negative_example: bool = False
+    # correlation_id do incidente que originou o padrão; permite que o
+    # feedback de falso positivo ache o padrão certo (4B-14).
+    source_incident_id: str | None = None
     created_at: str = field(
         default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat()
     )

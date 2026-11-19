@@ -13,6 +13,7 @@ Garante que o agente NUNCA piore o sistema.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -25,6 +26,9 @@ class TNRResult(Enum):
     REGRESSION = "regression"
     ROLLBACK_COMPLETE = "rollback_complete"
     ERROR = "error"
+    # Sem medição de saúde pós-ação (a ação não foi executada): não é sucesso
+    # nem regressão. Antes o protótipo inventava uma melhora e dava SUCCESS.
+    NOT_VERIFIED = "not_verified"
 
 
 @dataclass
@@ -80,8 +84,8 @@ class TNRReport:
     """
 
     result: TNRResult
-    pre_snapshot: HealthSnapshot
-    post_snapshot: HealthSnapshot
+    pre_snapshot: HealthSnapshot | None
+    post_snapshot: HealthSnapshot | None
     action: MitigationAction
     health_delta: float
     message: str
@@ -312,7 +316,11 @@ class TNRSafetyGuard:
                 from safety.audit import SafetyAuditor
 
                 SafetyAuditor.log_error("tnr", correlation_id, exc)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 — auditoria nunca derruba a validação
+                logging.getLogger(__name__).warning(
+                    "audit log_error failed for layer %s",
+                    "tnr",
+                    exc_info=True,
+                )
 
         return report

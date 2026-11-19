@@ -1,6 +1,8 @@
 """Postmortem: renderização markdown e serialização JSON do resultado.
 
-Extraído de ``main.py`` (F5-2) **verbatim** — o snapshot
+Extraído de ``main.py`` (F5-2) e portado para o template coerente do
+origin/main (veredito único para markdown E JSON, "Mitigation Proposed",
+tratamento de janela saudável e diagnóstico falho). O snapshot
 ``tests/snapshots/postmortem_structure.txt`` protege cada caractere do
 template. Nenhuma dependência de Rich ou de arquivo: a CLI
 (``interfaces/cli/postmortem.py``) chama :func:`render_postmortem_markdown`
@@ -89,6 +91,58 @@ def serialize_health_snapshot(snapshot: Any) -> dict[str, Any]:
     return d
 
 
+def _no_incident(result: dict[str, Any]) -> bool:
+    """A detecção concluiu que não há incidente (saída antecipada para IDLE).
+
+    Veredito, Action Items, tracking e resumo da CLI consultam este mesmo
+    predicado: antes só o veredito sabia, e o resto tratava a janela saudável
+    como incidente (pré-PR em 2b4f094).
+    """
+    return (
+        result.get("stages", {}).get("detection") or {}
+    ).get("is_incident") is False
+
+
+def _postmortem_verdict(result: dict[str, Any]) -> dict[str, Any]:
+    """Veredito único do postmortem, para o markdown E o JSON.
+
+    Revisão pré-PR do step_postmortem inteiro (9db0afd): Summary, Timeline,
+    Lições e JSON afirmavam coisas diferentes do mesmo run ("Resolved" ×
+    "awaiting approval", "Mitigation applied" sem nada executado). Este
+    projeto propõe a mitigação; quem executa é uma pessoa, fora dele.
+    """
+    stages = result.get("stages", {})
+    decision = stages.get("safety_decision")
+    validation = stages.get("safety_validation") or {}
+    awaiting_human = bool(
+        decision.get("requires_human") if decision is not None
+        else validation.get("requires_human")
+    )
+    proposed = bool((stages.get("mitigation") or {}).get("action"))
+    tnr = (stages.get("verification") or {}).get("result")
+    if awaiting_human:
+        resolution = "Awaiting human approval (mitigation proposed, not executed)"
+    elif _no_incident(result):
+        # Janela saudável: a CLI sai com exit 0; "Requires manual intervention"
+        # escalaria quem automatiza em cima de meta.resolution (pré-PR 78c4689).
+        resolution = "No incident detected; no action required"
+    elif result.get("success") and tnr == "success":
+        resolution = "Resolved"
+    elif result.get("success"):
+        resolution = (
+            "Resolved (mitigation approved, not executed by the agent; "
+            f"TNR {tnr or 'did not run'})"
+        )
+    else:
+        resolution = "Requires manual intervention"
+    return {
+        "awaiting_human": awaiting_human,
+        "mitigation_proposed": proposed,
+        "resolution": resolution,
+        "safety_blocked_by": list((decision or {}).get("blocked_by", [])),
+    }
+
+
 def serialize_result(result: dict[str, Any], incident: Any) -> dict[str, Any]:
     """Converte result dict completo para estrutura JSON-safe.
 
@@ -106,6 +160,9 @@ def serialize_result(result: dict[str, Any], incident: Any) -> dict[str, Any]:
         "llm_model": result.get("llm_model", "unknown"),
         "config_source": result.get("config_source", "defaults"),
         "success": result.get("success", False),
+        # Veredito do gate junto de meta.success: o JSON não pode dizer
+        # success=true sem o "awaiting_human"/"resolution" do markdown.
+        **_postmortem_verdict(result),
         "duration_minutes": round(
             (incident.fix_time - incident.deploy_time).total_seconds() / 60, 1
         ),
@@ -156,7 +213,8 @@ def serialize_result(result: dict[str, Any], incident: Any) -> dict[str, Any]:
         if mitigation_raw
         else "default"
     )
-    action_items = get_action_items(pattern_matched)
+    # Sem incidente não há tarefa (mesma regra do markdown).
+    action_items = [] if _no_incident(result) else get_action_items(pattern_matched)
 
     # Timeline
     timeline = {
@@ -217,6 +275,17 @@ def render_postmortem_markdown(
     diagnosis = result.get("stages", {}).get("diagnosis", {})
     mitigation = result.get("stages", {}).get("mitigation", {})
     verification = result.get("stages", {}).get("verification", {})
+    detection_stage = result.get("stages", {}).get("detection", {})
+
+    # Um veredito só para Summary, Timeline, Lições e JSON (_postmortem_verdict).
+    verdict = _postmortem_verdict(result)
+    awaiting_human = verdict["awaiting_human"]
+    resolution = verdict["resolution"]
+    is_incident = detection_stage.get("is_incident", True)
+    root_cause = diagnosis.get("root_cause") or "Unable to determine root cause"
+    diagnosis_failed = any(
+        t.get("to") == "FAILED" for t in result.get("timeline", [])
+    )
 
     scenario_name = result.get("scenario_name", "payment-pool-exhaustion")
     llm_model = result.get("llm_model", "unknown")
@@ -227,21 +296,21 @@ def render_postmortem_markdown(
 - **Date**: {now.strftime("%Y-%m-%d %H:%M")}
 - **Scenario**: {scenario_name}
 - **LLM Model**: {llm_model}
-- **Duration**: ~{(incident.fix_time - incident.deploy_time).total_seconds() / 60:.0f} minutes
+- **Duration**: ~{(incident.fix_time - incident.deploy_time).total_seconds() / 60:.0f} minutes (scenario: deploy to reference fix time)
 - **Severity**: {result.get("stages", {}).get("detection", {}).get("severity", "UNKNOWN")}
-- **Impact**: Service degradation detected via automated analysis
-- **Resolution**: {"Resolved" if result.get("success") else "Requires manual intervention"}
+- **Impact**: {"Service degradation detected via automated analysis" if is_incident else "No incident detected in the analysed window"}
+- **Resolution**: {resolution}
 
 ## Root Cause
 
-{diagnosis.get("root_cause", "Unable to determine root cause")}
+{root_cause}
 
 **Confidence**: {diagnosis.get("confidence", "unknown")}
 
 ## Evidence
 
 """
-    for i, ev in enumerate(diagnosis.get("evidence", []), 1):
+    for i, ev in enumerate(diagnosis.get("evidence") or [], 1):
         postmortem += f"{i}. {ev}\n"
 
     postmortem += f"""
@@ -250,9 +319,8 @@ def render_postmortem_markdown(
 | Time | Event |
 |------|-------|
 | {incident.deploy_time.strftime("%H:%M:%S")} | Deployment or configuration change applied |
-| {incident.spike_start.strftime("%H:%M:%S")} | {diagnosis.get("root_cause", "Anomaly detected")[:80]} |
+| {incident.spike_start.strftime("%H:%M:%S")} | {(diagnosis.get("root_cause") or "Anomaly detected")[:80]} |
 | {incident.detection_time.strftime("%H:%M:%S")} | Automated detection triggered |
-| {incident.fix_time.strftime("%H:%M:%S")} | Mitigation applied |
 
 ### State Machine Transitions
 
@@ -260,10 +328,15 @@ def render_postmortem_markdown(
     for t in result.get("timeline", []):
         postmortem += f"- **{t['time']}** {t['from']} -> {t['to']}: {t['reason']}\n"
 
+    # O agente propõe; nada neste projeto executa a ação (agents/mitigator.py).
     postmortem += """
-## Mitigation Applied
+## Mitigation Proposed
 
 """
+    if verdict["mitigation_proposed"]:
+        postmortem += "- **Executed by the agent**: No (the agent proposes; execution is a human step)\n"
+    else:
+        postmortem += "- No mitigation was proposed (the pipeline stopped before mitigation)\n"
     if mitigation:
         action = mitigation.get("action")
         if action:
@@ -274,14 +347,21 @@ def render_postmortem_markdown(
 
     # Safety validation section
     safety_validation = result.get("stages", {}).get("safety_validation", {})
+    safety_decision = result.get("stages", {}).get("safety_decision")
     if safety_validation:
+        # Veredito combinado de todas as camadas quando disponível (F03).
+        needs_human = (
+            safety_decision.get("requires_human")
+            if safety_decision is not None
+            else safety_validation.get("requires_human")
+        )
         postmortem += f"""
 ## Pre-Execution Safety Check
 
 - **Risk Level**: {safety_validation.get("risk_level", "N/A")}
 - **Risk Score**: {safety_validation.get("risk_score", "N/A")}/100
 - **Approval Status**: {safety_validation.get("approval_status", "N/A")}
-- **Requires Human**: {"Yes" if safety_validation.get("requires_human") else "No"}
+- **Requires Human**: {"Yes" if needs_human else "No"}
 - **Blast Radius**: {safety_validation.get("blast_radius_scope", "N/A")}
 - **Recommendation**: {safety_validation.get("recommendation", "N/A")}
 """
@@ -311,12 +391,16 @@ def render_postmortem_markdown(
 """
 
     # Gera action items dinâmicos com base no pattern_matched da mitigação.
+    # Sem incidente não há tarefa: a lista "default" ao lado de "no action
+    # required" se contradizia.
     pattern_matched = (
         mitigation.get("pattern_matched", "default") if mitigation else "default"
     )
-    items = get_action_items(pattern_matched)
+    items = [] if _no_incident(result) else get_action_items(pattern_matched)
     for i, item in enumerate(items, 1):
         postmortem += f"{i}. [ ] {item}\n"
+    if not items:
+        postmortem += "- None (no incident detected)\n"
 
     # Incident Tracking section (Story 6.3)
     if tracker_url and tracker_issue_key:
@@ -329,13 +413,47 @@ def render_postmortem_markdown(
 """
 
     confidence = diagnosis.get("confidence", "unknown")
+    # As lições dizem o que aconteceu. Antes eram fixas e afirmavam que o TNR
+    # validou a mitigação logo abaixo de "Result: not_verified" (pré-PR em
+    # eee1245, a mesma contradição já corrigida no --help e nos READMEs).
+    tnr_lesson = {
+        "success": "TNR verification validated the mitigation outcome",
+        "regression": "TNR detected a regression after the mitigation",
+        "not_verified": "TNR did not verify the mitigation (no post-action health measurement)",
+    }.get(verification.get("result"), "TNR verification did not run")
+    if not verdict["mitigation_proposed"]:
+        # Saída antecipada (sem incidente, diagnóstico FAILED): nada foi
+        # mitigado, e "completed all stages" seria falso.
+        pipeline_lesson = "Pipeline stopped before mitigation (see State Machine Transitions)"
+    elif awaiting_human:
+        pipeline_lesson = "Pipeline stopped at the human approval gate (mitigation awaiting approval)"
+    else:
+        pipeline_lesson = (
+            "Incident response pipeline completed all stages "
+            "(mitigation approved; execution is outside the agent)"
+        )
+    detection_lesson = (
+        "Automated detection identified the incident promptly"
+        if is_incident
+        else "Automated detection found no incident in the analysed window"
+    )
+    if diagnosis_failed:
+        diagnosis_lesson = "Diagnosis failed (see State Machine Transitions)"
+    elif not diagnosis:
+        diagnosis_lesson = "No diagnosis was run"
+    elif llm_model == "heuristic":
+        diagnosis_lesson = f"Heuristic diagnosis provided {confidence}-confidence assessment"
+    elif llm_model == "unknown":
+        diagnosis_lesson = f"Diagnosis provided {confidence}-confidence assessment"
+    else:
+        diagnosis_lesson = f"LLM diagnosis ({llm_model}) provided {confidence}-confidence assessment"
     postmortem += f"""
 ## Lessons Learned
 
-- Automated detection identified the incident promptly
-- Heuristic diagnosis provided {confidence}-confidence assessment
-- TNR verification validated the mitigation outcome
-- Incident response pipeline completed all stages successfully
+- {detection_lesson}
+- {diagnosis_lesson}
+- {tnr_lesson}
+- {pipeline_lesson}
 
 ---
 
@@ -347,6 +465,8 @@ def render_postmortem_markdown(
 
 __all__ = [
     "ACTION_ITEMS_MAP",
+    "_no_incident",
+    "_postmortem_verdict",
     "get_action_items",
     "json_default",
     "serialize_health_snapshot",

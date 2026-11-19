@@ -16,6 +16,7 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
+from application.use_cases.postmortem import _no_incident
 from interfaces.cli.console import console
 
 if TYPE_CHECKING:
@@ -44,6 +45,20 @@ def print_banner() -> None:
     console.print(Panel(banner, border_style="cyan", padding=(1, 2)))
 
 
+def _requires_human(safety_result: Any, remediation_result: Any) -> bool:
+    """Aprovação humana considerando TODAS as camadas pré-execução da CLI.
+
+    Uma camada que aprova não anula a que bloqueia: o PreExecutionValidator
+    pode auto-aprovar um comando que o VersionValidator classifica como
+    MALICIOUS (ex.: `kubectl rollout restart deployment/postgres:9.4`).
+    """
+    if safety_result is not None and safety_result.requires_human:
+        return True
+    if remediation_result is not None and not remediation_result.is_safe:
+        return True
+    return False
+
+
 def print_summary(
     result: dict[str, Any],
     compression_stats: Any = None,
@@ -58,9 +73,12 @@ def print_summary(
     console.print()
 
     success = result.get("success", False)
-    awaiting_human = bool(safety_result is not None and safety_result.requires_human)
+    awaiting_human = _requires_human(safety_result, remediation_result)
     if awaiting_human:
         status_icon = "[bold yellow]AWAITING HUMAN[/bold yellow]"
+    elif _no_incident(result):
+        # Janela saudável sai com exit 0; UNRESOLVED em vermelho contradizia.
+        status_icon = "[bold green]NO INCIDENT[/bold green]"
     elif success:
         status_icon = "[bold green]RESOLVED[/bold green]"
     else:
@@ -130,7 +148,7 @@ def print_summary(
     table.add_row(
         "Diagnosis",
         f"[green]{diagnosis.get('confidence', '?')} confidence[/green]",
-        f"{diagnosis.get('root_cause', 'N/A')[:60]} [dim](model: {llm_model})[/dim]",
+        f"{(diagnosis.get('root_cause') or 'N/A')[:60]} [dim](model: {llm_model})[/dim]",
     )
 
     # Mitigation
@@ -192,7 +210,11 @@ def print_summary(
     verification = result.get("stages", {}).get("verification", {})
     if verification:
         tnr_result = verification.get("result", "N/A")
-        style = "green" if tnr_result == "success" else "red"
+        style = {
+            "success": "green",
+            "not_verified": "yellow",
+            "regression": "red",
+        }.get(tnr_result, "red")
         table.add_row(
             "TNR Verify",
             f"[{style}]{tnr_result}[/{style}]",
@@ -209,6 +231,9 @@ def print_summary(
                 f"[green]{issue_key}[/green]",
                 f"{tracker_url}/browse/{issue_key}" if tracker_url else issue_key,
             )
+        elif _no_incident(result):
+            # step_tracking pulou de propósito: não é erro do tracker.
+            table.add_row("Tracking", "[dim]not created[/dim]", "no incident detected")
         else:
             table.add_row(
                 "Tracking",
@@ -285,4 +310,10 @@ def save_postmortem_v1(postmortem_md: str, output_dir: str = "output") -> Path |
     return path
 
 
-__all__ = ["print_banner", "print_summary", "display_results", "save_postmortem_v1"]
+__all__ = [
+    "_requires_human",
+    "print_banner",
+    "print_summary",
+    "display_results",
+    "save_postmortem_v1",
+]

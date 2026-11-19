@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from pipeline.log_predictor import LogBurstSignal
 from pipeline.risk_scorer import (
     MetricTrendSignal,

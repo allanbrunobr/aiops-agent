@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from pydantic_settings import (
@@ -178,6 +178,9 @@ class OAuthClientConfig(BaseModel):
     id: str
     scopes: list[str] = []
     secret: str = ""
+    # SHA-256 (hex) do segredo do cliente p/ autenticação no /auth/authorize.
+    # Vazio = cliente public (PKCE-only). Guarda o hash, nunca o segredo.
+    secret_sha256: str = ""
 
 
 class TrustedIssuerConfig(BaseModel):
@@ -204,7 +207,12 @@ class OAuthConfig(BaseModel):
     # Fonte única do claim iss: o AS emite com ele e os resource servers o
     # exigem (pós-revisão #5). Default mantém os tokens locais válidos.
     issuer: str = "aiops-agent"
+    # aud dos tokens (SEC-11). Vazio = não emite nem exige.
+    audience: str = ""
     allowed_clients: list[OAuthClientConfig] = []
+    # JSON {client_id: sha256 hex} fora do repositório; completa secret_sha256
+    # dos clientes acima. Env: AIOPS_MCP__OAUTH__CLIENT_SECRETS_FILE.
+    client_secrets_file: str = ""
 
     # Phase 2 — RS256 assimétrico
     private_key_path: str = ""  # caminho para chave privada RSA PEM
@@ -244,7 +252,9 @@ class McpConfig(BaseModel):
         "validate_action",
         "search_incidents",
     ]
-    auth_method: str = "header"  # "header" | "oauth21" | "federated" | "none"
+    # Validado na carga: um typo (ex.: "oauth2.1") caía em "anonymous" sem
+    # checagem de scope (S4/SEC-03). Agora o startup falha.
+    auth_method: Literal["header", "oauth21", "federated", "none"] = "header"
     oauth: OAuthConfig = OAuthConfig()
     rate_limits: McpRateLimitsConfig = McpRateLimitsConfig()
 
@@ -397,3 +407,18 @@ def load_config(
             loc = " -> ".join(str(x) for x in error["loc"])
             print(f"  - {loc}: {error['msg']}", file=sys.stderr)
         raise SystemExit(1)
+
+
+def resolve_llm_model(config: AppConfig | None) -> str:
+    """Modelo do LLM: AIOPS_LLM_MODEL (legado, documentado) > llm.model_name > padrão.
+
+    Antes os entrypoints liam só a variável de ambiente, com um literal de
+    fallback; `llm.model_name` da config não tinha leitor.
+    """
+    import os
+
+    from_env = os.environ.get("AIOPS_LLM_MODEL", "").strip()
+    if from_env:
+        return from_env
+    llm = getattr(config, "llm", None)
+    return getattr(llm, "model_name", None) or LLMConfig().model_name

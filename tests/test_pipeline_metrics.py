@@ -8,6 +8,8 @@ Cobre PipelineMetricsCollector e endpoint GET /api/v1/metrics/pipeline.
 import datetime
 
 import pytest
+
+pytestmark = pytest.mark.unit
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 

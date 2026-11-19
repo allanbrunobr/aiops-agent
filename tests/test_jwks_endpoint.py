@@ -345,7 +345,10 @@ class TestRS256TokenFlow:
             secret=private_pem,
             ttl=60,
             algorithm="RS256",
+            audience="mcp",
         )
+        # SEC-11: aud só é emitido quando configurado; validar com audience
+        # exige o claim — o emissor precisa configurá-lo explicitamente.
         claims = validate_token(token, public_pem, algorithm="RS256", audience="mcp")
         assert claims.sub == "partnera-agent"
         assert "aiops:diagnose" in claims.scopes

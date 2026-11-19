@@ -1,10 +1,21 @@
 from __future__ import annotations
 
+import hmac
 from abc import ABC, abstractmethod
 from typing import Any
 
 from application.ports.credential_provider import CredentialProvider
 from domain.alert import NormalizedAlert
+
+
+def secrets_match(received: str, expected: str) -> bool:
+    """Comparação em tempo constante que aceita qualquer texto.
+
+    `hmac.compare_digest` com `str` não-ASCII levanta TypeError, e o
+    Starlette decodifica headers em latin-1: `Authorization: Bearer é`
+    virava 500 antes da autenticação. Em bytes UTF-8 é só um token errado.
+    """
+    return hmac.compare_digest(received.encode("utf-8"), expected.encode("utf-8"))
 
 
 class AlertNormalizer(ABC):

@@ -184,9 +184,9 @@ python main.py [opções]
 
 | Código | Significado |
 |--------|-------------|
-| `0` | Incidente resolvido e verificado pelo TNR |
+| `0` | Pipeline concluído sem regressão e sem ação aguardando aprovação. Sem medição de saúde pós-ação, o TNR fica `not_verified`, não sucesso |
 | `1` | Argumento inválido, ou erro irrecuperável em algum estágio |
-| `2` | Regressão detectada pelo TNR (saúde pós-ação pior que a pré-ação) |
+| `2` | Regressão detectada pelo TNR (saúde pós-ação medida pior que a pré-ação) |
 | `3` | Ação bloqueada pela camada de segurança (requer aprovação humana) |
 
 ---
@@ -270,7 +270,7 @@ Para configurar um Slack App real, consulte [`infra/SLACK-SETUP.md`](infra/SLACK
 
 ### Variáveis de ambiente
 
-A CLI e a demo carregam `.env.local` automaticamente. A CLI também lê `.env`. Há dois modelos: [`.env.example`](.env.example), com as variáveis da CLI (Anthropic e Databricks), e [`env.example`](env.example), com as do ambiente local em `infra/` (webhook do Grafana e Slack).
+A CLI, a demo e o servidor de webhook local carregam `.env.local` e depois `.env` da raiz do repositório (`config/env.py`). Variáveis já definidas no processo prevalecem, e `.env.local` prevalece sobre `.env`. Copie [`.env.example`](.env.example).
 
 | Variável | Uso | Obrigatória |
 |----------|-----|-------------|
@@ -296,7 +296,7 @@ No transporte SSE, `POST /mcp/messages` só aceita mensagens do principal que ab
 
 ### Arquivos de configuração
 
-- [`config/defaults.yaml`](config/defaults.yaml): limiares de análise, Blueprint Engine, webhook, Slack e MCP. Valores podem ser sobrescritos por variáveis de ambiente com prefixo `AIOPS_` e `__` entre os níveis (por exemplo, `AIOPS_MCP__OAUTH__JWT_SECRET`).
+- [`config/defaults.yaml`](config/defaults.yaml): limiares de análise, Blueprint Engine, webhook, Slack e MCP. Valores podem ser sobrescritos por variáveis de ambiente no formato `AIOPS_<SECAO>__<CAMPO>` (prefixo `AIOPS_`, aninhamento com `__`; por exemplo, `AIOPS_MCP__OAUTH__JWT_SECRET`).
 - Bloco `rag` em `config/defaults.yaml`: reranker por sinais de domínio (`reranker_enabled`, Tier 1), cross-encoder opcional (`cross_encoder_enabled`, baixa um modelo Hugging Face), retriever Chain-of-Thought (`cot_enabled`) e o `service_criticality_map` por serviço consumido pelo reranker.
 
 ---
@@ -317,6 +317,14 @@ Servidor MCP via stdio (Claude Desktop e uso local):
 ```bash
 python -m interfaces.mcp.server
 ```
+
+App HTTP (health, A2A, servidor OAuth e, com `mcp.enabled: true` e `transport: sse`, o MCP via SSE), em `127.0.0.1:47893` por padrão:
+
+```bash
+python -m interfaces.http                      # --host, --port, --config
+```
+
+O A2A exige Bearer JWT, e o servidor OAuth só é montado com chave de assinatura configurada (veja o [`SECURITY.md`](SECURITY.md)). O MCP via SSE vem desligado; quando ligado, o `auth_method` padrão é `header`. Os routers de accuracy, metrics, knowledge e admin em `interfaces/http/` **não** são montados.
 
 ---
 

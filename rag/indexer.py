@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime
 import hashlib
 import json
+import logging
 import os
 import sys
 from dataclasses import dataclass
@@ -164,10 +165,7 @@ class ObservabilityIndexer:
             _embedding_cache.pop(next(iter(_embedding_cache)))  # FIFO: mais antigo
 
         # Mapeia posição no índice FAISS → índices de chunks (para retrieval correto)
-        unique_to_idx = {t: i for i, t in enumerate(unique_texts)}
-        self._faiss_to_chunks: list[list[int]] = [[] for _ in range(len(unique_texts))]
-        for ci, chunk in enumerate(self.chunks):
-            self._faiss_to_chunks[unique_to_idx[chunk.text]].append(ci)
+        self._faiss_to_chunks = self._build_faiss_to_chunks()
 
         dim = unique_embs.shape[1]
         nu = len(unique_embs)
@@ -189,6 +187,19 @@ class ObservabilityIndexer:
         self.index.add(unique_embs)
 
         return len(self.chunks)
+
+    def _build_faiss_to_chunks(self) -> list[list[int]]:
+        """Posição no FAISS → índices dos chunks com aquele texto.
+
+        Mesma ordem do build_index: textos únicos na ordem da primeira
+        ocorrência (dict.fromkeys), que é a ordem em que entram no FAISS.
+        """
+        unique_texts = list(dict.fromkeys(chunk.text for chunk in self.chunks))
+        position = {text: i for i, text in enumerate(unique_texts)}
+        mapping: list[list[int]] = [[] for _ in unique_texts]
+        for ci, chunk in enumerate(self.chunks):
+            mapping[position[chunk.text]].append(ci)
+        return mapping
 
     def save_index(self, cache_dir: str, content_hash: str) -> None:
         """Salva índice FAISS + chunks + metadados em disco.
@@ -305,17 +316,27 @@ class ObservabilityIndexer:
 
             self.index = faiss.read_index(faiss_path)
 
-            # Reconstrói o mapa FAISS idx → chunks (não persistido no cache).
-            # O índice da classe base contém só textos únicos, na ordem de primeira
-            # aparição em chunks — o mapa é recomputável deterministicamente.
-            # Subclasses que indexam duplicatas (WithHistory) têm ntotal > únicos
-            # e usam o fallback posicional do retriever, correto para elas.
+            # O FAISS guarda só textos únicos; o mapeamento posição → chunks é
+            # recalculado na mesma ordem do build_index (F06). Sem ele, o
+            # retriever caía em chunks[idx] e devolvia o chunk errado.
+            # Subclasses que indexam duplicatas (WithHistory) têm ntotal >
+            # únicos: para elas o mapa não se aplica e o retriever usa o
+            # fallback posicional (_faiss_to_chunks = None), correto para elas.
             unique_texts = list(dict.fromkeys(c.text for c in self.chunks))
-            if self.index.ntotal == len(unique_texts):
-                unique_to_idx = {t: i for i, t in enumerate(unique_texts)}
-                self._faiss_to_chunks = [[] for _ in range(len(unique_texts))]
-                for ci, chunk in enumerate(self.chunks):
-                    self._faiss_to_chunks[unique_to_idx[chunk.text]].append(ci)
+            if self.index.ntotal > len(unique_texts):
+                self._faiss_to_chunks = None
+            else:
+                self._faiss_to_chunks = self._build_faiss_to_chunks()
+                if len(self._faiss_to_chunks) != self.index.ntotal:
+                    print(
+                        f"[RAG Cache] Chunks e índice divergem "
+                        f"({len(self._faiss_to_chunks)} textos únicos vs {self.index.ntotal} vetores)",
+                        file=sys.stderr,
+                    )
+                    self.chunks = []
+                    self.index = None
+                    self._faiss_to_chunks = []
+                    return False
 
             return True
 
@@ -521,12 +542,11 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
                             },
                         )
                     )
-            except Exception as exc:
-                # Degradação graciosa — continua sem histórico, mas registra o motivo
-                import logging as _logging
-
-                _logging.getLogger(__name__).warning(
-                    "rag.history_chunks_failed: %s", exc
+            except Exception:  # noqa: BLE001 — degradação graciosa: continua sem histórico
+                logging.getLogger(__name__).warning(
+                    "historical chunks unavailable (%s); indexing without history",
+                    self.db_path,
+                    exc_info=True,
                 )
 
         return chunks

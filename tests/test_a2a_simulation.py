@@ -14,6 +14,9 @@ Cenários cobertos:
 
 from __future__ import annotations
 
+import hashlib
+import secrets
+
 import httpx
 import pytest
 from fastapi import FastAPI
@@ -26,8 +29,13 @@ from auth.pkce import derive_challenge, generate_verifier
 from auth.token_store import InMemoryTokenStore
 from interfaces.http.routes.a2a import router as a2a_router
 
+pytestmark = pytest.mark.unit
+
 _BASE_URL = "http://aiops-agent.internal"
 _JWT_SECRET = "test-a2a-32bytes-secret-minimum!!"
+# Segredo de cliente gerado em tempo de execução (client_secret_post, SEC-01).
+_CLIENT_SECRET = secrets.token_urlsafe(32)
+_CLIENT_SECRET_SHA256 = hashlib.sha256(_CLIENT_SECRET.encode()).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -118,11 +126,20 @@ def _make_auth_a2a_app() -> FastAPI:
         jwt_secret=_JWT_SECRET,
         token_ttl=3600,
         allowed_clients=[
-            {"id": "assistant-agent", "scopes": ["aiops:diagnose", "aiops:search"]},
-            {"id": "databricks-mcp", "scopes": ["aiops:search"]},
+            {
+                "id": "assistant-agent",
+                "scopes": ["aiops:diagnose", "aiops:search"],
+                "secret_sha256": _CLIENT_SECRET_SHA256,
+            },
+            {
+                "id": "databricks-mcp",
+                "scopes": ["aiops:search"],
+                "secret_sha256": _CLIENT_SECRET_SHA256,
+            },
             {
                 "id": "sre-orchestrator",
                 "scopes": ["aiops:diagnose", "aiops:search", "aiops:validate"],
+                "secret_sha256": _CLIENT_SECRET_SHA256,
             },
         ],
         base_url=_BASE_URL,
@@ -498,6 +515,7 @@ class TestA2AFullSimulation:
             "/auth/authorize",
             json={
                 "client_id": client_id,
+                "client_secret": _CLIENT_SECRET,
                 "scopes": scopes,
                 "code_challenge": challenge,
                 "audience": "a2a",  # F4-3

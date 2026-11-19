@@ -24,7 +24,17 @@ log = get_logger("blueprint.engine")
 
 
 class PipelineAborted(Exception):
-    """Pipeline abortado por falha em node com on_failure=ABORT."""
+    """Pipeline abortado por falha em node com on_failure=ABORT.
+
+    `state` é o IncidentState alcançado ANTES do node que falhou (diagnóstico
+    já feito, por exemplo), e `node_id` é esse node. Quem trata o aborto usa
+    `state` para mostrar o que já se sabe em vez do estado inicial.
+    """
+
+    def __init__(self, message: str, *, state=None, node_id: str | None = None) -> None:
+        super().__init__(message)
+        self.state = state
+        self.node_id = node_id
 
 
 # F6-3 (NFR6): o orçamento de chamadas LLM é aplicado onde elas acontecem —
@@ -79,8 +89,10 @@ class BlueprintEngine:
             node_count=len(pipeline.nodes),
         )
 
-        # F6-3: lista LOCAL por run → reentrante (A2A/MCP compartilham o engine
-        # de app.state). ``self.results`` aponta para o run mais recente.
+        # Lista própria desta execução: a mesma engine (app.state.engine) roda
+        # em várias threads (A2A/MCP via to_thread), e zerar/encher
+        # self.results misturava os nós de execuções concorrentes no
+        # pipeline.completed. self.results continua apontando para a última.
         results: list[NodeResult] = []
         self.results = results
 
@@ -95,7 +107,7 @@ class BlueprintEngine:
                 and timeout_s is not None
                 and (time.monotonic() - pipeline_start) > timeout_s
             ):
-                raise PipelineAborted("timeout")
+                raise PipelineAborted("timeout", state=state, node_id=node.id)
 
             start = time.monotonic()
             try:
@@ -162,7 +174,9 @@ class BlueprintEngine:
                         )
                     )
                     raise PipelineAborted(
-                        f"Node '{node.id}' failed and on_failure=ABORT: {exc}"
+                        f"Node '{node.id}' failed and on_failure=ABORT: {exc}",
+                        state=state,
+                        node_id=node.id,
                     ) from exc
 
                 elif node.on_failure == OnFailure.FALLBACK and node.fallback:
@@ -187,7 +201,9 @@ class BlueprintEngine:
                             )
                         )
                         raise PipelineAborted(
-                            f"Node '{node.id}' fallback also failed: {fb_exc}"
+                            f"Node '{node.id}' fallback also failed: {fb_exc}",
+                            state=state,
+                            node_id=node.id,
                         ) from fb_exc
 
                 elif node.on_failure == OnFailure.SKIP:

@@ -103,6 +103,8 @@ class TestCallToolRateLimit:
         # Simula client_id no contexto
         token = _current_client_id.set("test-client")
         try:
+            # Acessa handler de call_tool
+            server.request_handlers.get("tools/call")
             # Não temos acesso direto ao handler para chamar, mas verificamos que
             # o servidor foi criado com rate limiter injetado
             assert server is not None
@@ -215,7 +217,6 @@ class TestServerApp:
 
     def test_mcp_disabled_sse_not_mounted(self):
         """Verifica que SSE não é montado quando mcp.enabled=False."""
-
         from config.loader import AppConfig
         from interfaces.http.app import create_app
 

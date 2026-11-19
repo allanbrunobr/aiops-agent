@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, field_validator
 
 from application.ports.incident_store import IncidentStore
@@ -71,6 +71,7 @@ def get_store() -> IncidentStore:
 async def update_accuracy(
     correlation_id: str,
     body: AccuracyReviewRequest,
+    request: Request,
     store: IncidentStore = Depends(get_store),
 ) -> AccuracyReviewResponse:
     """Atualiza veredito de acurácia de um diagnóstico."""
@@ -99,10 +100,17 @@ async def update_accuracy(
             )
 
             await handle_false_positive_side_effects(
-                correlation_id, body.notes, updated
+                correlation_id,
+                body.notes,
+                updated,
+                knowledge_store=getattr(request.app.state, "knowledge_store", None),
             )
-        except Exception:
-            pass  # side-effects não bloqueiam a resposta principal
+        except Exception as exc:  # noqa: BLE001 — side-effects não bloqueiam a resposta principal
+            log.warning(
+                "accuracy.false_positive_side_effects_failed",
+                correlation_id=correlation_id,
+                error=repr(exc),
+            )
 
     log.info(
         "accuracy.reviewed",

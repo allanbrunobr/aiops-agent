@@ -9,6 +9,8 @@ import json
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from tests.support.golden_validator import ValidationResult, validate_against_golden
 
 # ── fixtures ──────────────────────────────────────────────────────────────────

@@ -18,7 +18,7 @@ sys.path.insert(0, str(project_root))
 # Load .env / .env.local before any import that uses os.environ (F5-3: single loader)
 from config.env import load_local_env
 
-_loaded_env = load_local_env(project_root)
+load_local_env(project_root)
 
 
 import structlog
@@ -114,6 +114,9 @@ def create_webhook_app() -> FastAPI:
 
 
 if __name__ == "__main__":
+    from core.logging import configure_logging
+
+    configure_logging(os.environ.get("AIOPS_LOG_LEVEL", "INFO"))
     app = create_webhook_app()
     print("=" * 60)
     print("AIOps Agent — Webhook Server")
@@ -121,7 +124,7 @@ if __name__ == "__main__":
     print("  Listening:    http://127.0.0.1:47890")
     print("  Health:       http://localhost:47890/health")
     print("  Webhook:      POST http://localhost:47890/webhook")
-    _env_local_loaded = any(p.name == ".env.local" for p in _loaded_env)
+    _env_local_loaded = (project_root / ".env.local").is_file()
     print(f"  .env.local:   {'loaded' if _env_local_loaded else 'NOT FOUND'}")
     print(
         f"  GRAFANA_TOKEN: {'set' if os.environ.get('GRAFANA_WEBHOOK_TOKEN') else 'MISSING'}"

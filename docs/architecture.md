@@ -121,4 +121,4 @@ The CLI records these names in a list inside `interfaces/cli/v0_pipeline.py` (`_
 
 ---
 
-> **See also**: [Full Architecture Document](../ARCHITECTURE%20-%20AIOPS-AGENT.md) | [Source Tree](source-tree-analysis.md) | [Data Models](data-models.md) | [API Contracts](api-contracts-internal.md) | [Development Guide](development-guide.md)
+> **See also**: [ADRs](adr/) | [Source Tree](source-tree-analysis.md) | [Data Models](data-models.md) | [API Contracts](api-contracts-internal.md) | [Development Guide](development-guide.md)

@@ -18,6 +18,9 @@ from tools.jira_tracker import (
     JiraTrackerError,
 )
 
+pytestmark = pytest.mark.unit
+
+
 # --- Fixtures ---
 
 

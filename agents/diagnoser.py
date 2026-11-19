@@ -16,7 +16,6 @@ import json
 import logging
 import os
 
-from adapters.llm.anthropic_client import create_anthropic_llm_client
 from application.ports.llm_client import LLMClient
 from application.ports.reporter import (
     DIAGNOSIS_COMPLETED,
@@ -93,7 +92,12 @@ class DiagnosisAgent:
         similar_incidents: list | None = None,
         skill=None,
         reporter: Reporter | None = None,
+        client_factory=None,
     ):
+        """client_factory: callable(api_key=...) -> LLMClient, injetado pela
+        raiz de composição. O agente não importa adapters concretos (regra de
+        camadas, ARQ-15)."""
+        self._client_factory = client_factory
         self.max_iterations = max_iterations
         self.model = model
         self.client = None
@@ -108,7 +112,9 @@ class DiagnosisAgent:
             api_key = os.environ.get("ANTHROPIC_API_KEY")
             if not api_key:
                 raise ValueError("API key not configured")
-            self.client = create_anthropic_llm_client(api_key=api_key)
+            if self._client_factory is None:
+                raise ValueError("LLM client factory not configured")
+            self.client = self._client_factory(api_key=api_key)
         return self.client
 
     def diagnose(self, report, retriever) -> dict:

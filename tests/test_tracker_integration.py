@@ -22,6 +22,9 @@ from main import (
     step_tracking,
 )
 
+pytestmark = pytest.mark.unit
+
+
 # --- Fixtures ---
 
 

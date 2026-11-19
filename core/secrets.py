@@ -9,11 +9,17 @@ from __future__ import annotations
 
 import re
 
+# Fonte única de padrões de segredo (M4/F5-06): core/logging.py reexporta
+# esta lista como SECRET_PATTERNS para a redação nos logs — antes eram
+# duas listas divergentes (4 aqui vs 6 lá) e tokens Slack/Bearer passavam
+# intactos pelo sanitizador da CLI.
 API_KEY_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"sk-ant-[a-zA-Z0-9_-]{20,}"),  # Anthropic API keys
     re.compile(r"dapi[a-zA-Z0-9]{20,}"),  # Databricks API keys
     re.compile(r"sk-[a-zA-Z0-9]{32,}"),  # OpenAI-style keys
     re.compile(r"key-[a-zA-Z0-9]{32,}"),  # Generic API keys
+    re.compile(r"xoxb-[a-zA-Z0-9-]+"),  # Slack Bot tokens
+    re.compile(r"Bearer\s+[a-zA-Z0-9._-]{20,}"),  # Bearer tokens
 ]
 
 

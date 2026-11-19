@@ -148,8 +148,9 @@ class TestHandleSearchIncidents:
             sanitizer=MockSanitizer(),
         )
         json.loads(result_json)
-        # Sanitizer foi chamado
+        # Sanitizer foi chamado E o PII não chega ao cliente MCP
         assert len(sanitized_calls) > 0
+        assert "john@example.com" not in result_json
 
     @pytest.mark.asyncio
     async def test_empty_query_returns_validation_error(self):

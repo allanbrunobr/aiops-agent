@@ -373,6 +373,7 @@ class TestRAGToSlackIntegration:
         """KnowledgeSearchResult com is_negative_example=True nao aparece nos blocks."""
         # Simula o retriever filtrando negative examples
         mock_retriever = MagicMock()
+        _sample_pattern(is_negative=True, pattern_id="neg-001")
         positive_pattern = _sample_pattern(is_negative=False, pattern_id="pos-001")
 
         # KnowledgeRetriever filtra negativos internamente
@@ -675,6 +676,8 @@ class TestDryRunAtScale:
     async def test_dry_run_blocks_contain_correct_scale_info(self):
         """dry_run: blocks internos contem informacoes de escala corretas."""
         notifier = _make_notifier(AsyncMock(), dry_run=True)
+
+        # Captura logs do structlog para verificar blocks
 
         # Usamos o mecanismo de dry_run que loga com structlog
         # Verificamos que pipeline.started registra o ts e que progress funciona

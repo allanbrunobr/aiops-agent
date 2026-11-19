@@ -132,21 +132,22 @@ def _ensure_rag_index(state: IncidentState, report_obj) -> None:
         )
 
 
-def _proposed_action_from_mitigation(mitigation: dict) -> dict | None:
-    """Converte a mitigação do MitigationAgent no dict consumido pelos safety nodes.
+def proposed_action_from_mitigation(mitigation: dict | None) -> dict | None:
+    """Converte a saída do MitigationAgent em IncidentState.proposed_action.
 
     Contrato de state.proposed_action (dict): description, command, risk_level,
     rollback. O MitigationAction do domain é a fonte; a conversão acontece aqui,
-    na borda do blueprint (F2-1).
+    na borda do blueprint (F2-1). Os safety nodes (version_validator,
+    pre_validator, tnr) leem state.proposed_action; sem ele, os três fazem skip.
     """
     action = (mitigation or {}).get("action")
     if action is None:
         return None
     return {
-        "description": action.description,
-        "command": action.command,
-        "risk_level": action.risk_level,
-        "rollback": action.rollback_command,
+        "description": getattr(action, "description", ""),
+        "command": getattr(action, "command", ""),
+        "risk_level": getattr(action, "risk_level", "MEDIUM"),
+        "rollback": getattr(action, "rollback_command", None),
     }
 
 
@@ -178,7 +179,7 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
         return dataclasses.replace(
             state,
             diagnosis=outcome.diagnosis,
-            proposed_action=_proposed_action_from_mitigation(outcome.mitigation),
+            proposed_action=proposed_action_from_mitigation(outcome.mitigation),
             metadata={**state.metadata, "_agent_outcome": outcome},
         )
 
@@ -216,15 +217,21 @@ def make_diagnoser_fallback(
         _ensure_rag_index(state, report_obj)
         diagnosis = diagnoser.heuristic_diagnosis(report_obj)
 
-        # Fallback também propõe ação — sem isso as safety layers skipam
-        # no modo --no-llm (F2-1)
-        from agents.mitigator import MitigationAgent
+        # Mesma proposta que o caminho com LLM faz dentro do AgentOrchestrator:
+        # sem ela, os safety nodes seguintes não têm o que validar (F2-1,
+        # inclusive no modo --no-llm).
+        proposed_action = None
+        if diagnosis.get("root_cause"):
+            from agents.mitigator import MitigationAgent
 
-        mitigation = MitigationAgent().propose(diagnosis)
+            proposed_action = proposed_action_from_mitigation(
+                MitigationAgent().propose_safe(diagnosis)
+            )
+
         return dataclasses.replace(
             state,
             diagnosis=diagnosis,
-            proposed_action=_proposed_action_from_mitigation(mitigation),
+            proposed_action=proposed_action,
         )
 
     return execute

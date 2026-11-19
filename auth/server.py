@@ -16,6 +16,9 @@ Phase 2: suporte a RS256 assimétrico + JWKS endpoint para federação.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
+import re
 import secrets
 
 import jwt as pyjwt
@@ -42,8 +45,10 @@ _token_store: TokenStore = InMemoryTokenStore()
 _jwt_secret: str = ""
 _token_ttl: int = 3600
 _allowed_clients: dict[str, list[str]] = {}  # client_id → scopes permitidos
+_client_secret_hashes: dict[str, str] = {}  # client_id → SHA-256 hex do secret
 _base_url: str = "http://localhost:8000"
 _issuer: str = ""
+_audience: str = ""
 
 # Phase 2 — RS256 assimétrico
 _rsa_private_pem: str | None = None
@@ -58,10 +63,12 @@ def configure(
     allowed_clients: list[dict] | None = None,
     base_url: str = "http://localhost:8000",
     issuer: str = "",
+    audience: str = "",
     token_store: TokenStore | None = None,
     rsa_private_pem: str | None = None,
     rsa_public_pem: str | None = None,
     kid: str = "aiops-rs256-1",
+    client_secrets_file: str = "",
 ) -> None:
     """Configura o Authorization Server com os valores do OAuthConfig.
 
@@ -82,7 +89,8 @@ def configure(
         kid: Key ID para o JWK (Phase 2).
     """
     global _jwt_secret, _token_ttl, _allowed_clients, _base_url, _token_store
-    global _rsa_private_pem, _rsa_public_pem, _kid, _jwk_set, _issuer
+    global _rsa_private_pem, _rsa_public_pem, _kid, _jwk_set, _issuer, _audience
+    global _client_secret_hashes
     # HS256 is the signer unless an RSA pair is supplied. A short or empty
     # HMAC key must not be stored: PyJWT warns and still signs keys under 32 bytes.
     if not (rsa_private_pem and rsa_public_pem):
@@ -94,6 +102,7 @@ def configure(
     _token_ttl = token_ttl
     _base_url = base_url
     _issuer = issuer or base_url or "aiops-agent"
+    _audience = audience
     _kid = kid
     if token_store is not None:
         _token_store = token_store
@@ -102,6 +111,20 @@ def configure(
     _allowed_clients = {
         c["id"]: list(c.get("scopes", [])) for c in (allowed_clients or [])
     }
+    # Autenticação de cliente (confidential): hashes SHA-256 dos secrets,
+    # inline (allowed_clients[].secret_sha256) ou de arquivo chmod-600.
+    # Clientes sem hash permanecem public (PKCE-only — limitação documentada).
+    _client_secret_hashes = {}
+    for c in allowed_clients or []:
+        digest = c.get("secret_sha256", "")
+        if digest:
+            if not re.fullmatch(r"[0-9a-f]{64}", digest):
+                raise ValueError(f"secret_sha256 inválido para client '{c['id']}'")
+            _client_secret_hashes[c["id"]] = digest
+    if client_secrets_file:
+        from auth.client_secrets import load_client_secret_hashes
+
+        _client_secret_hashes.update(load_client_secret_hashes(client_secrets_file))
     if rsa_private_pem and rsa_public_pem:
         from auth.keys import public_key_to_jwk
 
@@ -128,6 +151,7 @@ class AuthorizeRequest(BaseModel):
     code_challenge: str
     code_challenge_method: str = "S256"
     audience: str = "mcp"  # "mcp" | "a2a" — audiência do token (F4-3)
+    client_secret: str = ""  # confidential clients: prova de posse do secret
 
 
 class AuthorizeResponse(BaseModel):
@@ -152,6 +176,16 @@ class TokenResponse(BaseModel):
     token_type: str = "Bearer"
     expires_in: int
     scope: str
+
+
+class RegisterRequest(BaseModel):
+    """Body do POST /auth/token/register — confidential, single-step (SEC-01)."""
+
+    client_id: str
+    client_secret: str = ""
+    scopes: list[str] = []
+    code_verifier: str
+    code_challenge: str
 
 
 class IntrospectRequest(BaseModel):
@@ -208,6 +242,16 @@ async def authorize(body: AuthorizeRequest) -> AuthorizeResponse:
             detail=f"Unknown client_id: '{body.client_id}'",
         )
 
+    # Confidential client: se há hash registrado, exige secret válido (fail-closed).
+    expected_hash = _client_secret_hashes.get(body.client_id)
+    if expected_hash is not None:
+        provided = hashlib.sha256(body.client_secret.encode("utf-8")).hexdigest()
+        if not hmac.compare_digest(provided, expected_hash):
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid client_secret",
+            )
+
     permitted = set(_allowed_clients.get(body.client_id, []))
     disallowed = set(body.scopes) - permitted
     if disallowed:
@@ -237,6 +281,61 @@ async def authorize(body: AuthorizeRequest) -> AuthorizeResponse:
         ttl=300,
     )
     return AuthorizeResponse(code=code, expires_in=300)
+
+
+@router.post("/token/register", response_model=TokenResponse)
+async def register_token(body: RegisterRequest) -> TokenResponse:
+    """Emissão single-step para confidential clients (SEC-01).
+
+    Fail-closed: o cliente precisa de ``secret_sha256`` registrado; sem hash,
+    rejeita mesmo que um secret seja enviado. PKCE verificado inline (challenge
+    derivado do verifier). HS256-only: deployment RSA-only (sem secret HMAC)
+    retorna 503. O fluxo público two-step ``/auth/authorize`` + ``/auth/token``
+    permanece disponível separadamente.
+    """
+    if body.client_id not in _allowed_clients:
+        raise HTTPException(
+            status_code=401, detail=f"Unknown client_id: '{body.client_id}'"
+        )
+    if not _jwt_secret:
+        raise HTTPException(
+            status_code=503, detail="HS256 secret not configured for register"
+        )
+    expected_hash = _client_secret_hashes.get(body.client_id)
+    if not expected_hash:
+        raise HTTPException(
+            status_code=401, detail="client secret not configured (fail-closed)"
+        )
+    provided = hashlib.sha256(body.client_secret.encode("utf-8")).hexdigest()
+    if not hmac.compare_digest(provided, expected_hash):
+        raise HTTPException(status_code=401, detail="Invalid client_secret")
+    if not body.code_verifier or not verify_challenge(
+        body.code_verifier, body.code_challenge
+    ):
+        raise HTTPException(status_code=400, detail="PKCE verification failed")
+
+    permitted = set(_allowed_clients.get(body.client_id, []))
+    effective_scopes = body.scopes or _allowed_clients.get(body.client_id, [])
+    disallowed = set(effective_scopes) - permitted
+    if disallowed:
+        raise HTTPException(
+            status_code=403, detail=f"Scopes not permitted: {sorted(disallowed)}"
+        )
+
+    issued = issue_token(
+        agent_id=body.client_id,
+        scopes=effective_scopes,
+        secret=_jwt_secret,
+        ttl=_token_ttl,
+        algorithm="HS256",
+        issuer=_issuer,
+        audience=_audience or None,
+    )
+    return TokenResponse(
+        access_token=issued,
+        expires_in=_token_ttl,
+        scope=" ".join(effective_scopes),
+    )
 
 
 @router.post("/token", response_model=TokenResponse)
@@ -274,7 +373,7 @@ async def token(body: TokenRequest) -> TokenResponse:
         ttl=_token_ttl,
         algorithm=_signing_algorithm(),
         issuer=_issuer,
-        audience=entry.get("audience", "mcp"),
+        audience=entry.get("audience") or _audience or "mcp",
     )
     return TokenResponse(
         access_token=issued,
@@ -291,12 +390,13 @@ async def introspect(body: IntrospectRequest) -> dict:
     Retorna active=False (sem erro 401) para tokens inválidos/expirados.
     """
     try:
-        # Introspecção aceita ambas as audiências (mcp/a2a), mas exige iss
+        # SEC-11: introspecção exige aud/iss apenas quando configurados;
+        # vazio = comportamento anterior (sem exigência de audiência).
         claims: TokenClaims = validate_token(
             body.token,
             _verification_key(),
             algorithm=_signing_algorithm(),
-            audience=["mcp", "a2a"],
+            audience=_audience or None,
             issuer=_issuer,
         )
         return {
@@ -333,7 +433,7 @@ async def discovery() -> dict:
         "introspection_endpoint": f"{_base_url}/auth/token/introspect",
         "scopes_supported": ALL_SCOPES,
         "code_challenge_methods_supported": ["S256"],
-        "token_endpoint_auth_methods_supported": ["none"],
+        "token_endpoint_auth_methods_supported": ["client_secret_post"],
         "grant_types_supported": ["authorization_code"],
     }
     # Phase 2: adiciona jwks_uri e algoritmos assimétricos se RS256 estiver configurado

@@ -99,4 +99,4 @@ Each `step_*()` function in `interfaces/cli/v0_pipeline.py` (V0 CLI engine) writ
 
 ---
 
-> **See also**: [Data Models](data-models.md) for dataclass field definitions | [Project Context](./../_bmad-output/project-context.md) for implementation rules
+> **See also**: [Data Models](data-models.md) for dataclass field definitions | [Code Conventions](../CONTRIBUTING.md#code-conventions) for implementation rules

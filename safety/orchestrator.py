@@ -10,6 +10,7 @@ sem duplicação de lógica.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -117,17 +118,18 @@ class SafetyOrchestrator:
         layer_details: dict[str, object] = {}
         risk_scores: list[float] = []
 
-        # Camada 1: Sanitizer (se presente)
+        # Camada 1: Sanitizer (se presente). Comando que o sanitizer altera
+        # (PII/payload) bloqueia; exceção falha FECHADO (antes contava aprovado).
         if self._sanitizer is not None:
+            command = getattr(action, "command", "")
             try:
-                command = getattr(action, "command", "")
-                sanitizer_ok = self._sanitizer.sanitize(command)  # type: ignore[union-attr]
-                layer_details["sanitizer"] = {"passed": bool(sanitizer_ok)}
-                if not sanitizer_ok:
-                    blocked_by.append("sanitizer")
-            except Exception as exc:
-                # Fail-closed: exceção em camada de safety BLOQUEIA (F2-4)
-                layer_details["sanitizer"] = {"passed": False, "error": str(exc)}
+                sanitized = self._sanitizer.sanitize_text(command)  # type: ignore[union-attr]
+                sanitizer_ok = sanitized == command
+                layer_details["sanitizer"] = {"passed": sanitizer_ok}
+            except Exception as exc:  # noqa: BLE001 — falha fechado, registrado no detalhe
+                sanitizer_ok = False
+                layer_details["sanitizer"] = {"passed": False, "error": repr(exc)}
+            if not sanitizer_ok:
                 blocked_by.append("sanitizer")
 
         # Camada 2: PreExecutionValidator — blast radius + blocklist
@@ -146,23 +148,24 @@ class SafetyOrchestrator:
         if not pre_result.is_safe:
             blocked_by.append("pre_validator")
 
-        # Camada 3: TNR — verificação de regressão de saúde (SIMULADA, F2-3).
-        # PRÉ: telemetria real via system_state["pre_health"] quando disponível;
-        # sem ela, baseline nominal documentado. PÓS: projeção determinística
-        # do efeito da ação — nunca o mesmo snapshot (delta 0 garantido = teatro).
-        tnr_passed = True
+        # Camada 3: TNR (D-TNR — reconcilia F2-3 simulação + D5 honestidade).
+        # Com snapshots pré/pós MEDIDOS em system_state, compara saúde real.
+        # Sem medição pós-ação, projeta o efeito da ação (simulate_action_effect):
+        # uma projeção de REGRESSÃO (ação destrutiva que escapa do pre_validator,
+        # ex.: scale-to-zero) BLOQUEIA; uma projeção benigna é honestamente
+        # NOT_VERIFIED (não há medição real) e NÃO bloqueia. Exceção falha
+        # FECHADO. verification_mode="simulated" deixa explícito que é projeção.
+        from safety.tnr import (
+            HealthSnapshot,
+            TNRReport,
+            TNRResult,
+            simulate_action_effect,
+        )
+
+        state = system_state or {}
+        pre_health = state.get("pre_health")
+        post_health = state.get("post_health")
         try:
-            from datetime import datetime
-
-            from safety.tnr import HealthSnapshot, TNRResult, simulate_action_effect
-
-            pre_health = None
-            if isinstance(system_state, dict):
-                raw_pre = system_state.get("pre_health")
-                if isinstance(raw_pre, HealthSnapshot):
-                    pre_health = raw_pre
-                elif isinstance(raw_pre, dict):
-                    pre_health = HealthSnapshot(**raw_pre)
             if pre_health is None:
                 pre_health = HealthSnapshot(
                     timestamp=datetime.now(),
@@ -172,21 +175,43 @@ class SafetyOrchestrator:
                     connection_pool_active=0,
                     connection_pool_max=100,
                 )
-            post_health = simulate_action_effect(action, pre_health)
+            elif isinstance(pre_health, dict):
+                pre_health = HealthSnapshot(**pre_health)
+            measured = post_health is not None
+            if isinstance(post_health, dict):
+                post_health = HealthSnapshot(**post_health)
+            if post_health is None:
+                post_health = simulate_action_effect(action, pre_health)
             try:
                 tnr_report = self._tnr.simulate_check(
                     action, pre_health, post_health, correlation_id=correlation_id
                 )
             except TypeError:
                 tnr_report = self._tnr.simulate_check(action, pre_health, post_health)
+            if not measured and tnr_report.result == TNRResult.SUCCESS:
+                # Projeção benigna sem medição real => NOT_VERIFIED (D5), mas
+                # preserva os snapshots distintos para auditoria (F2-3).
+                tnr_report = TNRReport(
+                    result=TNRResult.NOT_VERIFIED,
+                    pre_snapshot=pre_health,
+                    post_snapshot=post_health,
+                    action=action,
+                    health_delta=tnr_report.health_delta,
+                    message="TNR not verified: no post-action health measurement",
+                    verification_mode="simulated",
+                )
             layer_details["tnr"] = tnr_report
-            tnr_passed = tnr_report.result == TNRResult.SUCCESS
-        except Exception as exc:
-            # Fail-closed: exceção em camada de safety BLOQUEIA (F2-4)
-            layer_details["tnr"] = {"passed": False, "error": str(exc)}
-            tnr_passed = False
-
-        if not tnr_passed:
+            if tnr_report.result != TNRResult.SUCCESS:
+                # REGRESSÃO (medida ou projetada) bloqueia; NOT_VERIFIED sem
+                # medição NÃO bloqueia (não há evidência de dano).
+                if measured or tnr_report.result != TNRResult.NOT_VERIFIED:
+                    blocked_by.append("tnr")
+        except Exception as exc:  # noqa: BLE001 — falha fechado, registrado no detalhe
+            layer_details["tnr"] = {
+                "verified": False,
+                "passed": False,
+                "error": repr(exc),
+            }
             blocked_by.append("tnr")
 
         # Camada 4: VersionValidator — CVE e versões

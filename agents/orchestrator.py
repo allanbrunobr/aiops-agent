@@ -15,16 +15,15 @@ import json
 import logging
 from dataclasses import dataclass, field
 
-from adapters.llm.counting_client import LLMBudgetExceeded
 from agents.detector import DetectionAgent
 from agents.diagnoser import DiagnosisAgent
 from agents.mitigator import MitigationAgent
 from agents.skill_router import DEFAULT_SKILL, SkillRouter
+from application.ports.incident_memory import IncidentMemory
 from application.ports.llm_client import LLMClient
 from application.ports.reporter import NullReporter, Reporter
-from core.llm_json import LLMJsonError, extract_json_object
-from rag.memory import IncidentMemoryDB
-from safety.tnr import TNRResult, TNRSafetyGuard
+from core.llm_json import LLMBudgetExceeded, LLMJsonError, extract_json_object
+from safety.tnr import TNRSafetyGuard
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +193,17 @@ class InvestigationPlan:
     max_steps: int = 5
 
 
+class LLMCallBudgetExhausted(Exception):
+    """Orçamento de chamadas ao LLM desta execução esgotado (NFR6).
+
+    Exceção própria do contador interno por-run (``_create_message``): os
+    handlers a capturam em ``except Exception`` e DEGRADAM para fallback
+    heurístico (filosofia theirs). Distinta de ``LLMBudgetExceeded`` do wrapper
+    ``CountingLLMClient``, que ABORTA o run (correção pós-revisão #1) via
+    ``except LLMBudgetExceeded: raise``. Os dois mecanismos coexistem.
+    """
+
+
 @dataclass
 class AgentOutcome:
     """Resultado completo de uma execução do AgentOrchestrator."""
@@ -204,11 +214,14 @@ class AgentOutcome:
     iterations: int = 0
     replans: int = 0
     tnr_passed: bool = False
+    tnr_result: str = ""  # "success" | "regression" | "not_verified" | ...
     tnr_health_delta: float = 0.0
     tnr_message: str = ""
     tnr_verification_mode: str = "simulated"
     mitigation: dict = field(default_factory=dict)
     reflection: dict | None = None
+    llm_calls: int = 0  # chamadas ao LLM feitas nesta execução
+    llm_budget_exhausted: bool = False  # True se max_llm_calls foi atingido
 
 
 # ---------------------------------------------------------------------------
@@ -243,12 +256,18 @@ class AgentOrchestrator:
     """
 
     MAX_REPLANS = 2
+    # Teto de steps por plano vindo do LLM. Junto com MAX_REPLANS e a saída
+    # quando o plano se esgota, limita as chamadas de reflexão por run a
+    # (MAX_REPLANS + 1) * MAX_STEPS_PER_PLAN.
+    MAX_STEPS_PER_PLAN = 8
+    # Usado quando não há config.blueprint.max_llm_calls (mesmo default do AppConfig).
+    DEFAULT_MAX_LLM_CALLS = 15
 
     def __init__(
         self,
         client: LLMClient | None,
         model: str,
-        memory_db: IncidentMemoryDB | None,
+        memory_db: IncidentMemory | None,
         skill_router: SkillRouter | None,
         config=None,
         reporter: Reporter | None = None,
@@ -262,6 +281,8 @@ class AgentOrchestrator:
         # F6-5: uma instância de DiagnosisAgent por orchestrator — antes era
         # recriada a cada step (e no fallback), descartando estado/cliente.
         self._diagnoser = DiagnosisAgent(reporter=self.reporter)
+        self._llm_calls = 0
+        self._llm_budget_exhausted = False
 
     # ------------------------------------------------------------------
     # Public
@@ -277,6 +298,8 @@ class AgentOrchestrator:
                 thresholds diferentes (F5-2). ``None`` mantém o comportamento
                 antigo: detecta com ``DetectionAgent`` default.
         """
+        self._llm_calls = 0
+        self._llm_budget_exhausted = False
         # ── DETECT (determinístico — não muda) ────────────────────────
         if detection is None:
             detector = DetectionAgent(reporter=self.reporter)
@@ -334,6 +357,11 @@ class AgentOrchestrator:
                     break
 
                 # decision == "continue" → próximo step
+            else:
+                # Plano esgotado sem finalize nem replan (inclusive quando toda
+                # reflexão falha e vira "continue"): repetir o mesmo plano não
+                # traz evidência nova. Sai e sintetiza com o que foi coletado.
+                break
 
             if diagnosis:
                 break
@@ -343,13 +371,17 @@ class AgentOrchestrator:
 
         # ── 4. SAFETY (invariante — nunca controlada pelo LLM) ────────
         mitigator = MitigationAgent(reporter=self.reporter)
-        mitigation = mitigator.propose(diagnosis)
+        mitigation = mitigator.propose_safe(diagnosis)
         tnr_guard = TNRSafetyGuard()
+        # F2-3: o loop agentic opta por TNR SIMULADO (projeção determinística a
+        # partir da telemetria do report) para dirigir o replanning. O modo
+        # "simulated" fica explícito no outcome/audit — não é uma medição real.
         tnr_result = mitigator.simulate_tnr_verification(mitigation, tnr_guard, report)
-        tnr_passed = tnr_result.result == TNRResult.SUCCESS
+        tnr_value = getattr(getattr(tnr_result, "result", None), "value", None)
+        tnr_passed = tnr_value == "success"
 
-        # TNR regression com replans disponíveis → mais uma tentativa
-        if not tnr_passed and replans < self.MAX_REPLANS:
+        # Só REGRESSÃO medida dispara replan; "not_verified" não é regressão.
+        if tnr_value == "regression" and replans < self.MAX_REPLANS:
             replans += 1
             plan = self._replan(
                 plan,
@@ -364,32 +396,73 @@ class AgentOrchestrator:
                 step.result = self._execute_step(step, report, retriever)
                 tools_used.append(step.tool)
             diagnosis = self._synthesize_diagnosis(plan, report, {}, skill)
-            mitigation = mitigator.propose(diagnosis)
+            mitigation = mitigator.propose_safe(diagnosis)
             tnr_result = mitigator.simulate_tnr_verification(
                 mitigation, tnr_guard, report
             )
-            tnr_passed = tnr_result.result == TNRResult.SUCCESS
+            tnr_value = getattr(getattr(tnr_result, "result", None), "value", None)
+            tnr_passed = tnr_value == "success"
 
         # ── 5. LEARN ─────────────────────────────────────────────────
-        final_reflection = self._reflect_final(diagnosis, tnr_passed, tools_used, plan)
+        final_reflection = self._reflect_final(
+            diagnosis, tnr_value or "unknown", tools_used, plan
+        )
 
         return AgentOutcome(
             diagnosis=diagnosis,
             plan=plan,
             mitigation=mitigation,
             tnr_passed=tnr_passed,
-            tnr_health_delta=tnr_result.health_delta,
-            tnr_message=tnr_result.message,
-            tnr_verification_mode=tnr_result.verification_mode,
+            tnr_result=tnr_value or "",
+            tnr_health_delta=getattr(tnr_result, "health_delta", 0.0),
+            tnr_message=getattr(tnr_result, "message", ""),
+            tnr_verification_mode=getattr(tnr_result, "verification_mode", "simulated"),
             tools_used=tools_used,
             iterations=sum(1 for s in plan.steps if s.result is not None),
             replans=replans,
             reflection=final_reflection,
+            llm_calls=self._llm_calls,
+            llm_budget_exhausted=self._llm_budget_exhausted,
         )
 
     # ------------------------------------------------------------------
     # Internos
     # ------------------------------------------------------------------
+
+    def _max_llm_calls(self) -> int:
+        blueprint = getattr(self.config, "blueprint", None)
+        value = getattr(blueprint, "max_llm_calls", None)
+        return (
+            value
+            if isinstance(value, int) and value >= 0
+            else self.DEFAULT_MAX_LLM_CALLS
+        )
+
+    def _create_message(self, *, investigation: bool = False, **kwargs):
+        """Única porta para o LLM.
+
+        Correção pós-revisão #1: quando o cliente é o wrapper ``CountingLLMClient``
+        (sempre, via ``build_agent_orchestrator``), ele é a autoridade de orçamento:
+        conta chamadas reais ao provider e levanta ``LLMBudgetExceeded``, que ABORTA
+        o run (``except LLMBudgetExceeded: raise`` nos call sites + engine). O contador
+        interno por-run NÃO deve pré-emptar o wrapper — isso degradava para heurística
+        antes do abort (bug provado no M1 em 2026-11-18). O contador interno só se
+        aplica a clientes sem wrapper (ex.: testes com client direto).
+        """
+        if not getattr(type(self.client), "is_budget_wrapper", False):
+            limit = self._max_llm_calls()
+            if investigation:
+                limit = max(0, limit - 1)
+            if self._llm_calls >= limit:
+                if not self._llm_budget_exhausted:
+                    logging.getLogger(__name__).warning(
+                        "LLM call budget exhausted (%d calls); falling back to heuristics",
+                        limit,
+                    )
+                self._llm_budget_exhausted = True
+                raise LLMCallBudgetExhausted(f"max_llm_calls={limit} reached")
+            self._llm_calls += 1
+        return self.client.create_message(**kwargs)
 
     def _generate_plan(self, report, skill, similar) -> InvestigationPlan:
         """LLM gera plano de investigação baseado em contexto + skill."""
@@ -402,7 +475,8 @@ class AgentOrchestrator:
         )
 
         try:
-            response = self.client.create_message(
+            response = self._create_message(
+                investigation=True,
                 model=self.model,
                 max_tokens=1024,
                 messages=[
@@ -444,7 +518,7 @@ class AgentOrchestrator:
             )
             for s in data.get("steps", [])
             if s.get("tool") in _VALID_TOOLS
-        ]
+        ][: self.MAX_STEPS_PER_PLAN]
 
         if not steps:
             return self._default_plan(report)
@@ -497,7 +571,8 @@ class AgentOrchestrator:
             [s for s in plan.steps if s.step_id > step.step_id and s.result is None]
         )
         try:
-            response = self.client.create_message(
+            response = self._create_message(
+                investigation=True,
                 model=self.model,
                 max_tokens=512,
                 messages=[
@@ -534,7 +609,8 @@ class AgentOrchestrator:
             for s in old_plan.steps
         ]
         try:
-            response = self.client.create_message(
+            response = self._create_message(
+                investigation=True,
                 model=self.model,
                 max_tokens=1024,
                 messages=[
@@ -561,7 +637,7 @@ class AgentOrchestrator:
                 )
                 for s in data.get("steps", [])
                 if s.get("tool") in _VALID_TOOLS
-            ]
+            ][: self.MAX_STEPS_PER_PLAN]
             return InvestigationPlan(
                 hypothesis=data.get("hypothesis", old_plan.hypothesis),
                 steps=steps or old_plan.steps,
@@ -604,24 +680,29 @@ class AgentOrchestrator:
         if system_msg:
             kwargs["system"] = system_msg
         try:
-            response = self.client.create_message(**kwargs)
-            return extract_json_object(response.content[0].text)
+            response = self._create_message(**kwargs)
+            data = extract_json_object(response.content[0].text)
         except LLMBudgetExceeded:
             raise  # Correção pós-revisão #1: orçamento estourado aborta o run
         except Exception as exc:  # noqa: BLE001
             logger.warning("orchestrator.synthesis_failed_using_heuristic: %s", exc)
             return self._diagnoser.heuristic_diagnosis(report)
+        # O resto do pipeline faz diagnosis.get(...) e decide por root_cause:
+        # lista, null ou dict sem root_cause não são diagnóstico.
+        if not isinstance(data, dict) or not data.get("root_cause"):
+            return self._diagnoser.heuristic_diagnosis(report)
+        return data
 
     def _reflect_final(
         self,
         diagnosis: dict,
-        tnr_passed: bool,
+        tnr_result: str,
         tools_used: list[str],
         plan: InvestigationPlan,
     ) -> dict:
         """Reflexão final sobre toda a investigação."""
         try:
-            response = self.client.create_message(
+            response = self._create_message(
                 model=self.model,
                 max_tokens=512,
                 messages=[
@@ -629,7 +710,7 @@ class AgentOrchestrator:
                         "role": "user",
                         "content": FINAL_REFLECT_PROMPT.format(
                             diagnosis=json.dumps(diagnosis, default=str)[:500],
-                            tnr_result="success" if tnr_passed else "regression",
+                            tnr_result=tnr_result,
                             tools_used=tools_used,
                             plan_steps=len(plan.steps),
                             hypothesis=plan.hypothesis,

@@ -1,14 +1,11 @@
-"""Carregamento único de ``.env`` / ``.env.local`` (F5-3).
+"""Carga única de `.env.local` e `.env` para os pontos de entrada (M3/F5-10, F5-3).
 
-Antes, cinco entrypoints (CLI V0, CLI V1, demo, webhook server e o script de
-teste do Slack) tinham cada um seu parser manual de ``.env.local`` — com
-diferenças sutis entre si (strip ou não, tratamento de aspas, raiz relativa
-ao cwd ou ao arquivo). Agora todos chamam :func:`load_local_env`, que delega
-ao ``python-dotenv`` já presente em ``requirements.txt``.
+Antes havia cinco parsers artesanais, um deles divergente, e nenhum tratava
+aspas nem `export`. Aqui o parsing fica com o python-dotenv.
 
-Precedência (preservada do CLI V0, que fazia ``load_dotenv()`` + ``setdefault``):
-ambiente do processo > ``.env`` > ``.env.local``. Nenhum arquivo sobrescreve
-uma variável já definida — um token exportado no shell sempre vence.
+Precedência: variável já presente no processo > `.env.local` > `.env`.
+Nada é sobrescrito (`override=False`) — `.env.local` são overrides locais e
+vence o `.env` compartilhado; um token exportado no shell sempre vence.
 """
 
 from __future__ import annotations
@@ -17,28 +14,40 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-ENV_FILES: tuple[str, ...] = (".env", ".env.local")
+# Raiz padrão de carga. O conftest da suíte redireciona este atributo para um
+# diretório vazio, para que nenhum teste leia o .env/.env.local do checkout.
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# Ordem de carga = precedência entre arquivos (primeiro carregado vence,
+# pois override=False): .env.local antes de .env.
+ENV_FILES: tuple[str, ...] = (".env.local", ".env")
 
 
 def project_root() -> Path:
-    """Raiz do repositório (a pasta que contém ``config/``)."""
+    """Raiz real do repositório (a pasta que contém ``config/``).
+
+    Independente de ``REPO_ROOT``: redirecionamentos de teste não afetam
+    quem só precisa localizar arquivos do projeto (defaults.yaml, main.py).
+    """
     return Path(__file__).resolve().parent.parent
 
 
-def load_local_env(root: Path | None = None) -> list[Path]:
-    """Carrega ``.env`` e ``.env.local`` da raiz, sem sobrescrever o ambiente.
+def load_local_env(root: Path | None = None) -> bool:
+    """Carrega `<root>/.env.local` e depois `<root>/.env`, sem sobrescrever.
 
-    Args:
-        root: Diretório onde procurar os arquivos. Default: raiz do repositório.
+    `root` padrão: ``REPO_ROOT`` (a raiz do repositório, não o diretório
+    corrente), para que a CLI, a demo e os scripts de infra leiam o mesmo
+    arquivo de onde quer que sejam chamados.
 
     Returns:
-        Lista dos arquivos efetivamente carregados (vazia se nenhum existe).
+        True se ao menos um dos arquivos existia; False se nenhum existe
+        (ausência dos arquivos não é erro).
     """
-    base = Path(root) if root is not None else project_root()
-    loaded: list[Path] = []
+    base = Path(root) if root is not None else REPO_ROOT
+    found = False
     for name in ENV_FILES:
         path = base / name
         if path.is_file():
             load_dotenv(path, override=False)
-            loaded.append(path)
-    return loaded
+            found = True
+    return found

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import Mapping
 from typing import Any, Awaitable, Callable
 
 import structlog
@@ -10,6 +11,7 @@ from slack_sdk.web.async_client import AsyncWebClient
 
 from adapters.credentials import EnvCredentialProvider
 from core.lifecycle import LifecycleEvent
+from domain.confidence import confidence_to_score
 
 log = structlog.get_logger()
 
@@ -29,12 +31,74 @@ _NODE_LABELS: dict[str, str] = {
 }
 
 # Erros do Slack que NAO devem ser retentados
+# Erros permanentes: retentar não muda o resultado (antes só auth parava o retry).
 _NON_RETRYABLE_ERRORS = {
     "invalid_auth",
     "token_revoked",
     "account_inactive",
     "token_expired",
+    "channel_not_found",
+    "not_in_channel",
+    "is_archived",
+    "missing_scope",
+    "no_permission",
+    "invalid_blocks",
+    "invalid_blocks_format",
+    "msg_too_long",
+    "invalid_arguments",
+    "restricted_action",
 }
+_RATE_LIMITED_ERRORS = {"ratelimited", "rate_limited"}
+
+# Limites da API do Slack (texto de section/field e blocos por mensagem).
+MAX_SECTION_TEXT = 3000
+MAX_BLOCKS = 50
+# Teto para o Retry-After de um 429, para não pendurar o pipeline.
+MAX_RETRY_AFTER_S = 30
+
+
+def _retry_after_seconds(exc: SlackApiError) -> float | None:
+    """Segundos do header Retry-After de um 429, se presente e válido."""
+    headers = getattr(exc.response, "headers", None)
+    if not isinstance(headers, Mapping):
+        return None
+    raw = headers.get("Retry-After", headers.get("retry-after"))
+    if not isinstance(raw, (str, int, float)):
+        return None
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    return value if value >= 0 else None
+
+
+def _truncate(text: str, limit: int = MAX_SECTION_TEXT) -> str:
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _fit_blocks(blocks: list[dict] | None) -> list[dict] | None:
+    """Ajusta blocos aos limites da API: texto de section/field e nº de blocos.
+
+    Antes uma mensagem final grande (causa raiz ou evidência longas) era
+    recusada pela API (invalid_blocks/msg_too_long) e caía no fallback local.
+    """
+    if not blocks:
+        return blocks
+    fitted = []
+    for block in blocks[:MAX_BLOCKS]:
+        block = dict(block)
+        text = block.get("text")
+        if isinstance(text, dict) and isinstance(text.get("text"), str):
+            block["text"] = {**text, "text": _truncate(text["text"])}
+        if isinstance(block.get("fields"), list):
+            block["fields"] = [
+                {**f, "text": _truncate(f["text"])}
+                if isinstance(f, dict) and isinstance(f.get("text"), str)
+                else f
+                for f in block["fields"]
+            ]
+        fitted.append(block)
+    return fitted
 
 
 class SlackNotifier:
@@ -163,6 +227,11 @@ class SlackNotifier:
                 backoff = self._initial_backoff_s * (
                     self._backoff_multiplier ** (attempt - 1)
                 )
+                # 429: o Slack diz quanto esperar (Retry-After), com teto.
+                if error_code in _RATE_LIMITED_ERRORS:
+                    retry_after = _retry_after_seconds(exc)
+                    if retry_after is not None:
+                        backoff = min(retry_after, float(MAX_RETRY_AFTER_S))
                 log.warning(
                     "slack.retry_attempt",
                     context=context,
@@ -217,7 +286,7 @@ class SlackNotifier:
         async def _send() -> Any:
             return await self._client.chat_postMessage(  # type: ignore[union-attr]
                 channel=self._channel,
-                blocks=blocks,
+                blocks=_fit_blocks(blocks),
                 text=f"Incident {cid}: Diagnosing...",
             )
 
@@ -260,7 +329,7 @@ class SlackNotifier:
             return await self._client.chat_update(  # type: ignore[union-attr]
                 channel=channel_id,
                 ts=ts,
-                blocks=blocks,
+                blocks=_fit_blocks(blocks),
                 text=f"Incident {cid}: Processing stage {event.node_name}...",
             )
 
@@ -273,7 +342,12 @@ class SlackNotifier:
         cid = event.correlation_id
         ts = self._message_ts.get(cid)
         blocks = self._build_final_blocks(event)
-        fallback_text = f"Incident {cid}: Diagnosis complete"
+        # O text é o que a notificação, a prévia e o leitor de tela mostram:
+        # tem de dizer o mesmo que os blocos (pré-PR em 35b958d).
+        if event.data.get("no_incident"):
+            fallback_text = f"No incident detected: {cid}"
+        else:
+            fallback_text = f"Incident {cid}: Diagnosis complete"
 
         if self._dry_run:
             log.info(
@@ -295,13 +369,13 @@ class SlackNotifier:
                 await self._client.chat_update(  # type: ignore[union-attr]
                     channel=channel_id,
                     ts=ts,
-                    blocks=blocks,
+                    blocks=_fit_blocks(blocks),
                     text=fallback_text,
                 )
             else:
                 await self._client.chat_postMessage(  # type: ignore[union-attr]
                     channel=self._channel,
-                    blocks=blocks,
+                    blocks=_fit_blocks(blocks),
                     text=fallback_text,
                 )
 
@@ -363,13 +437,13 @@ class SlackNotifier:
                 await self._client.chat_update(  # type: ignore[union-attr]
                     channel=channel_id,
                     ts=ts,
-                    blocks=blocks,
+                    blocks=_fit_blocks(blocks),
                     text=f"Incident {cid}: Pipeline failed",
                 )
             else:
                 await self._client.chat_postMessage(  # type: ignore[union-attr]
                     channel=self._channel,
-                    blocks=blocks,
+                    blocks=_fit_blocks(blocks),
                     text=f"Incident {cid}: Pipeline failed",
                 )
 
@@ -528,7 +602,7 @@ class SlackNotifier:
             await self._client.chat_postMessage(
                 channel=self._channel,
                 text=f"{event.event_type}: {scenario}",
-                attachments=[{"color": color, "blocks": blocks}],
+                attachments=[{"color": color, "blocks": _fit_blocks(blocks)}],
             )
 
         await self._send_with_retry(
@@ -551,7 +625,9 @@ class SlackNotifier:
             await self._client.chat_postMessage(  # type: ignore[union-attr]
                 channel=self._channel,
                 text=f"Incident resolved: {scenario}",
-                attachments=[{"color": "#2eb886", "blocks": blocks}],  # verde
+                attachments=[
+                    {"color": "#2eb886", "blocks": _fit_blocks(blocks)}
+                ],  # verde
             )
 
         if self._dry_run:
@@ -633,7 +709,7 @@ class SlackNotifier:
         async def _send() -> None:
             await self._client.chat_postMessage(  # type: ignore[union-attr]
                 channel=self._channel,
-                blocks=blocks,
+                blocks=_fit_blocks(blocks),
                 text=f"Diagnosis {cid}: {status}",
             )
 
@@ -655,9 +731,7 @@ class SlackNotifier:
         evidence = data.get("evidence", [])
 
         # confidence pode ser float (0.0–1.0) ou string ("high"/"medium"/"low")
-        if isinstance(confidence, str):
-            _conf_map = {"high": 0.9, "medium": 0.6, "low": 0.3}
-            confidence = _conf_map.get(confidence.lower(), 0.5)
+        confidence = confidence_to_score(confidence, default=0.5)
         confidence_pct = int(confidence * 100)
         if confidence >= 0.8:
             conf_emoji = ":large_green_circle:"
@@ -738,7 +812,41 @@ class SlackNotifier:
         cid = event.correlation_id
         data = event.data
 
-        root_cause = data.get("root_cause", "N/A")
+        if data.get("no_incident"):
+            # Janela saudável: não houve diagnóstico nem correção (a CLI marca
+            # o pipeline.completed com no_incident).
+            return [
+                {
+                    "type": "header",
+                    "text": {
+                        "type": "plain_text",
+                        "text": f"No Incident Detected: {cid}",
+                    },
+                },
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": (
+                            "The analysed window showed no incident. "
+                            "No diagnosis or mitigation was produced."
+                        ),
+                    },
+                },
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": (
+                                f"AIOps Agent | {cid} | {data.get('total_duration_ms', '?')}ms"
+                            ),
+                        },
+                    ],
+                },
+            ]
+
+        root_cause = data.get("root_cause") or "N/A"
         confidence = data.get("confidence", 0.0)
         evidence = data.get("evidence", [])
         proposed_fix = data.get("proposed_fix") or "N/A"
@@ -752,9 +860,7 @@ class SlackNotifier:
         )
 
         # Cor do indicador de confianca (confidence pode ser float ou string)
-        if isinstance(confidence, str):
-            _conf_map = {"high": 0.9, "medium": 0.6, "low": 0.3}
-            confidence = _conf_map.get(confidence.lower(), 0.5)
+        confidence = confidence_to_score(confidence, default=0.5)
         confidence_pct = int(confidence * 100)
         if confidence >= 0.8:
             conf_emoji = ":large_green_circle:"

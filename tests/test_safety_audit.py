@@ -6,6 +6,8 @@ Cobre SafetyAuditEvent, SafetyAuditor e instrumentação das 4 camadas de segura
 """
 
 import pytest
+
+pytestmark = pytest.mark.unit
 import structlog.testing
 
 from safety.audit import SafetyAuditEvent, SafetyAuditor

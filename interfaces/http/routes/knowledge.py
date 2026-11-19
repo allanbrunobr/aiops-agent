@@ -97,6 +97,7 @@ async def create_pattern(
         resolution=request.resolution,
         tags=request.tags,
         confidence=request.confidence,
+        source_incident_id=request.source_incident_id,
     )
 
     knowledge_store.add_pattern(pattern)

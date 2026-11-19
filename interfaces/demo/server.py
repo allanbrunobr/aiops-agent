@@ -59,7 +59,7 @@ from interfaces.demo.scenarios import SCENARIOS, DemoScenarioConfig, get_scenari
 logger = logging.getLogger("interfaces.demo.server")
 
 # Carrega .env / .env.local se existirem (loader único — F5-3)
-from config.env import load_local_env
+from config.env import load_local_env  # noqa: E402
 
 load_local_env()
 
@@ -359,8 +359,8 @@ async def _tick_loop() -> None:
 
 async def _maybe_notify_slack(frame: Any) -> None:
     """Envia notificação Slack quando a fase muda para WARNING, ALERT ou RESOLVED."""
-    # Sem `global`, a atribuição no branch prediction.critical torna a variável
-    # local em toda a função e o branch resolved lê antes de atribuir (UnboundLocalError).
+    # Sem `global`, a atribuição abaixo tornava o nome local: o ramo resolved
+    # levantava UnboundLocalError e o início do incidente nunca era gravado.
     global _incident_start_wall_time
     if _slack is None or _engine is None:
         return
@@ -597,7 +597,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    logging.basicConfig(level=logging.INFO)
+    from core.logging import configure_logging
+
+    configure_logging()
     if not os.environ.get("AIOPS_DEMO_TOKEN"):
         logger.warning(
             "demo.auth_disabled — AIOPS_DEMO_TOKEN não configurado; endpoints de "
@@ -611,7 +613,10 @@ def main() -> None:
             "demo.slack_dry_run — envio real desabilitado (opt-in: AIOPS_DEMO_SLACK_REAL=1)"
         )
     logger.info("Demo server ready on http://%s:%d/demo/", args.host, args.port)
-    uvicorn.run(app, host=args.host, port=args.port)
+    # log_level="info": o uvicorn reaplica o nível de uvicorn.access, que o
+    # configure_logging() baixa para WARNING; sem ele o access log da demo,
+    # que existia antes do log_config=None, sumia.
+    uvicorn.run(app, host=args.host, port=args.port, log_level="info", log_config=None)
 
 
 if __name__ == "__main__":

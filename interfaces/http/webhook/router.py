@@ -19,10 +19,8 @@ log = structlog.get_logger()
 
 webhook_router = APIRouter(tags=["webhook"])
 
-# Defaults usados apenas quando o app roda SEM AppConfig em app.state (testes
-# mínimos). Com config presente, os valores vêm tipados de WebhookConfig (F5-3).
+# Tamanho maximo de payload padrao (1MB) — configuravel via WebhookConfig
 DEFAULT_MAX_PAYLOAD_BYTES = 1_048_576
-DEFAULT_DEDUP_WINDOW_SECONDS = 300
 
 
 def identify_source(
@@ -61,6 +59,18 @@ def identify_source(
     return None
 
 
+async def _read_body_limited(request: Request, max_bytes: int) -> bytes | None:
+    """Lê o corpo em pedaços; devolve None assim que passar de `max_bytes`."""
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > max_bytes:
+            return None
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 @webhook_router.post("/webhook", status_code=202)
 async def receive_webhook(request: Request) -> WebhookResponse:
     """Recebe alerta via webhook com validacao completa.
@@ -85,11 +95,11 @@ async def receive_webhook(request: Request) -> WebhookResponse:
     credentials: CredentialProvider | None = getattr(
         request.app.state, "credentials", None
     )
-    max_payload = (
-        config.webhook.max_payload_bytes
-        if config is not None
-        else DEFAULT_MAX_PAYLOAD_BYTES
-    )
+    max_payload = DEFAULT_MAX_PAYLOAD_BYTES
+    if config and hasattr(config, "webhook"):
+        max_payload = getattr(
+            config.webhook, "max_payload_bytes", DEFAULT_MAX_PAYLOAD_BYTES
+        )
 
     # 1. Verificacao de tamanho via Content-Length header
     content_length = request.headers.get("content-length")
@@ -134,9 +144,10 @@ async def receive_webhook(request: Request) -> WebhookResponse:
                 )
             )
 
-    # 2. Parse JSON (le body uma vez e reutiliza)
-    body = await request.body()
-    if len(body) > max_payload:
+    # 2. Parse JSON (le body uma vez e reutiliza). Leitura LIMITADA: sem
+    # Content-Length (chunked) o corpo era lido inteiro antes do limite.
+    body = await _read_body_limited(request, max_payload)
+    if body is None:
         bound_log.warning("webhook.rejected", reason="payload_too_large_actual")
         raise WebhookError(
             ProblemDetail(
@@ -239,7 +250,9 @@ async def receive_webhook(request: Request) -> WebhookResponse:
     # 5. Normalizacao
     try:
         alert = normalizer.normalize(payload)
-    except (ValueError, KeyError) as e:
+    except (ValueError, KeyError, TypeError, AttributeError) as e:
+        # TypeError/AttributeError: payload autenticado com tipo inesperado.
+        # Antes viravam 500 e o emissor reenviava.
         bound_log.warning(
             "webhook.rejected", reason="normalization_failed", error=str(e)
         )
@@ -253,14 +266,28 @@ async def receive_webhook(request: Request) -> WebhookResponse:
             )
         )
 
-    # 6. Deduplicacao
-    dedup_store: DedupStore | None = getattr(request.app.state, "dedup_store", None)
-    if dedup_store is not None:
-        dedup_window = (
-            config.webhook.dedup_window_seconds
-            if config is not None
-            else DEFAULT_DEDUP_WINDOW_SECONDS
+    # 5b. Notificação de resolução não é incidente novo: aceita sem pipeline
+    # (antes abria um pipeline para cada "resolved" — 4B-06).
+    if alert.alert_type.endswith(".resolved"):
+        bound_log.info("webhook.resolved_ignored", alert_title=alert.title)
+        return WebhookResponse(
+            status="accepted",
+            correlation_id=alert.correlation_id,
+            ignored_reason="resolved_notification",
         )
+
+    # 6. Deduplicacao. Consulta e reserva acontecem juntas, sem `await` no
+    # meio: o `submit` abaixo pode ceder o event loop (lock de admissão
+    # disputado), e com o registro só depois dele dois envios simultâneos do
+    # mesmo alerta passavam ambos. Se o pipeline RECUSAR, a reserva é
+    # desfeita: o retry de um 503 (fila cheia) não pode virar duplicata e
+    # perder o alerta (4B-01).
+    dedup_store: DedupStore | None = getattr(request.app.state, "dedup_store", None)
+    fingerprint = None
+    dedup_window = 300
+    if dedup_store is not None:
+        if config and hasattr(config, "webhook"):
+            dedup_window = getattr(config.webhook, "dedup_window_seconds", 300)
 
         fingerprint = generate_fingerprint(alert)
         is_dup, original_cid = dedup_store.is_duplicate(fingerprint)
@@ -276,17 +303,22 @@ async def receive_webhook(request: Request) -> WebhookResponse:
                 correlation_id=alert.correlation_id,
                 deduplicated=True,
             )
-
-        # Registra fingerprint para futuras deduplicacoes
-        dedup_store.record(fingerprint, alert.correlation_id, dedup_window)
+        dedup_store.record(fingerprint, alert.correlation_id, dedup_window)  # reserva
 
     # 7. Submissao ao pipeline
     pipeline_runner: PipelineRunner | None = getattr(
         request.app.state, "pipeline_runner", None
     )
     if pipeline_runner is not None:
-        accepted = await pipeline_runner.submit(alert)
+        try:
+            accepted = await pipeline_runner.submit(alert)
+        except BaseException:
+            if fingerprint is not None:
+                dedup_store.release(fingerprint, alert.correlation_id)
+            raise
         if not accepted:
+            if fingerprint is not None:
+                dedup_store.release(fingerprint, alert.correlation_id)
             bound_log.warning("webhook.rejected", reason="queue_full")
             raise WebhookError(
                 ProblemDetail(

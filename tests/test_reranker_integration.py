@@ -202,7 +202,10 @@ class TestRerankerIntegration:
 
 @pytest.mark.unit
 class TestConfigWiring:
-    """Verifica carregamento de service_criticality_map (YAML → reranker)."""
+    """service_criticality_map lido de YAML chega ao DomainReranker.
+
+    O config.yaml da raiz, que nenhum entrypoint lia, foi removido (P3-7).
+    """
 
     def test_config_yaml_can_be_loaded(self, tmp_path):
         """config.yaml com service_criticality_map deve ser carregável via yaml."""
@@ -247,34 +250,6 @@ service_criticality_map:
 
         assert reranker.service_criticality_map["payment-svc"] == 1.0
         assert reranker.service_criticality_map["debug-svc"] == 0.1
-
-    def test_project_config_yaml_has_expected_services(self):
-        """O mapa de criticidade do projeto vive em config/defaults.yaml (rag).
-
-        F6-2: o antigo ``config.yaml`` da raiz não era lido por nenhum código;
-        o mapa migrou para ``rag.service_criticality_map`` e é consumido por
-        ``app.builders.build_reranker``.
-        """
-        import os
-
-        import yaml
-
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        config_path = os.path.join(project_root, "config", "defaults.yaml")
-
-        assert os.path.isfile(config_path), "config/defaults.yaml deve existir"
-
-        with open(config_path) as f:
-            config = yaml.safe_load(f)
-
-        assert "service_criticality_map" in config["rag"]
-        svc_map = config["rag"]["service_criticality_map"]
-
-        # Serviços obrigatórios
-        assert "payment-svc" in svc_map
-        assert "database" in svc_map
-        assert svc_map["payment-svc"] == 1.0
-        assert svc_map["debug-svc"] == 0.1
 
 
 # ---------------------------------------------------------------------------

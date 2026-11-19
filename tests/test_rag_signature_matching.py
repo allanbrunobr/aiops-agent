@@ -11,6 +11,8 @@ import pytest
 
 from rag.memory import IncidentMemoryDB
 
+pytestmark = pytest.mark.unit
+
 
 class _CpuSpike:
     """Sinal fictício — pico de CPU."""

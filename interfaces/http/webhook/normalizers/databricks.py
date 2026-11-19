@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hmac as hmac_mod
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -9,7 +8,7 @@ import structlog
 
 from application.ports.credential_provider import CredentialProvider
 from domain.alert import NormalizedAlert
-from interfaces.http.webhook.normalizers.base import AlertNormalizer
+from interfaces.http.webhook.normalizers.base import AlertNormalizer, secrets_match
 from interfaces.http.webhook.normalizers.registry import register_normalizer
 from interfaces.http.webhook.schemas import NormalizedAlertDTO
 
@@ -66,7 +65,7 @@ class DatabricksNormalizer(AlertNormalizer):
             log.error("databricks.auth_failed", reason="auth token not configured")
             return False
 
-        is_valid = hmac_mod.compare_digest(received_token, expected_token)
+        is_valid = secrets_match(received_token, expected_token)
         if not is_valid:
             log.warning("databricks.auth_failed", reason="token mismatch")
         return is_valid

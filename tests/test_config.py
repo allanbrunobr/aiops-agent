@@ -7,6 +7,8 @@ from pydantic import ValidationError
 
 from config.loader import AppConfig, ThresholdsConfig, load_config
 
+pytestmark = pytest.mark.unit
+
 
 class TestAppConfigDefaults:
     """Testes de carregamento com valores padrao."""

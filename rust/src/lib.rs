@@ -29,6 +29,7 @@ fn _aiops_rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     // CUSUM change-point detection e EWMA slope (Story 1.2)
+    // Implementação única em cusum_ewma/ (antes havia cópias inline aqui).
     m.add_function(wrap_pyfunction!(cusum_ewma::detect_cusum, m)?)?;
     m.add_function(wrap_pyfunction!(cusum_ewma::compute_ewma_slope, m)?)?;
     // TracePredictor: _percentile + detect_latency_drift (Story 6.1)

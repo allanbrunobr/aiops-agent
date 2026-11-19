@@ -10,7 +10,7 @@ import structlog
 
 from application.ports.credential_provider import CredentialProvider
 from domain.alert import NormalizedAlert
-from interfaces.http.webhook.normalizers.base import AlertNormalizer
+from interfaces.http.webhook.normalizers.base import AlertNormalizer, secrets_match
 from interfaces.http.webhook.normalizers.registry import register_normalizer
 from interfaces.http.webhook.schemas import NormalizedAlertDTO
 
@@ -76,7 +76,7 @@ class PagerDutyNormalizer(AlertNormalizer):
             hashlib.sha256,
         ).hexdigest()
 
-        is_valid = hmac.compare_digest(received_signature, expected_signature)
+        is_valid = secrets_match(received_signature, expected_signature)
         if not is_valid:
             log.warning("pagerduty.auth_failed", reason="signature mismatch")
         return is_valid

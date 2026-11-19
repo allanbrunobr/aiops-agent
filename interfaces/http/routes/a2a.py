@@ -105,9 +105,8 @@ def _require_bearer(request: Request) -> Any:
     """
     public_pem = getattr(request.app.state, "a2a_jwt_public_pem", "") or ""
     secret = _configured_hmac_secret(request)
-    issuer = (
-        getattr(request.app.state, "a2a_jwt_issuer", "aiops-agent") or "aiops-agent"
-    )
+    issuer = getattr(request.app.state, "a2a_jwt_issuer", "") or ""
+    audience = getattr(request.app.state, "a2a_jwt_audience", "") or ""
     if public_pem:
         key, algorithm = public_pem, "RS256"
     elif secret:
@@ -121,13 +120,23 @@ def _require_bearer(request: Request) -> Any:
     if not header.startswith("Bearer ") or not header[7:].strip():
         raise HTTPException(status_code=401, detail="Bearer token required")
     try:
-        return validate_token(
-            header[7:].strip(), key, algorithm=algorithm, audience="a2a", issuer=issuer
+        claims = validate_token(
+            header[7:].strip(),
+            key,
+            algorithm=algorithm,
+            audience=audience or None,
+            issuer=issuer or None,
         )
     except pyjwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="JWT has expired")
     except pyjwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="JWT is invalid")
+    # F4-3: sem audiência configurada, o A2A aceita tokens a2a e legados (sem
+    # aud), mas rejeita tokens de outra audiência (ex.: MCP). Com audiência
+    # configurada (SEC-11), validate_token já a exigiu acima.
+    if not audience and claims.aud and claims.aud != "a2a":
+        raise HTTPException(status_code=401, detail="JWT is invalid")
+    return claims
 
 
 @router.post("/tasks")
@@ -288,7 +297,7 @@ async def _handle_diagnose(task_id: str, data: dict, request: Request) -> list[d
         config = getattr(request.app.state, "config", None)
         pipeline = build_pipeline(config)
         # engine.run é síncrono e pode levar até pipeline_timeout_seconds —
-        # roda em thread para não bloquear o event loop (F3-2)
+        # roda em thread para não bloquear o event loop (F3-2 / 4B-04)
         result = await asyncio.to_thread(engine.run, pipeline, state)
 
         return [
@@ -304,8 +313,58 @@ async def _handle_diagnose(task_id: str, data: dict, request: Request) -> list[d
             },
         ]
     except Exception as exc:
+        blocked = _safety_block_artifacts(exc)
+        if blocked is not None:
+            log.warning(
+                "a2a.diagnose.safety_blocked",
+                task_id=task_id,
+                blocked_by=getattr(exc, "node_id", None),
+                reason=str(exc.__cause__),
+            )
+            return blocked
         log.error("a2a.diagnose.error", task_id=task_id, error=str(exc))
         return [_error_artifact("pipeline_error", "diagnosis failed")]
+
+
+def _safety_block_artifacts(exc: Exception) -> list[dict] | None:
+    """Artifacts para um aborto causado por uma camada de safety; None se não for.
+
+    Com o diagnóstico já feito, a task se completa com o diagnóstico e um
+    artifact `safety` dizendo que a AÇÃO foi bloqueada e exige humano. Sem
+    diagnóstico, um erro com código próprio (`safety_blocked`), distinto de
+    uma falha do pipeline.
+    """
+    from blueprint.adapters.safety_nodes import SafetyBlockedError
+    from blueprint.engine import PipelineAborted
+
+    if not (
+        isinstance(exc, PipelineAborted)
+        and isinstance(exc.__cause__, SafetyBlockedError)
+    ):
+        return None
+    blocked_by = getattr(exc, "node_id", None) or "safety"
+    reason = str(exc.__cause__)
+    state = getattr(exc, "state", None)
+    diagnosis = getattr(state, "diagnosis", None)
+    if not diagnosis:
+        return [_error_artifact("safety_blocked", f"{blocked_by}: {reason}")]
+    return [
+        {"name": "diagnosis", "parts": [{"type": "data", "data": diagnosis}]},
+        {
+            "name": "safety",
+            "parts": [
+                {
+                    "type": "data",
+                    "data": {
+                        "verdict": "BLOCKED",
+                        "blocked_by": blocked_by,
+                        "reason": reason,
+                        "requires_human": True,
+                    },
+                }
+            ],
+        },
+    ]
 
 
 async def _handle_search(task_id: str, data: dict, request: Request) -> list[dict]:

@@ -15,7 +15,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Load .env / .env.local (F5-3: single loader)
-from config.env import load_local_env
+from config.env import load_local_env  # noqa: E402
 
 load_local_env(project_root)
 

@@ -11,6 +11,8 @@ Cobre:
 
 from __future__ import annotations
 
+import hashlib
+import secrets
 import time
 
 import jwt as pyjwt
@@ -23,6 +25,13 @@ from auth.jwt_validator import TokenClaims, issue_token, validate_token
 from auth.pkce import derive_challenge, generate_verifier, verify_challenge
 from auth.scopes import TOOL_SCOPES, require_scope
 from auth.token_store import InMemoryTokenStore
+
+pytestmark = pytest.mark.unit
+
+# Segredo de cliente gerado em tempo de execução (client_secret_post, SEC-01).
+CLIENT_SECRET = secrets.token_urlsafe(32)
+CLIENT_SECRET_SHA256 = hashlib.sha256(CLIENT_SECRET.encode()).hexdigest()
+
 
 # ---------------------------------------------------------------------------
 # PKCE
@@ -74,7 +83,7 @@ SECRET = "test-secret-aiops-32b-minimum-key!"
 class TestJWT:
     def test_issue_and_validate_roundtrip(self):
         token = issue_token(
-            "assistant-agent", ["aiops:diagnose", "aiops:search"], SECRET
+            "assistant-agent", ["aiops:diagnose", "aiops:search"], SECRET, audience="mcp"
         )
         claims = validate_token(token, SECRET, audience="mcp")
         assert claims.sub == "assistant-agent"
@@ -82,7 +91,7 @@ class TestJWT:
         assert "aiops:search" in claims.scopes
 
     def test_expired_token_raises(self):
-        token = issue_token("agent", ["aiops:search"], SECRET, ttl=-1)
+        token = issue_token("agent", ["aiops:search"], SECRET, ttl=-1, audience="mcp")
         with pytest.raises(pyjwt.ExpiredSignatureError):
             validate_token(token, SECRET, audience="mcp")
 
@@ -99,7 +108,7 @@ class TestJWT:
             issue_token("agent", ["aiops:search"], "short-secret")
 
     def test_empty_scopes(self):
-        token = issue_token("agent", [], SECRET)
+        token = issue_token("agent", [], SECRET, audience="mcp")
         claims = validate_token(token, SECRET, audience="mcp")
         assert claims.scopes == []
 
@@ -157,8 +166,16 @@ def _make_auth_app() -> FastAPI:
         jwt_secret=SECRET,
         token_ttl=3600,
         allowed_clients=[
-            {"id": "assistant-agent", "scopes": ["aiops:diagnose", "aiops:search"]},
-            {"id": "databricks-mcp", "scopes": ["aiops:search"]},
+            {
+                "id": "assistant-agent",
+                "scopes": ["aiops:diagnose", "aiops:search"],
+                "secret_sha256": CLIENT_SECRET_SHA256,
+            },
+            {
+                "id": "databricks-mcp",
+                "scopes": ["aiops:search"],
+                "secret_sha256": CLIENT_SECRET_SHA256,
+            },
         ],
         base_url="http://testserver",
         token_store=InMemoryTokenStore(),
@@ -180,6 +197,7 @@ class TestAuthServer:
             "/auth/authorize",
             json={
                 "client_id": "assistant-agent",
+                "client_secret": CLIENT_SECRET,
                 "scopes": ["aiops:diagnose"],
                 "code_challenge": challenge,
             },
@@ -219,6 +237,7 @@ class TestAuthServer:
             "/auth/authorize",
             json={
                 "client_id": "databricks-mcp",
+                "client_secret": CLIENT_SECRET,
                 "scopes": ["aiops:diagnose"],
                 "code_challenge": challenge,
             },
@@ -230,6 +249,7 @@ class TestAuthServer:
             "/auth/authorize",
             json={
                 "client_id": "assistant-agent",
+                "client_secret": CLIENT_SECRET,
                 "scopes": ["aiops:search"],
                 "code_challenge": "abc",
                 "code_challenge_method": "plain",

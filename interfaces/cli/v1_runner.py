@@ -13,6 +13,7 @@ import dataclasses
 import time
 from datetime import datetime
 
+import structlog
 from rich.rule import Rule
 
 from config.env import load_local_env
@@ -29,6 +30,46 @@ from interfaces.cli.exit_codes import (
     EXIT_REGRESSION,
     EXIT_SUCCESS,
 )
+
+_persist_log = structlog.get_logger("main.persistence")
+
+
+def _state_after_abort(exc, config):
+    """Estado a exibir depois de um PipelineAborted no V1.
+
+    A engine anexa ao aborto o estado alcançado antes do node que falhou. Num
+    bloqueio de safety esse estado já tem o diagnóstico: marca o veredito como
+    BLOCKED e gera o postmortem (template, sem LLM) com a seção de safety —
+    o mesmo que o V0 mostra quando uma camada exige humano.
+    """
+    from blueprint.adapters.safety_nodes import SafetyBlockedError
+
+    state = getattr(exc, "state", None)
+    if state is None or not isinstance(exc.__cause__, SafetyBlockedError):
+        return state
+
+    node_id = getattr(exc, "node_id", None) or "safety"
+    reason = f"{node_id}: {exc.__cause__}"
+    state = dataclasses.replace(
+        state,
+        safety_verdict="BLOCKED",
+        safety_reasons=[*state.safety_reasons, reason],
+    )
+    if state.diagnosis and not state.postmortem_md:
+        try:
+            from blueprint.adapters.pipeline_nodes import make_postmortem_node
+            state = make_postmortem_node(config)(state)
+        except Exception as pm_exc:  # noqa: BLE001 — sem postmortem, mas registrado
+            _persist_log.warning("v1.postmortem_after_block_failed", error=repr(pm_exc))
+    if state.postmortem_md:
+        state = dataclasses.replace(state, postmortem_md=(
+            state.postmortem_md
+            + "\n## Safety\n"
+            + f"- **Verdict:** BLOCKED by `{node_id}`\n"
+            + f"- **Reason:** {exc.__cause__}\n"
+            + "- The proposed action was not approved and requires human review.\n"
+        ))
+    return state
 
 
 def create_incident_state(
@@ -115,8 +156,8 @@ def run_v1(args: argparse.Namespace) -> int:
     # Slack notifier — opcional, wired se SLACK_BOT_TOKEN estiver no ambiente
     from datetime import timezone as _tz
 
+    from app.slack_setup import setup_slack_notifier
     from core.lifecycle import LifecycleEvent
-    from tools.slack_setup import setup_slack_notifier
 
     _slack_notifier = setup_slack_notifier(app_config)
     if _slack_notifier is not None:
@@ -206,6 +247,11 @@ def run_v1(args: argparse.Namespace) -> int:
     except PipelineAborted as exc:
         log.error("main.pipeline_aborted", error=str(exc))
         console.print(f"[red]Pipeline aborted: {exc}[/red]")
+        # Mostra o que o pipeline já tinha apurado (diagnóstico, postmortem),
+        # não o estado inicial.
+        _aborted_state = _state_after_abort(exc, app_config)
+        if _aborted_state is not None:
+            state = _aborted_state
         _fire("pipeline.failed", cid=_cid, data={"error": str(exc)})
         if "regression" in str(exc).lower():
             exit_code = EXIT_REGRESSION
@@ -219,14 +265,17 @@ def run_v1(args: argparse.Namespace) -> int:
         _fire("pipeline.failed", cid=_cid, data={"error": str(exc)})
         exit_code = EXIT_ERROR
     else:
-        # Pipeline completou com sucesso
+        # Pipeline completou. Ação que o PreValidator mandou para revisão
+        # exige humano, como no V0 (exit 3).
+        if state.safety_verdict == "NEEDS_REVIEW":
+            exit_code = EXIT_APPROVAL_NEEDED
         diagnosis = state.diagnosis or {}
         _conf_v1 = diagnosis.get("confidence", 0.0)
         _fire(
             "pipeline.completed",
             cid=_cid,
             data={
-                "root_cause": diagnosis.get("root_cause", ""),
+                "root_cause": diagnosis.get("root_cause") or "",
                 "confidence": confidence_to_score(_conf_v1),
                 "proposed_fix": diagnosis.get("proposed_fix")
                 or diagnosis.get("fix_command", ""),

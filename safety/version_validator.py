@@ -23,6 +23,7 @@ Ref: "When AIOps Become AI Oops: Subverting LLM-driven IT Operations
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from dataclasses import dataclass, field
@@ -82,7 +83,14 @@ class RemediationValidation:
 # Em produção, consultaria NVD API, OSV, ou Snyk
 # ============================================================================
 
+
 # Versões com CVEs críticos conhecidos — NUNCA fazer downgrade para estas
+def _version_components(version: str) -> list[str]:
+    """Componentes de uma versão, sem zeros à esquerda: "9.04.1" → ["9", "4", "1"]."""
+    parts = re.split(r"[.\-+]", version.strip().lower())
+    return [p.lstrip("0") or "0" if p.isdigit() else p for p in parts if p]
+
+
 KNOWN_VULNERABLE_VERSIONS: dict[str, dict[str, list[str]]] = {
     "postgres": {
         "9.4": ["CVE-2023-5868", "CVE-2023-5869", "CVE-2023-5870"],
@@ -362,8 +370,12 @@ class VersionValidator:
                 from safety.audit import SafetyAuditor
 
                 SafetyAuditor.log_error("version_validator", correlation_id, exc)
-            except Exception:
-                pass
+            except Exception:  # noqa: BLE001 — auditoria nunca derruba a validação
+                logging.getLogger(__name__).warning(
+                    "audit log_error failed for layer %s",
+                    "version_validator",
+                    exc_info=True,
+                )
 
         return result
 
@@ -475,12 +487,18 @@ class VersionValidator:
 
         pkg_versions = self.vulnerable_versions[normalized_pkg]
 
-        # Igualdade da versão inteira. Prefixo fazia "1" herdar o CVE de "1.16"
-        # e "openssl 1" herdar CVE-2022-3602 da linha "1.0".
-        if version in pkg_versions:
-            return pkg_versions[version]
-
-        return []
+        # As chaves são LINHAS de release ("9.4", "1.16"): a versão pertence à
+        # linha se os componentes da chave forem prefixo dos componentes da
+        # versão. Por componente, não por string: "9.40" não é da linha "9.4",
+        # e "1" não herda o CVE de "1.16" nem "openssl 1" o da linha "1.0".
+        # Antes era igualdade exata, e "9.4.26"/"1.16.1" passavam (F08).
+        version_parts = _version_components(version)
+        cves: list[str] = []
+        for line, line_cves in pkg_versions.items():
+            line_parts = _version_components(line)
+            if line_parts and version_parts[: len(line_parts)] == line_parts:
+                cves.extend(c for c in line_cves if c not in cves)
+        return cves
 
     def _check_config_safety(
         self, text: str

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+import pytest
 import structlog
 from structlog.testing import capture_logs
 
@@ -13,6 +14,8 @@ from core.logging import (
     configure_logging,
     get_logger,
 )
+
+pytestmark = pytest.mark.unit
 
 
 class TestConfigureLogging:

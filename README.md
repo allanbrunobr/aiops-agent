@@ -186,9 +186,9 @@ python main.py [options]
 
 | Code | Meaning |
 |------|---------|
-| `0` | Incident resolved and verified by TNR |
+| `0` | Pipeline completed with no regression and no action awaiting approval. Without a post-action health measurement, TNR reports `not_verified`, not success |
 | `1` | Invalid arguments, or an unrecoverable error in a pipeline stage |
-| `2` | Regression detected by TNR (post-action health worse than pre-action) |
+| `2` | Regression detected by TNR (measured post-action health worse than pre-action) |
 | `3` | Action blocked by the safety layer (requires human approval) |
 
 ---
@@ -280,7 +280,7 @@ To set up a real Slack App, see [`infra/SLACK-SETUP.md`](infra/SLACK-SETUP.md). 
 
 ### Environment variables
 
-The CLI and the demo load `.env.local` automatically. The CLI also reads `.env`. Copy [`.env.example`](.env.example). The OAuth HMAC secret, when set, is `AIOPS_MCP__OAUTH__JWT_SECRET` and must be at least 32 bytes.
+The CLI, the demo and the local webhook server load `.env.local` and then `.env` from the repository root (`config/env.py`). Variables already set in the process win, and `.env.local` wins over `.env`. Copy [`.env.example`](.env.example). The OAuth HMAC secret, when set, is `AIOPS_MCP__OAUTH__JWT_SECRET` and must be at least 32 bytes.
 
 MCP and A2A authentication (`mcp.auth_method` in `config/defaults.yaml`):
 
@@ -312,7 +312,7 @@ maturin build --release --interpreter .venv/bin/python --manifest-path rust/Carg
 
 ### Configuration files
 
-- [`config/defaults.yaml`](config/defaults.yaml): analysis thresholds, Blueprint Engine, webhook, Slack and MCP settings. Values can be overridden by environment variables with the `AIOPS_` prefix and `__` between nesting levels (for example, `AIOPS_MCP__OAUTH__JWT_SECRET`).
+- [`config/defaults.yaml`](config/defaults.yaml): analysis thresholds, Blueprint Engine, webhook, Slack and MCP settings. Values can be overridden by environment variables named `AIOPS_<SECTION>__<FIELD>` (prefix `AIOPS_`, nesting with `__`; for example, `AIOPS_MCP__OAUTH__JWT_SECRET`).
 - `rag` block in `config/defaults.yaml`: domain reranker (`reranker_enabled`, Tier 1 signal fusion), optional cross-encoder (`cross_encoder_enabled`, downloads a Hugging Face model), Chain-of-Thought retriever (`cot_enabled`) and the per-service `service_criticality_map` consumed by the reranker.
 
 ---
@@ -333,6 +333,14 @@ MCP server over stdio (Claude Desktop and local use):
 ```bash
 python -m interfaces.mcp.server
 ```
+
+HTTP app (health, A2A, OAuth server and, when `mcp.enabled: true` with `transport: sse`, MCP over SSE), on `127.0.0.1:47893` by default:
+
+```bash
+python -m interfaces.http                      # --host, --port, --config
+```
+
+A2A requires a Bearer JWT, and the OAuth server is mounted only when a signing key is configured (see [`SECURITY.md`](SECURITY.md)). MCP over SSE is off by default; when enabled, its default `auth_method` is `header`. The accuracy, metrics, knowledge and admin routers in `interfaces/http/` are **not** mounted.
 
 ---
 

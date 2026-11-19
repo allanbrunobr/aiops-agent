@@ -175,7 +175,10 @@ class TestPkceTwoStepFlow:
         )
         assert resp.status_code == 400
 
-    def test_old_single_request_register_gone(self, client):
+    def test_single_request_register_requires_client_auth(self, client):
+        # SEC-01 (origin/main): o endpoint single-step /auth/token/register foi
+        # reintroduzido, mas agora exige client_secret (fail-closed). Um pedido
+        # sem segredo de cliente — o ataque do relatório — recebe 401, não um JWT.
         verifier = generate_verifier()
         resp = client.post(
             "/auth/token/register",
@@ -186,7 +189,7 @@ class TestPkceTwoStepFlow:
                 "code_challenge": derive_challenge(verifier),
             },
         )
-        assert resp.status_code in (404, 405)
+        assert resp.status_code == 401
 
     def test_discovery_advertises_two_step(self, client):
         resp = client.get("/auth/.well-known/oauth-authorization-server")
