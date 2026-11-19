@@ -48,6 +48,7 @@ markers = [
     "integration: Testes de integração (pipeline completo, modo --no-llm)",
     "snapshot: Testes de snapshot (validação de output determinístico)",
     "slow: Testes lentos de performance (podem demorar >10s)",
+    "e2e: Testes end-to-end Playwright do demo (browser headless; requer chromium + CDN)",
 ]
 addopts = "-v --tb=short"
 filterwarnings = [

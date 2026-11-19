@@ -1152,3 +1152,50 @@ follow-up `edfc3cc` (setter preserva a API atribuível); 113 passed nos suites R
 `fb82768` (#6 registro), `9431979` (#7 menores), `edfc3cc` (#4 setter follow-up).
 Working tree limpo. Push como branch `improvement-plan-2026-11-17` (Passo 7);
 `main` remoto não tocado.
+
+---
+
+## Playwright E2E do demo (2026-11-19)
+
+Pedido do usuário: validar a UI web real com Playwright. O módulo de demonstração
+(`interfaces/demo/server.py`, FastAPI + WebSocket em `http://localhost:47891`)
+é o alvo — dashboard `/demo/` e narrativa `/demo/story`.
+
+**Entregue:** suíte `tests/e2e/` (marcada `e2e`, excluída dos jobs `unit` e
+`integration or snapshot`), 10 testes:
+
+- **Browser (chromium headless, 4):** dashboard renderiza (título, badge `IDLE`,
+  4 cenários, controles, zero erros de console/página); start de cenário → botão
+  Stop aparece + badge de fase sai de `IDLE` **via WebSocket** + log stream popula
+  + `/demo/status` `is_running=true`; stop → controle volta + `is_running=false`;
+  `/demo/story` renderiza.
+- **API (2):** `GET /demo/scenarios` lista os 4 cenários; `GET /demo/postmortem`
+  → 204 antes de RESOLVED.
+- **Auth (4, `require_demo_token`):** mutação sem token → 401, token errado → 401,
+  token correto → 200, leituras abertas.
+
+**Design:** servidor real como subprocesso em porta efêmera (fixture
+`demo_server` modo aberto / `demo_server_with_token` com `AIOPS_DEMO_TOKEN`),
+`ANTHROPIC_API_KEY` removido (determinístico, sem LLM). Asserções no fluxo de
+dados/controle dirigido pelo WebSocket (badge, logs, timeline, status), não em
+pixels de gráfico. `pytest.importorskip("playwright")` pula onde não instalado.
+
+**Dependência:** `index.html` carrega uPlot/ECharts/GSAP de `cdn.jsdelivr.net`;
+os testes de dashboard esperam essas libs. Rodar no **M1** (internet); nada pesado
+no M5. Vendorizar os assets p/ suíte hermética + job CI dedicado = follow-up
+opcional (não adicionado p/ não ampliar escopo nem introduzir flakiness de CDN no CI).
+
+**Verificação (M1, números reais):**
+
+| Check | Comando | Resultado |
+|---|---|---|
+| E2E | `pytest tests/e2e -m e2e --timeout=120` | **10 passed** em 46.83s (chromium headless) |
+| Unit (sem regressão) | `pytest tests/ -m unit --ignore=tests/rust` | **907 passed**, 680 deselected (+10 e2e), 0 failed |
+| Integration/snapshot | `pytest tests/ -m "integration or snapshot"` | **152 passed**, 1503 deselected (+10 e2e), 0 failed → **ZERO diffs novos** |
+| ruff check | `ruff check .` | All checks passed |
+| ruff format | `ruff format --check .` | 322 files already formatted (+3 e2e) |
+| mypy | `mypy domain application core` | Success, 18 source files |
+
+Marker `e2e` registrado em `pyproject.toml`. Docs de execução em `tests/e2e/README.md`.
+Instalado no M1: `playwright 1.65.2` + `pytest-playwright 0.10.0` + chromium
+headless shell v1255. Merge com `main` segue em HOLD (decisão (a)/(b) pendente).
