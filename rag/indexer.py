@@ -149,7 +149,6 @@ class ObservabilityIndexer:
                 batch_size=512,
                 normalize_embeddings=True,
                 show_progress_bar=False,
-                num_workers=0,
             )
             for t, emb in zip(uncached, new_embs):
                 _embedding_cache[(mn, t)] = emb
@@ -577,7 +576,6 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
             batch_size=512,
             normalize_embeddings=True,
             show_progress_bar=False,
-            num_workers=0,
         )
         emb_map = {t: emb for t, emb in zip(unique_texts, unique_embeddings)}
         embeddings = np.array([emb_map[t] for t in texts], dtype=np.float32)
