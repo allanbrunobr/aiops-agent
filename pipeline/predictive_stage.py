@@ -20,6 +20,7 @@ from pipeline.risk_scorer import (
     get_event_level,
     relative_slope,
 )
+from pipeline.saturation_detector import SaturationSignal, detect_saturation
 from pipeline.trace_predictor import LatencyDriftSignal, analyze_trace_signals
 
 logger = logging.getLogger(__name__)
@@ -51,6 +52,7 @@ def run_predictive_stage(
     *,
     eta_sigma: float = 3.0,
     use_relative_slope: bool = False,
+    ceilings: dict[str, float] | None = None,
 ) -> PredictionReport | None:
     """Executa o estágio preditivo e retorna PredictionReport ou None em caso de erro.
 
@@ -68,6 +70,9 @@ def run_predictive_stage(
     use_relative_slope : bool
         Se True, o score de métrica usa limiares de slope relativo (D3).
         Default False preserva o comportamento absoluto.
+    ceilings : dict[str, float] | None
+        Teto por ``metric_name`` (ex.: maxReplicas do HPA) para o detector de
+        saturação (D4). Sem teto, usa-se o máximo da janela (exige subida prévia).
 
     Portões (D3): séries com < MIN_SERIES_POINTS pontos (métrica, log, spans)
     ou métrica com efeito relativo < MIN_RELATIVE_EFFECT não geram sinal.
@@ -82,6 +87,7 @@ def run_predictive_stage(
         log_signal: LogBurstSignal | None = None
         latency_signal: LatencyDriftSignal | None = None
 
+        saturation_signal: SaturationSignal | None = None
         signals: list[str] = []
         eta_minutes: float | None = None
 
@@ -110,12 +116,20 @@ def run_predictive_stage(
                 best_eta: float | None = None
                 best_sigma = 0.0
                 best_rel = 0.0
-                for entries in by_metric.values():
+                for metric_name, entries in by_metric.items():
                     if len(entries) < MIN_SERIES_POINTS:
                         continue  # série curta não estabelece tendência
                     entries.sort(key=lambda e: e[1].timestamp)
                     points = [p for _, p in entries]
                     values = [p.value for p in points]
+                    # D4: platô no teto tem slope≈0 e seria barrado pelo portão
+                    # de efeito abaixo — avalia saturação ANTES dele.
+                    sat = detect_saturation(points, (ceilings or {}).get(metric_name))
+                    if sat is not None and (
+                        saturation_signal is None
+                        or sat.sustained_samples > saturation_signal.sustained_samples
+                    ):
+                        saturation_signal = sat
                     if _relative_effect(values) < MIN_RELATIVE_EFFECT:
                         continue  # flat/ruído: efeito ínfimo → sem sinal
                     threshold = _eta_threshold(entries[0][0], eta_sigma)
@@ -137,6 +151,8 @@ def run_predictive_stage(
                     )
                     eta_minutes = best_eta
                     signals.append("metric_trend")
+            if saturation_signal is not None:
+                signals.append("saturation")
         except Exception as exc:
             logger.warning("predictive_stage.metric_signal_failed: %s", exc)
 
@@ -227,7 +243,11 @@ def run_predictive_stage(
 
         # Calcula score de risco unificado
         risk_score = compute_risk_score(
-            metric_signal, log_signal, latency_signal, use_relative_slope
+            metric_signal,
+            log_signal,
+            latency_signal,
+            use_relative_slope,
+            saturation_signal,
         )
         event_level = get_event_level(risk_score)
 

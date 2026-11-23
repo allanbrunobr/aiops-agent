@@ -10,6 +10,7 @@ um score único de 0 a 100 e determina o nível de evento de lifecycle.
 from dataclasses import dataclass
 
 from pipeline.log_predictor import LogBurstSignal
+from pipeline.saturation_detector import SaturationSignal
 from pipeline.trace_predictor import LatencyDriftSignal
 
 
@@ -89,15 +90,30 @@ def _score_latency_signal(signal: LatencyDriftSignal | None) -> float:
     return min(100.0, (ratio - 1.0) * 200.0)
 
 
+def _score_saturation_signal(signal: SaturationSignal | None) -> float:
+    """Platô confirmado pelo detector (≥K amostras, ≥95% do teto) = 100."""
+    return 0.0 if signal is None else 100.0
+
+
+# Pesos (soma = 1). Sem sinal de saturação, os pesos originais valem
+# (snapshots intactos). Com saturação, renormalizados explicitamente: o platô
+# no teto é o sinal que o slope perde, então ganha peso próprio.
+_WEIGHTS_BASE = (0.4, 0.3, 0.3, 0.0)  # metric, log, latency, saturation
+_WEIGHTS_WITH_SATURATION = (0.25, 0.15, 0.30, 0.30)
+
+
 def compute_risk_score(
     metric_signal: MetricTrendSignal | None,
     log_signal: LogBurstSignal | None,
     latency_signal: LatencyDriftSignal | None,
     use_relative_slope: bool = False,
+    saturation_signal: SaturationSignal | None = None,
 ) -> float:
     """Combina sinais preditivos em score de risco de 0 a 100 (FR-P6).
 
     Pesos: metric_slope=40%, log_burst=30%, latency_drift=30%.
+    Com ``saturation_signal`` (D4) os pesos são renormalizados (soma 1):
+    metric=25%, log=15%, latency=30%, saturation=30%.
     ``use_relative_slope`` troca os limiares absolutos de slope pelos relativos.
     Retorna 0.0 se todos os sinais forem None.
     """
@@ -105,7 +121,9 @@ def compute_risk_score(
     log_score = _score_log_signal(log_signal)
     latency_score = _score_latency_signal(latency_signal)
 
-    weighted = 0.4 * metric_score + 0.3 * log_score + 0.3 * latency_score
+    sat_score = _score_saturation_signal(saturation_signal)
+    wm, wl, wt, ws = _WEIGHTS_WITH_SATURATION if saturation_signal else _WEIGHTS_BASE
+    weighted = wm * metric_score + wl * log_score + wt * latency_score + ws * sat_score
     return min(100.0, max(0.0, weighted))
 
 

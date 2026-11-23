@@ -72,3 +72,9 @@ Feature 1 (VB-T1) ✅ CONCLUÍDA (commit 1dd9d63, passes=true). Siga a ordem de 
 - Testes: 10 novos em tests/test_predictive_stage.py (flat, ruído, curta, outlier, tendência real, slope relativo); 10 falhavam antes do fix (verificado revertendo os 2 arquivos).
 - Verificação (M5): `scripts/ci-local.sh unit` exit 0, 1820 passed / 6 skipped; ruff, format, mypy (core domain application) limpos. Commit do código: b1caebf.
 - Próxima: Feature 5 (D4 detector de saturação HPA).
+
+## Sessão Feature 5 (D4 detector de saturação HPA) — 2026-11-23
+- Entregue: `pipeline/saturation_detector.py` (`detect_saturation(points, ceiling)->SaturationSignal|None`: cauda ≥K=5 amostras com nível ≥95% do teto e spread ≤3% do teto; sem teto explícito usa o máximo da janela e EXIGE subida prévia, senão flat viraria "saturado"). `pipeline/predictive_stage.py`: kwarg `ceilings` (teto por metric_name), saturação avaliada ANTES do portão D3 de efeito (platô tem slope≈0), sinal `"saturation"` em `signals`. `pipeline/risk_scorer.py`: `saturation_signal` opcional; sem ele pesos 0.4/0.3/0.3 inalterados (snapshots intactos); com ele renormalizados 0.25/0.15/0.30/0.30 (soma 1).
+- Testes: tests/test_saturation_detector.py (21). Cobrem platô no teto, abaixo do teto, série curta, variância, platô já abandonado, flat sem teto, integração no stage e no scorer.
+- Verificação (M5, M5_LEVE=1): ruff/format/mypy limpos; `pytest tests --ignore=tests/rust -m "not slow"` = 1989 passed / 8 skipped. NÃO rodei o literal `scripts/ci-local.sh unit` (hook m5-guard bloqueia suíte) → passes=false até rodar. Obs.: um pytest sem --ignore pegou tests/rust: 38 falhas de paridade Rust (ambiente, pré-existentes).
+- Pendente: nada chama run_predictive_stage com `ceilings` ainda (default None); ligar ao maxReplicas do HPA é decisão para VB/D5. Próxima: rodar ci-local.sh unit com autorização e marcar passes=true; depois Feature 6 (D5).
