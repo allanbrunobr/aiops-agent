@@ -1,0 +1,399 @@
+{
+  "project": "aiops-agent",
+  "source_plan": "docs/improvement-agent-prompt.md",
+  "audit_verification": {
+    "date": "2026-11-17",
+    "method": "6 agentes de pesquisa em paralelo (um por fase) + spot-checks diretos nas alegações que mudam veredito; read-only, sem alterar código",
+    "result": "32 achados: 25 confirmados, 7 parcialmente confirmados (F0-2, F2-1, F5-1, F5-2, F5-3, F5-4, F6-4); nenhum 100% falso",
+    "note": "Descriptions corrigidas para refletir o código atual; o campo verification_note de cada feature registra o delta vs auditoria original. Linhas reconferidas em 2026-11-17, mas podem deslocar de novo — a regra 6 continua valendo."
+  },
+  "instructions": "Execute as features na ordem, uma por vez. ANTES de começar, leia docs/improvement-agent-prompt.md por completo (contexto arquitetural, 9 regras rígidas, comandos de verificação). Regras críticas: (1) teste que falha ANTES do fix para cada bug; (2) não misture movimentação de arquivos com mudança de comportamento; (3) rode scripts/ci-local.sh unit antes de concluir cada feature e o CI completo ao fim de cada fase; (4) não quebre o V0 (main.py sem --pipeline-v1) até a feature F5-4; (5) nenhuma ação pode ser executada em infraestrutura real (contrato do SECURITY.md); (6) confirme cada file:line antes de editar (linhas podem ter deslocado); se um achado não se confirmar, registre e pule; (7) ao concluir cada feature, atualize o campo status para done e registre em docs/improvement-progress.md (done/skipped/blocked + motivo + testes adicionados); (8) diffs de snapshot exigem justificativa; (9) em ambiguidade de produto, escolha a opção que torna o sistema mais honesto sobre o que realmente faz e registre a decisão. FEATURES DE FASE 7 (VB-* e D*): leia docs/vigia-barato-agent-prompt.md e ROBUSTNESS_PLAN.md (Eixo D, :309-363) por completo — write-sets, aceite e ordem lá. Stdlib-only nos geradores de cenário; nenhum teste grava em output/ do repo (usar tmp_path); camada barata do monitor NÃO chama LLM; nenhuma ação em infra real (fail-closed exit 3). Ordem: VB-T1 → D1 → D2 → D3 → D4 → D5 → VB1 → VB2 → VB3 → VB4.",
+  "verification": {
+    "unit": ".venv/bin/python -m pytest tests -m unit -q",
+    "ci_local_unit": "scripts/ci-local.sh unit",
+    "ci_full": "scripts/ci-local.sh",
+    "smoke_v0": ".venv/bin/python main.py --no-llm --no-rag",
+    "smoke_v1": ".venv/bin/python main.py --no-llm --no-rag --pipeline-v1"
+  },
+  "features": [
+    {
+      "id": "F0-1",
+      "phase": 0,
+      "title": "Ruff + mypy no pyproject e no CI",
+      "description": "Adicionar ruff (check + format, regras padrão + imports) e mypy ao pyproject.toml como dev-dependencies. mypy: começar SOMENTE por domain/, application/, core/ (módulos puros), com override permissivo para o resto. Criar job de lint separado em .github/workflows/ci.yml e espelhar em scripts/ci-local.sh. Ver Fase 0 de docs/improvement-agent-prompt.md.",
+      "acceptance": "ruff check . && ruff format --check . && mypy domain application core passam; CI verde com o novo job.",
+      "status": "done",
+      "verification_note": "Confirmado. Nota de implementação: pyproject.toml não tem tabela [project] (build maturin puro; deps reais em requirements.txt) — adicionar dev-dependencies exige criar [project]/dependency-groups ou arquivo separado."
+    },
+    {
+      "id": "F0-2",
+      "phase": 0,
+      "title": "Cache pip + coverage no CI",
+      "description": "Adicionar cache de pip (actions/setup-python com cache: pip) ao job unit-tests de .github/workflows/ci.yml — os jobs integration-tests e rust-build JÁ têm cache. Adicionar coverage report (SEM gate de threshold) ao job de testes.",
+      "acceptance": "Workflows atualizados; scripts/ci-local.sh unit verde.",
+      "status": "done",
+      "verification_note": "Parcialmente confirmado: a auditoria pedia cache nos 3 jobs, mas 2/3 já têm cache: pip. Escopo reduzido ao job unit-tests + coverage (ausente em todos os jobs)."
+    },
+    {
+      "id": "F0-3",
+      "phase": 0,
+      "title": "Corrigir docs obsoletos + CONTRIBUTING",
+      "description": "docs/project-overview.md está obsoleto (afirma 'Tests: None' e '~4900 lines'; realidade: 94 arquivos de teste, ~53k linhas Python). Atualizar com números reais. Documentar os novos comandos de lint/type-check em CONTRIBUTING.md.",
+      "acceptance": "Docs refletem o estado real; nenhum comando documentado que não exista.",
+      "status": "done",
+      "verification_note": "Confirmado com números exatos: docs/project-overview.md:22-23 ('15 source files, ~4,900 lines' / 'Tests: None (prototype)'); realidade conferida: 94 arquivos .py em tests/ (84 test_*.py), 52.793 linhas Python no repo."
+    },
+    {
+      "id": "F1-1",
+      "phase": 1,
+      "title": "Bug: mapeamento FAISS corrompido após load do cache",
+      "description": "rag/indexer.py:197-273 (load_index) restaura chunks e índice mas NÃO reconstrói _faiss_to_chunks (mapa criado em rag/indexer.py:131-133); save_index (:152-195) também não persiste o mapa. O índice FAISS contém só textos únicos (:111,:150); chunks contém duplicatas; rag/retriever.py:92 cai no fallback chunks[idx] (:113) → resultados TROCADOS após carregar do cache. Fix: reconstruir/persistir o mapa no load_index. Teste de regressão PRIMEIRO: indexar report com textos duplicados → salvar cache → novo indexer load_index → mesma query retorna os MESMOS chunks/ranking do indexer original.",
+      "acceptance": "Teste novo falha antes do fix e passa depois; suíte unit verde.",
+      "status": "done",
+      "verification_note": "Confirmado, alcançável em produção (main.py:345 carrega cache com a classe base). Nuance: a subclasse ObservabilityIndexerWithHistory indexa embeddings COM duplicatas (:467-476) e não usa o mapa — para ela o fallback posicional seria correto; o bug é no caminho da classe base."
+    },
+    {
+      "id": "F1-2",
+      "phase": 1,
+      "title": "Bug: for/else na sanitização de traces + mutação in-place",
+      "description": "pipeline/telemetry_sanitizer.py:309-320: o else do for sobre attributes executa sempre (sem break) → spans contaminados contados como clean_entries; spans sem attributes nunca contam como clean. Métricas/traces são mutados IN-PLACE ao contrário dos logs (clonados) — unificar para retornar cópias, nunca mutar o input. Testes: span com payload de injection em attribute conta como contaminado; input original intacto após sanitize_all().",
+      "acceptance": "Testes novos verdes; snapshots atualizados com justificativa se mudarem.",
+      "status": "done",
+      "verification_note": "Confirmado integralmente: nenhum break no arquivo; logs clonados em :231 (_clone_log_entry :645); metrics mutados em :264,268; traces em :304,313."
+    },
+    {
+      "id": "F1-3",
+      "phase": 1,
+      "title": "Bug: estágio preditivo opera sobre dados errados",
+      "description": "pipeline/predictive_stage.py:118 usa getattr(trace, 'duration_ms', 0.0) mas o campo real de SlowCallPath é total_duration_ms → spans sintéticos sempre 0.0. :124 coloca path (list) em Span.operation (str). Pontos de métrica vêm de anomalias deduplicadas a 1 por métrica (pipeline/metric_filter.py:151-158) → slope EWMA cruza métricas distintas; agrupar por métrica antes do slope. Logs sintéticos todos com timestamp=now — usar timestamps reais quando disponíveis. Teste: dados conhecidos → risk_score reflete os dados; assert de tipos nos campos sintéticos.",
+      "acceptance": "Testes novos verdes; risk_score não é mais constante/ruído com dados de entrada válidos.",
+      "status": "done",
+      "verification_note": "Confirmado integralmente: SlowCallPath (pipeline/trace_filter.py:26-36) só tem total_duration_ms; Span.operation é str (domain/incident.py:46), dataclass não valida tipo; slope usa só [p.value] sem agrupar (pipeline/metric_predictor.py:44); now único em predictive_stage.py:91-97."
+    },
+    {
+      "id": "F1-4",
+      "phase": 1,
+      "title": "Bug: key mismatch weight vs chunk_weight no reranker",
+      "description": "rag/reranker.py:141 lê metadata.get('weight') mas o indexer escreve 'chunk_weight' (rag/indexer.py:366,383,403,438) → downweight de histórico (0.5) nunca aplicado. Alinhar a key (preferir chunk_weight em ambos). Teste: chunk [HISTORICAL] com chunk_weight=0.5 pontua abaixo de chunk idêntico com peso 1.0.",
+      "acceptance": "Teste novo verde; suíte unit verde.",
+      "status": "done",
+      "verification_note": "Confirmado: nenhuma conversão chunk_weight→weight existe no repo; signals.chunk_weight é sempre 0.0 (peso 0.05 em _WEIGHTS, reranker.py:46)."
+    },
+    {
+      "id": "F1-5",
+      "phase": 1,
+      "title": "Bug: foreign keys nunca ativadas no SQLite",
+      "description": "rag/memory.py:187-191: docstring promete FK mas falta PRAGMA foreign_keys=ON por conexão. Ativar. Teste: inserir skill_outcomes com skill_id inexistente deve falhar.",
+      "acceptance": "Teste novo verde; scripts/ci-local.sh (completo) verde ao fim da Fase 1.",
+      "status": "done",
+      "verification_note": "Confirmado: zero ocorrências de 'foreign_keys' em todo o repo; schema declara FK em rag/memory.py:149 mas nunca é enforced (save_skill_outcome aceita skill_id órfão)."
+    },
+    {
+      "id": "F2-1",
+      "phase": 2,
+      "title": "V1: wire de state.proposed_action (safety nunca valida)",
+      "description": "Nenhum código seta state.proposed_action (nem make_diagnoser_node em blueprint/adapters/pipeline_nodes.py:127-131,162, nem main_v1 em main.py:1764-1922) → blueprint/adapters/safety_nodes.py:90-99,151-159,222-230 fazem skip 'no_proposed_action' e version_validator/pre_validator/tnr passam direto, contradizendo o docstring 'ALL 4 safety layers execute' em blueprint/pipelines/incident_response.py:46. TNR tem ainda 2º skip 'no_health_snapshots' (safety_nodes.py:234-241). Fix: diagnoser node (e fallback determinístico) preenche state.proposed_action via dataclasses.replace. ATENÇÃO: o campo no estado é dict[str, Any] | None (domain/incident_state.py:46) — decidir e registrar o formato (dict serializado vs dataclass MitigationAction de domain/incident.py:90-101, tipo ÚNICO re-exportado por safety/tnr.py:21). Teste E2E V1: ação proposta perigosa → pipeline BLOQUEIA.",
+      "acceptance": "Teste E2E V1 com ação perigosa bloqueado; nenhum skip 'no_proposed_action' quando há ação proposta.",
+      "status": "done",
+      "verification_note": "Parcialmente confirmado: wiring ausente e skips reais (grep no repo: proposed_action só em 3 leituras). A alegação 'dois tipos MitigationAction' está DESATUALIZADA — já é tipo único (domain/incident.py:90-101; safety/tnr.py:21 só re-importa)."
+    },
+    {
+      "id": "F2-2",
+      "phase": 2,
+      "title": "V1: RAG nasce vazio (build_rag sem build_index)",
+      "description": "app/builders.py:47-51 (build_rag) cria indexer sem chamar build_index; comentário em main.py:1850-1851 admite 'por ora, sem report pre-pipeline'. Fix: construir índice a partir do report agregado (node de indexação após aggregator ou build lazy no primeiro retrieve com o report do estado). Teste: V1 com RAG habilitado → retriever retorna chunks do incidente corrente.",
+      "acceptance": "Teste novo verde; smoke V1 inalterado.",
+      "status": "done",
+      "verification_note": "Confirmado: único build_index de produção está no V0 (main.py:357, step_rag); nenhum node do blueprint indexa; retriever retorna [] se index/model None (rag/retriever.py:66-67) → RAG do V1 sempre vazio. HTTP também (interfaces/http/app.py:216 usa build_rag sem indexar)."
+    },
+    {
+      "id": "F2-3",
+      "phase": 2,
+      "title": "TNR de teatro: substituir snapshots hardcoded por métricas reais",
+      "description": "Dois lugares ALCANÇÁVEIS fabricam snapshots: agents/mitigator.py:137-165 (verify_with_tnr: error_rate 45.0→0.1, availability 55.0→99.9 hardcoded → qualquer ação passa; replan em agents/orchestrator.py:326 nunca dispara) e safety/orchestrator.py:151-164 (baseline fixo error_rate=0.0/p99=100.0/avail=100.0 + simulate_check(action, baseline, baseline) → delta 0 → SUCCESS sempre; alcançável via MCP validate_action). interfaces/mcp/tools.py:478-527 (_check_tnr: pré/pós idênticos error_rate=5.0/p99=200.0/avail=99.0) é CÓDIGO MORTO (zero callers) — remover ou wire. Há também command.format(..., current=3, prev=1) hardcoded (agents/mitigator.py:114,117) e ROLLBACK_VERSIONS fixo (:25-28). O design real está pronto em safety/tnr.py:96-169 (execute_with_safety: pré→exec→pós→rollback se delta<−5.0, threshold em :87) mas tem ZERO callers no repo. Fix: derivar snapshots do AggregatedReport/fonte de telemetria. Onde a simulação for intencional (PoC), renomear para simulate_*, documentar no docstring+README que NÃO é validação real, e tornar o resultado simulado distinguishable no postmortem/audit. Substituir o acoplamento getattr(getattr(tnr_result,'result',None),'value',None)=='success' (agents/orchestrator.py:323, repetido em :343) por acesso tipado. Teste: ação que piora métricas simuladas → TNR reporta regressão e dispara rollback/replan; caminho de replan exercitado.",
+      "acceptance": "Teste de regressão TNR verde; replan dispara em teste; nenhuma métrica hardcoded apresentada como validação real.",
+      "status": "done",
+      "verification_note": "Confirmado com ressalva de alcance: _check_tnr do MCP existe com os valores citados mas é morto (handle_validate_action usa _check_sanitizer + SafetyOrchestrator, tools.py:304-318). execute_with_safety também sem callers (nem testes). Caminho de produção do teatro: make_diagnoser_node → AgentOrchestrator.run → verify_with_tnr."
+    },
+    {
+      "id": "F2-4",
+      "phase": 2,
+      "title": "Fail-open → fail-closed nas camadas de safety",
+      "description": "safety/orchestrator.py:125-126 (exceção no sanitizer → passed=True) e :167-168 (exceção no TNR → passed=True); safety/pre_validator.py:316-321 (exceção de auditoria engolida); MCP _sanitize_result em interfaces/mcp/tools.py:189-199 (except Exception: pass mantém texto original → PII vaza no erro; chamado em :123, search_incidents). Fix: exceção em camada de safety = passed=False/blocked com motivo no audit; sanitizer MCP em erro = texto redigido/genérico, nunca o original; auditoria que falha loga erro estruturado. Teste: monkeypatch lançando exceção em cada camada → decisão final = bloqueio.",
+      "acceptance": "rg -n 'passed=True' safety/ -A2 não mostra nenhum dentro de except; testes de exceção verdes.",
+      "status": "done",
+      "verification_note": "Confirmado 4/4. Nuances: a exceção de auditoria em pre_validator só suprime o log (a decisão de validação em si não muda); _check_sanitizer (tools.py:407-429) já é fail-CLOSED — o fail-open é específico do caminho de sanitização de resultados."
+    },
+    {
+      "id": "F2-5",
+      "phase": 2,
+      "title": "Bypass de allowlist por substring (shlex)",
+      "description": "safety/pre_validator.py:115-127: SAFE_PATTERNS sem âncora (ex. padrão 'kubectl get' solto) + :341 (re.search casa em qualquer posição) → 'kubectl get pods && python -c ...' passa como read-only e pode chegar a AUTO_APPROVED (:244-252). Apenas o padrão curl já foi ancorado com $ (:122, comentário em :120-121 explica o fix anterior). Fix: tokenizar com shlex.split, rejeitar operadores de composição (&&, ||, ;, |, backticks, $()) ANTES da allowlist; validar binário+subcomando do primeiro token. Manter default-deny (:351) e blocklist (:82-103, que hoje só pega operadores em combinações específicas como '&& sh' ou '| bash'). Testes: compostos com prefixo read-only bloqueados; read-only simples passam; rm -fr / e find -delete seguem bloqueados.",
+      "acceptance": "Testes novos verdes; scripts/ci-local.sh completo verde ao fim da Fase 2.",
+      "status": "done",
+      "verification_note": "Confirmado: trace de 'kubectl get pods && python -c ...' → blocklist não casa → allowlist casa via re.search → 'Read-only command'. Default-deny existe mas é inalcançável nesse exemplo (allowlist casa primeiro)."
+    },
+    {
+      "id": "F3-1",
+      "phase": 3,
+      "title": "MCP diagnose_incident quebrado (wiring + assinatura)",
+      "description": "Dois bugs: interfaces/http/app.py:144-152 (create_app chama mount_sse SEM engine/retriever → engine_unavailable/faiss_unavailable) e interfaces/mcp/tools.py:672 (engine.run(normalized_alert) com 1 arg vs assinatura run(pipeline, state) de blueprint/engine.py:58 → TypeError). Fix: wiring completo no create_app via builders + montar IncidentState a partir do NormalizedAlert. Teste de integração: tool diagnose_incident via MCP retorna diagnóstico em modo determinístico.",
+      "acceptance": "Teste de integração MCP verde.",
+      "status": "done",
+      "verification_note": "Confirmado. Nuances: o TypeError é capturado por except Exception (tools.py:711) → vira JSON 'pipeline_error' (500), não crash; testes (tests/test_diagnose_incident.py:17,32) usam mock com run(self, alert), mascarando o mismatch. app.state.engine/retriever existem (app.py:210-216) mas só servem ao A2A — nada chega ao mount_sse."
+    },
+    {
+      "id": "F3-2",
+      "phase": 3,
+      "title": "A2A: engine.run síncrono bloqueia event loop",
+      "description": "interfaces/http/routes/a2a.py:261 chama engine.run() síncrono dentro de rota async (até pipeline_timeout_seconds=90). Fix: await asyncio.to_thread(engine.run, ...). Teste: request concorrente de health responde enquanto diagnóstico roda.",
+      "acceptance": "Teste de concorrência verde.",
+      "status": "done",
+      "verification_note": "Confirmado: async handle_task (:117) → _handle_diagnose (:226) → engine.run síncrono (:261); zero to_thread/run_in_executor no caminho. Timeout (default 90s, config/loader.py:70) só é checado entre nodes (engine.py:82-89) — node lento pode bloquear o loop além disso."
+    },
+    {
+      "id": "F3-3",
+      "phase": 3,
+      "title": "Webhook → pipeline: implementar o runner (ou rotular stub)",
+      "description": "interfaces/http/webhook/pipeline_runner.py:143-168: _execute_pipeline é stub explícito (docstring 'Stub V1', termina em pipeline.stub_executed; nunca chama BlueprintEngine). infra/run_webhook_server.py:72 cria runner SEM store → nem o save de estado ocorre. Grafana provisioning aponta para esse endpoint (infra/grafana/provisioning/alerting/contact-points.yaml:11-14). O router do webhook NÃO tem nenhuma referência a Slack/notifier — o fluxo Grafana→Slack não existe nem em código, não só por wiring. (_queue_worker dormir 3600s é POR DESIGN: a fila é drenada por _release_slot_or_continue, :103-114 — não é bug de fila parada.) PREFIRA implementar de verdade: reusar BlueprintEngine V1 + builders, store persistente, e wiring de notificação Slack pós-postmortem. Alternativa aceitável: rotular explicitamente como stub (README + resposta do webhook + warning). Corrigir também tests/integration/test_webhook_to_slack_flow.py: referencia diretório docker/ inexistente (virou infra/) E um fixture JSON que não existe em lugar nenhum; testes afetados estão @pytest.mark.skip (:77,:146). Teste de integração: POST webhook Grafana válido → pipeline executa → postmortem → Slack mock recebe.",
+      "acceptance": "Teste de integração webhook→Slack mock verde; decisão (implementar vs rotular) registrada em docs/improvement-progress.md.",
+      "status": "done",
+      "verification_note": "Confirmado, 1 sub-alegação enganosa corrigida: '_queue_worker só dorme' não é fila parada (design documentado no docstring :171-175). Escopo real: stub + store ausente + Slack inexistente no router + teste quebrado/skipado."
+    },
+    {
+      "id": "F3-4",
+      "phase": 3,
+      "title": "Demo: auth nos endpoints de mutação + Slack opt-in",
+      "description": "interfaces/demo/server.py: ZERO auth em todos os endpoints incl. POST /demo/start/{scenario}; dispara Slack real se SLACK_BOT_TOKEN presente (:58-70). Fix: token simples (env AIOPS_DEMO_TOKEN, header) nos endpoints de mutação; Slack real só com opt-in explícito (AIOPS_DEMO_SLACK_REAL=1), default mock/dry-run. Atualizar .env.example e README.",
+      "acceptance": "POST sem token → 401; com token → funciona; Slack real só com opt-in.",
+      "status": "done",
+      "verification_note": "Confirmado (13 endpoints, zero auth/middleware). Mitigante: bind default 127.0.0.1 (:487), sobrescrevível via --host. Slack: dry_run default False (interfaces/http/notifications/slack.py:52); .env.local é auto-carregado (:43-51) → bastar o token no ambiente para envio real."
+    },
+    {
+      "id": "F3-5",
+      "phase": 3,
+      "title": "Rotas órfãs knowledge/admin: montar ou deletar",
+      "description": "interfaces/http/routes/knowledge.py e routes/admin.py nunca são montadas; get_knowledge_store lança NotImplementedError (knowledge.py:47-49). Decisão: montar com implementação mínima OU deletar. Não deixar código morto com rota fantasma. Registrar decisão.",
+      "acceptance": "rg confirma: rotas montadas e funcionais OU arquivos removidos; CI completo verde ao fim da Fase 3.",
+      "status": "done",
+      "verification_note": "Confirmado: include_router em produção só health/auth/a2a (app.py:119,189,205) e webhook (run_webhook_server.py:75). knowledge.py só montada em tests/test_knowledge_api.py:21 (com dependency_overrides); admin.py não importada por nenhum arquivo do repo."
+    },
+    {
+      "id": "F4-1",
+      "phase": 4,
+      "title": "PKCE real (authorize/token separados)",
+      "description": "O fluxo real é um ÚNICO POST /auth/token/register que recebe code_verifier E code_challenge na MESMA request (auth/server.py:107-110, validação em :174); pop_challenge (auth/token_store.py:20,40) só é chamado em testes — produção só faz save_challenge após emitir (:180), challenge nunca é consumido. Fix: separar /authorize (recebe só challenge S256, vinculado ao code) de /token (exige verifier, valida via auth/pkce.py e CONSOME o challenge com pop_challenge); trocar == por hmac.compare_digest em auth/pkce.py:48. Testes: fluxo completo com verifier correto passa; verifier errado/ausente falha; challenge na request de token rejeitado; replay do mesmo code rejeitado.",
+      "acceptance": "Testes de fluxo PKCE verdes.",
+      "status": "done",
+      "verification_note": "Confirmado com ajuste: não existem endpoints /authorize e /token hoje (nomes citados eram os do fix, não os atuais); verifier já é obrigatório e validado, mas a prova ocorre na mesma request, sem exchange separado."
+    },
+    {
+      "id": "F4-2",
+      "phase": 4,
+      "title": "Autenticação de cliente no modo header",
+      "description": "auth/server.py:238 anuncia token_endpoint_auth_methods_supported=['none']; modo header é o DEFAULT (config/loader.py:205) e autentica só por X-Client-Id sem segredo (interfaces/mcp/sse.py:141-148). Fix: segredo por cliente no modo header (env/config, comparação constant-time) OU mudar default para oauth21. Documentar no README/.env.example.",
+      "acceptance": "Request sem segredo válido no modo header → 401; testes verdes.",
+      "status": "done",
+      "verification_note": "Confirmado com mitigação parcial: EXISTE allow-list de client_ids pré-registrados (oauth.allowed_clients → sse.py:71-79); header desconhecido ou lista vazia → 401. Mas qualquer um que saiba um client_id do YAML passa, sem segredo."
+    },
+    {
+      "id": "F4-3",
+      "phase": 4,
+      "title": "JWT iss/aud + decisão RS256 + kid/JWKS correto",
+      "description": "auth/jwt_validator.py:91: jwt.decode sem audience/issuer; payload emitido (:61-66) nem contém iss/aud. Mesmo segredo MCP/A2A (interfaces/http/app.py:214 copia mcp.oauth.jwt_secret para a2a_jwt_secret; routes/a2a.py:91,109 valida com ele) → token MCP vale no A2A. Fix: emitir e validar iss+aud por audiência (MCP ≠ A2A). auth/server.py:242-244: RS256 anunciado + JWKS publicado mas issue_token (:183-188) sempre HS256 (default em jwt_validator.py:44); _rsa_private_pem nunca usado para assinar. RSA configurado + secret curto → _reject_short_hmac_key lança InvalidKeyError não capturado no handler register → 500 (app.py:176-177 passa jwt_secret=''; guard de server.py:141 é pulado). Decisão: implementar RS256 de verdade OU remover do metadata/JWKS (não anunciar o que não implementa); tratar o caminho RSA+secret curto sem 500. auth/oidc_validator.py:176-180: kid não encontrado → primeira chave do JWKS (keys[0]); RSAAlgorithm.from_jwk mesmo para ES256 (decode aceita RS256+ES256, :106); sem refresh on-miss. Fix: kid desconhecido → rejeitar após refresh único do JWKS; selecionar algoritmo pelo kty/alg da JWK. Testes: cross-audience rejeitado; kid desconhecido rejeitado.",
+      "acceptance": "Testes novos verdes; metadata coerente com o que é emitido.",
+      "status": "done",
+      "verification_note": "Confirmado em todas as sub-alegações, com atualização: chave HMAC curta hoje é REJEITADA (MIN_HMAC_KEY_BYTES=32, jwt_validator.py:17-27) — o bug residual é o 500 não tratado, não 'aceita chave curta'."
+    },
+    {
+      "id": "F4-4",
+      "phase": 4,
+      "title": "Databricks: SQL parametrizado em vez de f-string",
+      "description": "tools/databricks_connector.py:277-282 (safe_query=query.replace(\"'\",\"''\") interpolado em LIKE), :302 (LIMIT), :449-463 (metrics), :627-648 (traces): SQL por f-string. A API Databricks suporta parâmetros nomeados — usar em TODOS os queries. Teste: input com aspas/SQL injection → query parametrizada sem erro e sem escape manual.",
+      "acceptance": "rg -n 'f\".*(SELECT|LIKE|LIMIT)' tools/databricks_connector.py vazio; testes verdes.",
+      "status": "done",
+      "verification_note": "Confirmado: nenhum query usa parameters= (_execute_query :145-152 só passa statement). Pontos extras além dos citados: tail (:329-335), get_alerts (:498-504), get_trace (:675-680). Curingas LIKE (%/_) não escapados; nomes de tabela/colunas vêm de config sem sanitização."
+    },
+    {
+      "id": "F4-5",
+      "phase": 4,
+      "title": "Higiene: chmod 0600 na chave privada + sessão MCP vinculada",
+      "description": "auth/keys.py:102: chave privada (PKCS8 sem criptografia) escrita sem chmod 0600 — aplicar. interfaces/mcp/sse.py:217-245: POST /mcp/messages JÁ re-autentica o cliente (POST anônimo foi corrigido), mas não vincula session_id ao cliente autenticado — qualquer cliente autenticado pode postar na sessão de outro. Fix: vincular sessão→client_id na criação (GET /sse, :203-206) e validar no POST. Testes: permissão do arquivo; POST com sessão de outro cliente → rejeitado.",
+      "acceptance": "Testes novos verdes; scripts/ci-local.sh completo verde ao fim da Fase 4.",
+      "status": "done",
+      "verification_note": "Confirmado com atualização: a parte 'POST aceita qualquer corpo' já foi corrigida (re-autenticação no handler); o problema residual é o vínculo sessão→cliente. Nenhum os.chmod/fchmod no caminho da chave (grep no repo)."
+    },
+    {
+      "id": "F5-1",
+      "phase": 5,
+      "title": "Executar fases restantes do plano de refatoração existente",
+      "description": "PRÉ-REQUISITO: Fases 2 e 3 concluídas. VERIFICAÇÃO 2026-11-17: as fases 2b (LLM seam), 2c (Reporter), 2d (ports/persistence) e 3 (domain purity) de docs/refactoring-execution-plan.md JÁ ESTÃO EXECUTADAS no código (anthropic só em adapters/llm/anthropic_client.py:22; zero Rich em agents/; application/ports/{reporter,incident_store}.py existem; domain/ sem Pydantic + docs/adr/0003-domain-purity.md). 2e e 4 também done. Resta APENAS a fase 5 (composition builders) PARCIAL: app/builders.py existe (build_engine/build_pipeline/build_rag) mas build_diagnoser_agent/build_detector_agent do plano não existem. Escopo: (a) atualizar o status das fases no próprio plano (documento não tem marcadores de status); (b) executar o que falta da fase 5 seguindo os acceptance criteria do plano. Um PR/commit por fase, sem misturar file moves com comportamento. Não mexer no Pydantic de domain/ sem ADR (regra do plano).",
+      "acceptance": "Status das fases refletido no plano; critérios de aceite da fase 5 satisfeitos (rg/pytest definidos lá); CI verde.",
+      "status": "done",
+      "verification_note": "Parcialmente confirmado: a alegação de fases pendentes 2b/2c/2d/3 está DESATUALIZADA — já executadas no código. Re-escopado para fase 5 parcial + atualização do documento."
+    },
+    {
+      "id": "F5-2",
+      "phase": 5,
+      "title": "Quebrar o god-file main.py (2247 linhas)",
+      "description": "12 funções step_* misturam negócio + Rich UI (step_generate_data:138, step_sanitize:179, step_pipeline:223, step_compression:272, step_rag:318, step_agents:413, step_safety_validation:647, step_remediation_validation:717, step_predict:951, step_postmortem:1019, step_tracking:1508, step_fetch_databricks_data:1578). Destino: lógica → use cases em application/; Rich → adapter Reporter (adapters/reporter/rich_console.py já existe); CLI fina → interfaces/cli/. Remover duplicações: mapa de confiança {'high':0.85,'medium':0.5,'low':0.25} 2× (main.py:2109 _CONF_MAP_SLACK, :2202 _CONF_MAP); chamada dupla detector.detect no MESMO fluxo V0+LLM (main.py:508 detecta → :522 chama _orchestrator.run(report, retriever) que detecta de novo em agents/orchestrator.py:265 — passar a detecção adiante); acesso a privado diagnoser._heuristic_diagnosis (main.py:528) → método público. _run_v0 (main.py:1944-1953) é stub que retorna EXIT_ERROR, referenciado pela factory (:1941) mas inalcançável via CLI → remover junto com a factory (ver F5-4). NOTA: mitigação/TNR NÃO são mais duplicados (main.py:543-559 reusa resultados do orchestrator); não há state machine em AgentOrchestrator — a timeline _transition é inline em step_agents (main.py:497-504) e migra junto com ele. Smoke V0/V1 deve seguir funcionando após cada passo.",
+      "acceptance": "main.py < 300 linhas ao final (CLI + wiring); smokes V0/V1 verdes; snapshots equivalentes.",
+      "status": "done",
+      "verification_note": "Parcialmente confirmado: são 12 step_* (não ~15); 'state machine duplicada' era exagero (orchestrator não tem state machine); duplicação de mitigação/TNR já corrigida no repo. Duplo detector.detect e acesso privado confirmados no mesmo fluxo."
+    },
+    {
+      "id": "F5-3",
+      "phase": 5,
+      "title": "Composition root única + config drift",
+      "description": "app/builders.py para TODOS os entrypoints — hoje usam: CLI V1 (main.py:1778), HTTP (interfaces/http/app.py:211), A2A (routes/a2a.py:258); NÃO usam: CLI V0 (main() inline step_*), demo (interfaces/demo/server.py), MCP (interfaces/mcp/), webhook (infra/run_webhook_server.py:60-92 wiring manual). Parser manual de .env.local duplicado 5× (main.py:1780-1788, main.py:1968-1976, infra/run_webhook_server.py:19-26, interfaces/demo/server.py:43-51, infra/test_slack_notification.py:17-23) → loader único (config/loader.py). Config drift: slack.webhook_url fantasma (config/defaults.yaml:34, ausente de SlackConfig config/loader.py:84-121, extra='ignore' descarta silenciosamente) → remover ou implementar; webhook.dedup_window_seconds/max_payload_bytes lidos via getattr fallback (webhook/router.py:82,227; ausentes de WebhookConfig config/loader.py:74-81 E do defaults.yaml → fallback sempre usado) → adicionar ao modelo; tools/slack_setup.py:25-26 ignora config.slack (param config 'reservado para uso futuro', :20) → usar config; .env.example (env.example é só ponteiro de 2 linhas): adicionar JIRA_URL/JIRA_PROJECT_KEY/JIRA_EMAIL/JIRA_API_TOKEN (tools/jira_tracker.py:71-74), SLACK_API_BASE_URL (interfaces/http/notifications/slack.py:77), AIOPS_MCP__OAUTH__JWT_SECRET (config/defaults.yaml:47). MitigationAction JÁ é tipo único (domain/incident.py:90-101; safety/tnr.py:21 re-exporta) — nada a unificar.",
+      "acceptance": "rg '.env.local' --type py só no loader; nenhum campo de config lido via getattr fallback; CI verde.",
+      "status": "done",
+      "verification_note": "Parcialmente confirmado (6/7 sub-alegações): parsers são 5 (não 4); linhas de slack_setup corrigidas (25-26, não 34-37); 'dois tipos MitigationAction' é FALSO (já unificado) — removido do escopo e do título."
+    },
+    {
+      "id": "F5-4",
+      "phase": 5,
+      "title": "Aposentar o V0 (critério de paridade + remoção)",
+      "description": "PRÉ-REQUISITO: F5-1..F5-3 concluídas. Rodar golden validation (tests/support/golden_validator.py:39 validate_against_golden + data/golden/{memory-leak,payment-pool-exhaustion}.json) e suíte de snapshots (tests/test_snapshots.py, tests/test_memory_leak_snapshots.py) nos DOIS engines com os mesmos cenários → outputs equivalentes (diferenças justificadas e documentadas). NOTA: validation/runner.py NÃO é golden validation entre engines — roda cenários knowledge/RAG com stores isolados (usado pela rota admin órfã, ver F3-5). Só então deletar step_*, _run_v0 (stub), factory get_pipeline (main.py:1923-1941, core/pipeline_protocol.py:16-64) e a flag --pipeline-v1 (main.py:1366; V1 vira o único engine). Atualizar README e docs que mencionam V0/--pipeline-v1.",
+      "acceptance": "Golden/snapshots equivalentes antes da remoção; após remoção CI completo verde; smoke sem flag funciona; main.py < 300 linhas.",
+      "status": "blocked",
+      "verification_note": "Parcialmente confirmado: a ferramenta de paridade citada estava errada (validation/runner.py é knowledge/RAG); golden validator real em tests/support/golden_validator.py. get_pipeline/flag/snapshots confirmados nas linhas citadas.",
+      "blocked_reason": "Paridade V0/V1 NÃO existe (medido no M1, mesmo cenário --no-llm --no-rag): V0 exit 3 (human gate) vs V1 exit 0; postmortem V0 92 linhas/11 seções vs V1 26/5; V1 ignora --data-source, --tracker, --output-format, --rebuild-rag; só o V0 tem estágio preditivo, cache FAISS, memória episódica, evolução de skills e Slack progressivo (5 eventos vs 2). conftest._run_pipeline espelha o V0 e alimenta 15/17 snapshots + golden. Remover o V0 quebraria o contrato público de exit codes do README. O F5-4 real é PORTAR o V0 para o V1 (sub-features 4a gate+exit codes, 4b postmortem via application/use_cases/postmortem.py, 4c flags, 4d Slack/preditivo/memória, 4e conftest/snapshots regenerados com diff justificado, 4f remoção). Decisão do usuário (2026-11-17): seguir para a Fase 6; F5-4 vira épico próprio. O V0 já está isolado em interfaces/cli/v0_pipeline.py e não bloqueia mais nada."
+    },
+    {
+      "id": "F6-1",
+      "phase": 6,
+      "title": "Paridade Rust↔Python (thresholds, custom_patterns, log_parser)",
+      "description": "pipeline/metric_filter.py:48: Rust só usado se sigma_threshold==3.0 and baseline_ratio==0.5; pipeline/trace_filter.py:48: só se percentile_threshold==95.0 and max_hops==3 → config custom cai no Python SEM AVISO com algoritmos diferentes. Fix: warning estruturado explícito ao cair no fallback por config (ou implementar parâmetros no Rust). pipeline/telemetry_sanitizer.py:505 (_detect_taint): path Rust IGNORA custom_patterns → passar ao Rust ou forçar fallback com warning quando houver custom patterns. pipeline/log_parser.py: fallback Python amostra máx. 500 logs (logs[::step]), Rust processa todos; get_error_templates() chama self.parse([]) — Rust retorna [] (sem estado), Python retorna templates acumulados → unificar semântica e documentar. Testes de paridade: mesmos inputs → mesmos outputs (ou diferenças documentadas).",
+      "acceptance": "Testes de paridade verdes; nenhum fallback silencioso por config.",
+      "status": "done",
+      "verification_note": "Confirmado. Ressalvas: get_error_templates() não tem nenhum caller no repo (bug latente, sem impacto hoje); o batch detect_taint_batch (sanitize_logs, :206) tem o mesmo problema de custom_patterns; docstring do log_parser que menciona stride=4 está desatualizado (Rust não amostra)."
+    },
+    {
+      "id": "F6-2",
+      "phase": 6,
+      "title": "Features mortas: reranker/CoT — wire ou delete",
+      "description": "Reranker nunca wired em produção (main.py:373 cria retriever sem reranker); Tier 2 cross-encoder nunca ativa (nenhum caller passa use_tier2). CoTObservabilityRetriever/DomainReranker nunca instanciados fora de testes; rag/cot_retriever.py:53 chama self.reranker.rerank(query, raw) vs assinatura rerank(results, query, top_k) → AttributeError ao ativar; duplo rerank (search já reranqueia). Para CADA feature: ou wire com teste de integração, ou delete com nota no CHANGELOG. Registrar decisão. Não deixar código morto com bug latente.",
+      "acceptance": "rg confirma: features wired com testes OU removidas; decisões registradas.",
+      "status": "done",
+      "verification_note": "Confirmado. Precisão: a subclasse ObservabilityRetrieverWithHistory (rag/retriever_history.py:18-24) nem aceita parâmetro reranker; app/builders.py:50 também cria retriever sem reranker; agents/diagnoser.py:116-117,413-414 só faz isinstance dos tipos CoT."
+    },
+    {
+      "id": "F6-3",
+      "phase": 6,
+      "title": "Caches com chave de modelo + engine reentrante + limites wireados",
+      "description": "rag/retriever.py:14,76: _query_cache keyed só por md5(query); _embedding_cache por texto (rag/indexer.py:24,114-127) → trocar modelo de embedding retorna vetores stale; crescimento ilimitado. Fix: incluir model_name na chave + limite LRU. blueprint/engine.py:78: results resetado por run → não reentrante; fix: results por run (local/retornado). blueprint/engine.py:49-56: increment_llm_calls (limite 15) nunca chamado pelo engine (só testes) → wire no node agentic ou remover. blueprint/engine.py:82-89: timeout só entre nodes → documentar ou implementar por-node. core/lifecycle.py:37: LifecycleObserver definido mas engine não emite eventos → wire ou remover. Testes: troca de modelo invalida cache; runs concorrentes não compartilham results.",
+      "acceptance": "Testes novos verdes; nenhum cache sem chave de modelo.",
+      "status": "done",
+      "verification_note": "Confirmado. Nuances: o cache em DISCO valida model_name (load_index) — o problema é só nos caches em memória; LifecycleObserver não é 100% morto: observers Slack/metrics recebem eventos construídos manualmente fora do engine (main.py:985,1811,2006; interfaces/demo/server.py:333,394,422,441,461) — a decisão wire/remover deve considerar isso."
+    },
+    {
+      "id": "F6-4",
+      "phase": 6,
+      "title": "Testes Rust nativos + clippy/fmt no CI",
+      "description": "Só 2 de 7 módulos Rust têm testes (rust/src/cusum_ewma/analyzer.rs: 6 testes; rust/src/trace_predictor/predictor.rs: 9 testes — contagens conferidas em 2026-11-17). Adicionar testes unitários para context_compressor, log_parser, metric_filter, telemetry_sanitizer, trace_filter. Adicionar cargo clippy -- -D warnings e cargo fmt --check ao job rust do CI.",
+      "acceptance": "cargo test + clippy + fmt verdes; job rust do CI atualizado.",
+      "status": "done",
+      "verification_note": "Parcialmente confirmado: núcleo correto (7 módulos, só 2 com testes, CI sem clippy/fmt), mas as contagens originais (7/10) estavam erradas — são 6/9."
+    },
+    {
+      "id": "F6-5",
+      "phase": 6,
+      "title": "Code smells menores (opportunistic)",
+      "description": "Dentro dos arquivos já tocados nas fases anteriores: agents/orchestrator.py:443 DiagnosisAgent() recriado a cada step (também :556) → reusar instância; agents/orchestrator.py:390,473,504,554,581 json.loads sem tolerar markdown code-fence → helper tolerante com erro explícito; pipeline/trace_filter.py:98-107 DFS computado e descartado (usado só como booleano; campos usam trace_spans[:max_hops] por start_time, ordem temporal ≠ causal) → usar DFS ou remover; pipeline/trace_filter.py:90 np.mean([]) → nan → guardar; agents/skill_evolver.py:84 modelo haiku hardcoded → config; main.py:637-638 e rag/indexer.py:441-443 except Exception: pass → logar erro estruturado; demos (demo_adversarial_attack, pipeline/telemetry_sanitizer.py:661) em módulos de produção → mover para interfaces/demo/ ou scripts/; rag/memory.py:249-276 full table scan na similaridade → documentar como limitação conhecida (não otimizar).",
+      "acceptance": "CI completo verde; relatório final por fase em docs/improvement-progress.md (done/skipped/blocked + motivo + testes adicionados + diffs de snapshot justificados).",
+      "status": "done",
+      "verification_note": "Confirmado. Ressalva de alcance: demo_adversarial_attack só executa via __main__ (:727-728), nenhum import de produção — incômodo arquitetural, sem efeito no pipeline. Linhas corrigidas: skill_evolver :84 (não ~90), main.py :637-638 (não 625-637)."
+    },
+    {
+      "id": "VB-T1",
+      "phase": 7,
+      "title": "Cenário fictício do HPA (gerador stdlib-only)",
+      "status": "pending",
+      "description": "PRIMEIRO. Criar data/hpa_saturation_scenario.py reproduzindo o incidente KubeHpaMaxedOut (wbia/prd): creep de memória → utilização working_set/request crônica acima do alvo 80% → réplicas sobem até teto maxReplicas=10 e ficam presas (platô). 4 fases (normal~2h / creep~10h / saturação~6h / restart paliativo), seed fixa, ~1140 amostras (SAMPLE_INTERVAL_S=60, MEMORY_REQUEST_BYTES=512Mi, HPA_TARGET_UTILIZATION=0.80, MAX_REPLICAS=10, MIN_REPLICAS=2). Ground-truth: incident_start/maxed_out_at/restart_at. export_csv(path) timestamp,service,metric_name,value. Write-set: data/hpa_saturation_scenario.py (novo), data/registry.py (registrar), tests/test_hpa_saturation_scenario.py (novo). Stdlib-only (sem torch/faiss/sentence-transformers). Espec completa: docs/vigia-barato-agent-prompt.md §1. Siga o padrão de data/memory_leak_scenario.py.",
+      "acceptance": "Cenário registrado no registry; generate_metrics() retorna 4 fases+rótulos; teste confirma util cruza 80% e réplicas atingem 10, platô final variância baixa no teto, CSV roundtrip em tmp_path, stdlib-only. pytest tests -m unit -q verde.",
+      "verification_note": "Novo (Vigia Barato). Espec em docs/vigia-barato-agent-prompt.md §1. Stdlib-only → roda em qualquer host."
+    },
+    {
+      "id": "D1",
+      "phase": 7,
+      "title": "Eixo D1: clamp de sinais (log negativo + latência zero)",
+      "status": "pending",
+      "description": "clamp de score de log negativo (pipeline/risk_scorer.py:~45) + baseline de latência zero não explode ratio (pipeline/trace_predictor.py:~92-93). Sinais não alarmam sobre lixo. Write-set e aceite: ROBUSTNESS_PLAN.md:311. Teste que falha ANTES do fix. Resumo: docs/vigia-barato-agent-prompt.md §2 (D1).",
+      "acceptance": "Teste novo falha antes do fix e passa depois; scripts/ci-local.sh unit verde; sinais clampados não geram alarme sobre lixo.",
+      "verification_note": "Novo (Eixo D). ROBUSTNESS_PLAN.md:311; docs/vigia-barato-agent-prompt.md §2. Confirme file:line antes de editar."
+    },
+    {
+      "id": "D2",
+      "phase": 7,
+      "title": "Eixo D2: ETA correto (sample_interval + threshold)",
+      "status": "pending",
+      "description": "compute_ewma_slope ganha sample_interval_minutes (ou deriva dos timestamps) e converte slope por-amostra→minutos; current a partir do EWMA; predictive_stage.py:~83 passa threshold configurável (hoje chama SEM threshold→ETA None). Lead time real. Manter paridade Rust↔Python (tests/rust/test_rust_python_parity.py:237-254). Write-set/aceite: ROBUSTNESS_PLAN.md:322. Resumo: docs/vigia-barato-agent-prompt.md §2 (D2).",
+      "acceptance": "ETA em minutos correto com threshold; predictive_stage passa threshold; paridade Rust↔Python verde; teste falha antes do fix; ci-local unit verde.",
+      "verification_note": "Novo (Eixo D). ROBUSTNESS_PLAN.md:322; docs/vigia-barato-agent-prompt.md §2. GAP D-e2 confirmado no prompt."
+    },
+    {
+      "id": "D3",
+      "phase": 7,
+      "title": "Eixo D3: controle de falsos positivos (slope relativo + portões)",
+      "status": "pending",
+      "description": "slope relativo opcional + portões mínimos (série <N pontos / efeito <ε → sem sinal; flat+ruído não gera prediction.alert). Controla falso positivo do vigia contínuo. Write-set/aceite: ROBUSTNESS_PLAN.md:332. Resumo: docs/vigia-barato-agent-prompt.md §2 (D3).",
+      "acceptance": "flat/ruído não gera prediction.alert; série curta/efeito ínfimo → sem sinal; teste falha antes; ci-local unit verde.",
+      "verification_note": "Novo (Eixo D). ROBUSTNESS_PLAN.md:332; docs/vigia-barato-agent-prompt.md §2."
+    },
+    {
+      "id": "D4",
+      "phase": 7,
+      "title": "Eixo D4: detector de saturação HPA (platô no teto)",
+      "status": "pending",
+      "description": "Criar pipeline/saturation_detector.py: detect_saturation(points, ceiling)->SaturationSignal|None — platô no topo (variância baixa + nível ≥95% do ceiling, sustained ≥K amostras). Integrar em predictive_stage + risk_scorer (renormalizar pesos). Detecta o platô do HPA no teto que o slope perde. Write-set/aceite: ROBUSTNESS_PLAN.md:342. Resumo: docs/vigia-barato-agent-prompt.md §2 (D4). NÃO pular D1-D3 antes.",
+      "acceptance": "detect_saturation sinaliza platô no teto (variância baixa, ≥95% ceiling, ≥K amostras); integrado em predictive_stage/risk_scorer; teste falha antes; ci-local unit verde.",
+      "verification_note": "Novo (Eixo D). ROBUSTNESS_PLAN.md:342; docs/vigia-barato-agent-prompt.md §2. Depende de D1-D3."
+    },
+    {
+      "id": "D5",
+      "phase": 7,
+      "title": "Eixo D5: backtest preditivo (recall/precision/lead-time)",
+      "status": "pending",
+      "description": "Criar scripts/backtest_predictive.py + validation/golden/predictive_backtest.json + tests/test_predictive_backtest.py (marker slow, seed fixa, recall≥0.8 nas falhas fortes, precision≥0.7, zero alertas em flat/ruído). Replaya janelas (batch). Write-set/aceite: ROBUSTNESS_PLAN.md:354. Resumo: docs/vigia-barato-agent-prompt.md §2 (D5). Seguir validation/runner.py.",
+      "acceptance": "pytest tests/test_predictive_backtest.py -m slow -v verde; golden gerado; recall≥0.8, precision≥0.7, zero alertas flat/ruído.",
+      "verification_note": "Novo (Eixo D). ROBUSTNESS_PLAN.md:354; docs/vigia-barato-agent-prompt.md §2. Depende de D1-D4."
+    },
+    {
+      "id": "VB1",
+      "phase": 7,
+      "title": "Vigia Barato VB1: adapters MetricsSource (Prometheus + CSV)",
+      "status": "pending",
+      "description": "Criar tools/prometheus_connector.py PrometheusMetricsSource(MetricsSource): query()→HTTP GET /api/v1/query_range (query,start,end,step), parse data.result[].values→list[dict]; get_alerts()→/api/v1/alerts; base URL via PROMETHEUS_URL; timeout+retries (espelhar tools/databricks_connector.py COM retries). Criar tools/csv_metrics_source.py CsvMetricsSource(MetricsSource): lê CSV do cenário (VB-T1), filtra por metric_name/janela. Write-set: tools/prometheus_connector.py, tools/csv_metrics_source.py, tests/test_metrics_sources.py (novos). Sem dependência nova (http client já presente). Espec: docs/vigia-barato-agent-prompt.md §3 VB1.",
+      "acceptance": "Testes com HTTP mock / CSV em tmp_path; query retorna séries corretas; timeout/retry cobertos; unit verde sem torch.",
+      "verification_note": "Novo (Vigia Barato). docs/vigia-barato-agent-prompt.md §3 VB1. Porta application/ports/telemetry_sources.py:13."
+    },
+    {
+      "id": "VB2",
+      "phase": 7,
+      "title": "Vigia Barato VB2: loop ContinuousMonitor (camada barata, zero LLM)",
+      "status": "pending",
+      "description": "Criar pipeline/continuous_monitor.py ContinuousMonitor(source:MetricsSource,*,interval_seconds=60,ewma_threshold,escalate_eta_minutes,tracker:RiskTracker|None): tick(now)→MonitorTick(score,level,eta,saturation,should_escalate) — consulta janela via source.query, monta MetricPoint, compute_ewma_slope(span=10,threshold) pós-D2, compute_risk_score+detect_saturation, tracker.update, get_event_level. run_forever()/run_for(ticks) com sleep(interval); tick determinístico testável SEM sleep (injetar now). Config monitor.interval_seconds/ewma_threshold/escalate_eta_minutes em config/defaults.yaml+config/loader.py. REUTILIZAR interfaces/demo/analyzer.py (não duplicar matemática). Camada barata NÃO chama LLM (assert zero import adapters/llm no tick). Write-set: pipeline/continuous_monitor.py, config/defaults.yaml, config/loader.py, tests/test_continuous_monitor.py. Espec: docs/vigia-barato-agent-prompt.md §3 VB2.",
+      "acceptance": "Replay CSV HPA via CsvMetricsSource → monitor emite prediction.warning/alert ANTES de maxed_out_at (lead time>0); flat/ruído→nenhum alerta (pós-D3); tick determinístico com seed; zero LLM no tick; unit verde.",
+      "verification_note": "Novo (Vigia Barato). docs/vigia-barato-agent-prompt.md §3 VB2. Depende de D2/D3/D4 + VB1."
+    },
+    {
+      "id": "VB3",
+      "phase": 7,
+      "title": "Vigia Barato VB3: escalada à camada profunda + aviso proativo",
+      "status": "pending",
+      "description": "Hook de escalada em pipeline/continuous_monitor.py: quando should_escalate→montar IncidentState/NormalizedAlert para serviço+janela e chamar pipeline de diagnóstico existente (V1 BlueprintEngine.run via builders, ou run_v0), em thread separada se async (asyncio.to_thread). Resultado=proposta+postmortem; NENHUMA execução de infra (fail-closed exit 3). Aviso proativo 'vai estourar em ~X min'/'saturação no teto' via Slack (dry-run default; real só opt-in AIOPS_MONITOR_SLACK_REAL=1+token). Audit verification_mode:simulated quando aplicável. Documentar em docs/ arquitetura 2 camadas + economia de tokens + monitor NÃO substitui aprovação humana. Write-set: pipeline/continuous_monitor.py, interfaces/http/notifications/slack.py (reuso), tests/test_continuous_escalation.py (novo), docs/. Espec: docs/vigia-barato-agent-prompt.md §3 VB3.",
+      "acceptance": "Teste escalada com pipeline mock→diagnóstico chamado 1x quando level≥warning, 0x em flat; Slack mock recebe aviso; nenhum caminho executa infra; unit verde.",
+      "verification_note": "Novo (Vigia Barato). docs/vigia-barato-agent-prompt.md §3 VB3. Depende de VB2."
+    },
+    {
+      "id": "VB4",
+      "phase": 7,
+      "title": "Vigia Barato VB4: backtest do monitor contínuo (lead time)",
+      "status": "pending",
+      "description": "Criar scripts/backtest_continuous.py (OU estender backtest_predictive.py) + validation/golden/continuous_backtest.json + tests/test_continuous_backtest.py (marker slow) + docs/. Replaya cenário HPA (VB-T1) tick a tick via CsvMetricsSource+ContinuousMonitor; mede lead time (min entre 1º aviso e maxed_out_at), precision/recall contra rótulos, falsos positivos em flat/ruído. Grava golden seguindo validation/runner.py. Write-set: scripts/backtest_continuous.py, validation/golden/continuous_backtest.json, tests/test_continuous_backtest.py, docs/. Espec: docs/vigia-barato-agent-prompt.md §3 VB4.",
+      "acceptance": "pytest tests/test_continuous_backtest.py -m slow -v verde; golden gerado; lead time>0 no HPA; recall≥0.8; zero alertas flat/ruído puro.",
+      "verification_note": "Novo (Vigia Barato). docs/vigia-barato-agent-prompt.md §3 VB4. Depende de VB2/VB3. Ao fim registrar em docs/ que o monitor contínuo (antes 'trabalho futuro' do Eixo D) foi implementado + números de lead time."
+    }
+  ]
+}

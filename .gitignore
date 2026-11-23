@@ -80,3 +80,5 @@ run.log
 .hive/
 .codex/
 demo/desktop_app.log
+.long-run/
+progress.md

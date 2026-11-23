@@ -1,0 +1,34 @@
+# Claude Progress — aiops-agent
+
+## ★ LEIA PRIMEIRO (spec autoritativa)
+Antes de implementar QUALQUER feature, leia na íntegra:
+1. `docs/vigia-barato-agent-prompt.md` — spec autossuficiente das 10 tarefas (VB-T1, D1..D5, VB1..VB4), com assinaturas reais verificadas, write-set, aceite e regras.
+2. `ROBUSTNESS_PLAN.md` — Eixo D (linhas ~309-363): D1 clamp, D2 ETA, D3 falsos positivos, D4 saturação, D5 backtest.
+Cada feature em `feature_list.json` aponta para a tarefa correspondente nesses docs. NÃO implemente de memória; confirme file:line no código real antes de editar.
+
+## Fundação já concluída (NÃO refazer)
+Projeto: aiops-agent — agente AIOps local-first (CLI `main.py`, demo localhost:47891, RAG local sentence-transformers+FAISS, pipelines V0/V1, camadas de segurança, TNR SIMULADO que nunca executa infra real).
+- Merge origin/main concluído e em main (commit df7f71c); fix de segurança ML concluído (torch 2.13.0+cu130 / transformers 5.23.0 / sentence-transformers 5.7.0 / faiss 1.16.0); doc hold→resolvido (62954b0). Dependabot: 0 alertas abertos.
+- 31 features anteriores concluídas (registro completo em `feature_list.archive.json`). Pipelines V0/V1, RAG, safety layers, postmortem, databricks connector, display/rust — tudo verde.
+- Baseline de testes: `.venv/bin/python -m pytest tests -m unit -q` → ~1836 passed / 5 skipped. integration+snapshot ~152. e2e Playwright 10. Rust cargo 56.
+
+## Prioridade ATUAL: Vigia Barato (monitor contínuo preditivo barato)
+10 tarefas pendentes em `feature_list.json` (array, passes=false). Ordem por dependência:
+1 VB-T1 (cenário HPA fictício) → 2 D1 (clamp) → 3 D2 (ETA) → 4 D3 (falsos positivos) → 5 D4 (saturação) → 6 D5 (backtest preditivo) → 7 VB1 (adapters MetricsSource) → 8 VB2 (ContinuousMonitor) → 9 VB3 (escalada) → 10 VB4 (backtest contínuo).
+Ideia: camada BARATA contínua (poll métricas 30-60s + matemática pura, ZERO token/LLM por tick) que escala para a camada PROFUNDA (LLM/diagnóstico) só quando risco≥WARNING ou ETA curto. Incidente alvo: KubeHpaMaxedOut wbia/prd — creep de memória → utilização working_set/request crônica acima do alvo 80% → réplicas presas no teto maxReplicas=10 (platô).
+
+## Regras invioláveis
+- Teste que FALHA antes do fix; write-set explícito por tarefa.
+- NADA de infra real: TNR é SIMULADO (SECURITY.md); o agente propõe + aprovação humana, fail-closed exit 3.
+- NADA gravar em `output/` do repo nos testes (use `tmp_path`; guard `tests/conftest.py:201-215` `_forbid_writes_to_repo_output`).
+- Sem dependências novas; cenário e matemática stdlib-only. Não quebrar V0.
+- ruff/mypy limpos em domain/application/core. Snapshot só com justificativa.
+- Commit limpo por feature; marque `passes:true` só após verificação.
+
+## Ambiente / host
+- `.venv/bin/python` é o interpretador do projeto. `scripts/ci-local.sh unit` roda a suíte unit.
+- Host `m1-docker` é Intel x86_64 macOS e NÃO roda torch>=2.6 nativo; estas 10 tarefas são stdlib/matemática pura → rodam em qualquer host. Suítes ML pesadas (RAG real) exigem container linux/amd64 ou M5 arm64 — não rode aqui.
+- Smokes: `main.py --no-llm --no-rag [--pipeline-v1] --output-dir <tmp>` (exit 3 = aprovação necessária, seguro).
+
+## Próxima tarefa recomendada
+Feature 1 (VB-T1): criar `data/hpa_saturation_scenario.py` (gerador stdlib-only, 4 fases, rótulos incident_start/maxed_out_at/restart_at, export CSV, registrar em `data/registry.py`). Padrão a espelhar: `data/memory_leak_scenario.py`.
