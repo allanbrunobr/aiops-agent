@@ -56,11 +56,59 @@ def test_zero_alertas_em_flat_e_ruido_puro(report):
     assert report["metrics"]["precision"] == 1.0
 
 
-def test_limite_conhecido_hpa_depende_da_seed(report):
-    """Honestidade: nem toda seed do HPA é detectada (limiar único por monitor)."""
+def test_hpa_recall_alto_com_lead_time_positivo(report):
+    """VB4-FIX: nível crônico acima do alvo 80% captura o creep lento."""
+    m = report["metrics"]
+    assert m["hpa_recall"] >= 0.8
     k = report["per_kind"]["hpa_scenario"]
-    assert 0 < k["detected"] <= k["series"]
-    assert report["metrics"]["hpa_recall"] == k["detected"] / k["series"]
+    assert k["detected"] == round(m["hpa_recall"] * k["series"])
+    for r in report["series"]:
+        if r["kind"] == "hpa_scenario" and r["first_alert_offset_min"] is not None:
+            assert r["lead_time_min"] > 0
+    assert m["recall"] >= 0.8
+    assert m["precision"] == 1.0
+
+
+def test_hpa_lead_time_mean_nao_menor_que_min(report):
+    """Regressão: média dividia pelo total de seeds (incluía None) e ficava < min."""
+    m = report["metrics"]
+    assert m["hpa_lead_time_min_mean"] >= m["hpa_lead_time_min_min"] > 0
+
+
+def test_hpa_lead_time_mean_ignora_seeds_nao_detectadas(monkeypatch):
+    """Com 1 detecção e 1 miss, a média é o lead da detectada (não metade)."""
+    rows = iter([60.0, None])
+
+    def fake_hpa(seed, work):
+        lead = next(rows)
+        return {
+            "kind": "hpa_scenario",
+            "seed": seed,
+            "ticks": 1,
+            "first_alert_offset_min": None if lead is None else 1.0,
+            "lead_time_min": lead,
+            "alert_ticks": 0 if lead is None else 1,
+            "escalate_ticks": 0,
+            "positive": True,
+        }
+
+    monkeypatch.setattr(bt, "replay_hpa", fake_hpa)
+    monkeypatch.setattr(
+        bt,
+        "replay_synthetic",
+        lambda k, s, w: {
+            "kind": k,
+            "seed": s,
+            "ticks": 1,
+            "first_alert_offset_min": None,
+            "lead_time_min": None,
+            "alert_ticks": 0,
+            "escalate_ticks": 0,
+            "positive": k in bt.POSITIVE_SYNTH,
+        },
+    )
+    m = bt.run_backtest(seeds=2)["metrics"]
+    assert m["hpa_lead_time_min_mean"] == m["hpa_lead_time_min_min"] == 60.0
 
 
 def test_determinismo_e_golden_atualizado(report):

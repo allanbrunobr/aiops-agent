@@ -94,3 +94,38 @@ def detect_saturation(
         sustained_samples=len(window),
         ceiling_explicit=explicit,
     )
+
+
+# Nível crônico acima do alvo (ex.: utilização > 80% do request): K amostras.
+DEFAULT_SUSTAINED_LEVEL_SAMPLES = 15
+
+
+def detect_sustained_level(
+    points: Sequence[object],
+    level: float,
+    ceiling: float,
+    *,
+    min_sustained: int = DEFAULT_SUSTAINED_LEVEL_SAMPLES,
+) -> SaturationSignal | None:
+    """Nível sustentado ACIMA de ``level`` (ex.: alvo 80% do HPA), sem exigir platô.
+
+    Cobre o creep lento: o slope é pequeno e o ETA fica longe, mas a série já
+    vive acima do alvo. Exige que as ``min_sustained`` últimas amostras tenham
+    MÉDIA ≥ ``level`` e MÍNIMO ≥ ``level`` menos 1% do ``ceiling`` (tolera
+    ruído de uma amostra, não uma série que oscila abaixo do alvo). Retorna
+    um ``SaturationSignal`` (``ceiling_explicit=True``) ou None.
+    """
+    values = _values(points)
+    if min_sustained < 1 or len(values) < min_sustained or ceiling <= 0:
+        return None
+    tail = values[-min_sustained:]
+    mean = sum(tail) / len(tail)
+    if mean < level or min(tail) < level - 0.01 * ceiling:
+        return None
+    return SaturationSignal(
+        ceiling=float(ceiling),
+        level=mean,
+        utilization=mean / ceiling,
+        sustained_samples=len(tail),
+        ceiling_explicit=True,
+    )

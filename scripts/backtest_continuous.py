@@ -108,6 +108,14 @@ def replay_hpa(seed: int, workdir: Path) -> dict:
         metrics=[hpa.METRIC_MEMORY],
         ewma_threshold=0.9 * hpa.MEMORY_REQUEST_BYTES,
         escalate_eta_minutes=HPA_ESCALATE_ETA_MIN,
+        # Utilização crônica acima do alvo do HPA (80% do request) = saturação
+        # iminente (o platô real é em réplicas, invisível nesta métrica).
+        sustained_levels={
+            hpa.METRIC_MEMORY: (
+                hpa.HPA_TARGET_UTILIZATION * hpa.MEMORY_REQUEST_BYTES,
+                hpa.MEMORY_REQUEST_BYTES,
+            )
+        },
     )
     ticks = _replay(mon, hpa.START_TIME + timedelta(minutes=30), hpa.RESTART_AT)
     esc = sum(1 for t in ticks if t.should_escalate and t.timestamp < hpa.MAXED_OUT_AT)
@@ -169,7 +177,11 @@ def run_backtest(seeds: int = 5, base_seed: int = 42) -> dict:
     extra = [r for r in rows if r["kind"] in EXTRA_SYNTH]
     tp = sum(1 for r in pos if r["first_alert_offset_min"] is not None)
     fp = sum(1 for r in neg if r["alert_ticks"] > 0)
-    hpa_leads = [r["lead_time_min"] for r in rows if r["kind"] == "hpa_scenario"]
+    hpa_leads = [
+        r["lead_time_min"]
+        for r in rows
+        if r["kind"] == "hpa_scenario" and r["lead_time_min"] is not None
+    ]
     leads = [r["lead_time_min"] for r in pos if r["lead_time_min"] is not None]
     per_kind = {
         k: {
@@ -195,13 +207,10 @@ def run_backtest(seeds: int = 5, base_seed: int = 42) -> dict:
         "metrics": {
             "recall": tp / len(pos) if pos else 0.0,
             "precision": tp / (tp + fp) if (tp + fp) else 1.0,
-            "hpa_lead_time_min_min": min(
-                (x for x in hpa_leads if x is not None), default=0.0
-            ),
+            "hpa_lead_time_min_min": min(hpa_leads, default=0.0),
+            # média só sobre as seeds detectadas (non-None)
             "hpa_lead_time_min_mean": (
-                sum(x for x in hpa_leads if x is not None) / len(hpa_leads)
-                if hpa_leads
-                else 0.0
+                sum(hpa_leads) / len(hpa_leads) if hpa_leads else 0.0
             ),
             "mean_lead_time_min": sum(leads) / len(leads) if leads else 0.0,
             "true_positives": tp,

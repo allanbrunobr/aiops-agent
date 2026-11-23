@@ -49,7 +49,11 @@ from pipeline.risk_scorer import (
     relative_slope,
 )
 from pipeline.risk_tracker import RiskTracker
-from pipeline.saturation_detector import SaturationSignal, detect_saturation
+from pipeline.saturation_detector import (
+    SaturationSignal,
+    detect_saturation,
+    detect_sustained_level,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -256,6 +260,7 @@ class ContinuousMonitor:
         tracker: RiskTracker | None = None,
         metrics: list[str] | None = None,
         ceilings: dict[str, float] | None = None,
+        sustained_levels: dict[str, tuple[float, float]] | None = None,
         window_minutes: float = DEFAULT_WINDOW_MINUTES,
         step_seconds: int = 60,
         sleep: Callable[[float], None] = time.sleep,
@@ -271,6 +276,8 @@ class ContinuousMonitor:
         self.tracker = tracker if tracker is not None else RiskTracker()
         self.metrics = list(metrics) if metrics else [""]  # "" = todas (CSV)
         self.ceilings = dict(ceilings or {})
+        # métrica -> (nível-alvo, teto/denominador) para nível crônico acima do alvo
+        self.sustained_levels = dict(sustained_levels or {})
         self.window = timedelta(minutes=window_minutes)
         self.step_seconds = step_seconds
         self._sleep = sleep
@@ -305,6 +312,9 @@ class ContinuousMonitor:
                 continue
             values = [p.value for p in points]
             sat = detect_saturation(points, self.ceilings.get(name))
+            if sat is None and name in self.sustained_levels:
+                level, denom = self.sustained_levels[name]
+                sat = detect_sustained_level(points, level, denom)
             if sat is not None and (
                 saturation is None
                 or sat.sustained_samples > saturation.sustained_samples

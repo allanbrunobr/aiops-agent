@@ -7,17 +7,17 @@
     "synthetic_series_len": 60
   },
   "metrics": {
-    "false_negatives": 3,
+    "false_negatives": 0,
     "false_positives": 0,
-    "hpa_lead_time_min_mean": 20.4,
-    "hpa_lead_time_min_min": 43.0,
-    "hpa_recall": 0.4,
-    "mean_lead_time_min": 20.764705882352942,
+    "hpa_lead_time_min_mean": 183.6,
+    "hpa_lead_time_min_min": 171.0,
+    "hpa_recall": 1.0,
+    "mean_lead_time_min": 58.45,
     "negative_alert_ticks": 0,
     "noise_heavy_alert_series": 0,
     "precision": 1.0,
-    "recall": 0.85,
-    "true_positives": 17
+    "recall": 1.0,
+    "true_positives": 20
   },
   "per_kind": {
     "flat": {
@@ -29,7 +29,7 @@
       "series": 5
     },
     "hpa_scenario": {
-      "detected": 2,
+      "detected": 5,
       "series": 5
     },
     "memory_leak": {
@@ -52,51 +52,51 @@
   "scope": "tick a tick via CsvMetricsSource + ContinuousMonitor (sem LLM)",
   "series": [
     {
-      "alert_ticks": 1,
-      "escalate_ticks": 1,
-      "first_alert_offset_min": 631.0,
+      "alert_ticks": 189,
+      "escalate_ticks": 189,
+      "first_alert_offset_min": 501.0,
       "kind": "hpa_scenario",
-      "lead_time_min": 59.0,
+      "lead_time_min": 189.0,
       "positive": true,
       "seed": 42,
       "ticks": 1051
     },
     {
-      "alert_ticks": 4,
-      "escalate_ticks": 4,
-      "first_alert_offset_min": 647.0,
+      "alert_ticks": 186,
+      "escalate_ticks": 186,
+      "first_alert_offset_min": 504.0,
       "kind": "hpa_scenario",
-      "lead_time_min": 43.0,
+      "lead_time_min": 186.0,
       "positive": true,
       "seed": 43,
       "ticks": 1051
     },
     {
-      "alert_ticks": 0,
-      "escalate_ticks": 0,
-      "first_alert_offset_min": null,
+      "alert_ticks": 185,
+      "escalate_ticks": 185,
+      "first_alert_offset_min": 505.0,
       "kind": "hpa_scenario",
-      "lead_time_min": null,
+      "lead_time_min": 185.0,
       "positive": true,
       "seed": 44,
       "ticks": 1051
     },
     {
-      "alert_ticks": 0,
-      "escalate_ticks": 0,
-      "first_alert_offset_min": null,
+      "alert_ticks": 171,
+      "escalate_ticks": 171,
+      "first_alert_offset_min": 519.0,
       "kind": "hpa_scenario",
-      "lead_time_min": null,
+      "lead_time_min": 171.0,
       "positive": true,
       "seed": 45,
       "ticks": 1051
     },
     {
-      "alert_ticks": 0,
-      "escalate_ticks": 0,
-      "first_alert_offset_min": null,
+      "alert_ticks": 187,
+      "escalate_ticks": 187,
+      "first_alert_offset_min": 503.0,
       "kind": "hpa_scenario",
-      "lead_time_min": null,
+      "lead_time_min": 187.0,
       "positive": true,
       "seed": 46,
       "ticks": 1051

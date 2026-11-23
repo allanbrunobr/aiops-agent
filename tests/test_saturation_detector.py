@@ -166,3 +166,26 @@ def test_stage_other_metric_ceiling_does_not_apply():
     )
     assert r is not None
     assert "saturation" not in r.signals
+
+
+# --- detect_sustained_level (VB4-FIX): nível crônico acima do alvo -----------
+from pipeline.saturation_detector import detect_sustained_level  # noqa: E402
+
+
+def test_sustained_level_creep_lento_acima_do_alvo():
+    vals = [85.0 + 0.1 * i for i in range(20)]  # sobe devagar, sempre >= 80
+    sig = detect_sustained_level(vals, level=80.0, ceiling=100.0)
+    assert sig is not None and sig.ceiling_explicit and sig.utilization > 0.8
+
+
+def test_sustained_level_abaixo_do_alvo_nao_dispara():
+    assert detect_sustained_level([70.0] * 30, 80.0, 100.0) is None
+
+
+def test_sustained_level_oscilando_em_torno_do_alvo_nao_dispara():
+    vals = [70.0, 95.0] * 15  # média 82.5 mas mínimo muito abaixo
+    assert detect_sustained_level(vals, 80.0, 100.0) is None
+
+
+def test_sustained_level_serie_curta_nao_dispara():
+    assert detect_sustained_level([90.0] * 5, 80.0, 100.0) is None

@@ -138,5 +138,20 @@
       "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
     ],
     "passes": true
+  },
+  {
+    "number": 11,
+    "category": "functional",
+    "title": "VB4-FIX: corrigir mean lead-time + elevar recall do HPA contínuo",
+    "description": "Follow-up de qualidade do VB4 (backtest contínuo). DOIS problemas verificados:\n(1) BUG de métrica em scripts/backtest_continuous.py:201-205: hpa_lead_time_min_mean = sum(hpa_leads non-None)/len(hpa_leads) divide pelo TOTAL de seeds (5, inclui None) em vez da contagem de non-None (2). Resultado reportado 20.4 < min 43.0 (impossível). Corrija para dividir pela contagem de valores non-None (→ 51.0). Adicione teste de regressão garantindo mean >= min quando há detecções.\n(2) GAP de detecção: hpa_recall=0.4 — o cenário HPA realista (data/hpa_saturation_scenario.py, VB-T1, ~1051 ticks/18h de creep lento) é detectado em só 2/5 seeds (42,43; 44/45/46 com alert_ticks=0). Causa: replay_hpa (scripts/backtest_continuous.py ~linha 104) cria ContinuousMonitor SEM ceilings= → o saturation detector (pipeline/saturation_detector.py, D4) fica INATIVO para o HPA; só o caminho slope/ETA atua, e creep lento → slope pequeno → ETA raramente <= escalate_eta_minutes=60 antes de MAXED_OUT_AT. Melhore o SINAL (não apenas abaixe limiares): engaje o detector de saturação/nível sustentado para o HPA — passe o ceiling apropriado (ex.: MEMORY_REQUEST_BYTES ou o alvo de utilização) em replay_hpa E/OU adicione no ContinuousMonitor uma via de escalada por nível sustentado alto (utilização crônica acima do alvo) que capture o creep lento mesmo com slope pequeno. O platô real do HPA é em réplicas (maxReplicas=10); considere detectar utilização working_set/request sustentada acima do alvo 80% como sinal de saturação iminente.\nSpec base: docs/vigia-barato-agent-prompt.md (VB2/VB4/D4) + ROBUSTNESS_PLAN.md Eixo D. Confirme file:line no código real antes de editar.",
+    "dependencies": "10",
+    "steps": [
+      "Aceite: hpa_recall >= 0.8 (>=4/5 seeds do cenário realista) COM lead_time > 0; precision permanece 1.0; ZERO alertas em flat/noise/noise_heavy (negative_alert_ticks=0, noise_heavy_alert_series=0); recall overall >= 0.8. NÃO overfit: melhore o sinal, não abaixe limiares a ponto de gerar falso positivo.",
+      "Aceite: hpa_lead_time_min_mean corrigido (>= hpa_lead_time_min_min quando há detecções); teste de regressão mean>=min.",
+      "Escreva/ajuste testes que FALHAM antes do fix; regenere golden: python scripts/backtest_continuous.py --write-golden e python scripts/backtest_predictive.py --write-golden (se afetado).",
+      "Verificar LOCAL M5: scripts/ci-local.sh unit (verde) + .venv/bin/python -m pytest tests/test_continuous_backtest.py tests/test_predictive_backtest.py -m slow -q (verde). ruff check limpo nos arquivos tocados.",
+      "Regras: write-set explícito (scripts/backtest_continuous.py, pipeline/continuous_monitor.py, pipeline/saturation_detector.py, tests/*, validation/golden/*); NADA infra real; NADA gravar output/ do repo (tmp_path); sem deps novas; não quebrar V0 nem os outros 10 features; commit limpo. Marque passes:true só após verificação. Se hpa_recall>=0.8 não for alcançável honestamente sem falso positivo, documente o limite no claude-progress.txt e no golden (não force overfit)."
+    ],
+    "passes": true
   }
 ]
