@@ -32,3 +32,9 @@ Ideia: camada BARATA contínua (poll métricas 30-60s + matemática pura, ZERO t
 
 ## Próxima tarefa recomendada
 Feature 1 (VB-T1): criar `data/hpa_saturation_scenario.py` (gerador stdlib-only, 4 fases, rótulos incident_start/maxed_out_at/restart_at, export CSV, registrar em `data/registry.py`). Padrão a espelhar: `data/memory_leak_scenario.py`.
+
+## Sessão Feature 1 (VB-T1) — 2026-11-23
+- Entregue: `data/hpa_saturation_scenario.py` + `tests/test_hpa_saturation_scenario.py`. Cenário `hpa-saturation` se registra ao importar o módulo (padrão do memory-leak); `data/registry.py` e `sample_incident.py` NÃO foram alterados (o registry é passivo; importar o cenário em sample_incident mudaria a lista global de cenários — decisão para a VB1/VB4 se precisarem de descoberta automática).
+- API: MEMORY_REQUEST_BYTES, HPA_TARGET_UTILIZATION, MAX_REPLICAS, MIN_REPLICAS, SAMPLE_INTERVAL_S, generate_metrics(seed), ground_truth() -> HpaGroundTruth(incident_start, maxed_out_at, restart_at), export_csv(path, seed), generate_hpa_saturation(seed). Métricas: container_memory_working_set_bytes, container_cpu_usage_seconds, kube_hpa_status_current_replicas, kube_hpa_spec_max_replicas (service "wbia").
+- Pendente: rodar a suíte unit completa no M1 (feature_list passes=false até lá). Verificado só: 26 testes direcionados + ruff.
+- Próxima: Feature 2 (D1 clamp de sinais).
