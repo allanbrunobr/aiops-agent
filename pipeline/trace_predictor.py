@@ -7,9 +7,15 @@ de raiz, emitindo sinais de alerta antecipado.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from data.models import Span
+
+logger = logging.getLogger(__name__)
+
+# Baseline abaixo disso (ms) não é referência significativa para ratio.
+_MIN_BASELINE_MS = 1.0
 
 try:
     import _aiops_rust as _rust
@@ -81,10 +87,21 @@ def detect_latency_drift(
         p95_ratio (float): p95_current / max(p95_baseline, 0.001)
         p99_ratio (float): p99_current / max(p99_baseline, 0.001)
     """
+    # Guarda D1: baseline zero/irrelevante (< 1 ms) não tem referência válida;
+    # dividir por ele geraria ratio gigante e falso alarme. Vale p/ Rust e Python.
+    p95_baseline = _percentile(baseline, 95)
+    p99_baseline = _percentile(baseline, 99)
+    if p95_baseline < _MIN_BASELINE_MS or p99_baseline < _MIN_BASELINE_MS:
+        logger.warning(
+            "baseline de latência ~0 (p95=%.4f ms, p99=%.4f ms): sem sinal de drift",
+            p95_baseline,
+            p99_baseline,
+        )
+        return {"drift_detected": False, "p95_ratio": 1.0, "p99_ratio": 1.0}
+
     if _RUST_AVAILABLE:
         return _rust.detect_latency_drift(baseline, current, threshold_pct)
 
-    p95_baseline = _percentile(baseline, 95)
     p95_current = _percentile(current, 95)
     p99_baseline = _percentile(baseline, 99)
     p99_current = _percentile(current, 99)

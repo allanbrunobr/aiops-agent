@@ -10,7 +10,7 @@ Cada feature em `feature_list.json` aponta para a tarefa correspondente nesses d
 Projeto: aiops-agent — agente AIOps local-first (CLI `main.py`, demo localhost:47891, RAG local sentence-transformers+FAISS, pipelines V0/V1, camadas de segurança, TNR SIMULADO que nunca executa infra real).
 - Merge origin/main concluído e em main (commit df7f71c); fix de segurança ML concluído (torch 2.13.0+cu130 / transformers 5.23.0 / sentence-transformers 5.7.0 / faiss 1.16.0); doc hold→resolvido (62954b0). Dependabot: 0 alertas abertos.
 - 31 features anteriores concluídas (registro completo em `feature_list.archive.json`). Pipelines V0/V1, RAG, safety layers, postmortem, databricks connector, display/rust — tudo verde.
-- Baseline de testes: `.venv/bin/python -m pytest tests -m unit -q` → ~1836 passed / 5 skipped. integration+snapshot ~152. e2e Playwright 10. Rust cargo 56.
+- Baseline de testes (RODE AQUI NO M5): `scripts/ci-local.sh unit` → verde (~1800 passed; ignora tests/rust, que é job separado). NÃO use `pytest tests -m unit` sem `--ignore=tests/rust` (o binário Rust local pode estar stale → 4 parity failures irrelevantes para estas tarefas stdlib/math). integration+snapshot ~152. e2e Playwright 10. Rust cargo 56.
 
 ## Prioridade ATUAL: Vigia Barato (monitor contínuo preditivo barato)
 10 tarefas pendentes em `feature_list.json` (array, passes=false). Ordem por dependência:
@@ -24,14 +24,17 @@ Ideia: camada BARATA contínua (poll métricas 30-60s + matemática pura, ZERO t
 - Sem dependências novas; cenário e matemática stdlib-only. Não quebrar V0.
 - ruff/mypy limpos em domain/application/core. Snapshot só com justificativa.
 - Commit limpo por feature; marque `passes:true` só após verificação.
+- ★ VERIFIQUE LOCALMENTE NO M5 (arm64): `scripts/ci-local.sh unit` roda verde AQUI. NÃO faça rsync/ssh para m1-docker — é Intel e NÃO roda o stack; usá-lo só causa falhas espúrias (git status 128, torch antigo). Para mudanças em Rust (D2), rode `scripts/ci-local.sh rust` AQUI (cargo+maturin disponíveis).
 
-## Ambiente / host
-- `.venv/bin/python` é o interpretador do projeto. `scripts/ci-local.sh unit` roda a suíte unit.
-- Host `m1-docker` é Intel x86_64 macOS e NÃO roda torch>=2.6 nativo; estas 10 tarefas são stdlib/matemática pura → rodam em qualquer host. Suítes ML pesadas (RAG real) exigem container linux/amd64 ou M5 arm64 — não rode aqui.
+## Ambiente / host (LEIA COM ATENÇÃO)
+- ★ VOCÊ ESTÁ RODANDO NO M5 (arm64 macOS). ESTE host roda TUDO: torch, Rust, a suíte unit completa. RODE A VERIFICAÇÃO AQUI, LOCALMENTE.
+- Comando canônico de verificação: `scripts/ci-local.sh unit` (verde aqui; ignora tests/rust). Alternativa rápida: `.venv/bin/python -m pytest tests -m unit --ignore=tests/rust -q`.
+- ★ NUNCA use m1-docker / rsync / ssh para validar estas tarefas. m1-docker é Intel x86_64 macOS, NÃO roda torch>=2.6 nativo, e o rsync sem .git causa `git status 128`. Ir para lá só desperdiça a sessão e gera falhas falsas. TODAS as 10 tarefas são stdlib/matemática pura → rodam AQUI no M5 sem torch.
+- Rust (só D2 mexe): `scripts/ci-local.sh rust` AQUI (cargo 1.98 + maturin no .venv). Não precisa rebuildar Rust para as outras tarefas.
 - Smokes: `main.py --no-llm --no-rag [--pipeline-v1] --output-dir <tmp>` (exit 3 = aprovação necessária, seguro).
 
 ## Próxima tarefa recomendada
-Feature 1 (VB-T1): criar `data/hpa_saturation_scenario.py` (gerador stdlib-only, 4 fases, rótulos incident_start/maxed_out_at/restart_at, export CSV, registrar em `data/registry.py`). Padrão a espelhar: `data/memory_leak_scenario.py`.
+Feature 1 (VB-T1) ✅ CONCLUÍDA (commit 1dd9d63, passes=true). Siga a ordem de dependência em feature_list.json (próxima pendente). Verifique SEMPRE com `scripts/ci-local.sh unit` AQUI NO M5 — nunca no M1.
 
 ## Sessão Feature 1 (VB-T1) — 2026-11-23
 - Entregue: `data/hpa_saturation_scenario.py` + `tests/test_hpa_saturation_scenario.py`. Cenário `hpa-saturation` se registra ao importar o módulo (padrão do memory-leak); `data/registry.py` e `sample_incident.py` NÃO foram alterados (o registry é passivo; importar o cenário em sample_incident mudaria a lista global de cenários — decisão para a VB1/VB4 se precisarem de descoberta automática).
@@ -41,3 +44,10 @@ Feature 1 (VB-T1): criar `data/hpa_saturation_scenario.py` (gerador stdlib-only,
 
 ## Sessão 2 Feature 1 — fechamento
 - Suíte unit no M1 (ci-local.sh unit; venv slim, por isso 1798 vs baseline 1836 com ML): exit 0, 1798 passed. Feature 1 passes=true. Obs: rsync p/ M1 precisa de `git init && git add -A` (testes usam git ls-files). Próxima: Feature 2 (D1 clamp).
+
+## Sessão Feature 2 (D1 clamp de sinais) — 2026-11-23
+- Entregue: `pipeline/risk_scorer.py` (log score com clamp inferior em 0) e `pipeline/trace_predictor.py` (`detect_latency_drift`: baseline p95/p99 < 1 ms → sem drift, ratios 1.0, logger.warning; guarda vale também no caminho Rust, antes da chamada).
+- Testes: 4 novos em `tests/test_predictive_stage.py` (3 falhavam antes do fix: -20.0 vs 20.0; 0.0 vs 24.0; drift True com baseline zero). Atualizados 3 testes que fixavam o contrato antigo (ratio gigante com baseline 0): `tests/test_trace_predictor.py` (2), `tests/rust/test_trace_predictor.py` (1) — fora do write-set original, mas codificavam o comportamento corrigido.
+- Verificação: ci-local.sh unit no M1 (vaga s2, git init no rsync): exit 0, 1802 passed / 6 skipped. ruff + format + mypy (core domain application) limpos. tests/rust/test_trace_predictor.py local: 7 passed.
+- Obs: falhas de paridade Rust em test_rust_python_parity.py (trace_filter/metric_filter "caminho Rust indisponível") são de ambiente, não do D1. Edições em docs/vigia-barato-agent-prompt.md (host M5 vs M1) já estavam não commitadas antes desta sessão; não foram incluídas no commit.
+- Próxima: Feature 3 (D2 ETA correto) — atenção à paridade Rust↔Python.

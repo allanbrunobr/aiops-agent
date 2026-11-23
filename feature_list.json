@@ -8,7 +8,7 @@
     "steps": [
       "Aceite: Cenário registrado no registry; generate_metrics() retorna 4 fases+rótulos; teste confirma util cruza 80% e réplicas atingem 10, platô final variância baixa no teto, CSV roundtrip em tmp_path, stdlib-only. pytest tests -m unit -q verde.",
       "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar: .venv/bin/python -m pytest tests -m unit -q (baseline 1836 passed). Para backtest: -m slow no arquivo novo.",
+      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
       "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
     ],
     "passes": true
@@ -22,10 +22,10 @@
     "steps": [
       "Aceite: Teste novo falha antes do fix e passa depois; scripts/ci-local.sh unit verde; sinais clampados não geram alarme sobre lixo.",
       "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar: .venv/bin/python -m pytest tests -m unit -q (baseline 1836 passed). Para backtest: -m slow no arquivo novo.",
+      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
       "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 3,
@@ -36,7 +36,7 @@
     "steps": [
       "Aceite: ETA em minutos correto com threshold; predictive_stage passa threshold; paridade Rust↔Python verde; teste falha antes do fix; ci-local unit verde.",
       "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar: .venv/bin/python -m pytest tests -m unit -q (baseline 1836 passed). Para backtest: -m slow no arquivo novo.",
+      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
       "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
     ],
     "passes": false
@@ -50,7 +50,7 @@
     "steps": [
       "Aceite: flat/ruído não gera prediction.alert; série curta/efeito ínfimo → sem sinal; teste falha antes; ci-local unit verde.",
       "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar: .venv/bin/python -m pytest tests -m unit -q (baseline 1836 passed). Para backtest: -m slow no arquivo novo.",
+      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
       "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
     ],
     "passes": false
@@ -64,7 +64,7 @@
     "steps": [
       "Aceite: detect_saturation sinaliza platô no teto (variância baixa, ≥95% ceiling, ≥K amostras); integrado em predictive_stage/risk_scorer; teste falha antes; ci-local unit verde.",
       "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar: .venv/bin/python -m pytest tests -m unit -q (baseline 1836 passed). Para backtest: -m slow no arquivo novo.",
+      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
       "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
     ],
     "passes": false
@@ -78,7 +78,7 @@
     "steps": [
       "Aceite: pytest tests/test_predictive_backtest.py -m slow -v verde; golden gerado; recall≥0.8, precision≥0.7, zero alertas flat/ruído.",
       "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar: .venv/bin/python -m pytest tests -m unit -q (baseline 1836 passed). Para backtest: -m slow no arquivo novo.",
+      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
       "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
     ],
     "passes": false
@@ -92,7 +92,7 @@
     "steps": [
       "Aceite: Testes com HTTP mock / CSV em tmp_path; query retorna séries corretas; timeout/retry cobertos; unit verde sem torch.",
       "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar: .venv/bin/python -m pytest tests -m unit -q (baseline 1836 passed). Para backtest: -m slow no arquivo novo.",
+      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
       "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
     ],
     "passes": false
@@ -106,7 +106,7 @@
     "steps": [
       "Aceite: Replay CSV HPA via CsvMetricsSource → monitor emite prediction.warning/alert ANTES de maxed_out_at (lead time>0); flat/ruído→nenhum alerta (pós-D3); tick determinístico com seed; zero LLM no tick; unit verde.",
       "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar: .venv/bin/python -m pytest tests -m unit -q (baseline 1836 passed). Para backtest: -m slow no arquivo novo.",
+      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
       "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
     ],
     "passes": false
@@ -120,7 +120,7 @@
     "steps": [
       "Aceite: Teste escalada com pipeline mock→diagnóstico chamado 1x quando level≥warning, 0x em flat; Slack mock recebe aviso; nenhum caminho executa infra; unit verde.",
       "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar: .venv/bin/python -m pytest tests -m unit -q (baseline 1836 passed). Para backtest: -m slow no arquivo novo.",
+      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
       "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
     ],
     "passes": false
@@ -134,7 +134,7 @@
     "steps": [
       "Aceite: pytest tests/test_continuous_backtest.py -m slow -v verde; golden gerado; lead time>0 no HPA; recall≥0.8; zero alertas flat/ruído puro.",
       "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar: .venv/bin/python -m pytest tests -m unit -q (baseline 1836 passed). Para backtest: -m slow no arquivo novo.",
+      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
       "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
     ],
     "passes": false

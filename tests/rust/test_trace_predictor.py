@@ -78,7 +78,11 @@ class TestDetectLatencyDriftEquivalence:
         assert abs(py_result["p95_ratio"] - rust_result["p95_ratio"]) < 1e-9
 
     def test_baseline_zero_resultado_identico(self):
-        """Divisão por zero protegida por max(p95_baseline, 0.001) em ambas implementações."""
+        """D1: o wrapper Python guarda baseline ~0 (sem drift) antes de chamar o Rust.
+
+        O Rust cru ainda aplica max(p95_baseline, 0.001) e não panica; o
+        wrapper público é quem evita o ratio gigante.
+        """
         import _aiops_rust as rust
 
         baseline = [0.0] * 20
@@ -87,7 +91,9 @@ class TestDetectLatencyDriftEquivalence:
         py_result = detect_latency_drift(baseline, current, 0.20)
         rust_result = rust.detect_latency_drift(baseline, current, 0.20)
 
-        assert py_result["drift_detected"] == rust_result["drift_detected"]
+        assert py_result["drift_detected"] is False
+        assert py_result["p95_ratio"] == 1.0
+        assert isinstance(rust_result["drift_detected"], bool)  # sem panic
 
     def test_lista_vazia_baseline(self):
         """Lista vazia retorna p95=0.0 tanto em Python quanto em Rust."""

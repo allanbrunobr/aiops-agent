@@ -189,3 +189,68 @@ def test_matched_history_default_empty():
     result = run_predictive_stage(report)
     assert result is not None
     assert result.matched_history == []
+
+
+# ---------------------------------------------------------------------------
+# D1 — clamp de sinais (log negativo + baseline de latência zero)
+# ---------------------------------------------------------------------------
+
+
+def test_log_burst_ratio_below_one_does_not_go_negative():
+    """rate_ratio<1 com burst_detected=True não pode gerar score negativo."""
+    from pipeline.log_predictor import LogBurstSignal
+    from pipeline.risk_scorer import _score_log_signal
+
+    signal = LogBurstSignal(
+        burst_detected=True,
+        rate_ratio=0.2,
+        dominant_template=None,
+        novel_templates=["nova"],
+    )
+    # Sem clamp: base = -40 + 20 = -20 → mascararia a novidade.
+    assert _score_log_signal(signal) == 20.0
+
+
+def test_log_ratio_below_one_does_not_reduce_other_signals():
+    """Ratio<1 no log não pode reduzir o score abaixo dos outros sinais."""
+    from pipeline.log_predictor import LogBurstSignal
+    from pipeline.risk_scorer import MetricTrendSignal, compute_risk_score
+
+    metric = MetricTrendSignal(slope=1.0)  # 60 * 0.4 = 24
+    garbage_log = LogBurstSignal(
+        burst_detected=True,
+        rate_ratio=-5.0,
+        dominant_template=None,
+        novel_templates=["x"],
+    )
+    # log contribui 0.3 * 20 = 6 (só a novidade), nunca negativo.
+    assert compute_risk_score(metric, garbage_log, None) >= compute_risk_score(
+        metric, None, None
+    )
+
+
+def test_latency_zero_baseline_gives_no_drift_signal():
+    """Baseline com p95/p99 zero não explode o ratio nem alarma."""
+    from pipeline.risk_scorer import compute_risk_score
+    from pipeline.trace_predictor import LatencyDriftSignal, detect_latency_drift
+
+    result = detect_latency_drift([0.0] * 20, [50.0] * 20)
+    assert result["drift_detected"] is False
+    assert result["p95_ratio"] == 1.0
+    assert result["p99_ratio"] == 1.0
+
+    signal = LatencyDriftSignal(
+        drift_detected=result["drift_detected"],
+        p95_ratio=result["p95_ratio"],
+        p99_ratio=result["p99_ratio"],
+    )
+    assert compute_risk_score(None, None, signal) == 0.0
+
+
+def test_latency_real_baseline_still_detects_drift():
+    """Regressão: baseline legítimo continua detectando drift."""
+    from pipeline.trace_predictor import detect_latency_drift
+
+    result = detect_latency_drift([100.0] * 20, [200.0] * 20)
+    assert result["drift_detected"] is True
+    assert result["p95_ratio"] == pytest.approx(2.0)

@@ -96,14 +96,16 @@ def test_drift_empty_lists():
     """Listas vazias não devem lançar exceção e drift_detected deve ser False."""
     result = detect_latency_drift([], [])
     assert result["drift_detected"] is False
-    assert result["p95_ratio"] == pytest.approx(0.0)
-    assert result["p99_ratio"] == pytest.approx(0.0)
+    # D1: baseline ~0 → sem referência, ratio neutro (1.0)
+    assert result["p95_ratio"] == pytest.approx(1.0)
+    assert result["p99_ratio"] == pytest.approx(1.0)
 
 
 def test_drift_empty_baseline():
-    """Baseline vazio com current não-vazio: ratio alto por divisão por 0.001."""
+    """D1: baseline vazio/zero não tem referência → sem drift (antes: ratio 1e5)."""
     result = detect_latency_drift([], [100.0] * 10)
-    assert result["drift_detected"] is True
+    assert result["drift_detected"] is False
+    assert result["p95_ratio"] == pytest.approx(1.0)
 
 
 # ---------------------------------------------------------------------------

@@ -42,7 +42,9 @@ def _score_log_signal(signal: LogBurstSignal | None) -> float:
     if not signal.burst_detected:
         base = 0.0
     else:
-        base = min(100.0, (signal.rate_ratio - 1.0) * 50.0)
+        # Clamp inferior: ratio<1 (ou lixo negativo) não pode gerar score
+        # negativo e mascarar a contribuição de novel_templates / outros sinais.
+        base = max(0.0, min(100.0, (signal.rate_ratio - 1.0) * 50.0))
     if signal.novel_templates:
         base += 20.0
     return min(100.0, base)
