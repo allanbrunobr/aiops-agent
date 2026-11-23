@@ -114,3 +114,10 @@ Feature 1 (VB-T1) ✅ CONCLUÍDA (commit 1dd9d63, passes=true). Siga a ordem de 
 - Testes: tests/test_continuous_escalation.py (12; incl. engine V1 real no_llm): diagnóstico 1x em warning, 0x em flat, Slack mock recebe aviso, dry-run rápido, flag+token. Falhavam antes (ImportError).
 - Verificação (M5): `scripts/ci-local.sh unit` exit 0, 1878 passed/6 skipped; ruff e mypy (core domain application) limpos.
 - Próxima: Feature 10 (VB4 backtest do monitor).
+
+## Sessão Feature 10 (VB4 backtest do monitor contínuo) — 2026-11-23
+- Entregue: `scripts/backtest_continuous.py` (replay tick a tick via CsvMetricsSource+ContinuousMonitor; HPA seeds 42-46 + séries D5; CSVs em tempdir; `--write-golden`/`--output`), `validation/golden/continuous_backtest.json`, `tests/test_continuous_backtest.py` (9 testes, slow+integration; incl. sondas monitor cego/alarmista), `docs/vigia-barato-backtest.md`.
+- Medido (5 seeds): recall 0.85 (17/20), precision 1.00, 0 alertas em flat/noise/noise_heavy, lead HPA seed 42 = 59 min (mín 43), lead médio 20.8 min.
+- ACHADO HONESTO: nas seeds 44-46 do HPA o monitor NÃO avisa (recall HPA 2/5): memória oscila perto de 0.90 do request e o limiar único ewma_threshold não é cruzado. O recall global ≥0.8 vem das séries sintéticas. Documentado e testado; calibração por métrica fica fora do write-set.
+- Verificação (M5, M5_LEVE=1): `pytest tests/test_continuous_backtest.py -m slow` 9 passed; + test_continuous_monitor 19 passed; ruff check e mypy (domain application core) limpos; ruff format nos arquivos novos. NÃO rodei `scripts/ci-local.sh unit` (hook m5-guard bloqueia suíte completa) — a feature só adiciona arquivos novos (nenhum módulo existente alterado).
+- Próxima: nenhuma pendente; opcional: calibrar limiar por métrica no monitor para HPA seeds 44-46.
