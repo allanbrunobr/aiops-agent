@@ -11,7 +11,7 @@
       "Verificar: .venv/bin/python -m pytest tests -m unit -q (baseline 1836 passed). Para backtest: -m slow no arquivo novo.",
       "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 2,

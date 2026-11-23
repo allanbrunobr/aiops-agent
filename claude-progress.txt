@@ -38,3 +38,6 @@ Feature 1 (VB-T1): criar `data/hpa_saturation_scenario.py` (gerador stdlib-only,
 - API: MEMORY_REQUEST_BYTES, HPA_TARGET_UTILIZATION, MAX_REPLICAS, MIN_REPLICAS, SAMPLE_INTERVAL_S, generate_metrics(seed), ground_truth() -> HpaGroundTruth(incident_start, maxed_out_at, restart_at), export_csv(path, seed), generate_hpa_saturation(seed). Métricas: container_memory_working_set_bytes, container_cpu_usage_seconds, kube_hpa_status_current_replicas, kube_hpa_spec_max_replicas (service "wbia").
 - Pendente: rodar a suíte unit completa no M1 (feature_list passes=false até lá). Verificado só: 26 testes direcionados + ruff.
 - Próxima: Feature 2 (D1 clamp de sinais).
+
+## Sessão 2 Feature 1 — fechamento
+- Suíte unit no M1 (ci-local.sh unit; venv slim, por isso 1798 vs baseline 1836 com ML): exit 0, 1798 passed. Feature 1 passes=true. Obs: rsync p/ M1 precisa de `git init && git add -A` (testes usam git ls-files). Próxima: Feature 2 (D1 clamp).
