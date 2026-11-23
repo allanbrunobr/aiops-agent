@@ -61,3 +61,8 @@ Feature 1 (VB-T1) ✅ CONCLUÍDA (commit 1dd9d63, passes=true). Siga a ordem de 
 - Testes: 5 novos em tests/test_metric_predictor.py + 1 em tests/test_predictive_stage.py (6 falhavam antes); `test_eta_formula` atualizado p/ current=EWMA (contrato antigo usava valor bruto).
 - Verificação (M5, com M5_LEVE=1 — hook m5-guard bloqueia suíte completa): 35 testes diretos, paridade ewma 24 passed, subset unit 172 passed, ruff/format/mypy limpos. NÃO rodei `ci-local.sh unit` completo nem `ci-local.sh rust` (hook proíbe suíte pesada no M5; M1 é Intel). Por isso passes=false: falta a suíte completa.
 - Próxima: rodar suíte unit completa (autorização do Allan) e marcar passes=true; depois Feature 4 (D3).
+
+## Fechamento Feature 3 (D2) — 2026-11-23
+- `scripts/ci-local.sh unit` no M5: exit 0, 1808 passed / 6 skipped. ruff, format e mypy (core domain application) limpos. Feature 3 passes=true.
+- `scripts/ci-local.sh rust` falha em clippy (`cur_depth`/`current_depth` usados como contador de laço) em código Rust NÃO tocado por D2 — pré-existente, fora do write-set; vale tarefa à parte. D2 não alterou Rust.
+- Próxima: Feature 4 (D3).
