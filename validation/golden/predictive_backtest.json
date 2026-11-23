@@ -1,0 +1,289 @@
+{
+  "config": {
+    "base_seed": 42,
+    "sample_minutes": 1.0,
+    "seeds": 5,
+    "series_len": 60,
+    "window": 20
+  },
+  "metrics": {
+    "false_negatives": 0,
+    "false_positives": 0,
+    "mean_lead_time_min": 24.333333333333332,
+    "min_lead_time_min": 17.0,
+    "negative_alert_windows": 0,
+    "precision": 1.0,
+    "recall": 1.0,
+    "true_positives": 15
+  },
+  "per_kind": {
+    "flat": {
+      "detected": 0,
+      "series": 5
+    },
+    "hpa_saturation": {
+      "detected": 5,
+      "series": 5
+    },
+    "memory_leak": {
+      "detected": 5,
+      "series": 5
+    },
+    "noise": {
+      "detected": 0,
+      "series": 5
+    },
+    "noise_heavy": {
+      "detected": 0,
+      "series": 5
+    },
+    "pool_exhaustion": {
+      "detected": 5,
+      "series": 5
+    }
+  },
+  "scope": "batch (janelas replayadas; sem monitor cont\u00ednuo)",
+  "series": [
+    {
+      "alert_windows": 23,
+      "failure_index": 45,
+      "first_alert_index": 22,
+      "kind": "pool_exhaustion",
+      "lead_time_min": 23.0,
+      "seed": 42
+    },
+    {
+      "alert_windows": 23,
+      "failure_index": 45,
+      "first_alert_index": 22,
+      "kind": "pool_exhaustion",
+      "lead_time_min": 23.0,
+      "seed": 43
+    },
+    {
+      "alert_windows": 24,
+      "failure_index": 45,
+      "first_alert_index": 21,
+      "kind": "pool_exhaustion",
+      "lead_time_min": 24.0,
+      "seed": 44
+    },
+    {
+      "alert_windows": 23,
+      "failure_index": 45,
+      "first_alert_index": 22,
+      "kind": "pool_exhaustion",
+      "lead_time_min": 23.0,
+      "seed": 45
+    },
+    {
+      "alert_windows": 23,
+      "failure_index": 45,
+      "first_alert_index": 22,
+      "kind": "pool_exhaustion",
+      "lead_time_min": 23.0,
+      "seed": 46
+    },
+    {
+      "alert_windows": 18,
+      "failure_index": 40,
+      "first_alert_index": 22,
+      "kind": "hpa_saturation",
+      "lead_time_min": 18.0,
+      "seed": 42
+    },
+    {
+      "alert_windows": 17,
+      "failure_index": 40,
+      "first_alert_index": 23,
+      "kind": "hpa_saturation",
+      "lead_time_min": 17.0,
+      "seed": 43
+    },
+    {
+      "alert_windows": 18,
+      "failure_index": 40,
+      "first_alert_index": 22,
+      "kind": "hpa_saturation",
+      "lead_time_min": 18.0,
+      "seed": 44
+    },
+    {
+      "alert_windows": 18,
+      "failure_index": 40,
+      "first_alert_index": 22,
+      "kind": "hpa_saturation",
+      "lead_time_min": 18.0,
+      "seed": 45
+    },
+    {
+      "alert_windows": 18,
+      "failure_index": 40,
+      "first_alert_index": 22,
+      "kind": "hpa_saturation",
+      "lead_time_min": 18.0,
+      "seed": 46
+    },
+    {
+      "alert_windows": 32,
+      "failure_index": 50,
+      "first_alert_index": 18,
+      "kind": "memory_leak",
+      "lead_time_min": 32.0,
+      "seed": 42
+    },
+    {
+      "alert_windows": 32,
+      "failure_index": 50,
+      "first_alert_index": 18,
+      "kind": "memory_leak",
+      "lead_time_min": 32.0,
+      "seed": 43
+    },
+    {
+      "alert_windows": 32,
+      "failure_index": 50,
+      "first_alert_index": 18,
+      "kind": "memory_leak",
+      "lead_time_min": 32.0,
+      "seed": 44
+    },
+    {
+      "alert_windows": 32,
+      "failure_index": 50,
+      "first_alert_index": 18,
+      "kind": "memory_leak",
+      "lead_time_min": 32.0,
+      "seed": 45
+    },
+    {
+      "alert_windows": 32,
+      "failure_index": 50,
+      "first_alert_index": 18,
+      "kind": "memory_leak",
+      "lead_time_min": 32.0,
+      "seed": 46
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "flat",
+      "lead_time_min": null,
+      "seed": 42
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "flat",
+      "lead_time_min": null,
+      "seed": 43
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "flat",
+      "lead_time_min": null,
+      "seed": 44
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "flat",
+      "lead_time_min": null,
+      "seed": 45
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "flat",
+      "lead_time_min": null,
+      "seed": 46
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "noise",
+      "lead_time_min": null,
+      "seed": 42
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "noise",
+      "lead_time_min": null,
+      "seed": 43
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "noise",
+      "lead_time_min": null,
+      "seed": 44
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "noise",
+      "lead_time_min": null,
+      "seed": 45
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "noise",
+      "lead_time_min": null,
+      "seed": 46
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "noise_heavy",
+      "lead_time_min": null,
+      "seed": 42
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "noise_heavy",
+      "lead_time_min": null,
+      "seed": 43
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "noise_heavy",
+      "lead_time_min": null,
+      "seed": 44
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "noise_heavy",
+      "lead_time_min": null,
+      "seed": 45
+    },
+    {
+      "alert_windows": 0,
+      "failure_index": null,
+      "first_alert_index": null,
+      "kind": "noise_heavy",
+      "lead_time_min": null,
+      "seed": 46
+    }
+  ],
+  "subsystem": "predictive_backtest"
+}

@@ -82,3 +82,11 @@ Feature 1 (VB-T1) ✅ CONCLUÍDA (commit 1dd9d63, passes=true). Siga a ordem de 
 ## Fechamento Feature 5 (D4) — 2026-11-23
 - `scripts/ci-local.sh unit` no M5: exit 0, 1841 passed / 6 skipped. ruff check limpo; mypy (core domain application) limpo; format limpo nos arquivos do D4 (14 outros arquivos do repo já divergiam do `ruff format`, pré-existentes, não tocados). Feature 5 passes=true.
 - Próxima: Feature 6 (D5).
+
+## Sessão Feature 6 (D5 backtest preditivo) — 2026-11-23
+- Entregue: `scripts/backtest_predictive.py` (séries sintéticas seed fixa: pool_exhaustion, hpa_saturation, memory_leak + negativos flat/noise/noise_heavy; replaya janelas de 20 amostras em `run_predictive_stage`; recall/precision/lead-time; `--write-golden`/`--output`), `validation/golden/predictive_backtest.json`, `tests/test_predictive_backtest.py` (8 testes, marker slow+integration), `docs/preditivo-backtest.md` (limitação batch + caminho para monitor contínuo).
+- Medido (5 seeds): recall 1.00, precision 1.00, lead médio 24.3 min (mín 17), 0 alertas em flat/ruído. Sondas do instrumento: detector cego → recall 0; detector alarmista → precision<0.7 (testes).
+- Achado honesto: com `--seeds 20`, `noise_heavy` (σ=5% da média) gerou 1 falso positivo em 20 — documentado; fora da asserção "zero alertas" (só flat/ruído puro), mas conta na precision.
+- Verificação (M5): `pytest tests/test_predictive_backtest.py -m slow` 8 passed; `scripts/ci-local.sh unit` exit 0, 1841 passed/6 skipped; ruff check, ruff format (arquivos novos), mypy (core domain application) limpos. Feature 6 passes=true.
+- Obs: docs/vigia-barato-agent-prompt.md tinha edições não commitadas anteriores; não incluídas.
+- Próxima: nenhuma pendente no Eixo D; eventual calibração do ruído forte.
