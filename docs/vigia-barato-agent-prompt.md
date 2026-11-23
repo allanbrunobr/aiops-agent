@@ -118,10 +118,12 @@ Execute **D1 → D2 → D3 → D4 → D5** exatamente como especificado em `ROBU
 
 ## 5. Verificação (comandos reais)
 
+★ **RODE AQUI NO M5 (arm64 macOS), LOCALMENTE.** Este host roda tudo (torch, Rust, suíte unit). **NUNCA** faça rsync/ssh para `m1-docker` para validar estas tarefas — é Intel, não roda o stack, e o rsync sem `.git` gera `git status 128` (falhas falsas). Todas as tarefas são stdlib/math → rodam aqui.
+
 ```bash
-# Unitário (sem torch/faiss — importorskip nos testes pesados)
-.venv/bin/python -m pytest tests -m unit -q
+# Unitário canônico (ignora tests/rust — job separado; evita parity failures de binário Rust stale)
 scripts/ci-local.sh unit
+.venv/bin/python -m pytest tests -m unit --ignore=tests/rust -q
 # CI completo ao fim de cada fase
 scripts/ci-local.sh
 # Smokes (nunca gravar em output/ do repo — usar --output-dir tmp)
@@ -135,7 +137,7 @@ pytest tests/test_continuous_backtest.py -m slow -v
 ruff check . && ruff format --check . && mypy domain application core
 ```
 
-**Restrição de host:** o host pesado `m1-docker` é **Intel x86_64 macOS** — torch não publica wheels Intel-Mac após 2.2.2; o stack real (`requirements.txt`: `sentence-transformers>=5.6,<6`, `torch>=2.13,<2.14`, `faiss-cpu>=1.15.1`) NÃO roda nativamente nele. Validação real-RAG/pesada deve ser: (a) CI `ubuntu-latest` (linux x86_64), (b) container Docker `linux/amd64` no Intel, ou (c) nativo arm64 no M5. **Nunca propor job nativo Intel-Mac com torch.** As tarefas deste prompt (Vigia Barato + cenário) são **stdlib-only / matemática pura** → rodam em qualquer host, sem torch.
+**Restrição de host:** o host pesado `m1-docker` é **Intel x86_64 macOS** — torch não publica wheels Intel-Mac após 2.2.2; o stack real (`requirements.txt`: `sentence-transformers>=5.6,<6`, `torch>=2.13,<2.14`, `faiss-cpu>=1.15.1`) NÃO roda nativamente nele. Validação real-RAG/pesada deve ser: (a) CI `ubuntu-latest` (linux x86_64), (b) container Docker `linux/amd64` no Intel, ou (c) nativo arm64 no M5. **Nunca propor job nativo Intel-Mac com torch.** As tarefas deste prompt (Vigia Barato + cenário) são **stdlib-only / matemática pura** → rodam em qualquer host, sem torch. **Use o M5 local (arm64) para verificar — nunca o m1-docker.** Rust (só D2): `scripts/ci-local.sh rust` aqui.
 
 ## 6. Ordem de execução
 
