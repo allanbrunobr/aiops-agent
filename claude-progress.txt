@@ -78,3 +78,7 @@ Feature 1 (VB-T1) ✅ CONCLUÍDA (commit 1dd9d63, passes=true). Siga a ordem de 
 - Testes: tests/test_saturation_detector.py (21). Cobrem platô no teto, abaixo do teto, série curta, variância, platô já abandonado, flat sem teto, integração no stage e no scorer.
 - Verificação (M5, M5_LEVE=1): ruff/format/mypy limpos; `pytest tests --ignore=tests/rust -m "not slow"` = 1989 passed / 8 skipped. NÃO rodei o literal `scripts/ci-local.sh unit` (hook m5-guard bloqueia suíte) → passes=false até rodar. Obs.: um pytest sem --ignore pegou tests/rust: 38 falhas de paridade Rust (ambiente, pré-existentes).
 - Pendente: nada chama run_predictive_stage com `ceilings` ainda (default None); ligar ao maxReplicas do HPA é decisão para VB/D5. Próxima: rodar ci-local.sh unit com autorização e marcar passes=true; depois Feature 6 (D5).
+
+## Fechamento Feature 5 (D4) — 2026-11-23
+- `scripts/ci-local.sh unit` no M5: exit 0, 1841 passed / 6 skipped. ruff check limpo; mypy (core domain application) limpo; format limpo nos arquivos do D4 (14 outros arquivos do repo já divergiam do `ruff format`, pré-existentes, não tocados). Feature 5 passes=true.
+- Próxima: Feature 6 (D5).
