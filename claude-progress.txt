@@ -97,3 +97,11 @@ Feature 1 (VB-T1) ✅ CONCLUÍDA (commit 1dd9d63, passes=true). Siga a ordem de 
 - Verificação (M5): `scripts/ci-local.sh unit` exit 0, 1856 passed / 6 skipped; mypy (core domain application) e ruff check limpos; ruff format limpo nos 3 arquivos novos. Feature 7 passes=true.
 - Obs: docs/vigia-barato-agent-prompt.md segue com edição não commitada anterior; não incluída.
 - Próxima: Feature 8 (VB2 ContinuousMonitor).
+
+## Sessão Feature 8 (VB2 ContinuousMonitor) — 2026-11-23
+- Entregue: `pipeline/continuous_monitor.py` (`ContinuousMonitor.tick(now)->MonitorTick(score, level, eta_minutes, saturation, should_escalate)`, `run_for(n)`, `run_forever()`; sleep/clock injetáveis). Reusa a cadeia do DemoAnalyzer (compute_ewma_slope span=10 → compute_risk_score(use_relative_slope, saturation) → RiskTracker.update → get_event_level) e os portões D3 de predictive_stage. `config/loader.py` `MonitorConfig` + bloco `monitor:` em defaults.yaml (interval_seconds=60, ewma_threshold=0.90, escalate_eta_minutes=30).
+- Decisão: ETA dentro de escalate_eta_minutes com slope>0 vira change_point (senão metric-only satura em 24<30 e o monitor nunca alertaria); should_escalate = nível ativo e (alert ou saturação ou ETA<=horizonte).
+- Medido (HPA seed 42, ticks de 1 min, métrica memória, limiar 90% do request, horizonte 60 min): 1º warning às 17:48, 59 min antes de maxed_out_at (18:47); fase normal sem alerta; flat/ruído sem alerta; tick determinístico.
+- Verificação (M5): tests/test_continuous_monitor.py 10 passed; `scripts/ci-local.sh unit` exit 0, 1866 passed/6 skipped; ruff e mypy (core domain application) limpos. Zero import de adapters.llm (testado em subprocesso). Feature 8 passes=true.
+- Limite honesto: o lead time depende de ewma_threshold calibrado por métrica (limiar único por monitor); sem ele só a saturação/ETA padrão 0.90 atua.
+- Próxima: Feature 9 (VB3 escalada).

@@ -56,6 +56,16 @@ class ThresholdsConfig(BaseModel):
         return v
 
 
+class MonitorConfig(BaseModel):
+    """Vigia Barato (VB2): loop contínuo sem LLM."""
+
+    model_config = ConfigDict(frozen=True)
+
+    interval_seconds: float = Field(default=60.0, gt=0)
+    ewma_threshold: float = 0.90  # limiar-alvo do ETA (unidade da métrica)
+    escalate_eta_minutes: float = Field(default=30.0, gt=0)
+
+
 class SafetyConfig(BaseModel):
     """Configuracao de seguranca do pipeline."""
 
@@ -346,6 +356,7 @@ class AppConfig(BaseSettings):
     mcp: McpConfig = McpConfig()
     llm: LLMConfig = LLMConfig()
     rag: RagConfig = RagConfig()
+    monitor: MonitorConfig = MonitorConfig()
 
     @classmethod
     def settings_customise_sources(

@@ -109,7 +109,7 @@
       "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
       "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 9,

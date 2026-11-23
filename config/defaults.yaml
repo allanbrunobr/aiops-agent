@@ -14,6 +14,12 @@ thresholds:
   error_threshold: 50            # Número mínimo de erros para acionar incidente
   detection_sigma_threshold: 3.0 # Sigma threshold para classificação de severidade
 
+# Vigia Barato (VB2) — monitor contínuo, camada barata (zero LLM)
+monitor:
+  interval_seconds: 60           # Intervalo entre ticks
+  ewma_threshold: 0.90           # Limiar-alvo do ETA (na unidade da métrica monitorada)
+  escalate_eta_minutes: 30       # ETA <= isto com nível >= warning => should_escalate
+
 # Configuração de segurança
 safety:
   blast_radius_limit: 5          # Máximo de serviços afetados sem aprovação humana
