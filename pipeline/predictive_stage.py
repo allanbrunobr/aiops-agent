@@ -9,6 +9,7 @@ Todas as exceções são capturadas — o pipeline nunca deve crashar neste est�
 """
 
 import logging
+import math
 
 from data.models import PredictionReport
 from pipeline.log_predictor import LogBurstSignal, analyze_log_signals
@@ -23,7 +24,20 @@ from pipeline.trace_predictor import LatencyDriftSignal, analyze_trace_signals
 logger = logging.getLogger(__name__)
 
 
-def run_predictive_stage(aggregated_report) -> PredictionReport | None:
+def _eta_threshold(anomaly, eta_sigma: float) -> float | None:
+    """Limiar de ETA = mean + eta_sigma * std da baseline da anomalia."""
+    mean = getattr(anomaly, "mean", None)
+    std = getattr(anomaly, "std", None)
+    if not isinstance(mean, int | float) or not isinstance(std, int | float):
+        return None
+    if not (math.isfinite(mean) and math.isfinite(std)) or std <= 0:
+        return None
+    return float(mean + eta_sigma * std)
+
+
+def run_predictive_stage(
+    aggregated_report, *, eta_sigma: float = 3.0
+) -> PredictionReport | None:
     """Executa o estágio preditivo e retorna PredictionReport ou None em caso de erro.
 
     Extrai pontos de métrica, entradas de log e spans do aggregated_report,
@@ -33,6 +47,10 @@ def run_predictive_stage(aggregated_report) -> PredictionReport | None:
     ----------
     aggregated_report : AggregatedReport
         Relatório agregado com dados de observabilidade processados.
+    eta_sigma : float
+        Nº de desvios-padrão acima da média de baseline que define o limiar
+        do ETA por métrica (limiar = mean + eta_sigma * std, o mesmo 3-sigma
+        da detecção por padrão). Sem mean/std válidos, ETA fica None.
 
     Retorna
     -------
@@ -76,7 +94,8 @@ def run_predictive_stage(aggregated_report) -> PredictionReport | None:
                         continue  # 1 ponto não estabelece tendência
                     entries.sort(key=lambda e: e[1].timestamp)
                     points = [p for _, p in entries]
-                    slope, eta = compute_ewma_slope(points)
+                    threshold = _eta_threshold(entries[0][0], eta_sigma)
+                    slope, eta = compute_ewma_slope(points, threshold=threshold)
                     # Sinal = tendência ascendente mais acentuada entre as métricas
                     if best_slope is None or slope > best_slope:
                         best_slope = slope

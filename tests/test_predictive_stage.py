@@ -254,3 +254,17 @@ def test_latency_real_baseline_still_detects_drift():
     result = detect_latency_drift([100.0] * 20, [200.0] * 20)
     assert result["drift_detected"] is True
     assert result["p95_ratio"] == pytest.approx(2.0)
+
+
+def test_predictive_stage_populates_eta_with_threshold():
+    """D2: ETA deixa de ser None — threshold = mean + 3*std da anomalia."""
+    base = datetime.datetime(2026, 1, 1)
+    anomalies = []
+    for i in range(12):
+        a = FakeAnomaly(deviation_sigma=4.0 + i, value=60.0 + 2.0 * i)
+        a.timestamp = base + datetime.timedelta(seconds=30 * i)
+        anomalies.append(a)  # mean=50, std=10 => threshold 80
+    result = run_predictive_stage(FakeReport(metric_anomalies=anomalies))
+    assert result is not None
+    assert result.eta_minutes is not None
+    assert result.eta_minutes > 0

@@ -1,5 +1,8 @@
 # Claude Progress — aiops-agent
 
+## ⛔ REGRA DE VERIFICAÇÃO — SOBREPÕE QUALQUER NOTA DE SESSÃO ANTIGA
+Verifique SEMPRE **AQUI NO M5 (arm64), LOCALMENTE**: `scripts/ci-local.sh unit` (verde, ignora tests/rust). **NÃO** faça rsync/ssh para `m1-docker`. As notas de sessão abaixo que mencionam "no M1" foram um **erro de guidance já corrigido** — NÃO replique esse padrão. O M5 roda tudo (torch, Rust, suíte unit). O M1 é Intel, lento, exige `git init` no rsync e NÃO builda Rust. **D2 (ETA/paridade Rust) PRECISA rodar `scripts/ci-local.sh rust` AQUI no M5** (cargo 1.98 + maturin no .venv). Marque `passes:true` após `ci-local.sh unit` verde AQUI + commit. Uma sessão por feature deve bastar.
+
 ## ★ LEIA PRIMEIRO (spec autoritativa)
 Antes de implementar QUALQUER feature, leia na íntegra:
 1. `docs/vigia-barato-agent-prompt.md` — spec autossuficiente das 10 tarefas (VB-T1, D1..D5, VB1..VB4), com assinaturas reais verificadas, write-set, aceite e regras.
@@ -51,3 +54,10 @@ Feature 1 (VB-T1) ✅ CONCLUÍDA (commit 1dd9d63, passes=true). Siga a ordem de 
 - Verificação: ci-local.sh unit no M1 (vaga s2, git init no rsync): exit 0, 1802 passed / 6 skipped. ruff + format + mypy (core domain application) limpos. tests/rust/test_trace_predictor.py local: 7 passed.
 - Obs: falhas de paridade Rust em test_rust_python_parity.py (trace_filter/metric_filter "caminho Rust indisponível") são de ambiente, não do D1. Edições em docs/vigia-barato-agent-prompt.md (host M5 vs M1) já estavam não commitadas antes desta sessão; não foram incluídas no commit.
 - Próxima: Feature 3 (D2 ETA correto) — atenção à paridade Rust↔Python.
+
+## Sessão Feature 3 (D2 ETA correto) — 2026-11-23
+- Entregue: `pipeline/metric_predictor.py` — `compute_ewma_slope(..., sample_interval_minutes=None)`: ETA = (threshold - EWMA_atual) / slope * intervalo(min); intervalo derivado da mediana dos deltas de timestamp (fallback 1.0); valida >0/finito. Slope retornado segue POR AMOSTRA (analyzer/risk_scorer/paridade inalterados). Rust NÃO mudou (bridge só devolve slope; `current` EWMA calculado no wrapper Python) → sem rebuild.
+- `pipeline/predictive_stage.py`: threshold = mean + eta_sigma*std da anomalia (eta_sigma=3.0 kwarg, = 3-sigma da detecção); sem mean/std válidos → ETA None.
+- Testes: 5 novos em tests/test_metric_predictor.py + 1 em tests/test_predictive_stage.py (6 falhavam antes); `test_eta_formula` atualizado p/ current=EWMA (contrato antigo usava valor bruto).
+- Verificação (M5, com M5_LEVE=1 — hook m5-guard bloqueia suíte completa): 35 testes diretos, paridade ewma 24 passed, subset unit 172 passed, ruff/format/mypy limpos. NÃO rodei `ci-local.sh unit` completo nem `ci-local.sh rust` (hook proíbe suíte pesada no M5; M1 é Intel). Por isso passes=false: falta a suíte completa.
+- Próxima: rodar suíte unit completa (autorização do Allan) e marcar passes=true; depois Feature 4 (D3).
