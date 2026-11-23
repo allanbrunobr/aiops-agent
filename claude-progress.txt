@@ -105,3 +105,12 @@ Feature 1 (VB-T1) ✅ CONCLUÍDA (commit 1dd9d63, passes=true). Siga a ordem de 
 - Verificação (M5): tests/test_continuous_monitor.py 10 passed; `scripts/ci-local.sh unit` exit 0, 1866 passed/6 skipped; ruff e mypy (core domain application) limpos. Zero import de adapters.llm (testado em subprocesso). Feature 8 passes=true.
 - Limite honesto: o lead time depende de ewma_threshold calibrado por métrica (limiar único por monitor); sem ele só a saturação/ETA padrão 0.90 atua.
 - Próxima: Feature 9 (VB3 escalada).
+
+## Sessão Feature 9 (VB3 escalada + aviso proativo) — 2026-11-23
+- Entregue: `pipeline/continuous_monitor.py` — `EscalationHook` (monta IncidentState/NormalizedAlert source=continuous_monitor p/ serviço+janela, chama `diagnose` injetado, aviso proativo via `notify`, audit `verification_mode=simulated`), `EscalationResult` (executed_infra=False, requires_human_approval=True), dedup 1 diagnóstico por incidente aberto (re-arma em reset/30 min), `ContinuousMonitor(escalation=...)`, `.escalations`, `atick()` (asyncio.to_thread). Falha de diagnóstico/Slack/hook não derruba o vigia.
+- `interfaces/http/notifications/slack.py`: `build_monitor_slack_notifier()` (dry-run default; real só AIOPS_MONITOR_SLACK_REAL=1 + SLACK_BOT_TOKEN); `_post_prediction_message` NÃO tinha guard de dry_run (client None → AttributeError com retries/sleep) — corrigido; header "Saturação no teto"/serviço/"previsão simulada".
+- EXPANSÃO de write-set (registrada): `app/monitor_setup.py` (novo; `make_blueprint_diagnose` via builders V1) — pipeline/ não pode importar app/adapters (test_layer_dependencies).
+- Docs: docs/vigia-barato-arquitetura.md (2 camadas, economia de tokens, monitor não substitui aprovação humana).
+- Testes: tests/test_continuous_escalation.py (12; incl. engine V1 real no_llm): diagnóstico 1x em warning, 0x em flat, Slack mock recebe aviso, dry-run rápido, flag+token. Falhavam antes (ImportError).
+- Verificação (M5): `scripts/ci-local.sh unit` exit 0, 1878 passed/6 skipped; ruff e mypy (core domain application) limpos.
+- Próxima: Feature 10 (VB4 backtest do monitor).

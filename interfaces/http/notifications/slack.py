@@ -539,6 +539,12 @@ class SlackNotifier:
             )
         else:
             header_text = f"📈 Degradation Warning — Risk {risk_score:.0f}%"
+        if data.get("saturation") and event_level != "prediction.critical":
+            header_text = f"📈 Saturação no teto — {data.get('service', 'serviço')}"
+        elif data.get("service"):
+            header_text = f"{header_text} ({data['service']})"
+        if data.get("verification_mode") == "simulated":
+            header_text += " [previsão simulada, não validada em infra real]"
 
         # ETA formatado
         eta_text = f"{eta:.1f} min" if eta is not None else "Unknown"
@@ -597,6 +603,16 @@ class SlackNotifier:
         else:
             color = "#ff780a"  # laranja
         scenario = event.data.get("scenario", event.correlation_id)
+
+        if self._dry_run:
+            log.info(
+                "slack.dry_run",
+                action="post_prediction",
+                event_type=event.event_type,
+                correlation_id=event.correlation_id,
+                blocks=len(blocks),
+            )
+            return
 
         async def _send() -> None:
             await self._client.chat_postMessage(
@@ -911,3 +927,19 @@ class SlackNotifier:
                 ],
             },
         ]
+
+
+def build_monitor_slack_notifier() -> Any:
+    """SlackNotifier do monitor: dry-run por padrão.
+
+    Real somente com ``AIOPS_MONITOR_SLACK_REAL=1`` E ``SLACK_BOT_TOKEN``.
+    Retorna um objeto com ``on_event`` (async); passe ``notifier.on_event`` como
+    ``notify`` do ``EscalationHook`` (o hook aceita callback async).
+    """
+    real = os.environ.get("AIOPS_MONITOR_SLACK_REAL") == "1" and bool(
+        os.environ.get("SLACK_BOT_TOKEN")
+    )
+    channel = os.environ.get("SLACK_CHANNEL", "aiops-monitor").lstrip("#")
+    return SlackNotifier(
+        channel=channel, creds=EnvCredentialProvider(), dry_run=not real
+    )
