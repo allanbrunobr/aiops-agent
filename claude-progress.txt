@@ -90,3 +90,10 @@ Feature 1 (VB-T1) ✅ CONCLUÍDA (commit 1dd9d63, passes=true). Siga a ordem de 
 - Verificação (M5): `pytest tests/test_predictive_backtest.py -m slow` 8 passed; `scripts/ci-local.sh unit` exit 0, 1841 passed/6 skipped; ruff check, ruff format (arquivos novos), mypy (core domain application) limpos. Feature 6 passes=true.
 - Obs: docs/vigia-barato-agent-prompt.md tinha edições não commitadas anteriores; não incluídas.
 - Próxima: nenhuma pendente no Eixo D; eventual calibração do ruído forte.
+
+## Sessão Feature 7 (VB1 adapters MetricsSource) — 2026-11-23
+- Entregue: `tools/prometheus_connector.py` (`PrometheusMetricsSource`: GET /api/v1/query_range e /api/v1/alerts via `requests` já presente; base URL por `PROMETHEUS_URL`; timeout + retries com backoff em timeout/conexão/5xx/429, sem retry em 4xx; `PrometheusConnectorError` estruturado; amostras NaN/Inf descartadas em vez de virar 0.0). `tools/csv_metrics_source.py` (`CsvMetricsSource`: lê CSV do export do cenário HPA, filtra por nome da métrica (selector PromQL reduzido ao nome) e janela inclusiva; naive tratado como UTC; sem teto de 100 linhas, sem downsampling por step). Formato de saída = contrato dos demais adapters: `{timestamp(iso), service, metric, value}`.
+- Testes: tests/test_metrics_sources.py (15) — servidor HTTP real local (http.server em thread, sem infra externa) + CSV em tmp_path; cobrem params, parse, 4xx sem retry, 5xx com retry, retries esgotados, timeout, conexão recusada, alertas, roundtrip do cenário. Falhavam antes (módulos inexistentes).
+- Verificação (M5): `scripts/ci-local.sh unit` exit 0, 1856 passed / 6 skipped; mypy (core domain application) e ruff check limpos; ruff format limpo nos 3 arquivos novos. Feature 7 passes=true.
+- Obs: docs/vigia-barato-agent-prompt.md segue com edição não commitada anterior; não incluída.
+- Próxima: Feature 8 (VB2 ContinuousMonitor).
