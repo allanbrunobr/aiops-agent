@@ -20,17 +20,46 @@ class MetricTrendSignal:
     slope: float
     eta_minutes: float | None = None
     change_point_detected: bool = False
+    # slope / max(|média da série|, epsilon): independente de unidade (D3).
+    relative_slope: float | None = None
 
 
-def _score_metric_signal(signal: MetricTrendSignal | None) -> float:
-    """Converte MetricTrendSignal em pontuação de 0.0 a 100.0."""
+# Limiares ABSOLUTOS (default, dependem da unidade da métrica) — D-e6.
+_ABS_SLOPE_HIGH = 0.5
+_ABS_SLOPE_LOW = 0.1
+# Limiares RELATIVOS (opt-in): fração da média da série por amostra.
+# 5%/amostra ≈ tendência forte; 1%/amostra ≈ tendência moderada.
+_REL_SLOPE_HIGH = 0.05
+_REL_SLOPE_LOW = 0.01
+# Piso do denominador do slope relativo (evita divisão por ~0).
+RELATIVE_SLOPE_EPSILON = 1e-9
+
+
+def relative_slope(slope: float, mean_value: float) -> float:
+    """Slope relativo = slope / max(|média|, epsilon)."""
+    return slope / max(abs(mean_value), RELATIVE_SLOPE_EPSILON)
+
+
+def _score_metric_signal(
+    signal: MetricTrendSignal | None, use_relative_slope: bool = False
+) -> float:
+    """Converte MetricTrendSignal em pontuação de 0.0 a 100.0.
+
+    Com ``use_relative_slope=True`` e ``signal.relative_slope`` disponível,
+    os limiares são relativos (``_REL_SLOPE_*``); caso contrário, o
+    comportamento absoluto original (``_ABS_SLOPE_*``) é mantido.
+    """
     if signal is None:
         return 0.0
     if signal.change_point_detected:
         return 80.0
-    if signal.slope > 0.5:
+    if use_relative_slope and signal.relative_slope is not None:
+        value, high, low = signal.relative_slope, _REL_SLOPE_HIGH, _REL_SLOPE_LOW
+    else:
+        value, high, low = signal.slope, _ABS_SLOPE_HIGH, _ABS_SLOPE_LOW
+    if value > high:
         return 60.0
-    if signal.slope > 0.1:
+    if value > low:
         return 30.0
     return 0.0
 
@@ -64,13 +93,15 @@ def compute_risk_score(
     metric_signal: MetricTrendSignal | None,
     log_signal: LogBurstSignal | None,
     latency_signal: LatencyDriftSignal | None,
+    use_relative_slope: bool = False,
 ) -> float:
     """Combina sinais preditivos em score de risco de 0 a 100 (FR-P6).
 
     Pesos: metric_slope=40%, log_burst=30%, latency_drift=30%.
+    ``use_relative_slope`` troca os limiares absolutos de slope pelos relativos.
     Retorna 0.0 se todos os sinais forem None.
     """
-    metric_score = _score_metric_signal(metric_signal)
+    metric_score = _score_metric_signal(metric_signal, use_relative_slope)
     log_score = _score_log_signal(log_signal)
     latency_score = _score_latency_signal(latency_signal)
 

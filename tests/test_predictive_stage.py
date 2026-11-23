@@ -268,3 +268,103 @@ def test_predictive_stage_populates_eta_with_threshold():
     assert result is not None
     assert result.eta_minutes is not None
     assert result.eta_minutes > 0
+
+
+# ---------------------------------------------------------------------------
+# D3 — controle de falsos positivos (flat / ruído / série curta / outliers)
+# ---------------------------------------------------------------------------
+
+_BASE = datetime.datetime(2026, 1, 1)
+
+
+def _anoms(values, sigma=8.0):
+    out = []
+    for i, v in enumerate(values):
+        a = FakeAnomaly(deviation_sigma=sigma, value=v)
+        a.timestamp = _BASE + datetime.timedelta(seconds=30 * i)
+        out.append(a)
+    return out
+
+
+def _noise(n, base, amp):
+    import random
+
+    rng = random.Random(7)
+    return [base + rng.uniform(-amp, amp) for _ in range(n)]
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        pytest.param([100.0] * 12, id="flat"),
+        pytest.param(_noise(12, 100.0, 0.3), id="ruido-pequeno"),
+        pytest.param([100.0, 101.0, 100.0], id="serie-curta"),
+        pytest.param([100.0, 100.5, 100.0, 100.4], id="serie-curta-4"),
+    ],
+)
+def test_no_metric_signal_for_flat_noisy_or_short(values):
+    """Flat / ruído / série curta: sem sinal de métrica, score 0, sem alert."""
+    result = run_predictive_stage(FakeReport(metric_anomalies=_anoms(values)))
+    assert result is not None
+    assert "metric_trend" not in result.signals
+    assert result.risk_score == 0.0
+    assert result.event_level is None
+
+
+def test_flat_noise_does_not_emit_alert_with_other_weak_signals():
+    """Flat+ruído em métrica + poucos logs/spans curtos nunca vira alert."""
+    report = FakeReport(
+        log_templates=[FakeTemplate(level="ERROR", count=2)],
+        metric_anomalies=_anoms(_noise(15, 100.0, 0.3), sigma=9.0),
+        slow_traces=[FakeSlowTrace(500.0), FakeSlowTrace(800.0)],
+    )
+    result = run_predictive_stage(report)
+    assert result is not None
+    assert result.event_level != "prediction.alert"
+    assert "metric_trend" not in result.signals
+    assert "latency_drift" not in result.signals  # 2 spans < N
+
+
+def test_real_trend_still_emits_metric_signal():
+    """Regressão: tendência real (efeito grande) continua gerando sinal."""
+    result = run_predictive_stage(
+        FakeReport(metric_anomalies=_anoms([60.0 + 4.0 * i for i in range(12)], 4.0))
+    )
+    assert result is not None
+    assert "metric_trend" in result.signals
+    assert result.risk_score > 0.0
+
+
+def test_isolated_outlier_in_flat_series_has_no_alert():
+    values = [100.0] * 11 + [140.0]
+    result = run_predictive_stage(FakeReport(metric_anomalies=_anoms(values, 3.0)))
+    assert result is not None
+    assert result.event_level != "prediction.alert"
+
+
+@pytest.mark.parametrize(
+    ("slope", "mean", "abs_score", "rel_score"),
+    [
+        # 6%/amostra em unidades diferentes → mesmo score relativo
+        (0.06, 1.0, 0.0, 60.0),  # métrica em "unidade grande" (ex. razão 0-1)
+        (6.0, 100.0, 60.0, 60.0),
+        (200.0, 10000.0, 60.0, 30.0),  # bytes: 2%/amostra, absoluto exagera
+        (0.0, 100.0, 0.0, 0.0),
+    ],
+)
+def test_relative_slope_is_unit_independent(slope, mean, abs_score, rel_score):
+    from pipeline.risk_scorer import (
+        MetricTrendSignal,
+        _score_metric_signal,
+        relative_slope,
+    )
+
+    sig = MetricTrendSignal(slope=slope, relative_slope=relative_slope(slope, mean))
+    assert _score_metric_signal(sig) == abs_score  # default inalterado
+    assert _score_metric_signal(sig, use_relative_slope=True) == rel_score
+
+
+def test_relative_slope_zero_mean_does_not_divide_by_zero():
+    from pipeline.risk_scorer import relative_slope
+
+    assert relative_slope(1.0, 0.0) > 0
