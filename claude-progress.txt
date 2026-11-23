@@ -66,3 +66,9 @@ Feature 1 (VB-T1) ✅ CONCLUÍDA (commit 1dd9d63, passes=true). Siga a ordem de 
 - `scripts/ci-local.sh unit` no M5: exit 0, 1808 passed / 6 skipped. ruff, format e mypy (core domain application) limpos. Feature 3 passes=true.
 - `scripts/ci-local.sh rust` falha em clippy (`cur_depth`/`current_depth` usados como contador de laço) em código Rust NÃO tocado por D2 — pré-existente, fora do write-set; vale tarefa à parte. D2 não alterou Rust.
 - Próxima: Feature 4 (D3).
+
+## Sessão Feature 4 (D3 falsos positivos) — 2026-11-23
+- Entregue: `pipeline/risk_scorer.py` — `MetricTrendSignal.relative_slope`, `relative_slope()` (slope/max(|média|,eps)), `compute_risk_score(..., use_relative_slope=False)` com limiares relativos (5%/1% por amostra) opt-in; default absoluto inalterado (snapshots intactos). `pipeline/predictive_stage.py` — portões MIN_SERIES_POINTS=5 (métrica, log, spans) e MIN_RELATIVE_EFFECT=0.02 (amplitude relativa); flat/ruído/série curta → sem sinal; kwarg `use_relative_slope`.
+- Testes: 10 novos em tests/test_predictive_stage.py (flat, ruído, curta, outlier, tendência real, slope relativo); 10 falhavam antes do fix (verificado revertendo os 2 arquivos).
+- Verificação (M5): `scripts/ci-local.sh unit` exit 0, 1820 passed / 6 skipped; ruff, format, mypy (core domain application) limpos. Commit do código: b1caebf.
+- Próxima: Feature 5 (D4 detector de saturação HPA).
