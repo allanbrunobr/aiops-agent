@@ -37,7 +37,7 @@
     "title": "RF3: benchmark perf skip em build dev (AIOPS_RUST_RELEASE)",
     "description": "SPEC AUTORITATIVA: leia docs/review-fixes-agent-prompt.md (tarefa RF3) + docs/review-qwen-result.md. VERIFIQUE LOCAL M5 com `.venv/bin/python -m pytest tests -m unit -q` DIRETO (NÃO scripts/ci-local.sh unit=venv fresco pesado, hook m5-guard bloqueia; NÃO M1). tests/rust/test_trace_predictor.py TestPercentileBenchmark.test_rust_percentile_3x...: @pytest.mark.skipif(not os.environ.get('AIOPS_RUST_RELEASE'), reason=...). Import os. Dev→skipped (slow verde); release com env→roda assert 3x. Não remover teste/assert. Docstring explica env + follow-up CI release.",
     "dependencies": "none",
-    "passes": false,
+    "passes": true,
     "steps": [
       "pytest -m slow mostra perf falhando em dev (baseline)",
       "Adicionar skipif AIOPS_RUST_RELEASE + import os + docstring",

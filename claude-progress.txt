@@ -78,3 +78,10 @@ Próxima: RF2 (--profile auto|hpa|generic).
 Feito: `--profile auto|hpa|generic` (default auto) em args.py; monitor_runner aplica tuning HPA se profile==hpa ou (auto e replay e _is_hpa); generic nunca. docs/continuous-monitor.md documenta. Testes: 2 em test_args_monitor (default/valores/inválido) + 3 em test_monitor_runner (generic não aplica, auto aplica em HPA, hpa força em CSV plano). generic e hpa-forçado falharam antes (2 failed), passam depois.
 Verificado (M5_LEVE=1, exit direto, sem pipe): pytest tests -m unit = 1967 passed/6 skipped; ruff check . ok; ruff format --check nos 4 arquivos tocados ok (4 arquivos pré-existentes em interfaces/ seguem fora do formato); mypy domain application core ok; demo run_continuous_demo.py exit 3; csv inexistente exit 1.
 Próxima: RF3 (benchmark Rust só em release).
+
+## Sessão RF3 (2026-11-24)
+Feito: skipif(not AIOPS_RUST_RELEASE) + import os + docstring (env + follow-up CI rust-build --release) em tests/rust/test_trace_predictor.py::TestPercentileBenchmark. Teste e assert 3x preservados.
+Baseline: slow = 1 failed (speedup 0.2x em build dev). Depois: pytest tests -m slow = 29 passed/2 skipped, exit 0. Com AIOPS_RUST_RELEASE=1 o teste roda (e falha no build dev, esperado: o guard existe).
+Verificado (M5_LEVE=1, direto): unit 1967 passed/6 skipped; ruff check ok; ruff format --check do arquivo ok; mypy domain application core ok.
+Follow-up (fora do escopo, .github/ intocado): job rust-build deve buildar --release e exportar AIOPS_RUST_RELEASE=1.
+Fila RF1–RF3 concluída.
