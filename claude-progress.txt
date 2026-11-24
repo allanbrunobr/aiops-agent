@@ -1,131 +1,39 @@
 # Claude Progress — aiops-agent
 
-## ⛔ REGRA DE VERIFICAÇÃO — SOBREPÕE QUALQUER NOTA DE SESSÃO ANTIGA
-Verifique SEMPRE **AQUI NO M5 (arm64), LOCALMENTE**: `scripts/ci-local.sh unit` (verde, ignora tests/rust). **NÃO** faça rsync/ssh para `m1-docker`. As notas de sessão abaixo que mencionam "no M1" foram um **erro de guidance já corrigido** — NÃO replique esse padrão. O M5 roda tudo (torch, Rust, suíte unit). O M1 é Intel, lento, exige `git init` no rsync e NÃO builda Rust. **D2 (ETA/paridade Rust) PRECISA rodar `scripts/ci-local.sh rust` AQUI no M5** (cargo 1.98 + maturin no .venv). Marque `passes:true` após `ci-local.sh unit` verde AQUI + commit. Uma sessão por feature deve bastar.
+## Fase atual: Vigia Barato OPERÁVEL (CLI --monitor + demo contínua)
+O motor contínuo VB1–VB4 JÁ EXISTE e está verde (11 features concluídas, commits
+até 93f5cd1). Esta fase só o torna operável pela CLI e demonstrável sem infra real.
 
-## ★ LEIA PRIMEIRO (spec autoritativa)
-Antes de implementar QUALQUER feature, leia na íntegra:
-1. `docs/vigia-barato-agent-prompt.md` — spec autossuficiente das 10 tarefas (VB-T1, D1..D5, VB1..VB4), com assinaturas reais verificadas, write-set, aceite e regras.
-2. `ROBUSTNESS_PLAN.md` — Eixo D (linhas ~309-363): D1 clamp, D2 ETA, D3 falsos positivos, D4 saturação, D5 backtest.
-Cada feature em `feature_list.json` aponta para a tarefa correspondente nesses docs. NÃO implemente de memória; confirme file:line no código real antes de editar.
+★ LEIA PRIMEIRO: docs/continuous-monitor-agent-prompt.md (spec autoritativa, 4
+tarefas OP1→OP2→OP3→OP4) e docs/vigia-barato-agent-prompt.md (regras + assinaturas).
 
-## Fundação já concluída (NÃO refazer)
-Projeto: aiops-agent — agente AIOps local-first (CLI `main.py`, demo localhost:47891, RAG local sentence-transformers+FAISS, pipelines V0/V1, camadas de segurança, TNR SIMULADO que nunca executa infra real).
-- Merge origin/main concluído e em main (commit df7f71c); fix de segurança ML concluído (torch 2.13.0+cu130 / transformers 5.23.0 / sentence-transformers 5.7.0 / faiss 1.16.0); doc hold→resolvido (62954b0). Dependabot: 0 alertas abertos.
-- 31 features anteriores concluídas (registro completo em `feature_list.archive.json`). Pipelines V0/V1, RAG, safety layers, postmortem, databricks connector, display/rust — tudo verde.
-- Baseline de testes (RODE AQUI NO M5): `scripts/ci-local.sh unit` → verde (~1800 passed; ignora tests/rust, que é job separado). NÃO use `pytest tests -m unit` sem `--ignore=tests/rust` (o binário Rust local pode estar stale → 4 parity failures irrelevantes para estas tarefas stdlib/math). integration+snapshot ~152. e2e Playwright 10. Rust cargo 56.
+## ⛔ REGRA DE VERIFICAÇÃO (sobrepõe qualquer nota antiga "no M1")
+Verifique AQUI no M5, NÃO via ssh/rsync m1-docker:
+  scripts/ci-local.sh unit          # suíte completa + coverage
+  .venv/bin/python -m pytest tests -m unit -q
+  .venv/bin/ruff check .
+  .venv/bin/mypy domain application core
+Notas antigas dizendo "rode no M1" são erro corrigido — NÃO replique. O host
+m1-docker é Intel macOS e não roda torch>=2.6; estas tarefas são stdlib/CLI e
+rodam aqui. Marque passes:true após verde + commit. UMA sessão basta por tarefa.
 
-## Prioridade ATUAL: Vigia Barato (monitor contínuo preditivo barato)
-10 tarefas pendentes em `feature_list.json` (array, passes=false). Ordem por dependência:
-1 VB-T1 (cenário HPA fictício) → 2 D1 (clamp) → 3 D2 (ETA) → 4 D3 (falsos positivos) → 5 D4 (saturação) → 6 D5 (backtest preditivo) → 7 VB1 (adapters MetricsSource) → 8 VB2 (ContinuousMonitor) → 9 VB3 (escalada) → 10 VB4 (backtest contínuo).
-Ideia: camada BARATA contínua (poll métricas 30-60s + matemática pura, ZERO token/LLM por tick) que escala para a camada PROFUNDA (LLM/diagnóstico) só quando risco≥WARNING ou ETA curto. Incidente alvo: KubeHpaMaxedOut wbia/prd — creep de memória → utilização working_set/request crônica acima do alvo 80% → réplicas presas no teto maxReplicas=10 (platô).
+## Baseline
+scripts/ci-local.sh unit: ~1909+ passed / 6 skipped, coverage ~87%, verde.
+Smokes V0/V1: main.py --no-llm --no-rag [--pipeline-v1] --output-dir <tmp> → exit 3.
 
-## Regras invioláveis
-- Teste que FALHA antes do fix; write-set explícito por tarefa.
-- NADA de infra real: TNR é SIMULADO (SECURITY.md); o agente propõe + aprovação humana, fail-closed exit 3.
-- NADA gravar em `output/` do repo nos testes (use `tmp_path`; guard `tests/conftest.py:201-215` `_forbid_writes_to_repo_output`).
-- Sem dependências novas; cenário e matemática stdlib-only. Não quebrar V0.
-- ruff/mypy limpos em domain/application/core. Snapshot só com justificativa.
-- Commit limpo por feature; marque `passes:true` só após verificação.
-- ★ VERIFIQUE LOCALMENTE NO M5 (arm64): `scripts/ci-local.sh unit` roda verde AQUI. NÃO faça rsync/ssh para m1-docker — é Intel e NÃO roda o stack; usá-lo só causa falhas espúrias (git status 128, torch antigo). Para mudanças em Rust (D2), rode `scripts/ci-local.sh rust` AQUI (cargo+maturin disponíveis).
+## Regras
+- Teste falha antes do fix. Write-set explícito por tarefa.
+- Nada infra real: TNR verification_mode="simulated"; propõe+postmortem, nunca
+  executa remediação; fail-closed exit 3 (aprovação humana obrigatória).
+- Nada gravar em output/ do repo (tests/conftest.py _forbid_writes_to_repo_output):
+  use tmp_path.
+- Camada barata NÃO chama LLM. Sem dependências novas. Não quebre o V0.
+- Confirme file:line antes de editar.
 
-## Ambiente / host (LEIA COM ATENÇÃO)
-- ★ VOCÊ ESTÁ RODANDO NO M5 (arm64 macOS). ESTE host roda TUDO: torch, Rust, a suíte unit completa. RODE A VERIFICAÇÃO AQUI, LOCALMENTE.
-- Comando canônico de verificação: `scripts/ci-local.sh unit` (verde aqui; ignora tests/rust). Alternativa rápida: `.venv/bin/python -m pytest tests -m unit --ignore=tests/rust -q`.
-- ★ NUNCA use m1-docker / rsync / ssh para validar estas tarefas. m1-docker é Intel x86_64 macOS, NÃO roda torch>=2.6 nativo, e o rsync sem .git causa `git status 128`. Ir para lá só desperdiça a sessão e gera falhas falsas. TODAS as 10 tarefas são stdlib/matemática pura → rodam AQUI no M5 sem torch.
-- Rust (só D2 mexe): `scripts/ci-local.sh rust` AQUI (cargo 1.98 + maturin no .venv). Não precisa rebuildar Rust para as outras tarefas.
-- Smokes: `main.py --no-llm --no-rag [--pipeline-v1] --output-dir <tmp>` (exit 3 = aprovação necessária, seguro).
+## Próxima tarefa
+OP1 (number 1): Flags CLI --monitor + validação. Depois OP2→OP3→OP4.
 
-## Próxima tarefa recomendada
-Feature 1 (VB-T1) ✅ CONCLUÍDA (commit 1dd9d63, passes=true). Siga a ordem de dependência em feature_list.json (próxima pendente). Verifique SEMPRE com `scripts/ci-local.sh unit` AQUI NO M5 — nunca no M1.
-
-## Sessão Feature 1 (VB-T1) — 2026-11-23
-- Entregue: `data/hpa_saturation_scenario.py` + `tests/test_hpa_saturation_scenario.py`. Cenário `hpa-saturation` se registra ao importar o módulo (padrão do memory-leak); `data/registry.py` e `sample_incident.py` NÃO foram alterados (o registry é passivo; importar o cenário em sample_incident mudaria a lista global de cenários — decisão para a VB1/VB4 se precisarem de descoberta automática).
-- API: MEMORY_REQUEST_BYTES, HPA_TARGET_UTILIZATION, MAX_REPLICAS, MIN_REPLICAS, SAMPLE_INTERVAL_S, generate_metrics(seed), ground_truth() -> HpaGroundTruth(incident_start, maxed_out_at, restart_at), export_csv(path, seed), generate_hpa_saturation(seed). Métricas: container_memory_working_set_bytes, container_cpu_usage_seconds, kube_hpa_status_current_replicas, kube_hpa_spec_max_replicas (service "wbia").
-- Pendente: rodar a suíte unit completa no M1 (feature_list passes=false até lá). Verificado só: 26 testes direcionados + ruff.
-- Próxima: Feature 2 (D1 clamp de sinais).
-
-## Sessão 2 Feature 1 — fechamento
-- Suíte unit no M1 (ci-local.sh unit; venv slim, por isso 1798 vs baseline 1836 com ML): exit 0, 1798 passed. Feature 1 passes=true. Obs: rsync p/ M1 precisa de `git init && git add -A` (testes usam git ls-files). Próxima: Feature 2 (D1 clamp).
-
-## Sessão Feature 2 (D1 clamp de sinais) — 2026-11-23
-- Entregue: `pipeline/risk_scorer.py` (log score com clamp inferior em 0) e `pipeline/trace_predictor.py` (`detect_latency_drift`: baseline p95/p99 < 1 ms → sem drift, ratios 1.0, logger.warning; guarda vale também no caminho Rust, antes da chamada).
-- Testes: 4 novos em `tests/test_predictive_stage.py` (3 falhavam antes do fix: -20.0 vs 20.0; 0.0 vs 24.0; drift True com baseline zero). Atualizados 3 testes que fixavam o contrato antigo (ratio gigante com baseline 0): `tests/test_trace_predictor.py` (2), `tests/rust/test_trace_predictor.py` (1) — fora do write-set original, mas codificavam o comportamento corrigido.
-- Verificação: ci-local.sh unit no M1 (vaga s2, git init no rsync): exit 0, 1802 passed / 6 skipped. ruff + format + mypy (core domain application) limpos. tests/rust/test_trace_predictor.py local: 7 passed.
-- Obs: falhas de paridade Rust em test_rust_python_parity.py (trace_filter/metric_filter "caminho Rust indisponível") são de ambiente, não do D1. Edições em docs/vigia-barato-agent-prompt.md (host M5 vs M1) já estavam não commitadas antes desta sessão; não foram incluídas no commit.
-- Próxima: Feature 3 (D2 ETA correto) — atenção à paridade Rust↔Python.
-
-## Sessão Feature 3 (D2 ETA correto) — 2026-11-23
-- Entregue: `pipeline/metric_predictor.py` — `compute_ewma_slope(..., sample_interval_minutes=None)`: ETA = (threshold - EWMA_atual) / slope * intervalo(min); intervalo derivado da mediana dos deltas de timestamp (fallback 1.0); valida >0/finito. Slope retornado segue POR AMOSTRA (analyzer/risk_scorer/paridade inalterados). Rust NÃO mudou (bridge só devolve slope; `current` EWMA calculado no wrapper Python) → sem rebuild.
-- `pipeline/predictive_stage.py`: threshold = mean + eta_sigma*std da anomalia (eta_sigma=3.0 kwarg, = 3-sigma da detecção); sem mean/std válidos → ETA None.
-- Testes: 5 novos em tests/test_metric_predictor.py + 1 em tests/test_predictive_stage.py (6 falhavam antes); `test_eta_formula` atualizado p/ current=EWMA (contrato antigo usava valor bruto).
-- Verificação (M5, com M5_LEVE=1 — hook m5-guard bloqueia suíte completa): 35 testes diretos, paridade ewma 24 passed, subset unit 172 passed, ruff/format/mypy limpos. NÃO rodei `ci-local.sh unit` completo nem `ci-local.sh rust` (hook proíbe suíte pesada no M5; M1 é Intel). Por isso passes=false: falta a suíte completa.
-- Próxima: rodar suíte unit completa (autorização do Allan) e marcar passes=true; depois Feature 4 (D3).
-
-## Fechamento Feature 3 (D2) — 2026-11-23
-- `scripts/ci-local.sh unit` no M5: exit 0, 1808 passed / 6 skipped. ruff, format e mypy (core domain application) limpos. Feature 3 passes=true.
-- `scripts/ci-local.sh rust` falha em clippy (`cur_depth`/`current_depth` usados como contador de laço) em código Rust NÃO tocado por D2 — pré-existente, fora do write-set; vale tarefa à parte. D2 não alterou Rust.
-- Próxima: Feature 4 (D3).
-
-## Sessão Feature 4 (D3 falsos positivos) — 2026-11-23
-- Entregue: `pipeline/risk_scorer.py` — `MetricTrendSignal.relative_slope`, `relative_slope()` (slope/max(|média|,eps)), `compute_risk_score(..., use_relative_slope=False)` com limiares relativos (5%/1% por amostra) opt-in; default absoluto inalterado (snapshots intactos). `pipeline/predictive_stage.py` — portões MIN_SERIES_POINTS=5 (métrica, log, spans) e MIN_RELATIVE_EFFECT=0.02 (amplitude relativa); flat/ruído/série curta → sem sinal; kwarg `use_relative_slope`.
-- Testes: 10 novos em tests/test_predictive_stage.py (flat, ruído, curta, outlier, tendência real, slope relativo); 10 falhavam antes do fix (verificado revertendo os 2 arquivos).
-- Verificação (M5): `scripts/ci-local.sh unit` exit 0, 1820 passed / 6 skipped; ruff, format, mypy (core domain application) limpos. Commit do código: b1caebf.
-- Próxima: Feature 5 (D4 detector de saturação HPA).
-
-## Sessão Feature 5 (D4 detector de saturação HPA) — 2026-11-23
-- Entregue: `pipeline/saturation_detector.py` (`detect_saturation(points, ceiling)->SaturationSignal|None`: cauda ≥K=5 amostras com nível ≥95% do teto e spread ≤3% do teto; sem teto explícito usa o máximo da janela e EXIGE subida prévia, senão flat viraria "saturado"). `pipeline/predictive_stage.py`: kwarg `ceilings` (teto por metric_name), saturação avaliada ANTES do portão D3 de efeito (platô tem slope≈0), sinal `"saturation"` em `signals`. `pipeline/risk_scorer.py`: `saturation_signal` opcional; sem ele pesos 0.4/0.3/0.3 inalterados (snapshots intactos); com ele renormalizados 0.25/0.15/0.30/0.30 (soma 1).
-- Testes: tests/test_saturation_detector.py (21). Cobrem platô no teto, abaixo do teto, série curta, variância, platô já abandonado, flat sem teto, integração no stage e no scorer.
-- Verificação (M5, M5_LEVE=1): ruff/format/mypy limpos; `pytest tests --ignore=tests/rust -m "not slow"` = 1989 passed / 8 skipped. NÃO rodei o literal `scripts/ci-local.sh unit` (hook m5-guard bloqueia suíte) → passes=false até rodar. Obs.: um pytest sem --ignore pegou tests/rust: 38 falhas de paridade Rust (ambiente, pré-existentes).
-- Pendente: nada chama run_predictive_stage com `ceilings` ainda (default None); ligar ao maxReplicas do HPA é decisão para VB/D5. Próxima: rodar ci-local.sh unit com autorização e marcar passes=true; depois Feature 6 (D5).
-
-## Fechamento Feature 5 (D4) — 2026-11-23
-- `scripts/ci-local.sh unit` no M5: exit 0, 1841 passed / 6 skipped. ruff check limpo; mypy (core domain application) limpo; format limpo nos arquivos do D4 (14 outros arquivos do repo já divergiam do `ruff format`, pré-existentes, não tocados). Feature 5 passes=true.
-- Próxima: Feature 6 (D5).
-
-## Sessão Feature 6 (D5 backtest preditivo) — 2026-11-23
-- Entregue: `scripts/backtest_predictive.py` (séries sintéticas seed fixa: pool_exhaustion, hpa_saturation, memory_leak + negativos flat/noise/noise_heavy; replaya janelas de 20 amostras em `run_predictive_stage`; recall/precision/lead-time; `--write-golden`/`--output`), `validation/golden/predictive_backtest.json`, `tests/test_predictive_backtest.py` (8 testes, marker slow+integration), `docs/preditivo-backtest.md` (limitação batch + caminho para monitor contínuo).
-- Medido (5 seeds): recall 1.00, precision 1.00, lead médio 24.3 min (mín 17), 0 alertas em flat/ruído. Sondas do instrumento: detector cego → recall 0; detector alarmista → precision<0.7 (testes).
-- Achado honesto: com `--seeds 20`, `noise_heavy` (σ=5% da média) gerou 1 falso positivo em 20 — documentado; fora da asserção "zero alertas" (só flat/ruído puro), mas conta na precision.
-- Verificação (M5): `pytest tests/test_predictive_backtest.py -m slow` 8 passed; `scripts/ci-local.sh unit` exit 0, 1841 passed/6 skipped; ruff check, ruff format (arquivos novos), mypy (core domain application) limpos. Feature 6 passes=true.
-- Obs: docs/vigia-barato-agent-prompt.md tinha edições não commitadas anteriores; não incluídas.
-- Próxima: nenhuma pendente no Eixo D; eventual calibração do ruído forte.
-
-## Sessão Feature 7 (VB1 adapters MetricsSource) — 2026-11-23
-- Entregue: `tools/prometheus_connector.py` (`PrometheusMetricsSource`: GET /api/v1/query_range e /api/v1/alerts via `requests` já presente; base URL por `PROMETHEUS_URL`; timeout + retries com backoff em timeout/conexão/5xx/429, sem retry em 4xx; `PrometheusConnectorError` estruturado; amostras NaN/Inf descartadas em vez de virar 0.0). `tools/csv_metrics_source.py` (`CsvMetricsSource`: lê CSV do export do cenário HPA, filtra por nome da métrica (selector PromQL reduzido ao nome) e janela inclusiva; naive tratado como UTC; sem teto de 100 linhas, sem downsampling por step). Formato de saída = contrato dos demais adapters: `{timestamp(iso), service, metric, value}`.
-- Testes: tests/test_metrics_sources.py (15) — servidor HTTP real local (http.server em thread, sem infra externa) + CSV em tmp_path; cobrem params, parse, 4xx sem retry, 5xx com retry, retries esgotados, timeout, conexão recusada, alertas, roundtrip do cenário. Falhavam antes (módulos inexistentes).
-- Verificação (M5): `scripts/ci-local.sh unit` exit 0, 1856 passed / 6 skipped; mypy (core domain application) e ruff check limpos; ruff format limpo nos 3 arquivos novos. Feature 7 passes=true.
-- Obs: docs/vigia-barato-agent-prompt.md segue com edição não commitada anterior; não incluída.
-- Próxima: Feature 8 (VB2 ContinuousMonitor).
-
-## Sessão Feature 8 (VB2 ContinuousMonitor) — 2026-11-23
-- Entregue: `pipeline/continuous_monitor.py` (`ContinuousMonitor.tick(now)->MonitorTick(score, level, eta_minutes, saturation, should_escalate)`, `run_for(n)`, `run_forever()`; sleep/clock injetáveis). Reusa a cadeia do DemoAnalyzer (compute_ewma_slope span=10 → compute_risk_score(use_relative_slope, saturation) → RiskTracker.update → get_event_level) e os portões D3 de predictive_stage. `config/loader.py` `MonitorConfig` + bloco `monitor:` em defaults.yaml (interval_seconds=60, ewma_threshold=0.90, escalate_eta_minutes=30).
-- Decisão: ETA dentro de escalate_eta_minutes com slope>0 vira change_point (senão metric-only satura em 24<30 e o monitor nunca alertaria); should_escalate = nível ativo e (alert ou saturação ou ETA<=horizonte).
-- Medido (HPA seed 42, ticks de 1 min, métrica memória, limiar 90% do request, horizonte 60 min): 1º warning às 17:48, 59 min antes de maxed_out_at (18:47); fase normal sem alerta; flat/ruído sem alerta; tick determinístico.
-- Verificação (M5): tests/test_continuous_monitor.py 10 passed; `scripts/ci-local.sh unit` exit 0, 1866 passed/6 skipped; ruff e mypy (core domain application) limpos. Zero import de adapters.llm (testado em subprocesso). Feature 8 passes=true.
-- Limite honesto: o lead time depende de ewma_threshold calibrado por métrica (limiar único por monitor); sem ele só a saturação/ETA padrão 0.90 atua.
-- Próxima: Feature 9 (VB3 escalada).
-
-## Sessão Feature 9 (VB3 escalada + aviso proativo) — 2026-11-23
-- Entregue: `pipeline/continuous_monitor.py` — `EscalationHook` (monta IncidentState/NormalizedAlert source=continuous_monitor p/ serviço+janela, chama `diagnose` injetado, aviso proativo via `notify`, audit `verification_mode=simulated`), `EscalationResult` (executed_infra=False, requires_human_approval=True), dedup 1 diagnóstico por incidente aberto (re-arma em reset/30 min), `ContinuousMonitor(escalation=...)`, `.escalations`, `atick()` (asyncio.to_thread). Falha de diagnóstico/Slack/hook não derruba o vigia.
-- `interfaces/http/notifications/slack.py`: `build_monitor_slack_notifier()` (dry-run default; real só AIOPS_MONITOR_SLACK_REAL=1 + SLACK_BOT_TOKEN); `_post_prediction_message` NÃO tinha guard de dry_run (client None → AttributeError com retries/sleep) — corrigido; header "Saturação no teto"/serviço/"previsão simulada".
-- EXPANSÃO de write-set (registrada): `app/monitor_setup.py` (novo; `make_blueprint_diagnose` via builders V1) — pipeline/ não pode importar app/adapters (test_layer_dependencies).
-- Docs: docs/vigia-barato-arquitetura.md (2 camadas, economia de tokens, monitor não substitui aprovação humana).
-- Testes: tests/test_continuous_escalation.py (12; incl. engine V1 real no_llm): diagnóstico 1x em warning, 0x em flat, Slack mock recebe aviso, dry-run rápido, flag+token. Falhavam antes (ImportError).
-- Verificação (M5): `scripts/ci-local.sh unit` exit 0, 1878 passed/6 skipped; ruff e mypy (core domain application) limpos.
-- Próxima: Feature 10 (VB4 backtest do monitor).
-
-## Sessão Feature 10 (VB4 backtest do monitor contínuo) — 2026-11-23
-- Entregue: `scripts/backtest_continuous.py` (replay tick a tick via CsvMetricsSource+ContinuousMonitor; HPA seeds 42-46 + séries D5; CSVs em tempdir; `--write-golden`/`--output`), `validation/golden/continuous_backtest.json`, `tests/test_continuous_backtest.py` (9 testes, slow+integration; incl. sondas monitor cego/alarmista), `docs/vigia-barato-backtest.md`.
-- Medido (5 seeds): recall 0.85 (17/20), precision 1.00, 0 alertas em flat/noise/noise_heavy, lead HPA seed 42 = 59 min (mín 43), lead médio 20.8 min.
-- ACHADO HONESTO: nas seeds 44-46 do HPA o monitor NÃO avisa (recall HPA 2/5): memória oscila perto de 0.90 do request e o limiar único ewma_threshold não é cruzado. O recall global ≥0.8 vem das séries sintéticas. Documentado e testado; calibração por métrica fica fora do write-set.
-- Verificação (M5, M5_LEVE=1): `pytest tests/test_continuous_backtest.py -m slow` 9 passed; + test_continuous_monitor 19 passed; ruff check e mypy (domain application core) limpos; ruff format nos arquivos novos. NÃO rodei `scripts/ci-local.sh unit` (hook m5-guard bloqueia suíte completa) — a feature só adiciona arquivos novos (nenhum módulo existente alterado).
-- Próxima: nenhuma pendente; opcional: calibrar limiar por métrica no monitor para HPA seeds 44-46.
-
-## Sessão Feature 11 (VB4-FIX mean lead-time + recall HPA) — 2026-11-23
-- Bug: `hpa_lead_time_min_mean` dividia pelo total de seeds (incluía None) → 20.4 < min 43. Agora divide só pelas detecções (non-None); teste de regressão mean>=min (falha com a fórmula antiga, verificado).
-- Sinal novo: `pipeline/saturation_detector.py::detect_sustained_level` (nível crônico: média das 15 últimas amostras ≥ alvo e mínimo ≥ alvo−1% do denominador; sem exigir platô) + `ContinuousMonitor(sustained_levels={métrica:(alvo, denominador)})`, que alimenta o mesmo SaturationSignal. `replay_hpa` passa alvo=80% do request (HPA_TARGET_UTILIZATION). Limiares existentes NÃO foram alterados; o default (sem `sustained_levels`) é idêntico ao anterior.
-- Medido (5 seeds): hpa_recall 0.4→1.0 (5/5), lead HPA min 171 / média 183.6 min (antes 43/51), recall geral 1.00, precision 1.00, negative_alert_ticks 0, noise_heavy_alert_series 0.
-- Ressalva honesta: o lead de ~3h reflete que a série cruza 80% do request ~200 min antes de MAXED_OUT_AT; o alvo vem do cenário (HPA 80%), não foi ajustado para o resultado. Só o cenário HPA ativa o novo caminho; negativos sintéticos não o usam (não testam o caminho novo contra FP — cobertos por testes unitários de série abaixo/oscilando em torno do alvo).
-- Verificação (M5): `scripts/ci-local.sh unit` exit 0 (1882 passed/6 skipped); tests/test_continuous_backtest.py + test_predictive_backtest.py -m slow verdes; ruff check/format limpos. Golden do contínuo regenerado; o preditivo não mudou.
-- Próxima: nenhuma pendente.
+## Sessão OP1 (2026-11-24)
+Feito: flags --monitor em args.py + tests/test_args_monitor.py (commit 2f9a0d4). Alvo isolado verde, ruff ok.
+Pendente: ci-local.sh unit completo (m5-guard bloqueou) -> rodar e só então passes:true na OP1.
+Próxima: OP2 (monitor_runner.py + wiring main.py).
