@@ -2,156 +2,60 @@
   {
     "number": 1,
     "category": "functional",
-    "title": "VB-T1: Cenário fictício do HPA (gerador stdlib-only)",
-    "description": "SPEC AUTORITATIVA: leia docs/vigia-barato-agent-prompt.md (tarefa VB-T1) e ROBUSTNESS_PLAN.md (Eixo D :309-363) ANTES de implementar. PRIMEIRO. Criar data/hpa_saturation_scenario.py reproduzindo o incidente KubeHpaMaxedOut (wbia/prd): creep de memória → utilização working_set/request crônica acima do alvo 80% → réplicas sobem até teto maxReplicas=10 e ficam presas (platô). 4 fases (normal~2h / creep~10h / saturação~6h / restart paliativo), seed fixa, ~1140 amostras (SAMPLE_INTERVAL_S=60, MEMORY_REQUEST_BYTES=512Mi, HPA_TARGET_UTILIZATION=0.80, MAX_REPLICAS=10, MIN_REPLICAS=2). Ground-truth: incident_start/maxed_out_at/restart_at. export_csv(path) timestamp,service,metric_name,value. Write-set: data/hpa_saturation_scenario.py (novo), data/registry.py (registrar), tests/test_hpa_saturation_scenario.py (novo). Stdlib-only (sem torch/faiss/sentence-transformers). Espec completa: docs/vigia-barato-agent-prompt.md §1. Siga o padrão de data/memory_leak_scenario.py.",
+    "title": "OP1: Flags CLI --monitor + validação",
+    "description": "SPEC AUTORITATIVA: leia docs/continuous-monitor-agent-prompt.md tarefa OP1. Adicione --monitor/--source/--interval/--ticks/--monitor-service a build_arg_parser() (interfaces/cli/args.py) + exclusões mútuas e validação de --source em _validate_args.",
     "dependencies": "none",
     "steps": [
-      "Aceite: Cenário registrado no registry; generate_metrics() retorna 4 fases+rótulos; teste confirma util cruza 80% e réplicas atingem 10, platô final variância baixa no teto, CSV roundtrip em tmp_path, stdlib-only. pytest tests -m unit -q verde.",
-      "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
-      "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
+      "Teste falha antes: tests/test_args_monitor.py (flags parseiam; --monitor exclui --scenario/--data-source databricks/--pipeline-v1/--tracker; --monitor exige --source; scheme csv|prometheus; --interval>0; --ticks>0)",
+      "Implemente em interfaces/cli/args.py (write-set: args.py + tests/test_args_monitor.py)",
+      ".venv/bin/python -m pytest tests/test_args_monitor.py -q verde",
+      "scripts/ci-local.sh unit verde LOCAL M5 (não ssh m1-docker); ruff check .; mypy domain application core",
+      "Commit feat(cli): OP1 ... e marque passes:true"
     ],
     "passes": true
   },
   {
     "number": 2,
     "category": "functional",
-    "title": "D1: Eixo D1: clamp de sinais (log negativo + latência zero)",
-    "description": "SPEC AUTORITATIVA: leia docs/vigia-barato-agent-prompt.md (tarefa D1) e ROBUSTNESS_PLAN.md (Eixo D :309-363) ANTES de implementar. clamp de score de log negativo (pipeline/risk_scorer.py:~45) + baseline de latência zero não explode ratio (pipeline/trace_predictor.py:~92-93). Sinais não alarmam sobre lixo. Write-set e aceite: ROBUSTNESS_PLAN.md:311. Teste que falha ANTES do fix. Resumo: docs/vigia-barato-agent-prompt.md §2 (D1).",
-    "dependencies": "none",
+    "title": "OP2: Runner run_monitor + wiring main.py",
+    "description": "SPEC AUTORITATIVA: leia docs/continuous-monitor-agent-prompt.md tarefa OP2. Crie interfaces/cli/monitor_runner.py run_monitor(args)->int (parse csv://|prometheus://, AppConfig, ContinuousMonitor reutilizando scripts/backtest_continuous.py replay_hpa, EscalationHook(make_blueprint_diagnose, build_monitor_slack_notifier), run_for/run_forever, exit 3 escalada/0 limpo/1 falha). Wire main.py: if args.monitor return run_monitor(args).",
+    "dependencies": "1",
     "steps": [
-      "Aceite: Teste novo falha antes do fix e passa depois; scripts/ci-local.sh unit verde; sinais clampados não geram alarme sobre lixo.",
-      "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
-      "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
+      "Teste falha antes: tests/test_monitor_runner.py (tmp_path, clock/sleep fake; csv HPA via hpa.export_csv -> detecta+escala antes MAXED_OUT_AT exit3; flat -> exit0; source inválido -> exit1; --no-llm respeitado)",
+      "Implemente monitor_runner.py + main.py (write-set: monitor_runner.py, main.py, tests/test_monitor_runner.py). Nada output/ repo (tmp_path). Fail-closed simulated, nunca executa infra.",
+      ".venv/bin/python -m pytest tests/test_monitor_runner.py -q verde",
+      "scripts/ci-local.sh unit verde LOCAL M5; smoke .venv/bin/python main.py --monitor --source csv://<tmp_hpa> --ticks 5 --no-llm --output-dir <tmp>; smokes V0/V1 exit3 inalterados; ruff; mypy domain application core",
+      "Commit feat(cli): OP2 ... e passe passes:true"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "number": 3,
     "category": "functional",
-    "title": "D2: Eixo D2: ETA correto (sample_interval + threshold)",
-    "description": "SPEC AUTORITATIVA: leia docs/vigia-barato-agent-prompt.md (tarefa D2) e ROBUSTNESS_PLAN.md (Eixo D :309-363) ANTES de implementar. compute_ewma_slope ganha sample_interval_minutes (ou deriva dos timestamps) e converte slope por-amostra→minutos; current a partir do EWMA; predictive_stage.py:~83 passa threshold configurável (hoje chama SEM threshold→ETA None). Lead time real. Manter paridade Rust↔Python (tests/rust/test_rust_python_parity.py:237-254). Write-set/aceite: ROBUSTNESS_PLAN.md:322. Resumo: docs/vigia-barato-agent-prompt.md §2 (D2).",
-    "dependencies": "none",
+    "title": "OP3: Script demo contínua + smoke",
+    "description": "SPEC AUTORITATIVA: leia docs/continuous-monitor-agent-prompt.md tarefa OP3. Crie scripts/run_continuous_demo.py (stdlib-only): gera csv HPA em tmp, roda monitor com sleep zero/clock fake de START_TIME+30min até RESTART_AT, imprime linha do tempo + lead time antes MAXED_OUT_AT + escalada simulated. Reutilize run_monitor/ContinuousMonitor.",
+    "dependencies": "2",
     "steps": [
-      "Aceite: ETA em minutos correto com threshold; predictive_stage passa threshold; paridade Rust↔Python verde; teste falha antes do fix; ci-local unit verde.",
-      "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
-      "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
+      "Teste falha antes: tests/test_continuous_demo_smoke.py (marker slow se >2s; demo detecta+escala antes MAXED_OUT_AT, lead time>0, executed_infra=False)",
+      "Implemente scripts/run_continuous_demo.py + teste (write-set: scripts/run_continuous_demo.py, tests/test_continuous_demo_smoke.py). --source csv:// opcional, --seed. Sem infra real.",
+      ".venv/bin/python -m pytest tests/test_continuous_demo_smoke.py -q verde; .venv/bin/python scripts/run_continuous_demo.py roda end-to-end",
+      "scripts/ci-local.sh unit verde LOCAL M5; ruff; mypy domain application core",
+      "Commit feat(cli): OP3 ... e passe passes:true"
     ],
-    "passes": true
+    "passes": false
   },
   {
     "number": 4,
     "category": "functional",
-    "title": "D3: Eixo D3: controle de falsos positivos (slope relativo + portões)",
-    "description": "SPEC AUTORITATIVA: leia docs/vigia-barato-agent-prompt.md (tarefa D3) e ROBUSTNESS_PLAN.md (Eixo D :309-363) ANTES de implementar. slope relativo opcional + portões mínimos (série <N pontos / efeito <ε → sem sinal; flat+ruído não gera prediction.alert). Controla falso positivo do vigia contínuo. Write-set/aceite: ROBUSTNESS_PLAN.md:332. Resumo: docs/vigia-barato-agent-prompt.md §2 (D3).",
-    "dependencies": "3",
+    "title": "OP4: Documentação monitor contínuo",
+    "description": "SPEC AUTORITATIVA: leia docs/continuous-monitor-agent-prompt.md tarefa OP4. README.md seção 'Vigia Barato — monitoramento contínuo' (como rodar --monitor csv/prometheus, demo, exit codes, duas camadas, escopo honesto PoC simulado fail-closed nunca executa infra aprovação humana; NÃO alegue prod 24/7). docs/continuous-monitor.md guia completo.",
+    "dependencies": "2",
     "steps": [
-      "Aceite: flat/ruído não gera prediction.alert; série curta/efeito ínfimo → sem sinal; teste falha antes; ci-local unit verde.",
-      "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
-      "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
+      "Escreva README.md seção + docs/continuous-monitor.md (write-set: README.md, docs/continuous-monitor.md). Flags reais conferidas em args.py; gate Slack AIOPS_MONITOR_SLACK_REAL; métricas backtest recall/precision/lead-time; limitações.",
+      "Confira que os comandos documentados rodam (main.py --monitor ...; scripts/run_continuous_demo.py)",
+      "scripts/ci-local.sh unit verde LOCAL M5; ruff check .",
+      "Commit docs(cli): OP4 ... e passe passes:true"
     ],
-    "passes": true
-  },
-  {
-    "number": 5,
-    "category": "functional",
-    "title": "D4: Eixo D4: detector de saturação HPA (platô no teto)",
-    "description": "SPEC AUTORITATIVA: leia docs/vigia-barato-agent-prompt.md (tarefa D4) e ROBUSTNESS_PLAN.md (Eixo D :309-363) ANTES de implementar. Criar pipeline/saturation_detector.py: detect_saturation(points, ceiling)->SaturationSignal|None — platô no topo (variância baixa + nível ≥95% do ceiling, sustained ≥K amostras). Integrar em predictive_stage + risk_scorer (renormalizar pesos). Detecta o platô do HPA no teto que o slope perde. Write-set/aceite: ROBUSTNESS_PLAN.md:342. Resumo: docs/vigia-barato-agent-prompt.md §2 (D4). NÃO pular D1-D3 antes.",
-    "dependencies": "none",
-    "steps": [
-      "Aceite: detect_saturation sinaliza platô no teto (variância baixa, ≥95% ceiling, ≥K amostras); integrado em predictive_stage/risk_scorer; teste falha antes; ci-local unit verde.",
-      "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
-      "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
-    ],
-    "passes": true
-  },
-  {
-    "number": 6,
-    "category": "functional",
-    "title": "D5: Eixo D5: backtest preditivo (recall/precision/lead-time)",
-    "description": "SPEC AUTORITATIVA: leia docs/vigia-barato-agent-prompt.md (tarefa D5) e ROBUSTNESS_PLAN.md (Eixo D :309-363) ANTES de implementar. Criar scripts/backtest_predictive.py + validation/golden/predictive_backtest.json + tests/test_predictive_backtest.py (marker slow, seed fixa, recall≥0.8 nas falhas fortes, precision≥0.7, zero alertas em flat/ruído). Replaya janelas (batch). Write-set/aceite: ROBUSTNESS_PLAN.md:354. Resumo: docs/vigia-barato-agent-prompt.md §2 (D5). Seguir validation/runner.py.",
-    "dependencies": "1,2,3,4,5",
-    "steps": [
-      "Aceite: pytest tests/test_predictive_backtest.py -m slow -v verde; golden gerado; recall≥0.8, precision≥0.7, zero alertas flat/ruído.",
-      "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
-      "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
-    ],
-    "passes": true
-  },
-  {
-    "number": 7,
-    "category": "functional",
-    "title": "VB1: Vigia Barato VB1: adapters MetricsSource (Prometheus + CSV)",
-    "description": "SPEC AUTORITATIVA: leia docs/vigia-barato-agent-prompt.md (tarefa VB1) e ROBUSTNESS_PLAN.md (Eixo D :309-363) ANTES de implementar. Criar tools/prometheus_connector.py PrometheusMetricsSource(MetricsSource): query()→HTTP GET /api/v1/query_range (query,start,end,step), parse data.result[].values→list[dict]; get_alerts()→/api/v1/alerts; base URL via PROMETHEUS_URL; timeout+retries (espelhar tools/databricks_connector.py COM retries). Criar tools/csv_metrics_source.py CsvMetricsSource(MetricsSource): lê CSV do cenário (VB-T1), filtra por metric_name/janela. Write-set: tools/prometheus_connector.py, tools/csv_metrics_source.py, tests/test_metrics_sources.py (novos). Sem dependência nova (http client já presente). Espec: docs/vigia-barato-agent-prompt.md §3 VB1.",
-    "dependencies": "none",
-    "steps": [
-      "Aceite: Testes com HTTP mock / CSV em tmp_path; query retorna séries corretas; timeout/retry cobertos; unit verde sem torch.",
-      "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
-      "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
-    ],
-    "passes": true
-  },
-  {
-    "number": 8,
-    "category": "functional",
-    "title": "VB2: Vigia Barato VB2: loop ContinuousMonitor (camada barata, zero LLM)",
-    "description": "SPEC AUTORITATIVA: leia docs/vigia-barato-agent-prompt.md (tarefa VB2) e ROBUSTNESS_PLAN.md (Eixo D :309-363) ANTES de implementar. Criar pipeline/continuous_monitor.py ContinuousMonitor(source:MetricsSource,*,interval_seconds=60,ewma_threshold,escalate_eta_minutes,tracker:RiskTracker|None): tick(now)→MonitorTick(score,level,eta,saturation,should_escalate) — consulta janela via source.query, monta MetricPoint, compute_ewma_slope(span=10,threshold) pós-D2, compute_risk_score+detect_saturation, tracker.update, get_event_level. run_forever()/run_for(ticks) com sleep(interval); tick determinístico testável SEM sleep (injetar now). Config monitor.interval_seconds/ewma_threshold/escalate_eta_minutes em config/defaults.yaml+config/loader.py. REUTILIZAR interfaces/demo/analyzer.py (não duplicar matemática). Camada barata NÃO chama LLM (assert zero import adapters/llm no tick). Write-set: pipeline/continuous_monitor.py, config/defaults.yaml, config/loader.py, tests/test_continuous_monitor.py. Espec: docs/vigia-barato-agent-prompt.md §3 VB2.",
-    "dependencies": "3,4,5,7",
-    "steps": [
-      "Aceite: Replay CSV HPA via CsvMetricsSource → monitor emite prediction.warning/alert ANTES de maxed_out_at (lead time>0); flat/ruído→nenhum alerta (pós-D3); tick determinístico com seed; zero LLM no tick; unit verde.",
-      "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
-      "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
-    ],
-    "passes": true
-  },
-  {
-    "number": 9,
-    "category": "functional",
-    "title": "VB3: Vigia Barato VB3: escalada à camada profunda + aviso proativo",
-    "description": "SPEC AUTORITATIVA: leia docs/vigia-barato-agent-prompt.md (tarefa VB3) e ROBUSTNESS_PLAN.md (Eixo D :309-363) ANTES de implementar. Hook de escalada em pipeline/continuous_monitor.py: quando should_escalate→montar IncidentState/NormalizedAlert para serviço+janela e chamar pipeline de diagnóstico existente (V1 BlueprintEngine.run via builders, ou run_v0), em thread separada se async (asyncio.to_thread). Resultado=proposta+postmortem; NENHUMA execução de infra (fail-closed exit 3). Aviso proativo 'vai estourar em ~X min'/'saturação no teto' via Slack (dry-run default; real só opt-in AIOPS_MONITOR_SLACK_REAL=1+token). Audit verification_mode:simulated quando aplicável. Documentar em docs/ arquitetura 2 camadas + economia de tokens + monitor NÃO substitui aprovação humana. Write-set: pipeline/continuous_monitor.py, interfaces/http/notifications/slack.py (reuso), tests/test_continuous_escalation.py (novo), docs/. Espec: docs/vigia-barato-agent-prompt.md §3 VB3.",
-    "dependencies": "8",
-    "steps": [
-      "Aceite: Teste escalada com pipeline mock→diagnóstico chamado 1x quando level≥warning, 0x em flat; Slack mock recebe aviso; nenhum caminho executa infra; unit verde.",
-      "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
-      "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
-    ],
-    "passes": true
-  },
-  {
-    "number": 10,
-    "category": "functional",
-    "title": "VB4: Vigia Barato VB4: backtest do monitor contínuo (lead time)",
-    "description": "SPEC AUTORITATIVA: leia docs/vigia-barato-agent-prompt.md (tarefa VB4) e ROBUSTNESS_PLAN.md (Eixo D :309-363) ANTES de implementar. Criar scripts/backtest_continuous.py (OU estender backtest_predictive.py) + validation/golden/continuous_backtest.json + tests/test_continuous_backtest.py (marker slow) + docs/. Replaya cenário HPA (VB-T1) tick a tick via CsvMetricsSource+ContinuousMonitor; mede lead time (min entre 1º aviso e maxed_out_at), precision/recall contra rótulos, falsos positivos em flat/ruído. Grava golden seguindo validation/runner.py. Write-set: scripts/backtest_continuous.py, validation/golden/continuous_backtest.json, tests/test_continuous_backtest.py, docs/. Espec: docs/vigia-barato-agent-prompt.md §3 VB4.",
-    "dependencies": "1,8",
-    "steps": [
-      "Aceite: pytest tests/test_continuous_backtest.py -m slow -v verde; golden gerado; lead time>0 no HPA; recall≥0.8; zero alertas flat/ruído puro.",
-      "Escreva o teste que FALHA antes do fix; implemente; teste passa.",
-      "Verificar AQUI NO M5 (arm64): scripts/ci-local.sh unit (verde; ignora tests/rust). NUNCA rsync/ssh p/ m1-docker (Intel, nao roda o stack, git status 128 = falhas falsas). Backtest: -m slow no arquivo novo. Rust (so D2): scripts/ci-local.sh rust aqui.",
-      "Regras: write-set explicito; NADA de infra real (TNR simulado, SECURITY.md); NADA gravar output/ do repo (use tmp_path, tests/conftest.py:201-215); sem deps novas; nao quebrar V0; ruff/mypy limpos em domain/application/core; commit limpo so desta feature."
-    ],
-    "passes": true
-  },
-  {
-    "number": 11,
-    "category": "functional",
-    "title": "VB4-FIX: corrigir mean lead-time + elevar recall do HPA contínuo",
-    "description": "Follow-up de qualidade do VB4 (backtest contínuo). DOIS problemas verificados:\n(1) BUG de métrica em scripts/backtest_continuous.py:201-205: hpa_lead_time_min_mean = sum(hpa_leads non-None)/len(hpa_leads) divide pelo TOTAL de seeds (5, inclui None) em vez da contagem de non-None (2). Resultado reportado 20.4 < min 43.0 (impossível). Corrija para dividir pela contagem de valores non-None (→ 51.0). Adicione teste de regressão garantindo mean >= min quando há detecções.\n(2) GAP de detecção: hpa_recall=0.4 — o cenário HPA realista (data/hpa_saturation_scenario.py, VB-T1, ~1051 ticks/18h de creep lento) é detectado em só 2/5 seeds (42,43; 44/45/46 com alert_ticks=0). Causa: replay_hpa (scripts/backtest_continuous.py ~linha 104) cria ContinuousMonitor SEM ceilings= → o saturation detector (pipeline/saturation_detector.py, D4) fica INATIVO para o HPA; só o caminho slope/ETA atua, e creep lento → slope pequeno → ETA raramente <= escalate_eta_minutes=60 antes de MAXED_OUT_AT. Melhore o SINAL (não apenas abaixe limiares): engaje o detector de saturação/nível sustentado para o HPA — passe o ceiling apropriado (ex.: MEMORY_REQUEST_BYTES ou o alvo de utilização) em replay_hpa E/OU adicione no ContinuousMonitor uma via de escalada por nível sustentado alto (utilização crônica acima do alvo) que capture o creep lento mesmo com slope pequeno. O platô real do HPA é em réplicas (maxReplicas=10); considere detectar utilização working_set/request sustentada acima do alvo 80% como sinal de saturação iminente.\nSpec base: docs/vigia-barato-agent-prompt.md (VB2/VB4/D4) + ROBUSTNESS_PLAN.md Eixo D. Confirme file:line no código real antes de editar.",
-    "dependencies": "10",
-    "steps": [
-      "Aceite: hpa_recall >= 0.8 (>=4/5 seeds do cenário realista) COM lead_time > 0; precision permanece 1.0; ZERO alertas em flat/noise/noise_heavy (negative_alert_ticks=0, noise_heavy_alert_series=0); recall overall >= 0.8. NÃO overfit: melhore o sinal, não abaixe limiares a ponto de gerar falso positivo.",
-      "Aceite: hpa_lead_time_min_mean corrigido (>= hpa_lead_time_min_min quando há detecções); teste de regressão mean>=min.",
-      "Escreva/ajuste testes que FALHAM antes do fix; regenere golden: python scripts/backtest_continuous.py --write-golden e python scripts/backtest_predictive.py --write-golden (se afetado).",
-      "Verificar LOCAL M5: scripts/ci-local.sh unit (verde) + .venv/bin/python -m pytest tests/test_continuous_backtest.py tests/test_predictive_backtest.py -m slow -q (verde). ruff check limpo nos arquivos tocados.",
-      "Regras: write-set explícito (scripts/backtest_continuous.py, pipeline/continuous_monitor.py, pipeline/saturation_detector.py, tests/*, validation/golden/*); NADA infra real; NADA gravar output/ do repo (tmp_path); sem deps novas; não quebrar V0 nem os outros 10 features; commit limpo. Marque passes:true só após verificação. Se hpa_recall>=0.8 não for alcançável honestamente sem falso positivo, documente o limite no claude-progress.txt e no golden (não force overfit)."
-    ],
-    "passes": true
+    "passes": false
   }
 ]

@@ -35,5 +35,5 @@ OP1 (number 1): Flags CLI --monitor + validação. Depois OP2→OP3→OP4.
 
 ## Sessão OP1 (2026-11-24)
 Feito: flags --monitor em args.py + tests/test_args_monitor.py (commit 2f9a0d4). Alvo isolado verde, ruff ok.
-Pendente: ci-local.sh unit completo (m5-guard bloqueou) -> rodar e só então passes:true na OP1.
+Verificado (exit de cada comando, sem pipe): ci-local.sh unit 1899 passed/6 skipped; ruff check . ok; mypy domain application core ok; test_args_monitor 17 passed. OP1 passes:true.
 Próxima: OP2 (monitor_runner.py + wiring main.py).
