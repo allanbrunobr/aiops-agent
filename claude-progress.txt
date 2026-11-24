@@ -67,3 +67,9 @@ Sessão OP3 fechamento (2026-11-24): scripts/ci-local.sh unit rodado no M5 (auto
 Feito: README.md seção "Vigia Barato — monitoramento contínuo" (+ item no índice) e docs/continuous-monitor.md (guia: duas camadas, flags de args.py, fontes, exit codes, gate Slack AIOPS_MONITOR_SLACK_REAL, demo, métricas do backtest, limitações). Escopo honesto: PoC, simulado, fail-closed, nunca executa infra, sem alegação de 24/7.
 Verificado (exit direto, sem pipe): --monitor csv --ticks 5 -> 0; replay completo -> 3; csv inexistente -> 1; esquema inválido -> 1; run_continuous_demo.py -> 3; ruff check . ok; scripts/ci-local.sh unit exit 0 (1912 passed/6 skipped). OP4 passes:true.
 Fase OP1–OP4 concluída. Próxima: nenhuma da lista; opcional calibração por métrica (HPA seeds 44–46).
+
+## Sessão RF1 (2026-11-24)
+Feito: `return EXIT_SUCCESS` no `except KeyboardInterrupt` de interfaces/cli/monitor_runner.py (log mantido) + teste test_keyboard_interrupt_during_startup_returns_clean. Falhou antes (UnboundLocalError), passa depois.
+Verificado (exit direto, sem pipe, M5_LEVE=1): pytest tests -m unit = 1962 passed/6 skipped; ruff check . ok; ruff format --check nos 2 arquivos ok; mypy domain application core ok.
+Nota: Ctrl+C agora sempre sai 0, inclusive no run_forever após escaladas (antes cairia em exit 3) — conforme spec RF1.
+Próxima: RF2 (--profile auto|hpa|generic).

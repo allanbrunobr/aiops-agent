@@ -5,7 +5,7 @@
     "title": "RF1: Ctrl+C na subida do runner sem UnboundLocalError",
     "description": "SPEC AUTORITATIVA: leia docs/review-fixes-agent-prompt.md (tarefa RF1) + docs/review-qwen-result.md. VERIFIQUE LOCAL M5 com `.venv/bin/python -m pytest tests -m unit -q` DIRETO (NÃO scripts/ci-local.sh unit=venv fresco pesado, hook m5-guard bloqueia; NÃO M1). monitor_runner.py:152 except KeyboardInterrupt imprime mas não retorna→cai em if monitor.escalations(:158) com monitor unbound se Ctrl+C antes de :139. Fix: return EXIT_SUCCESS no handler. Teste monkeypatch _build_source raise KeyboardInterrupt→run_monitor==EXIT_SUCCESS sem UnboundLocalError.",
     "dependencies": "none",
-    "passes": false,
+    "passes": true,
     "steps": [
       "Teste test_keyboard_interrupt_during_startup_returns_clean falha antes (UnboundLocalError)",
       "Adicionar return EXIT_SUCCESS no except KeyboardInterrupt (manter log)",

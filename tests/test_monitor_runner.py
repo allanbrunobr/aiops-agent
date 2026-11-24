@@ -127,3 +127,16 @@ def test_csv_missing_columns_exit_1(tmp_path: Path, stub_diagnose: list[bool]) -
     bad = tmp_path / "bad.csv"
     bad.write_text("a,b\n1,2\n")
     assert monitor_runner.run_monitor(_args(["--source", f"csv://{bad}"])) == EXIT_ERROR
+
+
+def test_keyboard_interrupt_during_startup_returns_clean(
+    monkeypatch: pytest.MonkeyPatch, stub_diagnose: list[bool]
+) -> None:
+    """Ctrl+C antes de o monitor existir: saída limpa, sem UnboundLocalError."""
+
+    def boom(_source: str) -> Any:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(monitor_runner, "_build_source", boom)
+    args = build_arg_parser().parse_args(["--monitor", "--source", "csv:///x.csv"])
+    assert monitor_runner.run_monitor(args) == EXIT_SUCCESS
