@@ -1,0 +1,62 @@
+[
+  {
+    "number": 1,
+    "category": "functional",
+    "title": "OP1: Flags CLI --monitor + validação",
+    "description": "SPEC AUTORITATIVA: leia docs/continuous-monitor-agent-prompt.md tarefa OP1. Adicione --monitor/--source/--interval/--ticks/--monitor-service a build_arg_parser() (interfaces/cli/args.py) + exclusões mútuas e validação de --source em _validate_args.",
+    "dependencies": "none",
+    "steps": [
+      "Teste falha antes: tests/test_args_monitor.py (flags parseiam; --monitor exclui --scenario/--data-source databricks/--pipeline-v1/--tracker; --monitor exige --source; scheme csv|prometheus; --interval>0; --ticks>0)",
+      "Implemente em interfaces/cli/args.py (write-set: args.py + tests/test_args_monitor.py)",
+      ".venv/bin/python -m pytest tests/test_args_monitor.py -q verde",
+      "scripts/ci-local.sh unit verde LOCAL M5 (não ssh m1-docker); ruff check .; mypy domain application core",
+      "Commit feat(cli): OP1 ... e marque passes:true"
+    ],
+    "passes": true
+  },
+  {
+    "number": 2,
+    "category": "functional",
+    "title": "OP2: Runner run_monitor + wiring main.py",
+    "description": "SPEC AUTORITATIVA: leia docs/continuous-monitor-agent-prompt.md tarefa OP2. Crie interfaces/cli/monitor_runner.py run_monitor(args)->int (parse csv://|prometheus://, AppConfig, ContinuousMonitor reutilizando scripts/backtest_continuous.py replay_hpa, EscalationHook(make_blueprint_diagnose, build_monitor_slack_notifier), run_for/run_forever, exit 3 escalada/0 limpo/1 falha). Wire main.py: if args.monitor return run_monitor(args).",
+    "dependencies": "1",
+    "steps": [
+      "Teste falha antes: tests/test_monitor_runner.py (tmp_path, clock/sleep fake; csv HPA via hpa.export_csv -> detecta+escala antes MAXED_OUT_AT exit3; flat -> exit0; source inválido -> exit1; --no-llm respeitado)",
+      "Implemente monitor_runner.py + main.py (write-set: monitor_runner.py, main.py, tests/test_monitor_runner.py). Nada output/ repo (tmp_path). Fail-closed simulated, nunca executa infra.",
+      ".venv/bin/python -m pytest tests/test_monitor_runner.py -q verde",
+      "scripts/ci-local.sh unit verde LOCAL M5; smoke .venv/bin/python main.py --monitor --source csv://<tmp_hpa> --ticks 5 --no-llm --output-dir <tmp>; smokes V0/V1 exit3 inalterados; ruff; mypy domain application core",
+      "Commit feat(cli): OP2 ... e passe passes:true"
+    ],
+    "passes": true,
+    "verification_note": "OP2 verificada M5 local: 1957 unit passed; .so Rust rebuilt (maturin develop cp312, parity 28); KeyboardInterrupt handler logado (silent_failures guard verde); monitor_runner 9 testes."
+  },
+  {
+    "number": 3,
+    "category": "functional",
+    "title": "OP3: Script demo contínua + smoke",
+    "description": "SPEC AUTORITATIVA: leia docs/continuous-monitor-agent-prompt.md tarefa OP3. Crie scripts/run_continuous_demo.py (stdlib-only): gera csv HPA em tmp, roda monitor com sleep zero/clock fake de START_TIME+30min até RESTART_AT, imprime linha do tempo + lead time antes MAXED_OUT_AT + escalada simulated. Reutilize run_monitor/ContinuousMonitor.",
+    "dependencies": "2",
+    "steps": [
+      "Teste falha antes: tests/test_continuous_demo_smoke.py (marker slow se >2s; demo detecta+escala antes MAXED_OUT_AT, lead time>0, executed_infra=False)",
+      "Implemente scripts/run_continuous_demo.py + teste (write-set: scripts/run_continuous_demo.py, tests/test_continuous_demo_smoke.py). --source csv:// opcional, --seed. Sem infra real.",
+      ".venv/bin/python -m pytest tests/test_continuous_demo_smoke.py -q verde; .venv/bin/python scripts/run_continuous_demo.py roda end-to-end",
+      "scripts/ci-local.sh unit verde LOCAL M5; ruff; mypy domain application core",
+      "Commit feat(cli): OP3 ... e passe passes:true"
+    ],
+    "passes": true
+  },
+  {
+    "number": 4,
+    "category": "functional",
+    "title": "OP4: Documentação monitor contínuo",
+    "description": "SPEC AUTORITATIVA: leia docs/continuous-monitor-agent-prompt.md tarefa OP4. README.md seção 'Vigia Barato — monitoramento contínuo' (como rodar --monitor csv/prometheus, demo, exit codes, duas camadas, escopo honesto PoC simulado fail-closed nunca executa infra aprovação humana; NÃO alegue prod 24/7). docs/continuous-monitor.md guia completo.",
+    "dependencies": "2",
+    "steps": [
+      "Escreva README.md seção + docs/continuous-monitor.md (write-set: README.md, docs/continuous-monitor.md). Flags reais conferidas em args.py; gate Slack AIOPS_MONITOR_SLACK_REAL; métricas backtest recall/precision/lead-time; limitações.",
+      "Confira que os comandos documentados rodam (main.py --monitor ...; scripts/run_continuous_demo.py)",
+      "scripts/ci-local.sh unit verde LOCAL M5; ruff check .",
+      "Commit docs(cli): OP4 ... e passe passes:true"
+    ],
+    "passes": true
+  }
+]
