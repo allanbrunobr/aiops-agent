@@ -53,3 +53,10 @@ Próxima: rodar ci-local.sh unit e marcar OP2 passes:true; depois OP3.
 Revalidação (sessão seguinte, M5_LEVE=1): test_monitor_runner+test_args_monitor 26 passed; ruff ok. M1 ocupado (load ~12, outro pytest rodando; sem python3.12/uv no PATH do ssh) — ci-local.sh unit NÃO rodado; OP2 segue passes:false.
 Revalidação 3 (2026-11-24, M5_LEVE=1): test_monitor_runner+test_args_monitor 26 passed; ruff ok; mypy domain application core ok; smoke --monitor csv HPA --ticks 5 --no-llm -> exit 0.
 ci-local.sh unit NÃO rodado: regra do Allan (nada pesado no M5; hook barra) e M1 com load ~9. OP2 segue passes:false — falta só a suíte completa (rodar no M1 quando livre, ou Allan liberar no M5). Não iniciar OP3 antes.
+
+## Sessão OP3 (2026-11-24)
+Feito: scripts/run_continuous_demo.py (run_demo/main; reutiliza _build_source/constantes de monitor_runner + ContinuousMonitor/EscalationHook) + tests/test_continuous_demo_smoke.py (4 testes, ~0.5s, sem marker slow). Teste falhou antes (4 failed), passou depois (4 passed).
+Demo end-to-end (seed 42, diagnóstico V1 --no-llm real): 1º alerta/escalada 22/11 15:38, lead time 189 min antes de MAXED_OUT_AT (18:47), executed_infra=False, verification_mode=simulated, exit 3.
+Verificado (M5_LEVE=1, sem pipe): ruff check . ok; ruff format --check ok; mypy domain application core ok.
+NÃO RODADO: scripts/ci-local.sh unit (hook m5-guard bloqueia suíte no M5). Só arquivos novos, sem mudança em código compartilhado. passes OP3 mantido false até a suíte rodar (Allan/M1).
+Próxima: rodar ci-local.sh unit, marcar OP3 passes:true; depois OP4 (docs).
