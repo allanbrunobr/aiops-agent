@@ -102,7 +102,72 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "'none' explicitly disables tracking."
         ),
     )
+    parser.add_argument(
+        "--monitor",
+        action="store_true",
+        help="Continuous monitoring mode (Vigia Barato); requires --source",
+    )
+    parser.add_argument(
+        "--source",
+        type=str,
+        default=None,
+        metavar="URL",
+        help="Metrics source for --monitor: csv://<path> or prometheus://<url>",
+    )
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=60.0,
+        metavar="SECONDS",
+        help="Seconds between monitor ticks (> 0, default: 60)",
+    )
+    parser.add_argument(
+        "--ticks",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Run N monitor ticks and exit (default: loop forever)",
+    )
+    parser.add_argument(
+        "--monitor-service",
+        type=str,
+        default="hpa-demo",
+        metavar="NAME",
+        help="Service name used when the monitor escalates (default: hpa-demo)",
+    )
     return parser
+
+
+MONITOR_SOURCE_SCHEMES: tuple[str, ...] = ("csv", "prometheus")
+
+
+def _validate_monitor_args(
+    parser: argparse.ArgumentParser, args: argparse.Namespace
+) -> None:
+    """Regras do modo --monitor (modo próprio, exclusivo com os demais)."""
+    conflicts = [
+        flag
+        for flag, active in (
+            ("--scenario", args.scenario is not None),
+            ("--data-source databricks", args.data_source == "databricks"),
+            ("--pipeline-v1", args.pipeline_v1),
+            ("--tracker", args.tracker is not None),
+        )
+        if active
+    ]
+    if conflicts:
+        parser.error(f"--monitor cannot be combined with {', '.join(conflicts)}")
+    if not args.source:
+        parser.error("--monitor requires --source (csv://<path> or prometheus://<url>)")
+    scheme, sep, rest = args.source.partition("://")
+    if not sep or scheme not in MONITOR_SOURCE_SCHEMES or not rest:
+        parser.error(
+            f"invalid --source {args.source!r}: expected csv://<path> or prometheus://<url>"
+        )
+    if args.interval <= 0:
+        parser.error("--interval must be > 0")
+    if args.ticks is not None and args.ticks <= 0:
+        parser.error("--ticks must be > 0")
 
 
 def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
@@ -112,6 +177,9 @@ def _validate_args(parser: argparse.ArgumentParser, args: argparse.Namespace) ->
       --data-source databricks + --scenario sao mutuamente exclusivos.
       Dados reais nao possuem cenarios simulados.
     """
+    if args.monitor:
+        _validate_monitor_args(parser, args)
+        return
     if args.data_source == "databricks" and args.scenario is not None:
         parser.error(
             "--data-source databricks cannot be combined with --scenario (real data has no simulated scenarios)"
