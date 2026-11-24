@@ -62,7 +62,7 @@ def compute_ewma_slope(
     values = [p.value for p in points]
 
     if _RUST_AVAILABLE:
-        result = _rust.compute_ewma_slope(values, span)
+        result = _rust.compute_ewma_slope(values, span)  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
         slope: float = result["slope"]
     else:
         slope = _python_ewma_slope(values, span)

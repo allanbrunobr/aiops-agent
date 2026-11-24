@@ -313,8 +313,8 @@ class ContinuousMonitor:
             values = [p.value for p in points]
             sat = detect_saturation(points, self.ceilings.get(name))
             if sat is None and name in self.sustained_levels:
-                level, denom = self.sustained_levels[name]
-                sat = detect_sustained_level(points, level, denom)
+                target_level, denom = self.sustained_levels[name]
+                sat = detect_sustained_level(points, target_level, denom)
             if sat is not None and (
                 saturation is None
                 or sat.sustained_samples > saturation.sustained_samples
