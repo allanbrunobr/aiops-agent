@@ -134,6 +134,12 @@ def main() -> int:
         use_llm = False
         args.no_llm = True
 
+    if getattr(args, "monitor", False):
+        # import lazy: não arrasta deps do monitor para o parser
+        from interfaces.cli.monitor_runner import run_monitor
+
+        return run_monitor(args)
+
     if getattr(args, "pipeline_v1", False):
         return main_v1(args)
 

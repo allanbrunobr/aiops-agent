@@ -37,3 +37,14 @@ OP1 (number 1): Flags CLI --monitor + validação. Depois OP2→OP3→OP4.
 Feito: flags --monitor em args.py + tests/test_args_monitor.py (commit 2f9a0d4). Alvo isolado verde, ruff ok.
 Verificado (exit de cada comando, sem pipe): ci-local.sh unit 1899 passed/6 skipped; ruff check . ok; mypy domain application core ok; test_args_monitor 17 passed. OP1 passes:true.
 Próxima: OP2 (monitor_runner.py + wiring main.py).
+
+## Sessão OP2 (2026-11-24)
+Feito: interfaces/cli/monitor_runner.py (run_monitor) + wiring em main.py + tests/test_monitor_runner.py (9 testes).
+- csv:// = replay com relógio simulado (first_ts+30min, passo=--interval, sem sleep real); sem --ticks roda até o fim do CSV. prometheus:// = relógio/sleep reais, run_forever.
+- CSV com métrica do cenário HPA usa a config do backtest (EWMA 0.9*request, sustained 0.8*request, ETA 60min).
+- Exit: 3 se houve escalada, 0 limpo, 1 fonte inválida/falha.
+Verificado (M5_LEVE=1, alvo isolado): test_monitor_runner 9 passed; 90 passed em monitor_runner+args_monitor+exit_codes+cli_*+continuous_*; ruff check/format ok; mypy domain application core ok.
+Smokes: --monitor csv HPA --ticks 5 -> exit 0; replay completo (diagnóstico V1 real, --no-llm) -> exit 3, 1ª escalada 22/11 15:38 (< MAXED_OUT_AT 18:47); csv inexistente -> exit 1; V0 e V1 --no-llm --no-rag -> exit 3.
+NÃO RODADO: scripts/ci-local.sh unit (suíte completa) — o hook m5-guard.sh bloqueia suíte no M5. passes mantido false até alguém rodar (M1 ou liberar). 
+Obs: teste escrito depois do runner (não houve "falha antes").
+Próxima: rodar ci-local.sh unit e marcar OP2 passes:true; depois OP3.
