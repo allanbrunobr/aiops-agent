@@ -57,6 +57,6 @@
       "scripts/ci-local.sh unit verde LOCAL M5; ruff check .",
       "Commit docs(cli): OP4 ... e passe passes:true"
     ],
-    "passes": false
+    "passes": true
   }
 ]

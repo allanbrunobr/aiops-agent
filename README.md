@@ -32,6 +32,7 @@ The implementation is based on seven academic AIOps papers (2024–2025). See [A
 - [Architecture](#architecture)
 - [Quick start](#quick-start)
 - [CLI usage](#cli-usage)
+- [Vigia Barato — monitoramento contínuo](#vigia-barato--monitoramento-contínuo)
 - [Demo dashboard](#demo-dashboard)
 - [Slack notifications](#slack-notifications)
 - [Configuration](#configuration)
@@ -190,6 +191,35 @@ python main.py [options]
 | `1` | Invalid arguments, or an unrecoverable error in a pipeline stage |
 | `2` | Regression detected by TNR (measured post-action health worse than pre-action) |
 | `3` | Action blocked by the safety layer (requires human approval) |
+
+---
+
+## Vigia Barato — monitoramento contínuo
+
+Modo `--monitor`: uma camada **barata** (zero token, sem LLM) vigia séries de métricas tick a tick (EWMA + tendência + ETA até saturação). Só quando prevê saturação ela **escala** para a camada **profunda** (diagnóstico V1, o mesmo Blueprint Engine). Guia completo: [`docs/continuous-monitor.md`](docs/continuous-monitor.md).
+
+```bash
+# Replay de um CSV (relógio simulado, sem espera real); 5 ticks
+python main.py --monitor --source csv://path/to/metrics.csv --ticks 5 --no-llm
+
+# Prometheus (relógio e sleep reais; roda até Ctrl+C se não houver --ticks)
+python main.py --monitor --source prometheus://localhost:9090 --interval 60 --no-llm
+
+# Demo ponta a ponta sobre o cenário HPA (gera o CSV em diretório temporário)
+python scripts/run_continuous_demo.py
+```
+
+| Flag | Descrição | Padrão |
+|------|-----------|--------|
+| `--monitor` | Ativa o modo (exclusivo: não combina com `--scenario`, `--data-source databricks`, `--pipeline-v1`) | off |
+| `--source URL` | Obrigatória: `csv://<arquivo>` ou `prometheus://<url>` | — |
+| `--interval SEGUNDOS` | Intervalo entre ticks (> 0) | `60` |
+| `--ticks N` | Roda N ticks e sai | sem limite |
+| `--monitor-service NOME` | Serviço informado na escalada | `hpa-demo` |
+
+**Exit codes do `--monitor`:** `0` sem escalada · `1` argumentos/fonte inválidos ou falha · `3` houve escalada (aprovação humana obrigatória).
+
+**Escopo honesto.** É uma prova de conceito: os dados são simulados, o fluxo é fail-closed, o monitor **nunca executa infraestrutura** — só propõe (verificação TNR sempre `simulated`) e toda ação exige aprovação humana. Não há alegação de operação em produção 24/7. Recall/precision/lead time medidos estão em [`docs/vigia-barato-backtest.md`](docs/vigia-barato-backtest.md), com os limites (ex.: o HPA não é detectado em todas as seeds).
 
 ---
 

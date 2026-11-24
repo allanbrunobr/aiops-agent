@@ -62,3 +62,8 @@ NÃO RODADO: scripts/ci-local.sh unit (hook m5-guard bloqueia suíte no M5). Só
 Próxima: rodar ci-local.sh unit, marcar OP3 passes:true; depois OP4 (docs).
 Revalidação OP3 (2026-11-24, M5_LEVE=1): test_continuous_demo_smoke 4 passed. M1: pytest alheio rodando, sem uv/python3.12 no PATH do ssh — ci-local.sh unit NÃO rodado; OP3 segue passes:false até a suíte completa rodar (M1 livre ou Allan liberar no M5).
 Sessão OP3 fechamento (2026-11-24): scripts/ci-local.sh unit rodado no M5 (autorizado pela nota do coordenador): exit 0, 1912 passed/6 skipped. ruff check ok; mypy domain application core ok; demo end-to-end exit 3 (lead time 189 min, executed_infra=False, simulated). ruff format --check . acusa 14 arquivos PRÉ-EXISTENTES (nenhum de OP3; os 2 de OP3 estão formatados). OP3 passes:true. Próxima: OP4 (docs).
+
+## Sessão OP4 (2026-11-24)
+Feito: README.md seção "Vigia Barato — monitoramento contínuo" (+ item no índice) e docs/continuous-monitor.md (guia: duas camadas, flags de args.py, fontes, exit codes, gate Slack AIOPS_MONITOR_SLACK_REAL, demo, métricas do backtest, limitações). Escopo honesto: PoC, simulado, fail-closed, nunca executa infra, sem alegação de 24/7.
+Verificado (exit direto, sem pipe): --monitor csv --ticks 5 -> 0; replay completo -> 3; csv inexistente -> 1; esquema inválido -> 1; run_continuous_demo.py -> 3; ruff check . ok; scripts/ci-local.sh unit exit 0 (1912 passed/6 skipped). OP4 passes:true.
+Fase OP1–OP4 concluída. Próxima: nenhuma da lista; opcional calibração por métrica (HPA seeds 44–46).
