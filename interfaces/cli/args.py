@@ -135,6 +135,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         metavar="NAME",
         help="Service name used when the monitor escalates (default: hpa-demo)",
     )
+    parser.add_argument(
+        "--profile",
+        choices=["auto", "hpa", "generic"],
+        default="auto",
+        help=(
+            "Monitor tuning profile: auto = detect HPA by metric name in a CSV "
+            "replay (default); hpa = force HPA tuning; generic = never apply "
+            "HPA tuning"
+        ),
+    )
     return parser
 
 

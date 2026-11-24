@@ -73,3 +73,8 @@ Feito: `return EXIT_SUCCESS` no `except KeyboardInterrupt` de interfaces/cli/mon
 Verificado (exit direto, sem pipe, M5_LEVE=1): pytest tests -m unit = 1962 passed/6 skipped; ruff check . ok; ruff format --check nos 2 arquivos ok; mypy domain application core ok.
 Nota: Ctrl+C agora sempre sai 0, inclusive no run_forever após escaladas (antes cairia em exit 3) — conforme spec RF1.
 Próxima: RF2 (--profile auto|hpa|generic).
+
+## Sessão RF2 (2026-11-24)
+Feito: `--profile auto|hpa|generic` (default auto) em args.py; monitor_runner aplica tuning HPA se profile==hpa ou (auto e replay e _is_hpa); generic nunca. docs/continuous-monitor.md documenta. Testes: 2 em test_args_monitor (default/valores/inválido) + 3 em test_monitor_runner (generic não aplica, auto aplica em HPA, hpa força em CSV plano). generic e hpa-forçado falharam antes (2 failed), passam depois.
+Verificado (M5_LEVE=1, exit direto, sem pipe): pytest tests -m unit = 1967 passed/6 skipped; ruff check . ok; ruff format --check nos 4 arquivos tocados ok (4 arquivos pré-existentes em interfaces/ seguem fora do formato); mypy domain application core ok; demo run_continuous_demo.py exit 3; csv inexistente exit 1.
+Próxima: RF3 (benchmark Rust só em release).

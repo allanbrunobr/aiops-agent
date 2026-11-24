@@ -96,3 +96,15 @@ def test_interval_must_be_positive(
 def test_ticks_must_be_positive(ticks: str, capsys: pytest.CaptureFixture[str]) -> None:
     argv = ["--monitor", "--source", "csv://a.csv", "--ticks", ticks]
     assert "--ticks" in _fails(argv, capsys)
+
+
+def test_profile_default_and_values() -> None:
+    assert _parse([]).profile == "auto"
+    for value in ("auto", "hpa", "generic"):
+        argv = ["--monitor", "--source", "csv://x.csv", "--profile", value]
+        assert _parse(argv).profile == value
+
+
+def test_profile_invalid_rejected() -> None:
+    with pytest.raises(SystemExit):
+        build_arg_parser().parse_args(["--monitor", "--profile", "bogus"])

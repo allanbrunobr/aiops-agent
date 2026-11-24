@@ -21,7 +21,7 @@
     "title": "RF2: --profile auto|hpa|generic (tuning HPA explícito)",
     "description": "SPEC AUTORITATIVA: leia docs/review-fixes-agent-prompt.md (tarefa RF2) + docs/review-qwen-result.md. VERIFIQUE LOCAL M5 com `.venv/bin/python -m pytest tests -m unit -q` DIRETO (NÃO scripts/ci-local.sh unit=venv fresco pesado, hook m5-guard bloqueia; NÃO M1). args.py novo --profile choices auto/hpa/generic default auto após --monitor-service. monitor_runner.py:129 aplicar tuning HPA se profile==hpa OU (auto e replay e _is_hpa); generic nunca. Default auto=backward compat (MON=3). docs/continuous-monitor.md documenta. Testes: args parse/default/inválido; generic não aplica tuning, hpa força.",
     "dependencies": "1",
-    "passes": false,
+    "passes": true,
     "steps": [
       "Testes test_args --profile + test_monitor_runner generic/hpa falham antes",
       "args.py --profile + monitor_runner lógica profile + docs",

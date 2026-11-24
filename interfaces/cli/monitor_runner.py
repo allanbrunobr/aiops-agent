@@ -126,7 +126,8 @@ def run_monitor(args: Any, *, sleep: Callable[[float], None] | None = None) -> i
             kwargs["sleep"] = lambda _s: None  # replay: sem espera real
         elif sleep is not None:
             kwargs["sleep"] = sleep
-        if replay and _is_hpa(source):
+        profile = getattr(args, "profile", "auto")
+        if profile == "hpa" or (profile == "auto" and replay and _is_hpa(source)):
             req = hpa.MEMORY_REQUEST_BYTES
             kwargs.update(
                 metrics=[hpa.METRIC_MEMORY],

@@ -33,6 +33,7 @@ python scripts/run_continuous_demo.py [--seed 42] [--source csv://<arquivo>] [--
 | `--interval S` | Segundos entre ticks (> 0). No CSV é o passo do relógio simulado | `60` |
 | `--ticks N` | Número de ticks (> 0). Sem ele: CSV roda até o fim; Prometheus roda até Ctrl+C | — |
 | `--monitor-service NOME` | Nome do serviço na escalada | `hpa-demo` |
+| `--profile auto\|hpa\|generic` | Tuning do monitor (ver abaixo) | `auto` |
 | `--no-llm`, `--config` | Reaproveitados do CLI normal (diagnóstico heurístico; limiares) | — |
 
 ### Fontes
@@ -85,3 +86,14 @@ Valores simulados — não generalizam para tráfego real.
 - Prometheus testado apenas contra mocks/ambiente local, não contra produção.
 - Futuro: limiar por métrica/calibração automática, execução real mediada por aprovação,
   validação em dados reais.
+
+## Perfil de tuning (`--profile`)
+
+`auto` (padrão) aplica o tuning do cenário HPA (EWMA 0.9×request, sustentado 80%,
+ETA 60 min) só em replay de CSV que contenha a métrica
+`container_memory_working_set_bytes`. `hpa` força esse tuning; `generic` nunca o
+aplica (usa os defaults do monitor), mesmo num CSV com a métrica de memória.
+
+```bash
+python main.py --monitor --source csv://dados.csv --profile generic --no-llm
+```

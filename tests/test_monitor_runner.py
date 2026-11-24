@@ -140,3 +140,48 @@ def test_keyboard_interrupt_during_startup_returns_clean(
     monkeypatch.setattr(monitor_runner, "_build_source", boom)
     args = build_arg_parser().parse_args(["--monitor", "--source", "csv:///x.csv"])
     assert monitor_runner.run_monitor(args) == EXIT_SUCCESS
+
+
+def _capture_kwargs(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    captured: dict[str, Any] = {}
+    orig = monitor_runner._PrintingMonitor.__init__
+
+    def spy(self: Any, source: Any, **kwargs: Any) -> None:
+        captured.update(kwargs)
+        orig(self, source, **kwargs)
+
+    monkeypatch.setattr(monitor_runner._PrintingMonitor, "__init__", spy)
+    return captured
+
+
+def test_profile_generic_does_not_apply_hpa_tuning(
+    hpa_csv: Path, stub_diagnose: list[bool], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = _capture_kwargs(monkeypatch)
+    monitor_runner.run_monitor(
+        _args(["--source", f"csv://{hpa_csv}", "--no-llm", "--profile", "generic"])
+    )
+    assert "ewma_threshold" not in captured
+    assert "sustained_levels" not in captured
+
+
+def test_profile_auto_applies_hpa_tuning_on_hpa_csv(
+    hpa_csv: Path, stub_diagnose: list[bool], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured = _capture_kwargs(monkeypatch)
+    monitor_runner.run_monitor(_args(["--source", f"csv://{hpa_csv}", "--no-llm"]))
+    assert captured["ewma_threshold"] == 0.9 * hpa.MEMORY_REQUEST_BYTES
+
+
+def test_profile_hpa_forces_tuning_on_non_hpa_csv(
+    tmp_path: Path, stub_diagnose: list[bool], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    flat = _flat_csv(tmp_path / "flat.csv")
+    captured = _capture_kwargs(monkeypatch)
+    monitor_runner.run_monitor(
+        _args(["--source", f"csv://{flat}", "--no-llm", "--profile", "hpa"])
+    )
+    assert captured["ewma_threshold"] == 0.9 * hpa.MEMORY_REQUEST_BYTES
+    captured.clear()
+    monitor_runner.run_monitor(_args(["--source", f"csv://{flat}", "--no-llm"]))
+    assert "ewma_threshold" not in captured
