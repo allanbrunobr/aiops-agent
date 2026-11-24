@@ -43,7 +43,7 @@
       "scripts/ci-local.sh unit verde LOCAL M5; ruff; mypy domain application core",
       "Commit feat(cli): OP3 ... e passe passes:true"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 4,
