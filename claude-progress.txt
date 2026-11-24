@@ -1,3 +1,5 @@
+⛔ ESTADO ATUAL (coordenador): OP1+OP2 DONE e verificadas AQUI no M5 — suíte unit COMPLETA verde (1957 passed/6 skip). O binário Rust foi REBUILT local (maturin develop, cp312) → tests/rust/test_parity.py 28 passed. NÃO vá pro M1, NÃO defira a suíte: rode `scripts/ci-local.sh unit` AQUI e marque passes:true após verde+commit. Se parity falhar por .so stale, rebuild AQUI: `RUSTFLAGS="-C link-arg=-undefined -C link-arg=dynamic_lookup" maturin develop --manifest-path rust/Cargo.toml` (venv 3.12). Próxima: OP3 (demo contínua). Regra silent-failure: nenhum `except X: pass` sem log (tests/test_silent_failures.py) — KeyboardInterrupt deve logar.
+
 # Claude Progress — aiops-agent
 
 ## Fase atual: Vigia Barato OPERÁVEL (CLI --monitor + demo contínua)

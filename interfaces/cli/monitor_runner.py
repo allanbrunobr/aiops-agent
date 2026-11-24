@@ -150,7 +150,7 @@ def run_monitor(args: Any, *, sleep: Callable[[float], None] | None = None) -> i
         console.print(f"[red]monitor: {exc}[/red]")
         return EXIT_ERROR
     except KeyboardInterrupt:  # pragma: no cover - encerramento manual
-        pass
+        console.print("Monitor interrompido pelo usuário (Ctrl+C).", markup=False)
     except Exception as exc:  # fail-closed: falha de fonte/execução ≠ "limpo"
         console.print(f"[red]monitor falhou: {exc}[/red]", markup=True)
         return EXIT_ERROR

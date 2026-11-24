@@ -27,7 +27,8 @@
       "scripts/ci-local.sh unit verde LOCAL M5; smoke .venv/bin/python main.py --monitor --source csv://<tmp_hpa> --ticks 5 --no-llm --output-dir <tmp>; smokes V0/V1 exit3 inalterados; ruff; mypy domain application core",
       "Commit feat(cli): OP2 ... e passe passes:true"
     ],
-    "passes": false
+    "passes": true,
+    "verification_note": "OP2 verificada M5 local: 1957 unit passed; .so Rust rebuilt (maturin develop cp312, parity 28); KeyboardInterrupt handler logado (silent_failures guard verde); monitor_runner 9 testes."
   },
   {
     "number": 3,
