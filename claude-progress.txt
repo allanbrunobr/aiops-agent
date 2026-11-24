@@ -49,3 +49,5 @@ NÃO RODADO: scripts/ci-local.sh unit (suíte completa) — o hook m5-guard.sh b
 Obs: teste escrito depois do runner (não houve "falha antes").
 Próxima: rodar ci-local.sh unit e marcar OP2 passes:true; depois OP3.
 Revalidação (sessão seguinte, M5_LEVE=1): test_monitor_runner+test_args_monitor 26 passed; ruff ok. M1 ocupado (load ~12, outro pytest rodando; sem python3.12/uv no PATH do ssh) — ci-local.sh unit NÃO rodado; OP2 segue passes:false.
+Revalidação 3 (2026-11-24, M5_LEVE=1): test_monitor_runner+test_args_monitor 26 passed; ruff ok; mypy domain application core ok; smoke --monitor csv HPA --ticks 5 --no-llm -> exit 0.
+ci-local.sh unit NÃO rodado: regra do Allan (nada pesado no M5; hook barra) e M1 com load ~9. OP2 segue passes:false — falta só a suíte completa (rodar no M1 quando livre, ou Allan liberar no M5). Não iniciar OP3 antes.
