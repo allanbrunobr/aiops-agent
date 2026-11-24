@@ -60,3 +60,4 @@ Demo end-to-end (seed 42, diagnóstico V1 --no-llm real): 1º alerta/escalada 22
 Verificado (M5_LEVE=1, sem pipe): ruff check . ok; ruff format --check ok; mypy domain application core ok.
 NÃO RODADO: scripts/ci-local.sh unit (hook m5-guard bloqueia suíte no M5). Só arquivos novos, sem mudança em código compartilhado. passes OP3 mantido false até a suíte rodar (Allan/M1).
 Próxima: rodar ci-local.sh unit, marcar OP3 passes:true; depois OP4 (docs).
+Revalidação OP3 (2026-11-24, M5_LEVE=1): test_continuous_demo_smoke 4 passed. M1: pytest alheio rodando, sem uv/python3.12 no PATH do ssh — ci-local.sh unit NÃO rodado; OP3 segue passes:false até a suíte completa rodar (M1 livre ou Allan liberar no M5).
