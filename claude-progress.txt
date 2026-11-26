@@ -3,14 +3,15 @@ Verifique com `.venv/bin/python -m pytest tests -m unit -q` DIRETO. NÃO use
 `scripts/ci-local.sh unit` (venv fresco=pesado, m5-guard bloqueia→deferral→falha).
 NÃO vá pro M1. Marque passes:true após verde+commit. UMA sessão por tarefa basta.
 
-★ PRÓXIMA FILA: épico F5-4 paridade V1, LOTE 2 (docs/f5-4-parity-agent-prompt.md).
-LOTE 1 JÁ DONE+verificado (P1 adapter blueprint/adapters/state_adapter.py, P2 postmortem
-rico V0≡V1, P3 flags; unit 2124 green, exit 3, snapshots 14 intactos). USE o adapter P1.
-LEIA PRIMEIRO docs/f5-4-parity-map.md §3 (wiring file:line). Confirme antes de editar.
-P4a node preditivo+Slack 5 eventos (AIOPS-93) → P4b memória episódica+skill learning
-(AIOPS-94, dep P4a) → P4c cache FAISS disco+tabela-resumo (AIOPS-95, dep P4a,P4b).
-NÃO quebrar V0 / NÃO remover flag --pipeline-v1 (P6 gated fora deste lote).
-Exit codes JÁ paridade (V0=3 V1=3) — não replanejar. NÃO regen snapshots (P5).
+★ PRÓXIMA FILA: épico F5-4 paridade V1, LOTE 3 — P5 (docs/f5-4-parity-agent-prompt.md).
+LOTES 1+2 DONE+verificado+PUSHED (origin/main 0a19bb3): P1 adapter, P2 postmortem rico≡V0,
+P3 flags, P4a preditivo+Slack, P4b memória+skills, P4c cache+tabela. unit 2143 green,
+exit V0=3 V1=3, snapshots 17 intactos. V1 funcionalmente completo.
+P5 (AIOPS-96): migrar conftest._run_pipeline→V1 + regen snapshots SUPERVISIONADO +
+migrar test_exit_codes. ★GATE EQUIVALÊNCIA: rode snapshot SEM regen, classifique CADA diff
+(benigno vs semântico); SÓ regen se todos benignos+justificados; diff semântico→NÃO regen,
+passes=false, documente e PARE (coordenador resolve). NUNCA mascare regressão.
+P6 (remoção V0) GATED fora desta fila — precisa OK explícito do user. Cards movem sozinhos.
 O hook long-run chama scripts/jira_sync.py doing/done; --all reconcilia no fim.
 
 --- HISTÓRICO ---
