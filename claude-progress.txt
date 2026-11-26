@@ -272,3 +272,11 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - Verde M5 (M5_LEVE=1, sem pipe): unit 2135 passed/7 skipped (test_databricks_retry deselecionado, poluição pré-existente); ruff check/format e mypy limpos nos 3 arquivos tocados. ruff format também reformatou bloco pré-existente de _state_after_abort.
 - Limites: skill é re-roteada após o run (não lida do orchestrator); com LLM o client do evolver só é criado se ANTHROPIC_API_KEY; _extract_fault_tags duplicado em pipeline_nodes (V0 intocado; P6 remove o do V0). Evolução com LLM real não exercitada (fake).
 - Próxima: Feature 3 (P4c cache FAISS disco + tabela-resumo).
+
+## Sessão Feature 3 (lote 2) — P4c cache FAISS disco + tabela-resumo (concluída)
+- Cache FAISS em disco no V1 já existia desde P3 (_ensure_rag_index + run_v1 injeta _rag_cache_dir=.aiops-cache/rag e _rebuild_rag); P4c só adiciona teste que fixa o contrato no run_v1 (cache dir + rebuild chegam ao node).
+- interfaces/cli/v1_runner.py: _save_outputs retorna tracker_info; run_v1 chama print_summary(state_to_result(state), tracker_info=...) após salvar outputs (tabela + State Machine Timeline); sem diagnóstico mantém só a Rule. Exit codes inalterados. display.py não precisou mudar.
+- tests/test_v1_cache_summary.py (3 testes; 2 falhavam antes — tabela ausente).
+- Verde M5 (M5_LEVE=1, sem pipe): unit 2138 passed/7 skipped (test_databricks_retry deselecionado, pré-existente); ruff check/format ok; mypy sem erro novo.
+- Limites: linhas Compression, Sanitization, Safety Check e CVE/Version da tabela ficam ausentes no V1 (estado não guarda stats do compressor/sanitizer nem objetos de safety; não inventados). Cache FAISS real não exercitado (faiss mockado).
+- Próxima: lote 2 concluído; P5 (conftest→V1 + regen snapshots) é GATED pelo coordenador.

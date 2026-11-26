@@ -14,6 +14,7 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import structlog
 from rich.rule import Rule
@@ -29,7 +30,7 @@ from interfaces.cli.data_sources import (
     drop_invalid_metric_points,
     step_fetch_databricks_data,
 )
-from interfaces.cli.display import display_results, save_postmortem_v1
+from interfaces.cli.display import display_results, print_summary, save_postmortem_v1
 from interfaces.cli.exit_codes import (
     EXIT_APPROVAL_NEEDED,
     EXIT_CODE_LABELS,
@@ -183,8 +184,11 @@ def _save_outputs(
     tracker: object | None,
     *,
     aborted: bool,
-) -> None:
-    """Tracking + postmortem nos formatos de ``--output-format`` (como o V0)."""
+) -> dict[str, Any] | None:
+    """Tracking + postmortem nos formatos de ``--output-format`` (como o V0).
+
+    Retorna o ``tracker_info`` para a tabela-resumo (None sem tracker).
+    """
     from application.use_cases.postmortem import (
         json_default,
         render_postmortem_markdown,
@@ -236,6 +240,10 @@ def _save_outputs(
 
     if tracker is not None and issue_key and result is not None:
         _attach_postmortem_to_tracker(tracker, issue_key, result)
+
+    if tracker is None:
+        return None
+    return {"issue_key": issue_key, "url": getattr(tracker, "url", "")}
 
 
 def _persist_memory(state, args, elapsed: float) -> None:
@@ -520,10 +528,17 @@ def run_v1(args: argparse.Namespace) -> int:
     _persist_memory(state, args, elapsed)
 
     # 8. Tracking (opcional) e persistência do postmortem
-    _save_outputs(state, args, tracker, aborted=aborted)
+    tracker_info = _save_outputs(state, args, tracker, aborted=aborted)
 
-    # 9. Resumo final
-    console.print(Rule("[bold]Summary[/bold]", style="cyan"))
+    # 9. Resumo final: tabela-resumo do V0 (print_summary) sobre o result do
+    # adapter. Compression/sanitização/safety objetos não são capturados no
+    # estado V1 — essas linhas ficam de fora, não inventadas.
+    if state.diagnosis is not None:
+        from blueprint.adapters.state_adapter import state_to_result
+
+        print_summary(state_to_result(state), tracker_info=tracker_info)
+    else:
+        console.print(Rule("[bold]Summary[/bold]", style="cyan"))
     console.print(f"Total time: {elapsed:.1f}s")
     console.print(
         f"Exit code: {exit_code} ({EXIT_CODE_LABELS.get(exit_code, 'unknown')})"
