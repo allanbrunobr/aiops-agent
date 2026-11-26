@@ -181,3 +181,11 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - NÃO verde: `cargo clippy --all-targets -D warnings` falha em rust/src/log_parser/drain3.rs:139,255 (explicit_counter_loop, clippy 1.98) — PRÉ-EXISTENTE, fora do write-set, intocado; nada acusado em cusum_ewma.
 - NÃO verificado: o _aiops_rust instalado no .venv é build antigo (não recompilado: maturin é pesado no M5); a paridade passa porque o wrapper Python filtra NaN e valida span antes de chamar Rust. Guardas Rust cobertas por cargo test, não pelo binário instalado. test_databricks_retry na suíte completa (poluição pré-existente).
 - Próxima: Feature 14 (B6); considerar corrigir clippy drain3.rs.
+
+## Sessão Feature 14 — B6 (concluída)
+- safety/tnr.py execute_with_safety: post_state_fn() e rollback_fn(action) dentro de try/except. post_state falha → TNRResult.ERROR (fail-closed, sem provar não-regressão); rollback levanta → TNRResult.ERROR com "Manual rollback needed", nunca ROLLBACK_COMPLETE. Ambos registrados em history + logger.warning.
+- Nota: execute_with_safety não tem chamador de produção e TNRReport não tem campo blocked_by; o sinal de bloqueio é result=ERROR no relatório (sem mudança de schema).
+- tests/test_tnr_failure_paths.py (novo, 3 testes; 2 falhavam antes do fix, 1 controle de rollback OK).
+- Verde no M5 (M5_LEVE=1): unit (sem test_databricks_retry) 2084 passed/7 skipped; ruff check/format ok.
+- NÃO verificado: test_databricks_retry na suíte completa (poluição pré-existente).
+- Próxima: Feature 15.

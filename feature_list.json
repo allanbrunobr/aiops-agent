@@ -197,6 +197,6 @@
       "Testes funções raise",
       "unit verde"
     ],
-    "passes": false
+    "passes": true
   }
 ]

@@ -258,7 +258,27 @@ class TNRSafetyGuard:
             return report
 
         # 3. Captura estado PÓS
-        post_snapshot = post_state_fn()
+        try:
+            post_snapshot = post_state_fn()
+        except Exception as e:
+            # B6: sem estado pós não há como provar não-regressão → fail-closed.
+            logging.getLogger(__name__).warning(
+                "TNR: post_state_fn falhou → ERROR (%s)", e
+            )
+            report = TNRReport(
+                result=TNRResult.ERROR,
+                pre_snapshot=pre_snapshot,
+                post_snapshot=pre_snapshot,
+                action=action,
+                health_delta=0,
+                message=(
+                    f"ERROR: post_state_fn failed ({e}); "
+                    "não foi possível verificar não-regressão"
+                ),
+                verification_mode="real",
+            )
+            self.history.append(report)
+            return report
 
         # 3b. Guarda B3: snapshot inválido / delta não-finito → ERROR
         untrusted = self._untrusted_report(action, pre_snapshot, post_snapshot, "real")
@@ -271,7 +291,27 @@ class TNRSafetyGuard:
         if health_delta < self.regression_threshold:
             # REGRESSÃO DETECTADA — rollback
             if rollback_fn:
-                rollback_fn(action)
+                try:
+                    rollback_fn(action)
+                except Exception as e:
+                    # B6: rollback que falha NUNCA é ROLLBACK_COMPLETE.
+                    logging.getLogger(__name__).warning(
+                        "TNR: rollback_fn falhou → ERROR (%s)", e
+                    )
+                    report = TNRReport(
+                        result=TNRResult.ERROR,
+                        pre_snapshot=pre_snapshot,
+                        post_snapshot=post_snapshot,
+                        action=action,
+                        health_delta=health_delta,
+                        message=(
+                            f"ERROR: regression ({health_delta:.1f} points) and "
+                            f"rollback FAILED ({e}). Manual rollback needed."
+                        ),
+                        verification_mode="real",
+                    )
+                    self.history.append(report)
+                    return report
             report = TNRReport(
                 result=TNRResult.ROLLBACK_COMPLETE
                 if rollback_fn
