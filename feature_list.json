@@ -32,7 +32,7 @@
       "pytest -m slow -q + -m unit -q verdes",
       "passes:true + commit fix(backtest): TD2"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 3,

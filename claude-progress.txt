@@ -207,3 +207,13 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - Verificado: pi-lens worker 0 blockers nos 3 arquivos; ruff check ok; mypy com 9 erros idênticos ao baseline HEAD (pré-existentes, nenhum novo); paridade+test_trace_predictor 127 passed.
 - unit (sem test_databricks_retry) 2083 passed, 1 failed: test_local_env_loader::test_no_hand_written_env_parser_left — causado por scripts/jira_sync.py (alteração não commitada do usuário, fora do escopo). `ruff format --check .` acusa 14 arquivos já pré-existentes.
 - Próxima: Feature 2 (TD2 seeds 50).
+
+## Sessão Feature 2 — TD2 backtest --seeds 50 + variância (concluída)
+- scripts/backtest_continuous.py: DEFAULT_SEEDS=50 (run_backtest e --seeds); novas métricas hpa_lead_time_min_max e hpa_lead_time_min_std (populacional, ddof=0, só sobre detectadas); per_kind com recall (positivos) e false_alarm_series/false_alarm_rate (negativos).
+- Golden validation/golden/continuous_backtest.json regenerado (config.seeds=50): recall 1.0 (200/200), precision 1.0, 0 FP em flat/noise/noise_heavy; HPA lead min 171/max 194/mean 185.9/std 4.8 min.
+- tests/test_continuous_backtest.py: fixture seeds=50 (determinismo + golden), novo teste de variância (recall>=0.8, precision>=0.9, 0<min<=mean<=max, falso alarme 0 nos negativos) e teste de _pstdev.
+- docs/continuous-monitor.md: números antigos (5 seeds, "17/20") substituídos pelos medidos; seção "Honestidade: o backtest é sintético" (não generaliza; dado real bloqueado).
+- Verde no M5 (M5_LEVE=1, sem pipe): slow 37 passed/2 skipped; ruff check/format ok nos arquivos tocados; unit 2083 passed/7 skipped, 1 failed.
+- NÃO verde: unit test_local_env_loader::test_no_hand_written_env_parser_left — causado por scripts/jira_sync.py (WIP não commitado do usuário), pré-existente e fora do escopo; test_databricks_retry deselecionado (poluição pré-existente).
+- Ressalva: recall/precision 1.0 em dado sintético não é evidência de produção (TD3 aprofunda circularidade).
+- Próxima: Feature 3 (TD3 documentar circularidade).

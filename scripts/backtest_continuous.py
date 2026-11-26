@@ -30,6 +30,7 @@ Uso:
 import argparse
 import csv
 import json
+import math
 import sys
 import tempfile
 from datetime import datetime, timedelta
@@ -55,6 +56,7 @@ SYNTH_FIRST_TICK = 10  # amostras de aquecimento antes de começar a medir
 POSITIVE_SYNTH = bp.STRONG
 NEGATIVE_SYNTH = ("flat", "noise")  # noise_heavy: reportado, fora da asserção
 EXTRA_SYNTH = ("noise_heavy",)
+DEFAULT_SEEDS = 50
 
 
 def _replay(
@@ -164,7 +166,15 @@ def replay_synthetic(kind: str, seed: int, workdir: Path) -> dict:
     return _summarize(kind, seed, ticks, failure_at, esc)
 
 
-def run_backtest(seeds: int = 5, base_seed: int = 42) -> dict:
+def _pstdev(xs: list[float]) -> float:
+    """Desvio-padrão populacional (ddof=0); 0.0 para lista vazia."""
+    if not xs:
+        return 0.0
+    mu = sum(xs) / len(xs)
+    return math.sqrt(sum((x - mu) ** 2 for x in xs) / len(xs))
+
+
+def run_backtest(seeds: int = DEFAULT_SEEDS, base_seed: int = 42) -> dict:
     """Executa o backtest e devolve o relatório agregado (JSON-serializável)."""
     with tempfile.TemporaryDirectory(prefix="vb4_") as tmp:
         work = Path(tmp)
@@ -194,6 +204,14 @@ def run_backtest(seeds: int = 5, base_seed: int = 42) -> dict:
         }
         for k in dict.fromkeys(r["kind"] for r in rows)
     }
+    for k, v in per_kind.items():
+        positive = any(r["positive"] for r in rows if r["kind"] == k)
+        if positive:  # recall por kind; precision por kind = TP/(TP+FP) = 1.0 sem FP
+            v["recall"] = v["detected"] / v["series"]
+        else:
+            alarms = sum(1 for r in rows if r["kind"] == k and r["alert_ticks"] > 0)
+            v["false_alarm_series"] = alarms
+            v["false_alarm_rate"] = alarms / v["series"]
     return {
         "subsystem": "continuous_backtest",
         "scope": "tick a tick via CsvMetricsSource + ContinuousMonitor (sem LLM)",
@@ -208,6 +226,9 @@ def run_backtest(seeds: int = 5, base_seed: int = 42) -> dict:
             "recall": tp / len(pos) if pos else 0.0,
             "precision": tp / (tp + fp) if (tp + fp) else 1.0,
             "hpa_lead_time_min_min": min(hpa_leads, default=0.0),
+            "hpa_lead_time_min_max": max(hpa_leads, default=0.0),
+            # desvio-padrão POPULACIONAL (ddof=0) sobre as seeds detectadas
+            "hpa_lead_time_min_std": _pstdev(hpa_leads),
             # média só sobre as seeds detectadas (non-None)
             "hpa_lead_time_min_mean": (
                 sum(hpa_leads) / len(hpa_leads) if hpa_leads else 0.0
@@ -229,7 +250,7 @@ def run_backtest(seeds: int = 5, base_seed: int = 42) -> dict:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--seeds", type=int, default=5)
+    parser.add_argument("--seeds", type=int, default=DEFAULT_SEEDS)
     parser.add_argument("--base-seed", type=int, default=42)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--write-golden", action="store_true")
@@ -244,7 +265,9 @@ def main(argv: list[str] | None = None) -> int:
     m = report["metrics"]
     print(
         f"recall={m['recall']:.2f} precision={m['precision']:.2f} "
-        f"lead_hpa_min={m['hpa_lead_time_min_min']:.0f}min "
+        f"lead_hpa_min/max/mean/std="
+        f"{m['hpa_lead_time_min_min']:.0f}/{m['hpa_lead_time_min_max']:.0f}/"
+        f"{m['hpa_lead_time_min_mean']:.1f}/{m['hpa_lead_time_min_std']:.1f}min "
         f"lead_medio={m['mean_lead_time_min']:.1f}min "
         f"alertas_negativos={m['negative_alert_ticks']} "
         f"noise_heavy_series_com_alerta={m['noise_heavy_alert_series']}"

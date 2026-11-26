@@ -73,14 +73,26 @@ Nunca grava em `output/`.
 ## Métricas do backtest
 
 `scripts/backtest_continuous.py` (relatório em [`vigia-barato-backtest.md`](vigia-barato-backtest.md)),
-5 seeds a partir de 42: **recall 0,85 (17/20)**, **precision 1,00**, 0 falsos positivos em
-flat/ruído puro, lead time médio 20,8 min nos detectados (HPA seed 42: 59 min no backtest).
-Valores simulados — não generalizam para tráfego real.
+**50 seeds** a partir de 42 (golden `validation/golden/continuous_backtest.json`,
+`config.seeds=50`; `--seeds 50 --write-golden`): **recall 1,00 (200/200)**, **precision 1,00**,
+0 falsos positivos em flat/ruído/noise_heavy (150 séries negativas). Lead time HPA sobre as
+seeds detectadas (50/50): min 171 / max 194 / média 185,9 / desvio-padrão populacional
+(ddof=0) 4,8 min. Lead time médio global nos detectados: 59,2 min. O relatório traz também
+recall por kind e taxa de falso alarme por kind negativo.
+
+### Honestidade: o backtest é sintético
+
+Mesmo com 50 seeds, **todas** as séries vêm de geradores internos
+(`data/hpa_saturation_scenario.py`, `scripts/backtest_predictive.py`): recall/precision = 1,0
+é um sanity check de que o monitor detecta o que o gerador foi desenhado para produzir, **não**
+evidência estatística de desempenho em produção. Os negativos (flat/ruído) são trivialmente
+separáveis e a variância entre seeds só reflete o ruído do gerador. **Não generaliza para
+produção.** A validação em dado real segue bloqueada (Grafana Cloudflare / SRE sem CSV).
 
 ## Limitações e trabalho futuro
 
-- HPA nas seeds 44–46 **não** é detectado (recall HPA 2/5): limiar único de EWMA; o recall
-  global vem de séries sintéticas com tendência forte.
+- Calibração (EWMA 0,9×request, sustentado 0,8×request) foi ajustada neste mesmo cenário
+  sintético; não há conjunto de validação independente.
 - Calibração específica do cenário HPA; outras métricas usam padrões genéricos.
 - Sem persistência de estado entre execuções; sem alta disponibilidade do monitor.
 - Prometheus testado apenas contra mocks/ambiente local, não contra produção.

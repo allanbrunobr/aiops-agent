@@ -25,7 +25,7 @@ _SPEC.loader.exec_module(bt)
 
 @pytest.fixture(scope="module")
 def report() -> dict:
-    return bt.run_backtest(seeds=5, base_seed=42)
+    return bt.run_backtest(seeds=50, base_seed=42)
 
 
 def _row(report: dict, kind: str, seed: int) -> dict:
@@ -67,6 +67,22 @@ def test_hpa_recall_alto_com_lead_time_positivo(report):
             assert r["lead_time_min"] > 0
     assert m["recall"] >= 0.8
     assert m["precision"] == 1.0
+
+
+def test_golden_com_50_seeds_e_variancia(report):
+    assert report["config"]["seeds"] == 50
+    m = report["metrics"]
+    assert m["recall"] >= 0.8 and m["precision"] >= 0.9
+    lo, hi = m["hpa_lead_time_min_min"], m["hpa_lead_time_min_max"]
+    mean, std = m["hpa_lead_time_min_mean"], m["hpa_lead_time_min_std"]
+    assert 0 < lo <= mean <= hi and std >= 0
+    for kind in ("flat", "noise", "noise_heavy"):
+        assert report["per_kind"][kind]["false_alarm_rate"] == 0.0
+
+
+def test_pstdev_populacional():
+    assert bt._pstdev([]) == 0.0
+    assert bt._pstdev([2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]) == 2.0
 
 
 def test_hpa_lead_time_mean_nao_menor_que_min(report):
@@ -112,7 +128,7 @@ def test_hpa_lead_time_mean_ignora_seeds_nao_detectadas(monkeypatch):
 
 
 def test_determinismo_e_golden_atualizado(report):
-    assert bt.run_backtest(seeds=5, base_seed=42) == report
+    assert bt.run_backtest(seeds=50, base_seed=42) == report
     golden = json.loads(bt.GOLDEN_PATH.read_text(encoding="utf-8"))
     assert golden == json.loads(json.dumps(report))
 
