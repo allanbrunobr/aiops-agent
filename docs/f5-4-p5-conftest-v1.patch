@@ -1,0 +1,174 @@
+diff --git a/tests/conftest.py b/tests/conftest.py
+index b053db4..8c6b6f0 100644
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -240,137 +240,48 @@ def no_llm_args():
+ 
+ 
+ def _run_pipeline(incident, scenario_name: str | None = None):
+-    """Executa pipeline completo em modo --no-llm --no-rag e retorna result dict.
++    """Executa o pipeline V1 (Blueprint Engine) em --no-llm --no-rag e retorna result dict.
+ 
+     Helper reutilizado por pipeline_result e memory_leak_pipeline_result.
+-    Espelha a sequência de main.main() sem CLI parsing nem rich output.
++    Dirige o mesmo engine/pipeline do ``run_v1`` (app.builders) sem CLI parsing
++    nem rich output, e converte o estado final no dict ``result`` via
++    ``state_to_result`` (blueprint.adapters.state_adapter).
+ 
+     Args:
+         incident: SimulatedIncident com dados do cenário.
+         scenario_name: Nome do cenário para incluir no result dict.
+     """
+-    from agents.detector import DetectionAgent
+-    from agents.diagnoser import DiagnosisAgent
+-    from agents.mitigator import MitigationAgent
+-    from pipeline.aggregator import Aggregator
+-    from pipeline.context_compressor import ContextCompressor
+-    from pipeline.telemetry_sanitizer import TelemetrySanitizer
+-    from safety.pre_validator import PreExecutionValidator
+-    from safety.tnr import TNRSafetyGuard
+-    from safety.version_validator import VersionValidator
++    import argparse
++
++    from adapters.credentials import EnvCredentialProvider
++    from adapters.persistence.in_memory_store import InMemoryStore
++    from app.builders import build_engine, build_pipeline
++    from blueprint.adapters.state_adapter import state_to_result
++    from blueprint.engine import PipelineAborted
++    from config.loader import load_config
++    from interfaces.cli.v1_runner import _state_after_abort, create_incident_state
++
++    args = argparse.Namespace(no_llm=True, no_rag=True, compact=False, scenario=None)
++    incident_data = {
++        "logs": incident.logs,
++        "metrics": incident.metrics,
++        "traces": incident.traces,
++    }
+ 
+     # Suprime output do rich.Console durante execução do pipeline.
+     with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+-        # 1b. Sanitização (modifica incident in-place)
+-        sanitizer = TelemetrySanitizer(strict_mode=False)
+-        s_logs, s_metrics, s_traces, _san_report = sanitizer.sanitize_all(
+-            incident.logs,
+-            incident.metrics,
+-            incident.traces,
+-        )
+-        incident.logs = s_logs
+-        incident.metrics = s_metrics
+-        incident.traces = s_traces
+-
+-        # 2. Pré-processamento
+-        aggregator = Aggregator()
+-        report = aggregator.process(incident.logs, incident.metrics, incident.traces)
+-
+-        # 2b. Compressão de contexto
+-        compressor = ContextCompressor(compression_level="balanced")
+-        _compressed_text, _stats = compressor.compress(report)
+-
+-        # 4. Pipeline de agentes (sem LLM)
+-        detector = DetectionAgent()
+-        diagnoser = DiagnosisAgent(max_iterations=1)
+-        mitigator = MitigationAgent()
+-        tnr_guard = TNRSafetyGuard()
+-
+-        from datetime import datetime as _dt
+-
+-        timeline: list[dict] = []
+-
+-        def _rec(frm: str, to: str, reason: str) -> None:
+-            timeline.append(
+-                {
+-                    "time": _dt.now().strftime("%H:%M:%S"),
+-                    "from": frm,
+-                    "to": to,
+-                    "reason": reason,
+-                }
+-            )
+-
+-        result: dict = {"success": False, "stages": {}}
+-        _rec("IDLE", "DETECTING", "Analisando dados de observabilidade...")
+-        detection = detector.detect(report)
+-        result["stages"]["detection"] = detection
+-        if detection.get("is_incident"):
+-            affected = ", ".join(detection.get("affected_services", []))
+-            _rec("DETECTING", "DIAGNOSING", f"Investigando incidente em {affected}")
+-            diagnosis = diagnoser.diagnose(report, None)
+-            result["stages"]["diagnosis"] = diagnosis
+-            if diagnosis.get("root_cause"):
+-                _rec("DIAGNOSING", "MITIGATING", "Propondo remediação...")
+-                mitigation = mitigator.propose(diagnosis)
+-                result["stages"]["mitigation"] = mitigation
+-                _rec("MITIGATING", "VERIFYING", "Verificando impacto (TNR)...")
+-                tnr_check = mitigator.verify_with_tnr(mitigation, tnr_guard)
+-                result["stages"]["verification"] = {
+-                    "result": tnr_check.result.value,
+-                    "health_delta": tnr_check.health_delta,
+-                    "message": tnr_check.message,
+-                }
+-                if tnr_check.result.value != "regression":
+-                    # Mesmo texto de main.step_agents: o gate decide depois.
+-                    _label = (
+-                        "TNR check passed; mitigation proposed, safety gate decides next"
+-                        if tnr_check.result.value == "success"
+-                        else "Mitigation proposed (not executed); safety gate decides next"
+-                    )
+-                    _rec("VERIFYING", "RESOLVED", f"{_label}: {tnr_check.message}")
+-                    result["success"] = True
+-                else:
+-                    _rec(
+-                        "VERIFYING",
+-                        "ROLLBACK",
+-                        f"Regressão detectada: {tnr_check.message}",
+-                    )
+-            else:
+-                _rec("DIAGNOSING", "FAILED", "Não foi possível identificar root cause")
+-        else:
+-            _rec("DETECTING", "IDLE", "Nenhum incidente detectado")
+-        result["timeline"] = timeline
+-
+-        # 4b. Validação de segurança pré-execução
+-        mitigation = result.get("stages", {}).get("mitigation", {})
+-        if mitigation and mitigation.get("action"):
+-            diagnosis = result.get("stages", {}).get("diagnosis", {})
+-            validator = PreExecutionValidator(
+-                auto_approve_low_risk=True,
+-                max_blast_radius=3,
+-                require_rollback_plan=True,
+-            )
+-            safety_result = validator.validate(mitigation["action"], diagnosis)
+-            result["stages"]["safety_validation"] = {
+-                "is_safe": safety_result.is_safe,
+-                "risk_level": safety_result.risk_level.value,
+-                "risk_score": safety_result.risk_score,
+-                "approval_status": safety_result.approval_status.value,
+-                "requires_human": safety_result.requires_human,
+-            }
+-
+-        # 4c. Validação de versão/CVE na remediação
+-        if mitigation and mitigation.get("action"):
+-            action = mitigation["action"]
+-            version_validator = VersionValidator()
+-            validation = version_validator.validate_mitigation_action(action)
+-            result["stages"]["remediation_validation"] = {
+-                "is_safe": validation.is_safe,
+-                "risk": validation.risk.name,
+-                "blocked_patterns": validation.blocked_patterns,
+-                "warnings": validation.warnings,
+-                "recommendation": validation.recommendation,
+-            }
++        config = load_config(None)
++        engine = build_engine(config, InMemoryStore(), EnvCredentialProvider())
++        pipeline = build_pipeline(config)
++        state = create_incident_state(args, incident_data, incident=incident)
++        try:
++            state = engine.run(pipeline, state)
++        except PipelineAborted as exc:
++            aborted = _state_after_abort(exc, config)
++            if aborted is None:
++                raise
++            state = aborted
++        result = state_to_result(state)
+ 
+     if scenario_name:
+         result["scenario_name"] = scenario_name
