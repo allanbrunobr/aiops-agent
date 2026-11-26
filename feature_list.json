@@ -54,7 +54,7 @@
       "pytest test_indexer_decomposed test_reranker_integration -v verde",
       "unit verde"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 5,

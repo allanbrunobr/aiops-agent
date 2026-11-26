@@ -79,3 +79,13 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
   vira XPASS e força remoção. O plano supunha EXIT_ERROR nesse caso; só vale para env vars ausentes.
 - Cenário 5 ainda não assere guardas B3/D1 (só limites do score), conforme plano.
 - Próxima: Feature 4 (A5 mocks assinatura estrita, quick win).
+
+## Sessão Feature 4 — A5 (concluída)
+- tests/test_indexer_decomposed.py e tests/test_reranker_integration.py: `model.encode` agora é `create_autospec` de função
+  com assinatura estrita (sem **kwargs, sem num_workers) via `_strict_encode_mock`; kwarg desconhecido → TypeError.
+- Novos testes (classe TestMockEncodeEstrito): num_workers=0→TypeError; kwargs reais aceitos; build_index (rag/indexer.py:147).
+- Verde no M5 (M5_LEVE=1): os 2 arquivos → 27 passed; ruff check/format ok.
+- Mutação (revertida): num_workers=0 em indexer.py:574 (_embedar_e_indexar) → 2 falhas; em :147 (build_index) → 1 falha
+  (só depois do teste novo — antes dele a mutação em :147 passava; o mock estrito sozinho não cobria esse caminho).
+- NÃO verificado: suíte unit completa (pesada, vedada no M5); só os 2 arquivos tocados.
+- Próxima: Feature 5 (conforme feature_list.json).

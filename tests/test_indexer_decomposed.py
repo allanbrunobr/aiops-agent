@@ -7,7 +7,7 @@ sentence-transformers para execução rápida sem dependências pesadas.
 """
 
 from dataclasses import dataclass, field
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import numpy as np
 import pytest
@@ -56,12 +56,37 @@ class _SlowTrace:
 # ---------------------------------------------------------------------------
 
 
+def _strict_encode_mock(return_value):
+    """Mock de ``SentenceTransformer.encode`` com assinatura estrita (A5).
+
+    Sem ``**kwargs``: kwarg desconhecido (ex.: ``num_workers``, removido da
+    API) levanta ``TypeError`` como no modelo real, em vez de ser absorvido
+    silenciosamente por um ``MagicMock`` nu.
+    """
+
+    def encode(
+        sentences,
+        *,
+        batch_size=32,
+        show_progress_bar=None,
+        output_value="sentence_embedding",
+        convert_to_numpy=True,
+        convert_to_tensor=False,
+        normalize_embeddings=False,
+    ):
+        raise AssertionError("corpo nunca executado (autospec)")
+
+    mock = create_autospec(encode)
+    mock.return_value = return_value
+    return mock
+
+
 @pytest.fixture
 def indexer():
     """Retorna ObservabilityIndexerWithHistory com _load_model e model mockados."""
     # Mock de faiss e sentence_transformers para não exigir instalação pesada
     fake_model = MagicMock()
-    fake_model.encode.return_value = (
+    fake_model.encode = _strict_encode_mock(
         np.random.default_rng(42).random((3, 384)).astype(np.float32)
     )
 
@@ -236,3 +261,43 @@ class TestEmbedarEIndexar:
         call_args = indexer.model.encode.call_args[0][0]
         assert len(call_args) == 1
         assert result == 2  # retorna total de chunks, não únicos
+
+
+# ---------------------------------------------------------------------------
+# Regressão A5: o mock de encode deve rejeitar kwargs desconhecidos
+# ---------------------------------------------------------------------------
+
+
+class TestMockEncodeEstrito:
+    """Prova que o mock rejeita ``num_workers`` (bug real já ocorrido)."""
+
+    def test_num_workers_levanta_typeerror(self, indexer):
+        with pytest.raises(TypeError, match="num_workers"):
+            indexer.model.encode(["texto"], num_workers=0)
+
+    def test_kwargs_reais_do_indexer_sao_aceitos(self, indexer):
+        indexer.model.encode(
+            ["texto"],
+            batch_size=512,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        )
+        indexer.model.encode.assert_called_once()
+
+    def test_build_index_encode_usa_somente_kwargs_validos(self, indexer):
+        """build_index (caminho com cache) chama encode com a assinatura real."""
+        import sys
+
+        fake_faiss = MagicMock()
+        with (
+            patch("rag.indexer._embedding_cache", {}),
+            patch.dict(sys.modules, {"faiss": fake_faiss}),
+        ):
+            total = indexer.build_index(
+                [_LogTemplate("ERROR", {"svc-a"}, "boom", 3, "t0", "t1")],
+                [_MetricAnomaly("svc-a", "cpu", "spike", 9.0, 1.0, 4.0, "t0")],
+                [_SlowTrace(["a", "b"], 900.0, 100.0, "b", 800.0)],
+            )
+
+        assert total == 3
+        indexer.model.encode.assert_called_once()

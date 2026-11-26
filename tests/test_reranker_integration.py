@@ -10,7 +10,7 @@ reranker resultam em fallback silencioso para resultados FAISS brutos.
 from __future__ import annotations
 
 import warnings
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
 
@@ -20,6 +20,31 @@ from rag.retriever import ObservabilityRetriever, SearchResult
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _strict_encode_mock(return_value):
+    """Mock de ``SentenceTransformer.encode`` com assinatura estrita (A5).
+
+    Sem ``**kwargs``: kwarg desconhecido (ex.: ``num_workers``) levanta
+    ``TypeError`` como no modelo real, em vez de ser absorvido por um
+    ``MagicMock`` nu.
+    """
+
+    def encode(
+        sentences,
+        *,
+        batch_size=32,
+        show_progress_bar=None,
+        output_value="sentence_embedding",
+        convert_to_numpy=True,
+        convert_to_tensor=False,
+        normalize_embeddings=False,
+    ):
+        raise AssertionError("corpo nunca executado (autospec)")
+
+    mock = create_autospec(encode)
+    mock.return_value = return_value
+    return mock
 
 
 def _make_fake_indexer(n_results: int = 5, source: str = "log") -> object:
@@ -33,10 +58,10 @@ def _make_fake_indexer(n_results: int = 5, source: str = "log") -> object:
         for i in range(n_results)
     ]
 
-    mock_model = MagicMock()
     import numpy as np
 
-    mock_model.encode.return_value = np.array([[0.1] * 128], dtype=np.float32)
+    mock_model = MagicMock()
+    mock_model.encode = _strict_encode_mock(np.array([[0.1] * 128], dtype=np.float32))
 
     mock_index = MagicMock()
     mock_index.ntotal = n_results
