@@ -3,12 +3,14 @@ Verifique com `.venv/bin/python -m pytest tests -m unit -q` DIRETO. NÃO use
 `scripts/ci-local.sh unit` (venv fresco=pesado, m5-guard bloqueia→deferral→falha).
 NÃO vá pro M1. Marque passes:true após verde+commit. UMA sessão por tarefa basta.
 
-★ PRÓXIMA FILA: épico F5-4 paridade V1, LOTE 1 (docs/f5-4-parity-agent-prompt.md).
-LEIA PRIMEIRO docs/f5-4-parity-map.md (wiring file:line exato). Confirme antes de editar.
-P1 adapter state→result+captura estruturada (AIOPS-90) → P2 postmortem rico 12 seções
-(AIOPS-91, dep P1) → P3 flags run_v1 (AIOPS-92, dep P1,P2). Cards movem sozinhos (jira_key).
-NÃO quebrar V0 / NÃO remover flag --pipeline-v1 (isso é P6, gated, fora deste lote).
-Exit codes JÁ em paridade (V0=3 V1=3) — não replanejar. NÃO regen snapshots (isso é P5).
+★ PRÓXIMA FILA: épico F5-4 paridade V1, LOTE 2 (docs/f5-4-parity-agent-prompt.md).
+LOTE 1 JÁ DONE+verificado (P1 adapter blueprint/adapters/state_adapter.py, P2 postmortem
+rico V0≡V1, P3 flags; unit 2124 green, exit 3, snapshots 14 intactos). USE o adapter P1.
+LEIA PRIMEIRO docs/f5-4-parity-map.md §3 (wiring file:line). Confirme antes de editar.
+P4a node preditivo+Slack 5 eventos (AIOPS-93) → P4b memória episódica+skill learning
+(AIOPS-94, dep P4a) → P4c cache FAISS disco+tabela-resumo (AIOPS-95, dep P4a,P4b).
+NÃO quebrar V0 / NÃO remover flag --pipeline-v1 (P6 gated fora deste lote).
+Exit codes JÁ paridade (V0=3 V1=3) — não replanejar. NÃO regen snapshots (P5).
 O hook long-run chama scripts/jira_sync.py doing/done; --all reconcilia no fim.
 
 --- HISTÓRICO ---

@@ -2,49 +2,49 @@
   {
     "number": 1,
     "category": "functional",
-    "title": "P1: Adapter state→result + captura estruturada (fundação)",
-    "description": "SPEC: docs/f5-4-parity-agent-prompt.md tarefa P1. MAPA DE WIRING: docs/f5-4-parity-map.md (leia primeiro). Criar application/use_cases/state_adapter.py state_to_result(state)->dict; safety nodes guardam dicts estruturados (safety_validation/remediation); timeline em IncidentState ou metadata; reconstruir MitigationAction do dict proposed_action. Regras: teste falha antes do fix; write-set explícito; verificação LOCAL M5 `.venv/bin/python -m pytest tests -m unit -q` (NÃO ci-local.sh unit, NÃO M1); nada gravar output/ repo (use tmp_path); TNR simulado; sem deps novas; NÃO quebrar V0 nem remover flag antes de P6; exit codes já em paridade (não replanejar); marque passes:true após verde+commit (message inclua P1/P2/P3).",
+    "title": "P4a: Node preditivo + Slack progressivo no V1",
+    "description": "SPEC: docs/f5-4-parity-agent-prompt.md tarefa P4a. MAPA: docs/f5-4-parity-map.md §3 (leia primeiro). P1 adapter já existe em blueprint/adapters/state_adapter.py (use-o). V1 ganha node preditivo (run_predictive_stage, stages.prediction) + eventos Slack diagnosis.completed e prediction.warning/alert (V0 tem 5 eventos, V1 só 3). Regras: teste falha antes do fix; write-set explícito; verificação LOCAL M5 `.venv/bin/python -m pytest tests -m unit -q` (NÃO ci-local.sh unit, NÃO M1); nada gravar output/ repo (tmp_path); TNR simulado; sem deps novas; NÃO quebrar V0 nem remover flag (P6 gated fora deste lote); exit codes já paridade (não replanejar); NÃO regen snapshots (P5); marque passes:true após verde+commit (message inclua P4a/P4b/P4c).",
     "dependencies": "none",
     "steps": [
-      "Ler docs/f5-4-parity-map.md §1 e §6 P1; confirmar file:line.",
-      "Escrever tests/test_state_adapter.py cobrindo as 6 seções (root_cause/timeline/mitigation.action+pattern_matched/safety_validation/remediation_validation/verification); ver falhar.",
-      "Implementar adapter + captura estruturada nos safety nodes (write-set: state_adapter.py, safety_nodes.py, pipeline_nodes.py, domain/incident_state.py).",
-      "Sem mudança de comportamento V1; .venv/bin/python -m pytest tests -m unit -q verde; ruff/mypy gate clean.",
-      "Commit (message inclua P1); marcar passes:true."
+      "Ler docs/f5-4-parity-map.md §3 (preditivo, Slack); confirmar file:line.",
+      "Escrever tests/test_v1_predictive.py: V1 stages.prediction populated + 5 tipos evento Slack; ver falhar.",
+      "Implementar (write-set: blueprint/adapters/pipeline_nodes.py node preditivo, app/builders.py build_pipeline, interfaces/cli/v1_runner.py slack events).",
+      "Unit green; exit codes inalterados (3); ruff/mypy gate clean.",
+      "Commit (message inclua P4a); marcar passes:true."
     ],
-    "passes": true,
-    "jira_key": "AIOPS-90"
+    "passes": false,
+    "jira_key": "AIOPS-93"
   },
   {
     "number": 2,
     "category": "functional",
-    "title": "P2: Postmortem rico no V1 (12 seções)",
-    "description": "SPEC: docs/f5-4-parity-agent-prompt.md tarefa P2. MAPA DE WIRING: docs/f5-4-parity-map.md (leia primeiro). make_postmortem_node chama render_postmortem_markdown via adapter P1; incident em metadata['_incident'] (create_incident_state); registrar timeline; TNR no-LLM via verify_with_tnr ou not_verified honesto. Regras: teste falha antes do fix; write-set explícito; verificação LOCAL M5 `.venv/bin/python -m pytest tests -m unit -q` (NÃO ci-local.sh unit, NÃO M1); nada gravar output/ repo (use tmp_path); TNR simulado; sem deps novas; NÃO quebrar V0 nem remover flag antes de P6; exit codes já em paridade (não replanejar); marque passes:true após verde+commit (message inclua P1/P2/P3).",
+    "title": "P4b: Memória episódica + skill learning no V1",
+    "description": "SPEC: docs/f5-4-parity-agent-prompt.md tarefa P4b. MAPA: docs/f5-4-parity-map.md §3 (leia primeiro). P1 adapter já existe em blueprint/adapters/state_adapter.py (use-o). V1 persiste IncidentRecord (IncidentMemoryDB.save_incident) + skill read/route (find_similar_incidents, SkillRouter) + write/evolve (SkillOutcome, SkillEvolver agents/skill_evolver.py:46; update_skill_score EMA só quando use_llm). Best-effort não quebra exit codes. Regras: teste falha antes do fix; write-set explícito; verificação LOCAL M5 `.venv/bin/python -m pytest tests -m unit -q` (NÃO ci-local.sh unit, NÃO M1); nada gravar output/ repo (tmp_path); TNR simulado; sem deps novas; NÃO quebrar V0 nem remover flag (P6 gated fora deste lote); exit codes já paridade (não replanejar); NÃO regen snapshots (P5); marque passes:true após verde+commit (message inclua P4a/P4b/P4c).",
     "dependencies": "1",
     "steps": [
-      "Ler docs/f5-4-parity-map.md §1; confirmar file:line.",
-      "Escrever tests/test_v1_postmortem_parity.py: V1 --no-llm --no-rag postmortem tem 12 seções; ver falhar.",
-      "Implementar (write-set: pipeline_nodes.py make_postmortem_node, v1_runner.py create_incident_state, safety_nodes.py tnr no-LLM).",
-      "Smoke main.py --pipeline-v1 --no-llm --no-rag --output-dir /tmp/x → 12 seções, exit 3; diff vs V0 justificado no commit; unit green; NÃO regen snapshots.",
-      "Commit (message inclua P2); marcar passes:true."
+      "Ler docs/f5-4-parity-map.md §3 (memória, skills) + v0 step_persist_incident:1025/step_agents:419/step_skill_learning:712; confirmar file:line.",
+      "Escrever tests/test_v1_memory_skills.py: V1 persiste incident + rota/evolui skills como V0; ver falhar.",
+      "Implementar (write-set: blueprint/adapters/pipeline_nodes.py, app/builders.py, interfaces/cli/v1_runner.py).",
+      "Unit green; best-effort não quebra exit codes; ruff/mypy gate clean.",
+      "Commit (message inclua P4b); marcar passes:true."
     ],
-    "passes": true,
-    "jira_key": "AIOPS-91"
+    "passes": false,
+    "jira_key": "AIOPS-94"
   },
   {
     "number": 3,
     "category": "functional",
-    "title": "P3: Flags no run_v1",
-    "description": "SPEC: docs/f5-4-parity-agent-prompt.md tarefa P3. MAPA DE WIRING: docs/f5-4-parity-map.md (leia primeiro). run_v1 honra --output-format (json/both via serialize_result/step_postmortem), --tracker (_resolve_tracker+step_tracking), --data-source (databricks), --rebuild-rag; fix mkdir parents=True display.py:302. Regras: teste falha antes do fix; write-set explícito; verificação LOCAL M5 `.venv/bin/python -m pytest tests -m unit -q` (NÃO ci-local.sh unit, NÃO M1); nada gravar output/ repo (use tmp_path); TNR simulado; sem deps novas; NÃO quebrar V0 nem remover flag antes de P6; exit codes já em paridade (não replanejar); marque passes:true após verde+commit (message inclua P1/P2/P3).",
+    "title": "P4c: Cache FAISS disco + tabela-resumo no V1",
+    "description": "SPEC: docs/f5-4-parity-agent-prompt.md tarefa P4c. MAPA: docs/f5-4-parity-map.md §3 (leia primeiro). P1 adapter já existe em blueprint/adapters/state_adapter.py (use-o). V1 RAG com cache disco (.aiops-cache/rag, content_hash, load_index/save_index, rebuild flag) + print_summary (tabela-resumo display.py:62) no V1. Regras: teste falha antes do fix; write-set explícito; verificação LOCAL M5 `.venv/bin/python -m pytest tests -m unit -q` (NÃO ci-local.sh unit, NÃO M1); nada gravar output/ repo (tmp_path); TNR simulado; sem deps novas; NÃO quebrar V0 nem remover flag (P6 gated fora deste lote); exit codes já paridade (não replanejar); NÃO regen snapshots (P5); marque passes:true após verde+commit (message inclua P4a/P4b/P4c).",
     "dependencies": "1,2",
     "steps": [
-      "Ler docs/f5-4-parity-map.md §2; confirmar file:line.",
-      "Escrever tests/test_v1_flags.py: cada flag honrada no V1; ver falhar.",
-      "Implementar (write-set: v1_runner.py, postmortem.py se precisar, display.py mkdir, tests/test_args.py se precisar).",
-      "Smoke de cada flag; --output-format json gera .json; exit codes inalterados; unit green.",
-      "Commit (message inclua P3); marcar passes:true."
+      "Ler docs/f5-4-parity-map.md §3 (cache FAISS, tabela) + v0 step_rag:313; confirmar file:line.",
+      "Escrever tests/test_v1_cache_summary.py: V1 usa cache disco + imprime tabela-resumo; ver falhar.",
+      "Implementar (write-set: interfaces/cli/v1_runner.py, app/builders.py, interfaces/cli/display.py, rag/ se precisar).",
+      "Unit green; exit codes inalterados; ruff/mypy gate clean.",
+      "Commit (message inclua P4c); marcar passes:true."
     ],
-    "passes": true,
-    "jira_key": "AIOPS-92"
+    "passes": false,
+    "jira_key": "AIOPS-95"
   }
 ]
