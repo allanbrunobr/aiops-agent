@@ -33,6 +33,9 @@ pub fn detect_cusum(py: Python<'_>, values: Vec<f64>, k: f64, h: f64) -> PyResul
 /// Nota: eta_minutes é calculado no Python wrapper com o threshold.
 #[pyfunction]
 pub fn compute_ewma_slope(py: Python<'_>, values: Vec<f64>, span: usize) -> PyResult<Py<PyAny>> {
+    if span == 0 {
+        return Err(pyo3::exceptions::PyValueError::new_err("span must be >= 1"));
+    }
     // Libera GIL para computação CPU-bound
     let result = py.detach(|| ewma_slope(&values, span));
 

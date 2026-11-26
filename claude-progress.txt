@@ -169,3 +169,15 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - tests/test_real_rag_docker.py (4 testes estáticos; falhavam antes dos artefatos): verde no M5 (M5_LEVE=1), ruff ok, test_packaging_consistency ok.
 - NÃO verificado: build/run real do container (M5 não roda docker); `uv sync --frozen --group test` não foi exercitado. Validar no M1: `DOCKER="docker --context m1-docker" scripts/real-rag-docker.sh`.
 - Próxima: Feature 13.
+
+## Sessão Feature 13 — B3 (concluída)
+- safety/tnr.py: HealthSnapshot.validation_error() (não-finito, error_rate<0, availability fora de [0,100], latência/pool negativos) + TNRSafetyGuard._untrusted_report:
+  snapshot pré/pós inválido ou health_delta não-finito → TNRResult.ERROR (nunca SUCCESS) em simulate_check e execute_with_safety (sem rollback nesse caso).
+- pipeline/risk_scorer.py: sinal metric/log/latency com campo não-finito → contribuição 0 + logger.warning explícito.
+- pipeline/metric_predictor.py: span<1 → ValueError("span must be >= 1"); pontos não-finitos descartados antes do cálculo (Rust e Python).
+- rust analyzer.rs: span==0 → slope 0; não-finitos filtrados; 3 testes novos. bridge.rs: span==0 → PyValueError.
+- Testes: TestB3NonFiniteGuards (test_safety), 4 testes em test_predictive_stage, paridade NaN/span em tests/rust/test_rust_python_parity.py. 14 falhavam antes do fix.
+- Verde no M5 (M5_LEVE=1): unit (sem test_databricks_retry) 2081 passed/7 skipped; paridade 121 passed; cargo test 59 passed; cargo fmt/ruff ok.
+- NÃO verde: `cargo clippy --all-targets -D warnings` falha em rust/src/log_parser/drain3.rs:139,255 (explicit_counter_loop, clippy 1.98) — PRÉ-EXISTENTE, fora do write-set, intocado; nada acusado em cusum_ewma.
+- NÃO verificado: o _aiops_rust instalado no .venv é build antigo (não recompilado: maturin é pesado no M5); a paridade passa porque o wrapper Python filtra NaN e valida span antes de chamar Rust. Guardas Rust cobertas por cargo test, não pelo binário instalado. test_databricks_retry na suíte completa (poluição pré-existente).
+- Próxima: Feature 14 (B6); considerar corrigir clippy drain3.rs.

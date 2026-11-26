@@ -238,6 +238,9 @@ def _ewma_inputs():
     rng = random.Random(11)
     out = [[1.0, 2.0], [5.0] * 10, [float(i) for i in range(30)]]
     out += [[rng.uniform(0, 100) for _ in range(n)] for n in (2, 7, 60)]
+    nan, inf = float("nan"), float("inf")
+    # B3: não-finitos são descartados nos dois caminhos.
+    out += [[1.0, nan, 3.0, 4.0], [nan, 2.0, inf, 5.0, -inf], [nan, nan]]
     return out
 
 
@@ -254,6 +257,21 @@ def test_compute_ewma_slope_parity(monkeypatch, values, span):
         mp, monkeypatch, lambda: mp.compute_ewma_slope(points, span=span, threshold=1e6)
     )
     assert _close(rust, python) == []
+
+
+@pytest.mark.parametrize("span", [0, -1])
+def test_compute_ewma_slope_invalid_span_parity(monkeypatch, span):
+    """B3: span<1 → ValueError igual nos caminhos Rust e Python."""
+    import pipeline.metric_predictor as mp
+
+    base = get_scenario(SCENARIOS[0])().metrics[0]
+    points = [dataclasses.replace(base, value=v) for v in (1.0, 2.0, 3.0)]
+    assert mp._RUST_AVAILABLE
+    with pytest.raises(ValueError, match="span must be >= 1"):
+        mp.compute_ewma_slope(points, span=span)
+    monkeypatch.setattr(mp, "_RUST_AVAILABLE", False)
+    with pytest.raises(ValueError, match="span must be >= 1"):
+        mp.compute_ewma_slope(points, span=span)
 
 
 # --------------------------------------------------------------------------

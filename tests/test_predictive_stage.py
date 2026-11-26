@@ -368,3 +368,74 @@ def test_relative_slope_zero_mean_does_not_divide_by_zero():
     from pipeline.risk_scorer import relative_slope
 
     assert relative_slope(1.0, 0.0) > 0
+
+
+# ---------------------------------------------------------------------------
+# B3 — guardas NaN/inf/span
+# ---------------------------------------------------------------------------
+
+
+def test_risk_scorer_non_finite_signal_zero_with_warning(caplog):
+    import logging
+
+    from pipeline.log_predictor import LogBurstSignal
+    from pipeline.risk_scorer import MetricTrendSignal, compute_risk_score
+
+    caplog.set_level(logging.WARNING, logger="pipeline.risk_scorer")
+    nan_metric = MetricTrendSignal(slope=float("nan"))
+    assert compute_risk_score(nan_metric, None, None) == 0.0
+    assert any("não-finito" in r.getMessage() for r in caplog.records)
+
+    caplog.clear()
+    inf_log = LogBurstSignal(
+        burst_detected=True,
+        rate_ratio=float("inf"),
+        dominant_template=None,
+        novel_templates=[],
+    )
+    assert compute_risk_score(None, inf_log, None) == 0.0
+    assert any("não-finito" in r.getMessage() for r in caplog.records)
+
+
+def test_risk_scorer_finite_signal_no_warning(caplog):
+    import logging
+
+    from pipeline.risk_scorer import MetricTrendSignal, compute_risk_score
+
+    caplog.set_level(logging.WARNING, logger="pipeline.risk_scorer")
+    assert compute_risk_score(MetricTrendSignal(slope=1.0), None, None) > 0
+    assert not caplog.records
+
+
+@pytest.mark.parametrize("span", [0, -1, -10])
+def test_ewma_slope_span_below_one_raises(span):
+    from data.models import MetricPoint
+    from pipeline.metric_predictor import compute_ewma_slope
+
+    t0 = datetime.datetime(2026, 1, 1)
+    pts = [
+        MetricPoint(t0 + datetime.timedelta(minutes=i), "s", "m", float(i))
+        for i in range(5)
+    ]
+    with pytest.raises(ValueError, match="span must be >= 1"):
+        compute_ewma_slope(pts, span=span)
+
+
+def test_ewma_slope_ignores_non_finite_values():
+    from data.models import MetricPoint
+    from pipeline.metric_predictor import compute_ewma_slope
+
+    t0 = datetime.datetime(2026, 1, 1)
+
+    def mk(vals):
+        return [
+            MetricPoint(t0 + datetime.timedelta(minutes=i), "s", "m", v)
+            for i, v in enumerate(vals)
+        ]
+
+    clean = compute_ewma_slope(mk([1.0, 2.0, 3.0, 4.0]), span=3)
+    dirty = compute_ewma_slope(
+        mk([1.0, float("nan"), 2.0, float("inf"), 3.0, 4.0, float("-inf")]), span=3
+    )
+    assert dirty[0] == pytest.approx(clean[0])
+    assert compute_ewma_slope(mk([float("nan"), float("nan")]), span=3) == (0.0, None)

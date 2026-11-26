@@ -183,7 +183,7 @@
       "Rust guarda+teste",
       "cargo test+clippy verde; paridade mantida; unit verde"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 14,

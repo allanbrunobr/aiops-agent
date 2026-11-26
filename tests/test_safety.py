@@ -1220,3 +1220,69 @@ class TestC3EdgeCases:
         pre = _make_health_snapshot()
         post = simulate_action_effect(_make_mitigation_action(command=None), pre)
         assert post.availability == pre.availability
+
+
+@pytest.mark.unit
+class TestB3NonFiniteGuards:
+    """B3: delta/snapshot não-finito ou inválido nunca vira SUCCESS (fail-closed)."""
+
+    def test_simulate_check_delta_nan_is_error(self):
+        from safety.tnr import TNRResult, TNRSafetyGuard
+
+        pre = _make_health_snapshot()
+        post = _make_health_snapshot(error_rate=float("nan"))
+        report = TNRSafetyGuard().simulate_check(_make_mitigation_action(), pre, post)
+        assert report.result == TNRResult.ERROR
+        assert report.result != TNRResult.SUCCESS
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"error_rate": float("inf")},
+            {"latency_p99_ms": float("nan")},
+            {"availability": float("-inf")},
+            {"error_rate": -1.0},
+            {"availability": 150.0},
+            {"pool_active": -3},
+        ],
+    )
+    def test_simulate_check_invalid_snapshot_is_error(self, kwargs):
+        from safety.tnr import TNRResult, TNRSafetyGuard
+
+        pre = _make_health_snapshot()
+        report = TNRSafetyGuard().simulate_check(
+            _make_mitigation_action(), pre, _make_health_snapshot(**kwargs)
+        )
+        assert report.result == TNRResult.ERROR
+
+    def test_simulate_check_invalid_pre_snapshot_is_error(self):
+        from safety.tnr import TNRResult, TNRSafetyGuard
+
+        report = TNRSafetyGuard().simulate_check(
+            _make_mitigation_action(),
+            _make_health_snapshot(error_rate=float("nan")),
+            _make_health_snapshot(),
+        )
+        assert report.result == TNRResult.ERROR
+
+    def test_execute_with_safety_nan_post_is_error(self):
+        from safety.tnr import TNRResult, TNRSafetyGuard
+
+        pre = _make_health_snapshot()
+        report = TNRSafetyGuard().execute_with_safety(
+            _make_mitigation_action(),
+            pre,
+            execute_fn=lambda a: None,
+            post_state_fn=lambda: _make_health_snapshot(latency_p99_ms=float("nan")),
+        )
+        assert report.result == TNRResult.ERROR
+
+    def test_valid_snapshots_unchanged(self):
+        from safety.tnr import TNRResult, TNRSafetyGuard
+
+        report = TNRSafetyGuard().simulate_check(
+            _make_mitigation_action(),
+            _make_health_snapshot(availability=80.0),
+            _make_health_snapshot(availability=99.0),
+        )
+        assert report.result == TNRResult.SUCCESS

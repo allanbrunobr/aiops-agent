@@ -40,7 +40,19 @@ pub fn cusum_detect(values: &[f64], k: f64, h: f64) -> CusumResult {
 /// Retorna EwmaResult com slope = ewma[-1] - ewma[-2].
 /// eta_minutes é sempre None aqui — calculado no lado Python com o threshold.
 pub fn ewma_slope(values: &[f64], span: usize) -> EwmaResult {
-    if values.len() < 2 {
+    // Guarda B3: span == 0 é inválido (o bridge PyO3 levanta ValueError);
+    // aqui, na função pura, degrada para slope 0 em vez de produzir lixo.
+    if span == 0 {
+        return EwmaResult {
+            slope: 0.0,
+            eta_minutes: None,
+        };
+    }
+
+    // Guarda B3: valores não-finitos (NaN/inf) são descartados — mesma
+    // semântica do fallback Python (pipeline/metric_predictor.py).
+    let finite: Vec<f64> = values.iter().copied().filter(|v| v.is_finite()).collect();
+    if finite.len() < 2 {
         return EwmaResult {
             slope: 0.0,
             eta_minutes: None,
@@ -48,10 +60,10 @@ pub fn ewma_slope(values: &[f64], span: usize) -> EwmaResult {
     }
 
     let alpha = 2.0 / (span as f64 + 1.0);
-    let mut ewma_prev = values[0];
+    let mut ewma_prev = finite[0];
     let mut ewma_last = ewma_prev;
 
-    for &v in &values[1..] {
+    for &v in &finite[1..] {
         ewma_prev = ewma_last;
         ewma_last = alpha * v + (1.0 - alpha) * ewma_prev;
     }
@@ -112,5 +124,40 @@ mod tests {
     fn test_ewma_single_point() {
         let result = ewma_slope(&[42.0], 10);
         assert_eq!(result.slope, 0.0);
+    }
+
+    /// B3: span == 0 → slope 0 (sem divisão/lixo).
+    #[test]
+    fn test_ewma_span_zero_returns_zero_slope() {
+        let r = ewma_slope(&[1.0, 2.0, 3.0], 0);
+        assert_eq!(r.slope, 0.0);
+        assert!(r.eta_minutes.is_none());
+    }
+
+    /// B3: NaN/inf são ignorados; resultado igual ao da série limpa.
+    #[test]
+    fn test_ewma_ignores_non_finite() {
+        let clean = ewma_slope(&[1.0, 2.0, 3.0, 4.0], 3);
+        let dirty = ewma_slope(
+            &[
+                1.0,
+                f64::NAN,
+                2.0,
+                f64::INFINITY,
+                3.0,
+                4.0,
+                f64::NEG_INFINITY,
+            ],
+            3,
+        );
+        assert!(dirty.slope.is_finite());
+        assert!((dirty.slope - clean.slope).abs() < 1e-12);
+    }
+
+    /// B3: série só com não-finitos → slope 0.
+    #[test]
+    fn test_ewma_all_non_finite_returns_zero() {
+        let r = ewma_slope(&[f64::NAN, f64::NAN, f64::INFINITY], 5);
+        assert_eq!(r.slope, 0.0);
     }
 }

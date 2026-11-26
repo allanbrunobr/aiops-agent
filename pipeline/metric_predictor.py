@@ -42,6 +42,12 @@ def compute_ewma_slope(
         dos deltas de timestamp de ``points`` (fallback 1.0 se não houver
         delta positivo). Deve ser > 0 e finito quando informado.
 
+    Levanta
+    -------
+    ValueError
+        Se ``span < 1`` ou ``sample_interval_minutes`` inválido. Pontos com
+        valor não-finito (NaN/inf) são descartados antes do cálculo.
+
     Retorna
     -------
     (slope, eta_minutes)
@@ -56,10 +62,13 @@ def compute_ewma_slope(
         math.isfinite(sample_interval_minutes) and sample_interval_minutes > 0
     ):
         raise ValueError("sample_interval_minutes must be finite and > 0")
-    if len(points) < 2:
+    if span < 1:
+        raise ValueError("span must be >= 1")
+    # Valores não-finitos (NaN/inf) contaminariam toda a recorrência EWMA.
+    finite_points = [p for p in points if math.isfinite(p.value)]
+    values = [p.value for p in finite_points]
+    if len(values) < 2:
         return (0.0, None)
-
-    values = [p.value for p in points]
 
     if _RUST_AVAILABLE:
         result = _rust.compute_ewma_slope(values, span)  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
@@ -74,7 +83,7 @@ def compute_ewma_slope(
             interval = (
                 sample_interval_minutes
                 if sample_interval_minutes is not None
-                else _derive_interval_minutes(points)
+                else _derive_interval_minutes(finite_points)
             )
             eta_minutes = (threshold - current_value) / slope * interval
 

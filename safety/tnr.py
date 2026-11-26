@@ -14,6 +14,7 @@ Garante que o agente NUNCA piore o sistema.
 from __future__ import annotations
 
 import logging
+import math
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -42,6 +43,30 @@ class HealthSnapshot:
     availability: float
     connection_pool_active: int
     connection_pool_max: int
+
+    def validation_error(self) -> str | None:
+        """Motivo pelo qual o snapshot não é confiável, ou None se válido.
+
+        Não-finito (NaN/inf), error_rate<0, availability fora de [0, 100],
+        latência<0 ou pool negativo → não-confiável (B3, fail-closed).
+        """
+        floats = {
+            "error_rate": self.error_rate,
+            "latency_p99_ms": self.latency_p99_ms,
+            "availability": self.availability,
+        }
+        for name, value in floats.items():
+            if not math.isfinite(value):
+                return f"{name} não-finito ({value})"
+        if self.error_rate < 0:
+            return f"error_rate negativo ({self.error_rate})"
+        if self.latency_p99_ms < 0:
+            return f"latency_p99_ms negativo ({self.latency_p99_ms})"
+        if not 0 <= self.availability <= 100:
+            return f"availability fora de [0, 100] ({self.availability})"
+        if self.connection_pool_active < 0 or self.connection_pool_max < 0:
+            return "connection pool negativo"
+        return None
 
     @property
     def health_score(self) -> float:
@@ -158,6 +183,43 @@ class TNRSafetyGuard:
         self.regression_threshold = regression_threshold
         self.history: list[TNRReport] = []
 
+    def _untrusted_report(
+        self,
+        action: MitigationAction,
+        pre: HealthSnapshot,
+        post: HealthSnapshot,
+        mode: str,
+    ) -> TNRReport | None:
+        """ERROR (nunca SUCCESS) se algum snapshot ou o delta for não-confiável."""
+        reason = pre.validation_error()
+        if reason:
+            reason = f"pre-snapshot: {reason}"
+        else:
+            reason = post.validation_error()
+            if reason:
+                reason = f"post-snapshot: {reason}"
+        delta = 0.0
+        if reason is None:
+            delta = post.health_score - pre.health_score
+            if not math.isfinite(delta):
+                reason = f"health_delta não-finito ({delta})"
+        if reason is None:
+            return None
+        logging.getLogger(__name__).warning(
+            "TNR: medição não-confiável → ERROR (%s)", reason
+        )
+        report = TNRReport(
+            result=TNRResult.ERROR,
+            pre_snapshot=pre,
+            post_snapshot=post,
+            action=action,
+            health_delta=0.0,
+            message=f"ERROR: medição de health não-confiável ({reason})",
+            verification_mode=mode,
+        )
+        self.history.append(report)
+        return report
+
     def execute_with_safety(
         self,
         action: MitigationAction,
@@ -197,6 +259,11 @@ class TNRSafetyGuard:
 
         # 3. Captura estado PÓS
         post_snapshot = post_state_fn()
+
+        # 3b. Guarda B3: snapshot inválido / delta não-finito → ERROR
+        untrusted = self._untrusted_report(action, pre_snapshot, post_snapshot, "real")
+        if untrusted is not None:
+            return untrusted
 
         # 4. Compara
         health_delta = post_snapshot.health_score - pre_snapshot.health_score
@@ -247,6 +314,9 @@ class TNRSafetyGuard:
         correlation_id: str = "",
     ) -> TNRReport:
         """Simula TNR check sem executar (para demo/testes)."""
+        untrusted = self._untrusted_report(action, pre_health, post_health, "simulated")
+        if untrusted is not None:
+            return untrusted
         health_delta = post_health.health_score - pre_health.health_score
 
         if health_delta < self.regression_threshold:

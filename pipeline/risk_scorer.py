@@ -7,11 +7,28 @@ Pondera MetricTrendSignal, LogBurstSignal e LatencyDriftSignal em
 um score único de 0 a 100 e determina o nível de evento de lifecycle.
 """
 
+import logging
+import math
 from dataclasses import dataclass
 
 from pipeline.log_predictor import LogBurstSignal
 from pipeline.saturation_detector import SaturationSignal
 from pipeline.trace_predictor import LatencyDriftSignal
+
+logger = logging.getLogger(__name__)
+
+
+def _all_finite(signal_name: str, **fields: float | None) -> bool:
+    """False (com warning explícito) se algum campo for não-finito (NaN/inf)."""
+    bad = {k: v for k, v in fields.items() if v is not None and not math.isfinite(v)}
+    if bad:
+        logger.warning(
+            "risk_scorer: sinal %s com valor não-finito %s → contribuição 0",
+            signal_name,
+            bad,
+        )
+        return False
+    return True
 
 
 @dataclass
@@ -52,6 +69,10 @@ def _score_metric_signal(
     """
     if signal is None:
         return 0.0
+    if not _all_finite(
+        "metric", slope=signal.slope, relative_slope=signal.relative_slope
+    ):
+        return 0.0
     if signal.change_point_detected:
         return 80.0
     if use_relative_slope and signal.relative_slope is not None:
@@ -69,6 +90,8 @@ def _score_log_signal(signal: LogBurstSignal | None) -> float:
     """Converte LogBurstSignal em pontuação de 0.0 a 100.0."""
     if signal is None:
         return 0.0
+    if not _all_finite("log", rate_ratio=signal.rate_ratio):
+        return 0.0
     if not signal.burst_detected:
         base = 0.0
     else:
@@ -85,6 +108,10 @@ def _score_latency_signal(signal: LatencyDriftSignal | None) -> float:
     if signal is None:
         return 0.0
     if not signal.drift_detected:
+        return 0.0
+    if not _all_finite(
+        "latency", p95_ratio=signal.p95_ratio, p99_ratio=signal.p99_ratio
+    ):
         return 0.0
     ratio = max(signal.p95_ratio, signal.p99_ratio)
     return min(100.0, (ratio - 1.0) * 200.0)
