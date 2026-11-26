@@ -8,6 +8,7 @@ V1 ainda não expõe ``--data-source``.
 
 from __future__ import annotations
 
+import math
 import os
 import uuid
 from datetime import datetime, timedelta
@@ -24,6 +25,37 @@ from interfaces.cli.console import console
 DATABRICKS_LOOKBACK_MINUTES = 60
 
 _persist_log = structlog.get_logger("main.persistence")
+
+
+def is_valid_metric_point(point: Any) -> bool:
+    """Validação de borda (B8): ponto utilizável pelo pipeline.
+
+    Exige timestamp datetime, service/metric_name strings não vazias e value
+    numérico finito (NaN/inf/None/bool/str são rejeitados). O dataclass
+    ``MetricPoint`` do domínio segue sem validar — a checagem vive aqui.
+    """
+    value = getattr(point, "value", None)
+    return (
+        isinstance(getattr(point, "timestamp", None), datetime)
+        and isinstance(getattr(point, "service", None), str)
+        and bool(point.service)
+        and isinstance(getattr(point, "metric_name", None), str)
+        and bool(point.metric_name)
+        and isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )
+
+
+def drop_invalid_metric_points(incident: Any) -> int:
+    """Remove in-place de ``incident.metrics`` os pontos inválidos; devolve a contagem."""
+    metrics = list(getattr(incident, "metrics", None) or [])
+    valid = [m for m in metrics if is_valid_metric_point(m)]
+    dropped = len(metrics) - len(valid)
+    if dropped:
+        incident.metrics[:] = valid
+        _persist_log.warning("telemetry.dropped", dropped=dropped)
+    return dropped
 
 
 def _create_databricks_sources() -> tuple[Any, Any, Any] | None:
@@ -74,6 +106,7 @@ def step_fetch_databricks_data(
     log_source: Any,
     metrics_source: Any,
     trace_source: Any,
+    stats: dict[str, int] | None = None,
 ) -> tuple[SimulatedIncident, str]:
     """Etapa 1 (Databricks): Busca dados reais via conectores.
 
@@ -84,6 +117,8 @@ def step_fetch_databricks_data(
         log_source: Conector de logs (LogSource).
         metrics_source: Conector de metricas (MetricsSource).
         trace_source: Conector de traces (TraceSource).
+        stats: Se informado, recebe ``telemetry_dropped`` (métricas descartadas
+            na borda por valor não-finito ou campos ausentes).
 
     Returns:
         Tupla (SimulatedIncident com dados reais, "databricks-live").
@@ -119,17 +154,34 @@ def step_fetch_databricks_data(
 
     # --- Metrics ---
     metrics: list[MetricPoint] = []
+    dropped_metrics = 0
     try:
         raw_metrics = metrics_source.query(promql="", start=window_start, end=now)
         for d in raw_metrics:
-            ts = datetime.fromisoformat(d["timestamp"]) if d.get("timestamp") else now
-            metrics.append(
-                MetricPoint(
+            try:
+                ts = (
+                    datetime.fromisoformat(d["timestamp"])
+                    if d.get("timestamp")
+                    else now
+                )
+                point = MetricPoint(
                     timestamp=ts,
                     service=d.get("service", "unknown"),
                     metric_name=d.get("metric", ""),
-                    value=float(d.get("value", 0.0)),
+                    # Sem default: value ausente não vira 0.0 fabricado.
+                    value=float(d["value"]),
                 )
+            except (KeyError, TypeError, ValueError, AttributeError):
+                dropped_metrics += 1
+                continue
+            if is_valid_metric_point(point):
+                metrics.append(point)
+            else:
+                dropped_metrics += 1
+        if dropped_metrics:
+            _persist_log.warning("telemetry.dropped", dropped=dropped_metrics)
+            console.print(
+                f"  [yellow]Metrics:[/yellow] {dropped_metrics} malformed points dropped"
             )
         console.print(f"  [green]Metrics:[/green] {len(metrics)} points fetched")
     except Exception as exc:
@@ -176,6 +228,9 @@ def step_fetch_databricks_data(
             lookback_minutes=DATABRICKS_LOOKBACK_MINUTES,
         )
 
+    if stats is not None:
+        stats["telemetry_dropped"] = dropped_metrics
+
     incident = SimulatedIncident(
         logs=logs,
         metrics=metrics,
@@ -193,6 +248,8 @@ def step_fetch_databricks_data(
 
 __all__ = [
     "DATABRICKS_LOOKBACK_MINUTES",
+    "drop_invalid_metric_points",
+    "is_valid_metric_point",
     "_create_databricks_sources",
     "step_fetch_databricks_data",
 ]

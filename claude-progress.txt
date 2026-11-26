@@ -109,3 +109,16 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
   Mutação (retry desligado) → 2 testes falham.
 - NÃO verificado: suíte unit completa; `ruff format --check .` global acusa 14 arquivos pré-existentes (meus 3 estão ok).
 - Próxima: Feature 7 (B8 validação de telemetria).
+
+## Sessão Feature 7 — B8 (concluída)
+- interfaces/cli/data_sources.py: `is_valid_metric_point` / `drop_invalid_metric_points` (borda; timestamp datetime, service/metric_name não vazios,
+  value numérico finito; bool/str/None/NaN/inf rejeitados). Ingestão Databricks: `value` ausente não vira mais 0.0 fabricado; linha malformada é descartada e
+  contada em `stats["telemetry_dropped"]` (param opcional de step_fetch_databricks_data).
+- interfaces/cli/v0_pipeline.py: filtra qualquer fonte após o fetch (inclui simulada/injetada) e grava `result["telemetry_dropped"]`.
+- application/use_cases/postmortem.py (2 linhas fora do write-set estrito): `meta.telemetry_dropped` só quando >0 (run normal inalterado).
+- domain/incident.py intocado. tests/test_telemetry_validation.py: 13 testes (NaN/inf/None/str/bool/campos ausentes, payload cru, e2e com meta.telemetry_dropped==10).
+- Verde no M5 (M5_LEVE=1): novo arquivo 13 passed; integration 190 passed/3 skipped/1 xfailed; ruff check . ok. Mutação (isfinite→True) → 6 falhas (revertida).
+- ACHADO PRÉ-EXISTENTE (não é da F7): `pytest -m unit` completo tem 4 falhas em tests/test_databricks_retry.py (Feature 6) — passam isoladas, falham
+  na suíte inteira (poluição de ordem; reproduzido em HEAD limpo via worktree). Unit sem elas: 1985 passed. Sugestão: corrigir antes de seguir (provável
+  recarga de módulo tools.databricks_connector por outro teste → identidade de DatabricksConnectorError).
+- Próxima: Feature 8 (conforme feature_list.json); idealmente corrigir a poluição do test_databricks_retry primeiro.

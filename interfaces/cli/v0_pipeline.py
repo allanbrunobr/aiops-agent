@@ -38,6 +38,7 @@ from domain.confidence import confidence_to_score
 from interfaces.cli.console import console
 from interfaces.cli.data_sources import (
     _create_databricks_sources,
+    drop_invalid_metric_points,
     step_fetch_databricks_data,
 )
 from interfaces.cli.display import _requires_human, print_banner, print_summary
@@ -1110,6 +1111,7 @@ def run_v0(args: argparse.Namespace) -> int:
         )
 
         # 1. Data Generation / Fetch
+        telemetry_stats: dict[str, int] = {}
         if args.data_source == "databricks":
             sources = _create_databricks_sources()
             if sources is None:
@@ -1122,9 +1124,15 @@ def run_v0(args: argparse.Namespace) -> int:
                 log_source,
                 metrics_source,
                 trace_source,
+                stats=telemetry_stats,
             )
         else:
             incident, scenario_name = step_generate_data(scenario_name=args.scenario)
+        # B8: validação na borda — cobre qualquer fonte (a de Databricks já
+        # descartou os crus; aqui pegamos o que sobrou, ex. fontes injetadas).
+        telemetry_dropped = telemetry_stats.get(
+            "telemetry_dropped", 0
+        ) + drop_invalid_metric_points(incident)
 
         # 1b. Telemetry Sanitization (AIOpsShield)
         san_report = step_sanitize(incident)
@@ -1222,6 +1230,7 @@ def run_v0(args: argparse.Namespace) -> int:
         result["scenario_name"] = scenario_name
         if rag_degraded:
             result["rag_degraded"] = True
+        result["telemetry_dropped"] = telemetry_dropped
         result["config_source"] = config_source
         result["threshold_config"] = threshold_config
 

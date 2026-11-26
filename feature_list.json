@@ -97,7 +97,7 @@
       "Testes NaN/inf/campos ausentes",
       "unit verde; domínio puro intacto"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 8,

@@ -165,6 +165,12 @@ def serialize_result(result: dict[str, Any], incident: Any) -> dict[str, Any]:
         **_postmortem_verdict(result),
         # Só aparece quando o RAG caiu (B1): JSON de run normal fica idêntico.
         **({"rag_degraded": True} if result.get("rag_degraded") else {}),
+        # Só aparece quando a borda descartou pontos (B8).
+        **(
+            {"telemetry_dropped": result["telemetry_dropped"]}
+            if result.get("telemetry_dropped")
+            else {}
+        ),
         "duration_minutes": round(
             (incident.fix_time - incident.deploy_time).total_seconds() / 60, 1
         ),
