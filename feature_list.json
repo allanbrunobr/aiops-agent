@@ -40,7 +40,7 @@
       "pytest tests -m integration -q verde",
       "Cenário4 invariante estável antes/depois B1"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 4,

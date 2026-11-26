@@ -65,3 +65,17 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
   `pytest tests -m real_rag` → 6 passed. Mutação num_workers=0 já provada em A1 (mesmos testes que o job roda).
 - NÃO verificado: execução real no runner GitHub (push/cache 2ª execução) e `ci-local.sh real-rag` (instala torch; pesado → M1/CI).
 - Próxima: Feature 3 — A4 (tests/test_failure_injection.py).
+
+## Sessão Feature 3 — A4 (concluída)
+- tests/test_failure_injection.py (marker integration, 13 testes, main() ponta a ponta, tmp_path): LLM timeout→fallback
+  heurístico; LLMBudgetExceeded→EXIT_ERROR sem postmortem; RAG vazio→sem crash; _load_model raise→invariante
+  estável (exit 1 sem postmortem OU exit∈{0,3} com rag_degraded — vale antes/depois de B1); telemetria NaN/inf/vazia/
+  campos ausentes→None ou score finito em [0,100] (unit + e2e); conector fora→fallback por fonte, sem credenciais→EXIT_ERROR.
+- Verde no M5: `pytest tests -m integration -q` → 189 passed, 3 skipped, 1 xfailed. ruff check/format ok.
+  Mutação: trocar `except LLMBudgetExceeded` por outra exceção em agents/orchestrator.py → teste de budget falha (revertido).
+- ACHADO (bug real, fora do write-set): todas as fontes Databricks levantando DatabricksConnectorError → run sai com
+  exit 0 ("resolved") sobre telemetria vazia = falso sucesso. Marcado xfail(strict) em
+  test_all_connectors_down_never_reports_success; ao corrigir (B8/fail-closed em step_fetch_databricks_data) o xfail
+  vira XPASS e força remoção. O plano supunha EXIT_ERROR nesse caso; só vale para env vars ausentes.
+- Cenário 5 ainda não assere guardas B3/D1 (só limites do score), conforme plano.
+- Próxima: Feature 4 (A5 mocks assinatura estrita, quick win).
