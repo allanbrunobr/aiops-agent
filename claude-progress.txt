@@ -294,3 +294,9 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - Diffs benignos/aditivos: llm_model "heuristic" (era "unknown"), verification_mode "measured", stages.prediction e stages.safety_decision novos, reasons "Diagnosticando causa raiz..."/"Propondo mitigação..." (texto), "Heuristic diagnosis provided..." no Lessons Learned.
 - Decisão necessária (coordenador): (a) enriquecer state_to_result/detection e mitigation.diagnosis + timeline IDLE→DETECTING + is_safe p/ paridade V0 e reexecutar o gate; ou (b) aceitar explicitamente os diffs 1-4 como mudança de contrato. test_exit_codes NÃO migrado (depende da migração do conftest/decisão).
 - Próxima: coordenador resolve diffs semânticos; depois reaplicar o patch e regenerar.
+
+## Sessão Feature 1 (lote 3, re-tentativa) — P5 ainda BLOQUEADA (sem mudança de código desde o gate)
+- `git diff 0a19bb3 HEAD -- '*.py'` vazio: nenhum código mudou desde a evidência do gate (docs/f5-4-p5-snapshot-diffs.txt, patch em docs/f5-4-p5-conftest-v1.patch). Reexecutar daria o mesmo resultado; não reexecutei.
+- Diffs SEMÂNTICOS pendentes (detalhe na sessão anterior): detection perde campos; mitigation perde "diagnosis"; safety_validation.is_safe false→true; timeline sem IDLE→DETECTING.
+- Sem regen de snapshot, sem commit de código, conftest/test_exit_codes NÃO migrados, passes=false.
+- Próxima: coordenador despachar P5a (parity-fix: restaurar CAT1 + is_safe fail-closed), depois reaplicar o patch e reexecutar o gate (P5b).
