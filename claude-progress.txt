@@ -314,3 +314,8 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - `git diff 0a19bb3 HEAD -- '*.py'` vazio: nenhum código mudou; evidência do gate (docs/f5-4-p5-snapshot-diffs.txt) segue válida. Sem migração, sem regen, passes=false.
 - Diffs SEMÂNTICOS pendentes: detection perde campos; mitigation perde "diagnosis"; safety_validation.is_safe false→true; timeline sem IDLE→DETECTING.
 - Próxima: despachar P5a (parity-fix) ANTES de re-despachar P5; depois P5b (reaplicar docs/f5-4-p5-conftest-v1.patch + reexecutar o gate).
+
+## Sessão Feature 1 (lote 3, 6ª tentativa) — P5 continua BLOQUEADA (P5a não despachada)
+- `git diff 0a19bb3 HEAD -- '*.py'` vazio: nenhum código mudou; evidência do gate (docs/f5-4-p5-snapshot-diffs.txt) segue válida. Sem migração, sem regen, passes=false.
+- Diffs SEMÂNTICOS pendentes: detection perde campos; mitigation perde "diagnosis"; safety_validation.is_safe false→true; timeline sem IDLE→DETECTING.
+- Próxima: despachar P5a (parity-fix) ANTES de re-despachar P5; depois P5b (reaplicar docs/f5-4-p5-conftest-v1.patch + reexecutar o gate).
