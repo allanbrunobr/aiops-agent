@@ -3,9 +3,12 @@ Verifique com `.venv/bin/python -m pytest tests -m unit -q` DIRETO. NÃO use
 `scripts/ci-local.sh unit` (venv fresco=pesado, m5-guard bloqueia→deferral→falha).
 NÃO vá pro M1. Marque passes:true após verde+commit. UMA sessão por tarefa basta.
 
-★ PRÓXIMA FILA: 3 débitos técnicos (docs/tech-debt-agent-prompt.md).
-TD1 stub _aiops_rust.pyi+guards (AIOPS-87) → TD2 seeds 50+variância (AIOPS-85)
-→ TD3 docs circularidade (AIOPS-86, dep TD2). Cards movem sozinhos (jira_key).
+★ PRÓXIMA FILA: épico F5-4 paridade V1, LOTE 1 (docs/f5-4-parity-agent-prompt.md).
+LEIA PRIMEIRO docs/f5-4-parity-map.md (wiring file:line exato). Confirme antes de editar.
+P1 adapter state→result+captura estruturada (AIOPS-90) → P2 postmortem rico 12 seções
+(AIOPS-91, dep P1) → P3 flags run_v1 (AIOPS-92, dep P1,P2). Cards movem sozinhos (jira_key).
+NÃO quebrar V0 / NÃO remover flag --pipeline-v1 (isso é P6, gated, fora deste lote).
+Exit codes JÁ em paridade (V0=3 V1=3) — não replanejar. NÃO regen snapshots (isso é P5).
 O hook long-run chama scripts/jira_sync.py doing/done; --all reconcilia no fim.
 
 --- HISTÓRICO ---

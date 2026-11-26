@@ -2,52 +2,49 @@
   {
     "number": 1,
     "category": "functional",
-    "jira_key": "AIOPS-87",
-    "title": "TD1: stub _aiops_rust.pyi + guards ModuleType|None (pi-lens 0 blockers)",
-    "description": "SPEC AUTORITATIVA: docs/tech-debt-agent-prompt.md Tarefa 1. Criar _aiops_rust.pyi na raiz com assinaturas fiéis de TODAS as funções exportadas (confira rust/src/lib.rs #[pyfunction]+wrap_pyfunction!). Ajustar guards pipeline/metric_predictor.py:15-21 e pipeline/trace_predictor.py:20-26 p/ _rust: ModuleType|None sem no-redef/assignment no mypy nem reportOptionalMemberAccess no Pyright, preservando fallback runtime. NÃO editar .pi-lens.json.",
+    "title": "P1: Adapter state→result + captura estruturada (fundação)",
+    "description": "SPEC: docs/f5-4-parity-agent-prompt.md tarefa P1. MAPA DE WIRING: docs/f5-4-parity-map.md (leia primeiro). Criar application/use_cases/state_adapter.py state_to_result(state)->dict; safety nodes guardam dicts estruturados (safety_validation/remediation); timeline em IncidentState ou metadata; reconstruir MitigationAction do dict proposed_action. Regras: teste falha antes do fix; write-set explícito; verificação LOCAL M5 `.venv/bin/python -m pytest tests -m unit -q` (NÃO ci-local.sh unit, NÃO M1); nada gravar output/ repo (use tmp_path); TNR simulado; sem deps novas; NÃO quebrar V0 nem remover flag antes de P6; exit codes já em paridade (não replanejar); marque passes:true após verde+commit (message inclua P1/P2/P3).",
     "dependencies": "none",
     "steps": [
-      "Conferir exports reais rust/src/lib.rs + callers _rust.*",
-      "Criar _aiops_rust.pyi (8+ funções, assinaturas fiéis)",
-      "Ajustar guards 2 módulos (ModuleType|None) + guards nos callers se preciso",
-      "pi-lens worker fresh: 0 blockers em test_trace_predictor.py+metric_predictor.py+trace_predictor.py",
-      "mypy domain application core pipeline + ruff limpos",
-      "pytest tests -m unit -q verde + paridade Rust verde",
-      "passes:true + commit fix(types): TD1"
+      "Ler docs/f5-4-parity-map.md §1 e §6 P1; confirmar file:line.",
+      "Escrever tests/test_state_adapter.py cobrindo as 6 seções (root_cause/timeline/mitigation.action+pattern_matched/safety_validation/remediation_validation/verification); ver falhar.",
+      "Implementar adapter + captura estruturada nos safety nodes (write-set: state_adapter.py, safety_nodes.py, pipeline_nodes.py, domain/incident_state.py).",
+      "Sem mudança de comportamento V1; .venv/bin/python -m pytest tests -m unit -q verde; ruff/mypy gate clean.",
+      "Commit (message inclua P1); marcar passes:true."
     ],
-    "passes": true
+    "passes": false,
+    "jira_key": "AIOPS-90"
   },
   {
     "number": 2,
     "category": "functional",
-    "jira_key": "AIOPS-85",
-    "title": "TD2: backtest --seeds 50 + variância + honestidade (MEDIUM-1)",
-    "description": "SPEC AUTORITATIVA: docs/tech-debt-agent-prompt.md Tarefa 2. scripts/backtest_continuous.py:167 run_backtest(seeds=5)→rodar --seeds 50, regenerar validation/golden/continuous_backtest.json (config.seeds=50) + variância lead time HPA (min/max/mean/std sobre detectadas, mean>=min). Atualizar tests/test_continuous_backtest.py (slow): recall>=0.8 precision>=0.9 zero falso alarme negativos. docs/continuous-monitor.md: declarar limitação sintética (não generaliza p/ produção; dado real bloqueado).",
-    "dependencies": "none",
+    "title": "P2: Postmortem rico no V1 (12 seções)",
+    "description": "SPEC: docs/f5-4-parity-agent-prompt.md tarefa P2. MAPA DE WIRING: docs/f5-4-parity-map.md (leia primeiro). make_postmortem_node chama render_postmortem_markdown via adapter P1; incident em metadata['_incident'] (create_incident_state); registrar timeline; TNR no-LLM via verify_with_tnr ou not_verified honesto. Regras: teste falha antes do fix; write-set explícito; verificação LOCAL M5 `.venv/bin/python -m pytest tests -m unit -q` (NÃO ci-local.sh unit, NÃO M1); nada gravar output/ repo (use tmp_path); TNR simulado; sem deps novas; NÃO quebrar V0 nem remover flag antes de P6; exit codes já em paridade (não replanejar); marque passes:true após verde+commit (message inclua P1/P2/P3).",
+    "dependencies": "1",
     "steps": [
-      "Rodar backtest --seeds 50 + adicionar variância (std/min/max)",
-      "Regenerar golden continuous_backtest.json seeds=50",
-      "Atualizar teste slow p/ novo golden (recall>=0.8 precision>=0.9 mean>=min)",
-      "docs honestidade sintética",
-      "pytest -m slow -q + -m unit -q verdes",
-      "passes:true + commit fix(backtest): TD2"
+      "Ler docs/f5-4-parity-map.md §1; confirmar file:line.",
+      "Escrever tests/test_v1_postmortem_parity.py: V1 --no-llm --no-rag postmortem tem 12 seções; ver falhar.",
+      "Implementar (write-set: pipeline_nodes.py make_postmortem_node, v1_runner.py create_incident_state, safety_nodes.py tnr no-LLM).",
+      "Smoke main.py --pipeline-v1 --no-llm --no-rag --output-dir /tmp/x → 12 seções, exit 3; diff vs V0 justificado no commit; unit green; NÃO regen snapshots.",
+      "Commit (message inclua P2); marcar passes:true."
     ],
-    "passes": true
+    "passes": false,
+    "jira_key": "AIOPS-91"
   },
   {
     "number": 3,
-    "category": "style",
-    "jira_key": "AIOPS-86",
-    "title": "TD3: documentar circularidade do backtest sintético (LOW-3, docs-only)",
-    "description": "SPEC AUTORITATIVA: docs/tech-debt-agent-prompt.md Tarefa 3. docs-only: seção 'Limitações do backtest sintético' em docs/continuous-monitor.md — circularidade (gerador e detector compartilham pressupostos, cenário feito p/ ser detectável), amostra 50 seeds ainda sintética, 1.0 não é evidência de produção, dado real bloqueado (Grafana/SRE). Referenciar MEDIUM-1/LOW-3 de docs/review-qwen-result.md. SEM mudança de código.",
-    "dependencies": "2",
+    "category": "functional",
+    "title": "P3: Flags no run_v1",
+    "description": "SPEC: docs/f5-4-parity-agent-prompt.md tarefa P3. MAPA DE WIRING: docs/f5-4-parity-map.md (leia primeiro). run_v1 honra --output-format (json/both via serialize_result/step_postmortem), --tracker (_resolve_tracker+step_tracking), --data-source (databricks), --rebuild-rag; fix mkdir parents=True display.py:302. Regras: teste falha antes do fix; write-set explícito; verificação LOCAL M5 `.venv/bin/python -m pytest tests -m unit -q` (NÃO ci-local.sh unit, NÃO M1); nada gravar output/ repo (use tmp_path); TNR simulado; sem deps novas; NÃO quebrar V0 nem remover flag antes de P6; exit codes já em paridade (não replanejar); marque passes:true após verde+commit (message inclua P1/P2/P3).",
+    "dependencies": "1,2",
     "steps": [
-      "Adicionar seção Limitações (circularidade+amostra+dado real) em docs/continuous-monitor.md",
-      "Referenciar review MEDIUM-1/LOW-3",
-      "Confirmar nenhum código alterado",
-      "pytest -m unit -q verde (sanity)",
-      "passes:true + commit docs(backtest): TD3"
+      "Ler docs/f5-4-parity-map.md §2; confirmar file:line.",
+      "Escrever tests/test_v1_flags.py: cada flag honrada no V1; ver falhar.",
+      "Implementar (write-set: v1_runner.py, postmortem.py se precisar, display.py mkdir, tests/test_args.py se precisar).",
+      "Smoke de cada flag; --output-format json gera .json; exit codes inalterados; unit green.",
+      "Commit (message inclua P3); marcar passes:true."
     ],
-    "passes": true
+    "passes": false,
+    "jira_key": "AIOPS-92"
   }
 ]

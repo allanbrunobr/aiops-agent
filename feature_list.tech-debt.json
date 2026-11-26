@@ -1,0 +1,53 @@
+[
+  {
+    "number": 1,
+    "category": "functional",
+    "jira_key": "AIOPS-87",
+    "title": "TD1: stub _aiops_rust.pyi + guards ModuleType|None (pi-lens 0 blockers)",
+    "description": "SPEC AUTORITATIVA: docs/tech-debt-agent-prompt.md Tarefa 1. Criar _aiops_rust.pyi na raiz com assinaturas fiéis de TODAS as funções exportadas (confira rust/src/lib.rs #[pyfunction]+wrap_pyfunction!). Ajustar guards pipeline/metric_predictor.py:15-21 e pipeline/trace_predictor.py:20-26 p/ _rust: ModuleType|None sem no-redef/assignment no mypy nem reportOptionalMemberAccess no Pyright, preservando fallback runtime. NÃO editar .pi-lens.json.",
+    "dependencies": "none",
+    "steps": [
+      "Conferir exports reais rust/src/lib.rs + callers _rust.*",
+      "Criar _aiops_rust.pyi (8+ funções, assinaturas fiéis)",
+      "Ajustar guards 2 módulos (ModuleType|None) + guards nos callers se preciso",
+      "pi-lens worker fresh: 0 blockers em test_trace_predictor.py+metric_predictor.py+trace_predictor.py",
+      "mypy domain application core pipeline + ruff limpos",
+      "pytest tests -m unit -q verde + paridade Rust verde",
+      "passes:true + commit fix(types): TD1"
+    ],
+    "passes": true
+  },
+  {
+    "number": 2,
+    "category": "functional",
+    "jira_key": "AIOPS-85",
+    "title": "TD2: backtest --seeds 50 + variância + honestidade (MEDIUM-1)",
+    "description": "SPEC AUTORITATIVA: docs/tech-debt-agent-prompt.md Tarefa 2. scripts/backtest_continuous.py:167 run_backtest(seeds=5)→rodar --seeds 50, regenerar validation/golden/continuous_backtest.json (config.seeds=50) + variância lead time HPA (min/max/mean/std sobre detectadas, mean>=min). Atualizar tests/test_continuous_backtest.py (slow): recall>=0.8 precision>=0.9 zero falso alarme negativos. docs/continuous-monitor.md: declarar limitação sintética (não generaliza p/ produção; dado real bloqueado).",
+    "dependencies": "none",
+    "steps": [
+      "Rodar backtest --seeds 50 + adicionar variância (std/min/max)",
+      "Regenerar golden continuous_backtest.json seeds=50",
+      "Atualizar teste slow p/ novo golden (recall>=0.8 precision>=0.9 mean>=min)",
+      "docs honestidade sintética",
+      "pytest -m slow -q + -m unit -q verdes",
+      "passes:true + commit fix(backtest): TD2"
+    ],
+    "passes": true
+  },
+  {
+    "number": 3,
+    "category": "style",
+    "jira_key": "AIOPS-86",
+    "title": "TD3: documentar circularidade do backtest sintético (LOW-3, docs-only)",
+    "description": "SPEC AUTORITATIVA: docs/tech-debt-agent-prompt.md Tarefa 3. docs-only: seção 'Limitações do backtest sintético' em docs/continuous-monitor.md — circularidade (gerador e detector compartilham pressupostos, cenário feito p/ ser detectável), amostra 50 seeds ainda sintética, 1.0 não é evidência de produção, dado real bloqueado (Grafana/SRE). Referenciar MEDIUM-1/LOW-3 de docs/review-qwen-result.md. SEM mudança de código.",
+    "dependencies": "2",
+    "steps": [
+      "Adicionar seção Limitações (circularidade+amostra+dado real) em docs/continuous-monitor.md",
+      "Referenciar review MEDIUM-1/LOW-3",
+      "Confirmar nenhum código alterado",
+      "pytest -m unit -q verde (sanity)",
+      "passes:true + commit docs(backtest): TD3"
+    ],
+    "passes": true
+  }
+]
