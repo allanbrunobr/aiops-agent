@@ -2,18 +2,19 @@
   {
     "number": 1,
     "category": "functional",
-    "title": "P5b: aplicar conftest→V1 + regen snapshots + migrar test_exit_codes",
+    "title": "P6: aposentar V0 — V1 canônico, --pipeline-v1 deprecated no-op",
     "jira_key": "AIOPS-96",
-    "description": "SPEC: docs/f5-4-parity-agent-prompt.md tarefa P5 (4e) + docs/f5-4-p5-snapshot-diffs-after.txt. P5a JÁ fechou paridade (HEAD 75454a6): CAT1 restaurado no source (pipeline_nodes/state_adapter), is_safe alinhado (test config blast_radius_limit=3 espelha V0; real default=5 V0≡V1). Restam SÓ 4 diffs CAT2 enhancements VERIFICADOS pelo coordenador (safety_validation +blast_radius_scope+recommendation; full_pipeline_result +llm_model+prediction+safety_decision+verification_mode; postmortem LLM Model heuristic/Blast Radius multi_service/Recommendation/'Heuristic diagnosis'). AGORA: (1) git apply docs/f5-4-p5-conftest-v1.patch PERMANENTE (conftest._run_pipeline→V1 via app.builders+state_to_result, SafetyConfig blast_radius_limit=3). (2) Migrar tests/test_exit_codes.py p/ V1 (exit codes JÁ paridade 3; usar --pipeline-v1 ou conftest V1). (3) REGEN snapshots: .venv/bin/python -m pytest tests -m snapshot --snapshot-update — ACEITAR só os 4 diffs CAT2 verificados; se aparecer diff NOVO não-CAT2, PARE e reporte. (4) NÃO remover V0 (P6 gated). Verificação LOCAL M5: .venv/bin/python -m pytest tests -m unit -q (TUDO verde, não só snapshot); .venv/bin/python -m pytest tests -m snapshot -q verde; V0 exit3 V1 exit3; ruff check .; mypy domain application core. Commit msg inclua 'P5b'. passes:true após verde+commit.",
+    "description": "SPEC docs/f5-4-parity-agent-prompt.md tarefa P6 (4f). P1-P5 done+pushed 408488c. Remover v0_pipeline.py+step_* exclusivos V0; main.py V1 default único; --pipeline-v1 alias deprecated no-op; docs atualizados; testes V0-only removidos mantendo exit codes V1. Não quebrar contrato CLI 0/1/2/3. Verificação LOCAL M5 unit+snapshot+smoke exit3+ruff+mypy domain application core. Commit P6. passes:true.",
     "dependencies": "none",
     "steps": [
-      "git apply docs/f5-4-p5-conftest-v1.patch (conftest.py permanente)",
-      "migrar tests/test_exit_codes.py para V1",
-      "regen snapshots --snapshot-update; revisar diffs = só CAT2 verificado",
-      ".venv/bin/python -m pytest tests -m unit -q TUDO verde + -m snapshot verde",
-      "V0 exit3 V1 exit3; ruff check .; mypy domain application core",
-      "commit msg 'P5b'; passes:true; NÃO remover V0"
+      "remover interfaces/cli/v0_pipeline.py + step_* exclusivos V0",
+      "main.py V1 default único; --pipeline-v1 deprecated no-op",
+      "docs README/docs atualizados V1 canônico",
+      "testes V0-only removidos; exit codes V1 mantidos",
+      ".venv/bin/python -m pytest tests -m unit -q + -m snapshot verde",
+      "main.py --no-llm --no-rag exit3; ruff; mypy domain application core",
+      "commit P6; passes:true"
     ],
-    "passes": true
+    "passes": false
   }
 ]
