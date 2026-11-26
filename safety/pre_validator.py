@@ -105,6 +105,10 @@ BLOCKED_COMMANDS = [
     r"&&\s*(sh|bash|zsh)\b",
     r"`",  # substituição de comando
     r"\$\(",  # substituição de comando
+    # SSRF / exfiltração: endpoints de metadata de nuvem e esquema file://
+    r"169\.254\.169\.254",
+    r"metadata\.google\.internal",
+    r"file://",
 ]
 
 # Encadeamento, redirecionamento e quebra de linha. A allow-list abaixo
@@ -116,7 +120,10 @@ SHELL_METACHARACTERS = re.compile(r"[;&|<>\n\r]")
 # Padrões que indicam risco elevado
 HIGH_RISK_PATTERNS = [
     (r"kubectl\s+delete\s+pod", "Deleting pods causes temporary service disruption"),
-    (r"kubectl\s+scale.*--replicas=0", "Scaling to 0 removes all service instances"),
+    (
+        r"kubectl\s+scale.*--replicas[=\s]+0+\b",
+        "Scaling to 0 removes all service instances",
+    ),
     (r"kubectl\s+drain", "Draining node removes all pods from node"),
     (r"helm\s+uninstall", "Uninstalling Helm chart removes entire deployment"),
     (r"docker\s+stop", "Stopping container causes service disruption"),
@@ -133,7 +140,8 @@ SAFE_PATTERNS = [
     r"kubectl\s+top\s+",  # Read-only: metrics
     # curl só é leitura se não houver metacaractere de shell. O padrão
     # antigo `curl\s+` aprovava `curl http://x | sh` como read-only.
-    r"curl\s+\S+$",
+    # Só http(s)://: file://, ftp://, gopher:// etc. caem no default fechado.
+    r"curl\s+https?://\S+$",
     r"ping\s+",  # Read-only: ping
     r"nslookup\s+",  # Read-only: DNS
     r"kubectl\s+rollout\s+status",  # Read-only: rollout status
@@ -143,7 +151,7 @@ SAFE_PATTERNS = [
 ROLLOUT_PATTERNS = [
     r"kubectl\s+rollout\s+undo",  # Rollback
     r"kubectl\s+rollout\s+restart",  # Restart
-    r"kubectl\s+scale\s+.*--replicas=[1-9]",  # Scale up
+    r"kubectl\s+scale\s+.*--replicas[=\s]+0*[1-9]",  # Scale up
 ]
 
 
@@ -231,8 +239,9 @@ class PreExecutionValidator:
                 warnings.append("No rollback command provided")
 
         # 6. Risk level from action metadata
-        risk_map = {"LOW": 1, "MEDIUM": 2, "HIGH": 3}
-        action_risk = risk_map.get(action.risk_level, 2)
+        risk_map = {"LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
+        # Desconhecido = fail-closed alto (3), não médio.
+        action_risk = risk_map.get(action.risk_level, 3)
 
         # 7. Confidence check (baixa confiança no diagnóstico = risco maior)
         confidence = diagnosis.get("confidence", "medium")
@@ -302,7 +311,7 @@ class PreExecutionValidator:
 
             duration_ms = int((time.monotonic() - start) * 1000)
             command_preview = (
-                action.command[:100]
+                (action.command or "")[:100]
                 if hasattr(action, "command")
                 else str(action)[:100]
             )
@@ -352,7 +361,7 @@ class PreExecutionValidator:
 
         return result
 
-    def _check_command_safety(self, command: str) -> tuple[bool, str]:
+    def _check_command_safety(self, command: str | None) -> tuple[bool, str]:
         """Verifica se o comando é seguro.
 
         Defesa em profundidade (F2-5): operadores de composição são rejeitados
@@ -361,6 +370,7 @@ class PreExecutionValidator:
         allowlists casam o binário+subcomando reais (tokens shlex), ancorados
         no início, não substrings em qualquer posição.
         """
+        command = command or ""  # None = comando vazio → REVIEW
         cmd_lower = command.lower().strip()
 
         # 1. Composição/metacaracteres: nenhum comando composto passa.
@@ -420,7 +430,7 @@ class PreExecutionValidator:
     def _estimate_blast_radius(self, action, diagnosis: dict) -> BlastRadius:
         """Estima o raio de impacto da ação."""
         affected = diagnosis.get("affected_services", [])
-        command = action.command.lower()
+        command = (action.command or "").lower()
 
         # Scope estimation
         if "namespace" in command or "--all" in command:

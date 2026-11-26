@@ -1033,3 +1033,159 @@ class TestSanitizeTracesCountingAndCloning:
         assert s_traces[0].operation != orig_operation
         assert s_traces[0].attributes["db.statement"] != self._PAYLOAD
         assert s_metrics[0].service != orig_service
+
+
+# ============================================================================
+# C3: edge cases do pre_validator e TNR (corpus adversarial)
+# ============================================================================
+
+
+@pytest.mark.unit
+class TestC3EdgeCases:
+    """Buracos de pattern: --replicas com espaço, CRITICAL, curl/metadata, None."""
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "kubectl scale deployment/x --replicas 0",
+            "kubectl scale deployment/x --replicas=00",
+            "kubectl scale deployment/x --replicas  0",
+            "kubectl scale --replicas 0 deployment/x",
+            "kubectl scale deployment/x --replicas=0",
+        ],
+    )
+    def test_replicas_zero_is_high_risk(self, cmd):
+        from safety.pre_validator import PreExecutionValidator
+
+        ok, msg = PreExecutionValidator()._check_command_safety(cmd)
+        assert ok and "HIGH RISK" in msg
+
+    def test_replicas_zero_never_auto_approved(self):
+        from safety.pre_validator import ApprovalStatus, PreExecutionValidator
+
+        action = _make_mitigation_action(
+            command="kubectl scale deployment/x --replicas 0", risk_level="LOW"
+        )
+        res = PreExecutionValidator().validate(action, {"confidence": "high"})
+        assert res.approval_status != ApprovalStatus.AUTO_APPROVED
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "kubectl scale deployment/x --replicas 3",
+            "kubectl scale deployment/x --replicas=10",
+            "kubectl scale deployment/x --replicas 05",
+        ],
+    )
+    def test_replicas_nonzero_stays_rollout(self, cmd):
+        from safety.pre_validator import PreExecutionValidator
+
+        ok, msg = PreExecutionValidator()._check_command_safety(cmd)
+        assert ok and "HIGH RISK" not in msg and "Rollout" in msg
+
+    def test_critical_risk_level_ranks_above_high(self):
+        from safety.pre_validator import PreExecutionValidator
+
+        v = PreExecutionValidator()
+        diag = {"confidence": "high"}
+        crit = v.validate(_make_mitigation_action(risk_level="CRITICAL"), diag)
+        high = v.validate(_make_mitigation_action(risk_level="HIGH"), diag)
+        assert crit.risk_score >= high.risk_score
+        assert crit.requires_human
+
+    def test_unknown_risk_level_defaults_high_not_medium(self):
+        from safety.pre_validator import PreExecutionValidator
+
+        v = PreExecutionValidator()
+        diag = {"confidence": "high"}
+        unk = v.validate(_make_mitigation_action(risk_level="BOGUS"), diag)
+        high = v.validate(_make_mitigation_action(risk_level="HIGH"), diag)
+        assert unk.risk_score == high.risk_score
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "curl file:///etc/passwd",
+            "curl http://169.254.169.254/latest/meta-data/",
+            "curl https://169.254.169.254/latest/meta-data/",
+            "curl http://metadata.google.internal/computeMetadata/v1/",
+            "curl ftp://host/x",
+            "curl gopher://host/x",
+        ],
+    )
+    def test_curl_dangerous_targets_not_approved(self, cmd):
+        from safety.pre_validator import ApprovalStatus, PreExecutionValidator
+
+        v = PreExecutionValidator()
+        ok, _msg = v._check_command_safety(cmd)
+        assert not ok
+        res = v.validate(
+            _make_mitigation_action(command=cmd, risk_level="LOW"),
+            {"confidence": "high"},
+        )
+        assert res.approval_status != ApprovalStatus.AUTO_APPROVED
+
+    @pytest.mark.parametrize(
+        "cmd",
+        [
+            "curl https://example.com/health",
+            "curl http://payment-svc:8080/health",
+            "kubectl get pods -n prod",
+            "kubectl describe pod x",
+        ],
+    )
+    def test_legit_readonly_still_allowed(self, cmd):
+        from safety.pre_validator import PreExecutionValidator
+
+        ok, msg = PreExecutionValidator()._check_command_safety(cmd)
+        assert ok and msg == "Read-only command"
+
+    @pytest.mark.parametrize("empty", [None, "", "   "])
+    def test_command_none_or_empty_is_review(self, empty):
+        from safety.pre_validator import ApprovalStatus, PreExecutionValidator
+
+        v = PreExecutionValidator()
+        ok, msg = v._check_command_safety(empty)
+        assert not ok and msg.startswith("REVIEW")
+        res = v.validate(_make_mitigation_action(command=empty), {"confidence": "high"})
+        assert res.approval_status == ApprovalStatus.PENDING_APPROVAL
+        assert res.requires_human
+
+    def test_version_validator_command_none(self):
+        from safety.version_validator import VersionValidator
+
+        vv = VersionValidator()
+        assert vv.validate_remediation(None, "") is not None
+        assert (
+            vv.validate_mitigation_action(_make_mitigation_action(command=None))
+            is not None
+        )
+
+    def test_tnr_replicas_space_form_is_destructive(self):
+        from safety.tnr import simulate_action_effect
+
+        pre = _make_health_snapshot()
+        for cmd in (
+            "kubectl scale deployment/x --replicas 0",
+            "kubectl scale deployment/x --replicas=00",
+        ):
+            post = simulate_action_effect(_make_mitigation_action(command=cmd), pre)
+            assert post.availability < pre.availability, cmd
+
+    def test_tnr_replicas_nonzero_not_destructive(self):
+        from safety.tnr import simulate_action_effect
+
+        pre = _make_health_snapshot()
+        for cmd in (
+            "kubectl scale deployment/x --replicas 3",
+            "kubectl scale deployment/x --replicas=10",
+        ):
+            post = simulate_action_effect(_make_mitigation_action(command=cmd), pre)
+            assert post.availability >= pre.availability, cmd
+
+    def test_tnr_command_none(self):
+        from safety.tnr import simulate_action_effect
+
+        pre = _make_health_snapshot()
+        post = simulate_action_effect(_make_mitigation_action(command=None), pre)
+        assert post.availability == pre.availability

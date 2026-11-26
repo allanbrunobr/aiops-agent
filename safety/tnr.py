@@ -14,6 +14,7 @@ Garante que o agente NUNCA piore o sistema.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -107,11 +108,11 @@ def simulate_action_effect(
     """
     cmd = (action.command or "").lower()
     destructive = any(
-        p in cmd
-        for p in ("delete", "rm -", "drop ", "truncate", "--replicas=0", "scale down")
-    )
-    recovery = not destructive and any(
-        p in cmd for p in ("rollout undo", "rollback", "restart", "--replicas=")
+        p in cmd for p in ("delete", "rm -", "drop ", "truncate", "scale down")
+    ) or bool(re.search(r"--replicas[=\s]+0+\b", cmd))
+    recovery = not destructive and (
+        any(p in cmd for p in ("rollout undo", "rollback", "restart"))
+        or bool(re.search(r"--replicas[=\s]", cmd))
     )
     now = datetime.now()
     if destructive:

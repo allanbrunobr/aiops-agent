@@ -282,6 +282,8 @@ class VersionValidator:
         warnings = []
         overall_risk = RemediationRisk.SAFE
 
+        command = command or ""
+        description = description or ""
         combined_text = f"{command} {description}"
 
         # === Check 1: Repositórios maliciosos (⋆PPA) ===
@@ -566,8 +568,10 @@ class VersionValidator:
         Returns:
             RemediationValidation
         """
-        command = action.command if hasattr(action, "command") else str(action)
-        description = action.description if hasattr(action, "description") else ""
+        command = (action.command or "") if hasattr(action, "command") else str(action)
+        description = (
+            (action.description or "") if hasattr(action, "description") else ""
+        )
         rollback = (
             action.rollback_command if hasattr(action, "rollback_command") else ""
         )

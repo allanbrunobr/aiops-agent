@@ -122,3 +122,13 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
   na suíte inteira (poluição de ordem; reproduzido em HEAD limpo via worktree). Unit sem elas: 1985 passed. Sugestão: corrigir antes de seguir (provável
   recarga de módulo tools.databricks_connector por outro teste → identidade de DatabricksConnectorError).
 - Próxima: Feature 8 (conforme feature_list.json); idealmente corrigir a poluição do test_databricks_retry primeiro.
+
+## Sessão Feature 8 — C3 (concluída)
+- safety/pre_validator.py: HIGH_RISK `--replicas[=\s]+0+\b`; rollout scale-up aceita forma com espaço; risk_map +CRITICAL=4, default 3;
+  curl SAFE só `https?://`; BLOCKED_COMMANDS += 169.254.169.254, metadata.google.internal, file://; command=None→"" (REVIEW/PENDING) em
+  _check_command_safety, _estimate_blast_radius e preview de auditoria.
+- safety/tnr.py (só simulate_action_effect): replicas forma espaço destrutiva; `--replicas[=\s]` não-zero = recuperação. version_validator: `command or ""`.
+- tests/test_safety.py: classe TestC3EdgeCases (28 casos); 15 falhavam antes do fix. Read-only legítimo (kubectl get, curl http(s)://host) intacto.
+- Verde no M5 (M5_LEVE=1): 6 arquivos safety 154 passed; unit sem test_databricks_retry: 2012 passed/6 skipped; integration 5 passed; ruff ok.
+- NÃO verificado: test_databricks_retry na suíte completa (poluição de ordem pré-existente da F6/F7, não tocada).
+- Próxima: Feature 9; antes, corrigir poluição do test_databricks_retry.

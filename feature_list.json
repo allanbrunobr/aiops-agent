@@ -112,7 +112,7 @@
       "command None→REVIEW",
       "Testes falham antes do fix; unit verde; read-only legítimo não encolhe"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 9,
