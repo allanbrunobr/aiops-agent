@@ -325,3 +325,8 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - CAUSA RAIZ is_safe (CAT3): NÃO é V1 perdendo fail-closed. O conftest V0 hardcoda PreExecutionValidator(max_blast_radius=3) (tests/conftest.py ~347); V1 usa config.safety.blast_radius_limit=5 (config/defaults.yaml:25), igual ao V0 de produção (step_safety_validation). 4 serviços: >3 → is_safe false; ≤5 → true. Medido: patch + limite 3 no conftest → is_safe=false≡V0, diffs restantes SÓ adições CAT2 (docs/f5-4-p5-snapshot-diffs-after-limit3.txt). Não forcei is_safe=false no produto (mudaria semântica e divergiria do V0 real).
 - passes=false (gate literal exige is_safe≡V0; correção é de conftest = P5b). Unit M5: 2148 passed/7 skipped; ruff/mypy gate limpos; snapshots no V0 (conftest original) verdes.
 - Próxima: P5b — migrar conftest para V1 com AppConfig(safety.blast_radius_limit=3) espelhando o conftest legado, regenerar snapshots com diff justificado (só adições CAT2 + texto de recommendation/blast_radius).
+
+## Sessão Feature 1 (lote 3, re-despacho P5a) — sem mudança de código; passes:false mantido
+- Re-verifiquei a evidência: tests/conftest.py:350 hardcoda max_blast_radius=3 (V0 de teste) vs config/defaults.yaml:25 blast_radius_limit=5 (V0 produção e V1). diffs-after.txt mostra is_safe false→true; diffs-after-limit3.txt (limite 3) mostra is_safe≡V0 e só adições CAT2.
+- Nenhum .py mudou desde 33dcab6. Forçar is_safe=false no produto divergiria do V0 de produção; correção cabe ao conftest (P5b).
+- Próxima: despachar P5b (conftest→V1 com safety.blast_radius_limit=3 + regen supervisionado), não re-despachar P5a.
