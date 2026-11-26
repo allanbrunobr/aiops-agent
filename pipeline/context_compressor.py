@@ -20,9 +20,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
+from types import ModuleType
 
+_rust: ModuleType | None
 try:
-    import _aiops_rust as _rust
+    import _aiops_rust as _rust_mod
+
+    _rust = _rust_mod
 
     _RUST_AVAILABLE = True
 except ImportError:

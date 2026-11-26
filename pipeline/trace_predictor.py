@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from types import ModuleType
 
 from data.models import Span
 
@@ -17,10 +18,12 @@ logger = logging.getLogger(__name__)
 # Baseline abaixo disso (ms) não é referência significativa para ratio.
 _MIN_BASELINE_MS = 1.0
 
+_rust: ModuleType | None
 try:
-    import _aiops_rust as _rust
+    import _aiops_rust as _rust_mod
 
-    _RUST_AVAILABLE = hasattr(_rust, "detect_latency_drift")
+    _rust = _rust_mod
+    _RUST_AVAILABLE = hasattr(_rust_mod, "detect_latency_drift")
 except ImportError:
     _rust = None
     _RUST_AVAILABLE = False
@@ -99,7 +102,7 @@ def detect_latency_drift(
         )
         return {"drift_detected": False, "p95_ratio": 1.0, "p99_ratio": 1.0}
 
-    if _RUST_AVAILABLE:
+    if _RUST_AVAILABLE and _rust is not None:
         return _rust.detect_latency_drift(baseline, current, threshold_pct)
 
     p95_current = _percentile(current, 95)

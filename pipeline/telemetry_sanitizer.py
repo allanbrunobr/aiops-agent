@@ -32,11 +32,15 @@ import re
 import time
 from dataclasses import dataclass, field, replace
 from enum import Enum
+from types import ModuleType
 
 from core.logging import get_logger
 
+_rust: ModuleType | None
 try:
-    import _aiops_rust as _rust
+    import _aiops_rust as _rust_mod
+
+    _rust = _rust_mod
 
     _RUST_AVAILABLE = True
 except ImportError:
@@ -254,6 +258,7 @@ class TelemetrySanitizer:
         # Pré-computa taint levels em batch usando Rust+Rayon (paralelo)
         if logs and self._use_rust():
             messages = [log.message for log in logs]
+            assert _rust is not None
             taint_strs = _rust.detect_taint_batch(messages)
             taint_cache = {i: TaintLevel(t) for i, t in enumerate(taint_strs)}
         else:
@@ -594,6 +599,7 @@ class TelemetrySanitizer:
             return TaintLevel.CLEAN
 
         if self._use_rust():
+            assert _rust is not None
             return TaintLevel(_rust.detect_taint_single(text))
 
         # Fallback Python

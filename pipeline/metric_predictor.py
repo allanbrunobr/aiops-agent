@@ -9,13 +9,16 @@ executa implementação Python pura.
 
 import math
 import statistics
+from types import ModuleType
 
 from data.models import MetricPoint
 
+_rust: ModuleType | None
 try:
-    import _aiops_rust as _rust
+    import _aiops_rust as _rust_mod
 
-    _RUST_AVAILABLE = hasattr(_rust, "compute_ewma_slope")
+    _rust = _rust_mod
+    _RUST_AVAILABLE = hasattr(_rust_mod, "compute_ewma_slope")
 except ImportError:
     _rust = None
     _RUST_AVAILABLE = False
@@ -70,8 +73,8 @@ def compute_ewma_slope(
     if len(values) < 2:
         return (0.0, None)
 
-    if _RUST_AVAILABLE:
-        result = _rust.compute_ewma_slope(values, span)  # pyright: ignore[reportOptionalMemberAccess, reportAttributeAccessIssue]
+    if _RUST_AVAILABLE and _rust is not None:
+        result = _rust.compute_ewma_slope(values, span)
         slope: float = result["slope"]
     else:
         slope = _python_ewma_slope(values, span)

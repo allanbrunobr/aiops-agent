@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
+from types import ModuleType
 
 import numpy as np
 
@@ -20,13 +21,16 @@ from config.loader import ThresholdsConfig
 # Defaults vêm de ThresholdsConfig (o YAML sobrescreve na composição).
 _DEFAULTS = ThresholdsConfig()
 
+_rust: ModuleType | None
 try:
-    import _aiops_rust as _rust
+    import _aiops_rust as _rust_mod
+
+    _rust = _rust_mod
 
     from pipeline.rust_compat import has_params
 
     _RUST_AVAILABLE = has_params(
-        _rust, "filter_traces", "percentile_threshold", "max_hops"
+        _rust_mod, "filter_traces", "percentile_threshold", "max_hops"
     )
 except ImportError:
     _rust = None
@@ -72,6 +76,7 @@ class TraceFilter:
 
     def _filter_rust(self, spans: list) -> list[SlowCallPath]:
         """Delegação para implementação Rust (percentil + max_hops paramétricos)."""
+        assert _rust is not None
         raw = _rust.filter_traces(
             spans,
             percentile_threshold=self.percentile_threshold,

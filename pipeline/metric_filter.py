@@ -13,6 +13,7 @@ import math
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime
+from types import ModuleType
 
 import numpy as np
 
@@ -21,13 +22,16 @@ from config.loader import ThresholdsConfig
 # Defaults vêm de ThresholdsConfig (o YAML sobrescreve na composição).
 _DEFAULTS = ThresholdsConfig()
 
+_rust: ModuleType | None
 try:
-    import _aiops_rust as _rust
+    import _aiops_rust as _rust_mod
+
+    _rust = _rust_mod
 
     from pipeline.rust_compat import has_params
 
     _RUST_AVAILABLE = has_params(
-        _rust, "filter_metrics", "sigma_threshold", "baseline_ratio"
+        _rust_mod, "filter_metrics", "sigma_threshold", "baseline_ratio"
     )
 except ImportError:
     _rust = None
@@ -73,6 +77,7 @@ class MetricFilter:
 
     def _detect_rust(self, metrics: list) -> list[MetricAnomaly]:
         """Delegação para implementação Rust (N-sigma paramétrico)."""
+        assert _rust is not None
         raw = _rust.filter_metrics(
             metrics,
             sigma_threshold=self.sigma_threshold,

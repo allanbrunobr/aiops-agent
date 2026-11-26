@@ -14,9 +14,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from types import ModuleType
 
+_rust: ModuleType | None
 try:
-    import _aiops_rust as _rust
+    import _aiops_rust as _rust_mod
+
+    _rust = _rust_mod
 
     _RUST_AVAILABLE = True
 except ImportError:
@@ -105,6 +109,7 @@ class LogParser:
         """
         import datetime as _dt
 
+        assert _rust is not None
         raw = _rust.parse_logs(logs)
         # Fuso da entrada: o Rust devolve epoch, e a conversão preserva o
         # tzinfo original (aware continua aware; naive continua hora local).

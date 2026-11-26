@@ -200,3 +200,10 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - Verde no M5 (M5_LEVE=1): unit (sem test_databricks_retry) 2084 passed/7 skipped; ruff check/format ok.
 - NÃO verificado: test_databricks_retry na suíte completa (poluição pré-existente).
 - Próxima: Feature 15.
+
+## Sessão Feature 1 — TD1 stub _aiops_rust.pyi (concluída)
+- _aiops_rust.pyi (novo, raiz): 9 funções exportadas em rust/src/lib.rs, assinaturas/defaults conferidos nos #[pyo3(signature)].
+- Guards `_rust: ModuleType | None` (+ `_rust_mod`) em metric_predictor, trace_predictor e, por efeito do stub no mypy, também log_parser, trace_filter, metric_filter, context_compressor, telemetry_sanitizer; callers com `_rust is not None`/assert. Fallback runtime preservado.
+- Verificado: pi-lens worker 0 blockers nos 3 arquivos; ruff check ok; mypy com 9 erros idênticos ao baseline HEAD (pré-existentes, nenhum novo); paridade+test_trace_predictor 127 passed.
+- unit (sem test_databricks_retry) 2083 passed, 1 failed: test_local_env_loader::test_no_hand_written_env_parser_left — causado por scripts/jira_sync.py (alteração não commitada do usuário, fora do escopo). `ruff format --check .` acusa 14 arquivos já pré-existentes.
+- Próxima: Feature 2 (TD2 seeds 50).

@@ -15,7 +15,7 @@
       "pytest tests -m unit -q verde + paridade Rust verde",
       "passes:true + commit fix(types): TD1"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 2,
