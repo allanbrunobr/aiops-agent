@@ -709,8 +709,17 @@ def _record_safety_decision(result, safety_result, remediation_result) -> bool:
     return requires_human
 
 
-def step_skill_learning(memory_db, skill, *, tnr_result: str, reflection: dict,
-                        tools_used: list, iteration_count: int, use_llm: bool, client):
+def step_skill_learning(
+    memory_db,
+    skill,
+    *,
+    tnr_result: str,
+    reflection: dict,
+    tools_used: list,
+    iteration_count: int,
+    use_llm: bool,
+    client,
+):
     """Fases WRITE + EVOLVE do ciclo de skills: grava o outcome e, se a skill
     estiver fraca, propõe uma reescrita (pendente de revisão humana).
 
@@ -1294,9 +1303,7 @@ def run_v0(args: argparse.Namespace) -> int:
             _attach_postmortem_to_tracker(tracker, tracker_issue_key, result)
 
         # 5d. Persiste incidente na memória institucional (Story 7.3)
-        step_persist_incident(
-            result, report, scenario_name, time.time() - t_total
-        )
+        step_persist_incident(result, report, scenario_name, time.time() - t_total)
 
         # Summary
         print_summary(
