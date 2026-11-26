@@ -1,87 +1,39 @@
-⛔ ESTADO ATUAL (coordenador): fase CORREÇÕES DO REVIEW (RF1-RF3). Spec: docs/review-fixes-agent-prompt.md + docs/review-qwen-result.md. VERIFIQUE LOCAL M5 DIRETO: `.venv/bin/python -m pytest tests -m unit -q` (leve, 1961 passed). NÃO use scripts/ci-local.sh unit (cria venv fresco=pesado, hook m5-guard bloqueia no M5 — foi o que fez OP2/OP3 deferirem/falharem em loop). NÃO vá pro M1/ssh/rsync. Teste falha antes→fix→suíte direta verde→passes:true→commit. UMA sessão por tarefa. Ordem RF1→RF2→RF3. RF1=Ctrl+C return EXIT_SUCCESS (monitor_runner.py:152); RF2=--profile auto|hpa|generic; RF3=perf skipif AIOPS_RUST_RELEASE. Regra silent-failure: except sem log proibido. Nada infra real / output repo (tmp_path). Sem deps novas.
+# Progresso — aiops-agent (fila long-run: Robustez Eixos A/B/C)
 
-# Claude Progress — aiops-agent
+## ⛔ REGRA DE VERIFICAÇÃO (sobrepõe qualquer nota antiga)
+Verifique AQUI no M5, direto com o venv do projeto:
+- Unit: `.venv/bin/python -m pytest tests -m unit -q`
+- Integration: `.venv/bin/python -m pytest tests -m integration -q`
+- real-RAG (A1): `.venv/bin/python -m pytest tests -m real_rag -v` (M5 arm64, torch 2.4.1 ok)
+- Rust (B3): `cargo test --manifest-path rust/Cargo.toml` + clippy `-D warnings`
+- Lint/tipos: `.venv/bin/ruff check .` + `.venv/bin/mypy domain application core`
+- Smoke: `.venv/bin/python main.py --no-llm --no-rag --output-dir /tmp/smoke-out`
+NÃO use `scripts/ci-local.sh unit` (cria venv fresco = pesado → hook m5-guard bloqueia no M5
+→ você defere pro M1 e falha). NÃO ssh/rsync m1-docker para a suíte unit. Marque passes:true
+após verde + commit. Uma sessão basta por tarefa. Não rode testes concorrentes.
 
-## Fase atual: Vigia Barato OPERÁVEL (CLI --monitor + demo contínua)
-O motor contínuo VB1–VB4 JÁ EXISTE e está verde (11 features concluídas, commits
-até 93f5cd1). Esta fase só o torna operável pela CLI e demonstrável sem infra real.
+## SPEC AUTORITATIVA — LEIA PRIMEIRO
+1. `docs/robustness-abc-agent-prompt.md` (regras de execução + mapa tarefa→seção).
+2. `ROBUSTNESS_PLAN.md` (spec técnica completa com file:line, aceite, write-set por tarefa).
+   §0/§1 = contexto + a lição do bug num_workers (ponto cego de CI = Eixo A, prioridade máxima).
 
-★ LEIA PRIMEIRO: docs/continuous-monitor-agent-prompt.md (spec autoritativa, 4
-tarefas OP1→OP2→OP3→OP4) e docs/vigia-barato-agent-prompt.md (regras + assinaturas).
+## Estado atual (fundação já concluída e verde)
+- Fundação F0–F6 (31), merge segurança df7f71c, ML fix (torch 2.13/tf 5.23/st 5.7).
+- Eixo D completo (D1–D5), Vigia Barato (VB1–VB4+fix), operável (OP1–OP4), review fixes (RF1–RF3).
+- B2/B4/C1/C2 já feitos (via merge + F2). unit 1967 passed / slow 29 / smokes 3/3/3.
+- origin/main = 9cc13cd (sync). Branch main.
 
-## ⛔ REGRA DE VERIFICAÇÃO (sobrepõe qualquer nota antiga "no M1")
-Verifique AQUI no M5, NÃO via ssh/rsync m1-docker:
-  scripts/ci-local.sh unit          # suíte completa + coverage
-  .venv/bin/python -m pytest tests -m unit -q
-  .venv/bin/ruff check .
-  .venv/bin/mypy domain application core
-Notas antigas dizendo "rode no M1" são erro corrigido — NÃO replique. O host
-m1-docker é Intel macOS e não roda torch>=2.6; estas tarefas são stdlib/CLI e
-rodam aqui. Marque passes:true após verde + commit. UMA sessão basta por tarefa.
+## Esta fila: 14 tarefas Eixos A/B/C (ordem do feature_list.json)
+A1→A2→A4→A5→B1→B7→B8→C3→C4→C5→C6→A3→B3→B6.
+Prioridade máxima: A1+A2 (CI com RAG real) fecha o ponto cego que causou o incidente de ML.
 
-## Baseline
-scripts/ci-local.sh unit: ~1909+ passed / 6 skipped, coverage ~87%, verde.
-Smokes V0/V1: main.py --no-llm --no-rag [--pipeline-v1] --output-dir <tmp> → exit 3.
-
-## Regras
-- Teste falha antes do fix. Write-set explícito por tarefa.
-- Nada infra real: TNR verification_mode="simulated"; propõe+postmortem, nunca
-  executa remediação; fail-closed exit 3 (aprovação humana obrigatória).
-- Nada gravar em output/ do repo (tests/conftest.py _forbid_writes_to_repo_output):
-  use tmp_path.
-- Camada barata NÃO chama LLM. Sem dependências novas. Não quebre o V0.
-- Confirme file:line antes de editar.
+## Regras inegociáveis
+- Teste que falha antes do fix. Write-set explícito (só arquivos da seção do plano).
+- Nada infra real (TNR SIMULADO, SECURITY.md); fail-closed exit3/2, nunca falso sucesso exit0.
+- Nada gravar em output/ do repo (tests/conftest.py:201-215 _forbid_writes_to_repo_output → tmp_path).
+- Confirme file:line antes de editar (pode ter driftado). Não quebre V0 nem paridade Rust↔Python.
+- Sem deps novas. Opção mais honesta (documente limite se critério não alcançável sem falso positivo).
+- C5: se o invariante falhar por decisão agregada (C1) não governar exit, implemente C1 junto.
 
 ## Próxima tarefa
-OP1 (number 1): Flags CLI --monitor + validação. Depois OP2→OP3→OP4.
-
-## Sessão OP1 (2026-11-24)
-Feito: flags --monitor em args.py + tests/test_args_monitor.py (commit 2f9a0d4). Alvo isolado verde, ruff ok.
-Verificado (exit de cada comando, sem pipe): ci-local.sh unit 1899 passed/6 skipped; ruff check . ok; mypy domain application core ok; test_args_monitor 17 passed. OP1 passes:true.
-Próxima: OP2 (monitor_runner.py + wiring main.py).
-
-## Sessão OP2 (2026-11-24)
-Feito: interfaces/cli/monitor_runner.py (run_monitor) + wiring em main.py + tests/test_monitor_runner.py (9 testes).
-- csv:// = replay com relógio simulado (first_ts+30min, passo=--interval, sem sleep real); sem --ticks roda até o fim do CSV. prometheus:// = relógio/sleep reais, run_forever.
-- CSV com métrica do cenário HPA usa a config do backtest (EWMA 0.9*request, sustained 0.8*request, ETA 60min).
-- Exit: 3 se houve escalada, 0 limpo, 1 fonte inválida/falha.
-Verificado (M5_LEVE=1, alvo isolado): test_monitor_runner 9 passed; 90 passed em monitor_runner+args_monitor+exit_codes+cli_*+continuous_*; ruff check/format ok; mypy domain application core ok.
-Smokes: --monitor csv HPA --ticks 5 -> exit 0; replay completo (diagnóstico V1 real, --no-llm) -> exit 3, 1ª escalada 22/11 15:38 (< MAXED_OUT_AT 18:47); csv inexistente -> exit 1; V0 e V1 --no-llm --no-rag -> exit 3.
-NÃO RODADO: scripts/ci-local.sh unit (suíte completa) — o hook m5-guard.sh bloqueia suíte no M5. passes mantido false até alguém rodar (M1 ou liberar). 
-Obs: teste escrito depois do runner (não houve "falha antes").
-Próxima: rodar ci-local.sh unit e marcar OP2 passes:true; depois OP3.
-Revalidação (sessão seguinte, M5_LEVE=1): test_monitor_runner+test_args_monitor 26 passed; ruff ok. M1 ocupado (load ~12, outro pytest rodando; sem python3.12/uv no PATH do ssh) — ci-local.sh unit NÃO rodado; OP2 segue passes:false.
-Revalidação 3 (2026-11-24, M5_LEVE=1): test_monitor_runner+test_args_monitor 26 passed; ruff ok; mypy domain application core ok; smoke --monitor csv HPA --ticks 5 --no-llm -> exit 0.
-ci-local.sh unit NÃO rodado: regra do Allan (nada pesado no M5; hook barra) e M1 com load ~9. OP2 segue passes:false — falta só a suíte completa (rodar no M1 quando livre, ou Allan liberar no M5). Não iniciar OP3 antes.
-
-## Sessão OP3 (2026-11-24)
-Feito: scripts/run_continuous_demo.py (run_demo/main; reutiliza _build_source/constantes de monitor_runner + ContinuousMonitor/EscalationHook) + tests/test_continuous_demo_smoke.py (4 testes, ~0.5s, sem marker slow). Teste falhou antes (4 failed), passou depois (4 passed).
-Demo end-to-end (seed 42, diagnóstico V1 --no-llm real): 1º alerta/escalada 22/11 15:38, lead time 189 min antes de MAXED_OUT_AT (18:47), executed_infra=False, verification_mode=simulated, exit 3.
-Verificado (M5_LEVE=1, sem pipe): ruff check . ok; ruff format --check ok; mypy domain application core ok.
-NÃO RODADO: scripts/ci-local.sh unit (hook m5-guard bloqueia suíte no M5). Só arquivos novos, sem mudança em código compartilhado. passes OP3 mantido false até a suíte rodar (Allan/M1).
-Próxima: rodar ci-local.sh unit, marcar OP3 passes:true; depois OP4 (docs).
-Revalidação OP3 (2026-11-24, M5_LEVE=1): test_continuous_demo_smoke 4 passed. M1: pytest alheio rodando, sem uv/python3.12 no PATH do ssh — ci-local.sh unit NÃO rodado; OP3 segue passes:false até a suíte completa rodar (M1 livre ou Allan liberar no M5).
-Sessão OP3 fechamento (2026-11-24): scripts/ci-local.sh unit rodado no M5 (autorizado pela nota do coordenador): exit 0, 1912 passed/6 skipped. ruff check ok; mypy domain application core ok; demo end-to-end exit 3 (lead time 189 min, executed_infra=False, simulated). ruff format --check . acusa 14 arquivos PRÉ-EXISTENTES (nenhum de OP3; os 2 de OP3 estão formatados). OP3 passes:true. Próxima: OP4 (docs).
-
-## Sessão OP4 (2026-11-24)
-Feito: README.md seção "Vigia Barato — monitoramento contínuo" (+ item no índice) e docs/continuous-monitor.md (guia: duas camadas, flags de args.py, fontes, exit codes, gate Slack AIOPS_MONITOR_SLACK_REAL, demo, métricas do backtest, limitações). Escopo honesto: PoC, simulado, fail-closed, nunca executa infra, sem alegação de 24/7.
-Verificado (exit direto, sem pipe): --monitor csv --ticks 5 -> 0; replay completo -> 3; csv inexistente -> 1; esquema inválido -> 1; run_continuous_demo.py -> 3; ruff check . ok; scripts/ci-local.sh unit exit 0 (1912 passed/6 skipped). OP4 passes:true.
-Fase OP1–OP4 concluída. Próxima: nenhuma da lista; opcional calibração por métrica (HPA seeds 44–46).
-
-## Sessão RF1 (2026-11-24)
-Feito: `return EXIT_SUCCESS` no `except KeyboardInterrupt` de interfaces/cli/monitor_runner.py (log mantido) + teste test_keyboard_interrupt_during_startup_returns_clean. Falhou antes (UnboundLocalError), passa depois.
-Verificado (exit direto, sem pipe, M5_LEVE=1): pytest tests -m unit = 1962 passed/6 skipped; ruff check . ok; ruff format --check nos 2 arquivos ok; mypy domain application core ok.
-Nota: Ctrl+C agora sempre sai 0, inclusive no run_forever após escaladas (antes cairia em exit 3) — conforme spec RF1.
-Próxima: RF2 (--profile auto|hpa|generic).
-
-## Sessão RF2 (2026-11-24)
-Feito: `--profile auto|hpa|generic` (default auto) em args.py; monitor_runner aplica tuning HPA se profile==hpa ou (auto e replay e _is_hpa); generic nunca. docs/continuous-monitor.md documenta. Testes: 2 em test_args_monitor (default/valores/inválido) + 3 em test_monitor_runner (generic não aplica, auto aplica em HPA, hpa força em CSV plano). generic e hpa-forçado falharam antes (2 failed), passam depois.
-Verificado (M5_LEVE=1, exit direto, sem pipe): pytest tests -m unit = 1967 passed/6 skipped; ruff check . ok; ruff format --check nos 4 arquivos tocados ok (4 arquivos pré-existentes em interfaces/ seguem fora do formato); mypy domain application core ok; demo run_continuous_demo.py exit 3; csv inexistente exit 1.
-Próxima: RF3 (benchmark Rust só em release).
-
-## Sessão RF3 (2026-11-24)
-Feito: skipif(not AIOPS_RUST_RELEASE) + import os + docstring (env + follow-up CI rust-build --release) em tests/rust/test_trace_predictor.py::TestPercentileBenchmark. Teste e assert 3x preservados.
-Baseline: slow = 1 failed (speedup 0.2x em build dev). Depois: pytest tests -m slow = 29 passed/2 skipped, exit 0. Com AIOPS_RUST_RELEASE=1 o teste roda (e falha no build dev, esperado: o guard existe).
-Verificado (M5_LEVE=1, direto): unit 1967 passed/6 skipped; ruff check ok; ruff format --check do arquivo ok; mypy domain application core ok.
-Follow-up (fora do escopo, .github/ intocado): job rust-build deve buildar --release e exportar AIOPS_RUST_RELEASE=1.
-Fila RF1–RF3 concluída.
+Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).

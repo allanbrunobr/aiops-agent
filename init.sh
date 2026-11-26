@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
+# Inicialização da sessão long-run — Robustez Eixos A/B/C.
 set -euo pipefail
 cd "$(dirname "$0")"
 [ -d .venv ] && source .venv/bin/activate || true
-echo "Spec autoritativa: docs/review-fixes-agent-prompt.md (RF1-RF3) + docs/review-qwen-result.md"
-echo "Verifique LOCAL M5 DIRETO: .venv/bin/python -m pytest tests -m unit -q ; ruff check . ; mypy domain application core"
-echo "NAO use scripts/ci-local.sh unit (venv fresco pesado, m5-guard bloqueia). NAO va pro M1."
-echo "Baseline: 1961 unit passed. Smokes V0/V1/MON exit 3. Proxima: RF1."
+echo "=== SPEC AUTORITATIVA ==="
+echo "1. docs/robustness-abc-agent-prompt.md (regras + mapa tarefa→seção)"
+echo "2. ROBUSTNESS_PLAN.md (spec técnica file:line por tarefa; §0/§1 contexto)"
+echo "3. claude-progress.txt (estado + regra de verificação)"
+echo "=== VERIFICAÇÃO (AQUI no M5, direto .venv — NÃO ci-local.sh unit, NÃO M1) ==="
+echo "unit:        .venv/bin/python -m pytest tests -m unit -q"
+echo "integration: .venv/bin/python -m pytest tests -m integration -q"
+echo "real-rag:    .venv/bin/python -m pytest tests -m real_rag -v"
+echo "rust:        cargo test --manifest-path rust/Cargo.toml + clippy -D warnings"
+echo "lint/tipos:  .venv/bin/ruff check . + .venv/bin/mypy domain application core"
+echo "smoke:       .venv/bin/python main.py --no-llm --no-rag --output-dir /tmp/smoke-out"

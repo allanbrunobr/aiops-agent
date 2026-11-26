@@ -1,0 +1,50 @@
+[
+  {
+    "number": 1,
+    "category": "functional",
+    "title": "RF1: Ctrl+C na subida do runner sem UnboundLocalError",
+    "description": "SPEC AUTORITATIVA: leia docs/review-fixes-agent-prompt.md (tarefa RF1) + docs/review-qwen-result.md. VERIFIQUE LOCAL M5 com `.venv/bin/python -m pytest tests -m unit -q` DIRETO (NÃO scripts/ci-local.sh unit=venv fresco pesado, hook m5-guard bloqueia; NÃO M1). monitor_runner.py:152 except KeyboardInterrupt imprime mas não retorna→cai em if monitor.escalations(:158) com monitor unbound se Ctrl+C antes de :139. Fix: return EXIT_SUCCESS no handler. Teste monkeypatch _build_source raise KeyboardInterrupt→run_monitor==EXIT_SUCCESS sem UnboundLocalError.",
+    "dependencies": "none",
+    "passes": true,
+    "steps": [
+      "Teste test_keyboard_interrupt_during_startup_returns_clean falha antes (UnboundLocalError)",
+      "Adicionar return EXIT_SUCCESS no except KeyboardInterrupt (manter log)",
+      "Teste passa + suíte unit direta verde",
+      "Rode .venv/bin/python -m pytest tests -m unit -q (direto, leve) — verde",
+      ".venv/bin/ruff check . + .venv/bin/mypy domain application core",
+      "Marque passes:true e commite fix(...): RFn"
+    ]
+  },
+  {
+    "number": 2,
+    "category": "functional",
+    "title": "RF2: --profile auto|hpa|generic (tuning HPA explícito)",
+    "description": "SPEC AUTORITATIVA: leia docs/review-fixes-agent-prompt.md (tarefa RF2) + docs/review-qwen-result.md. VERIFIQUE LOCAL M5 com `.venv/bin/python -m pytest tests -m unit -q` DIRETO (NÃO scripts/ci-local.sh unit=venv fresco pesado, hook m5-guard bloqueia; NÃO M1). args.py novo --profile choices auto/hpa/generic default auto após --monitor-service. monitor_runner.py:129 aplicar tuning HPA se profile==hpa OU (auto e replay e _is_hpa); generic nunca. Default auto=backward compat (MON=3). docs/continuous-monitor.md documenta. Testes: args parse/default/inválido; generic não aplica tuning, hpa força.",
+    "dependencies": "1",
+    "passes": true,
+    "steps": [
+      "Testes test_args --profile + test_monitor_runner generic/hpa falham antes",
+      "args.py --profile + monitor_runner lógica profile + docs",
+      "Suíte unit direta verde + smokes V0/V1/MON exit 3",
+      "Rode .venv/bin/python -m pytest tests -m unit -q (direto, leve) — verde",
+      ".venv/bin/ruff check . + .venv/bin/mypy domain application core",
+      "Marque passes:true e commite fix(...): RFn"
+    ]
+  },
+  {
+    "number": 3,
+    "category": "functional",
+    "title": "RF3: benchmark perf skip em build dev (AIOPS_RUST_RELEASE)",
+    "description": "SPEC AUTORITATIVA: leia docs/review-fixes-agent-prompt.md (tarefa RF3) + docs/review-qwen-result.md. VERIFIQUE LOCAL M5 com `.venv/bin/python -m pytest tests -m unit -q` DIRETO (NÃO scripts/ci-local.sh unit=venv fresco pesado, hook m5-guard bloqueia; NÃO M1). tests/rust/test_trace_predictor.py TestPercentileBenchmark.test_rust_percentile_3x...: @pytest.mark.skipif(not os.environ.get('AIOPS_RUST_RELEASE'), reason=...). Import os. Dev→skipped (slow verde); release com env→roda assert 3x. Não remover teste/assert. Docstring explica env + follow-up CI release.",
+    "dependencies": "none",
+    "passes": true,
+    "steps": [
+      "pytest -m slow mostra perf falhando em dev (baseline)",
+      "Adicionar skipif AIOPS_RUST_RELEASE + import os + docstring",
+      "pytest -m slow -q → 0 failed (perf skipped); ruff ok",
+      "Rode .venv/bin/python -m pytest tests -m unit -q (direto, leve) — verde",
+      ".venv/bin/ruff check . + .venv/bin/mypy domain application core",
+      "Marque passes:true e commite fix(...): RFn"
+    ]
+  }
+]
