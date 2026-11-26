@@ -53,3 +53,15 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
   (hook m5-guard) — nenhum arquivo de produção alterado.
 - Próxima: Feature 2 — A2 (job CI real-rag em .github/workflows/ci.yml + scripts/ci-local.sh).
   Lembrar: o job precisa de KMP_DUPLICATE_LIB_OK só no macOS; ubuntu não.
+
+## Sessão Feature 2 — A2 (concluída)
+- ci.yml: job `real-rag` (ubuntu-latest, timeout 20, setup-python 3.12, pip install -r requirements.txt,
+  actions/cache ~/.cache/huggingface key hf-<hash requirements>-v1, `pytest tests/ -m real_rag -v`).
+- ci-local.sh: 5º job `real-rag` (venv /tmp/aiops-ci-venv-real-rag), entra em `all`; header avisa Intel-Mac→container (A3).
+- ACHADO: os testes real_rag levam também `integration` (A1) → o job integration (`integration or snapshot`,
+  timeout 5, sem cache) os rodaria e baixaria modelos. Corrigido: integration usa
+  `(integration or snapshot) and not real_rag`; rust-build usa `-m "not real_rag"` (ci.yml + ci-local.sh).
+- Verificação (M5, leve): YAML válido (5 jobs), bash -n ok, -h ok; coleta do filtro do integration = 0 real_rag;
+  `pytest tests -m real_rag` → 6 passed. Mutação num_workers=0 já provada em A1 (mesmos testes que o job roda).
+- NÃO verificado: execução real no runner GitHub (push/cache 2ª execução) e `ci-local.sh real-rag` (instala torch; pesado → M1/CI).
+- Próxima: Feature 3 — A4 (tests/test_failure_injection.py).

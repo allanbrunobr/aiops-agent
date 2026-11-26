@@ -26,7 +26,7 @@
       "YAML válido + job local roda",
       "Push normal verde; num_workers=0 reintroduzido→vermelho"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 3,

@@ -2,11 +2,15 @@
 # scripts/ci-local.sh — replica os jobs do GitHub Actions localmente.
 #
 # Uso:
-#   scripts/ci-local.sh                 # roda os 4 jobs (lint, unit, integration, rust)
+#   scripts/ci-local.sh                 # roda os 5 jobs (lint, unit, integration, real-rag, rust)
 #   scripts/ci-local.sh lint            # só lint & type-check (ruff + mypy)
 #   scripts/ci-local.sh unit            # só unit-tests
 #   scripts/ci-local.sh integration     # só integration & snapshot
+#   scripts/ci-local.sh real-rag        # só real-rag (modelos HF reais; baixa ~340MB)
 #   scripts/ci-local.sh rust            # só rust-build & PyO3
+#
+# ATENÇÃO real-rag: exige torch 2.13 (linux x86_64/arm64 ou macOS arm64). Em
+# Intel-Mac NÃO rodar nativo — use o container (tarefa A3, scripts/real-rag-docker.sh).
 #
 # Cria venvs descartáveis em /tmp/aiops-ci-venv-<job> para mimicar o ambiente
 # limpo do runner do GitHub Actions. O .venv local do projeto não é tocado.
@@ -92,7 +96,17 @@ run_integration() {
   mkvenv "$VENV_BASE-integration"
   pip install --quiet -r "$ROOT/requirements.txt"
   cd "$ROOT"
-  pytest tests/ -m "integration or snapshot" -v
+  pytest tests/ -m "(integration or snapshot) and not real_rag" -v
+  deactivate
+}
+
+run_real_rag() {
+  echo ">>> Job: real-rag"
+  require "$PYTHON"
+  mkvenv "$VENV_BASE-real-rag"
+  pip install --quiet -r "$ROOT/requirements.txt"
+  cd "$ROOT"
+  pytest tests/ -m real_rag -v
   deactivate
 }
 
@@ -109,7 +123,7 @@ run_rust() {
   maturin build --manifest-path rust/Cargo.toml --release
   pip install --quiet --force-reinstall rust/target/wheels/*.whl
   python -c "import _aiops_rust; print('rust ext OK:', dir(_aiops_rust))"
-  python -m pytest tests/ -v
+  python -m pytest tests/ -m "not real_rag" -v
   deactivate
 }
 
@@ -117,14 +131,15 @@ case "$JOB" in
   lint)        run_lint ;;
   unit)        run_unit ;;
   integration) run_integration ;;
+  real-rag)    run_real_rag ;;
   rust)        run_rust ;;
-  all)         run_lint; run_unit; run_integration; run_rust ;;
+  all)         run_lint; run_unit; run_integration; run_real_rag; run_rust ;;
   -h|--help)
-    sed -n '2,17p' "$0"
+    sed -n '2,21p' "$0"
     exit 0
     ;;
   *)
-    echo "Uso: $0 [lint|unit|integration|rust|all]" >&2
+    echo "Uso: $0 [lint|unit|integration|real-rag|rust|all]" >&2
     exit 2
     ;;
 esac
