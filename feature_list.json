@@ -3,7 +3,7 @@
     "number": 1,
     "category": "functional",
     "title": "P6: aposentar V0 — V1 canônico, --pipeline-v1 deprecated no-op",
-    "jira_key": "AIOPS-96",
+    "jira_key": "AIOPS-97",
     "description": "SPEC docs/f5-4-parity-agent-prompt.md tarefa P6 (4f). P1-P5 done+pushed 408488c. Remover v0_pipeline.py+step_* exclusivos V0; main.py V1 default único; --pipeline-v1 alias deprecated no-op; docs atualizados; testes V0-only removidos mantendo exit codes V1. Não quebrar contrato CLI 0/1/2/3. Verificação LOCAL M5 unit+snapshot+smoke exit3+ruff+mypy domain application core. Commit P6. passes:true.",
     "dependencies": "none",
     "steps": [
@@ -15,6 +15,6 @@
       "main.py --no-llm --no-rag exit3; ruff; mypy domain application core",
       "commit P6; passes:true"
     ],
-    "passes": false
+    "passes": true
   }
 ]
