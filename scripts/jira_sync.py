@@ -15,6 +15,7 @@ Sem jira_key, a feature é ignorada (sync é opt-in por feature).
 Credenciais: ~/.config/jira-pessoal.env (JIRA_SITE/JIRA_EMAIL/JIRA_API_TOKEN).
 O token nunca é impresso.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,22 +26,21 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from dotenv import dotenv_values
+
 # status id no workflow Kanban do projeto AIOPS (esquema PF 10002)
-STATUS_DONE = "10005"      # Concluído com evidência
-STATUS_DOING = "3"         # Em andamento / Em execução
-STATUS_PLANNED = "10004"   # Selected for Development / Próximas entregas
+STATUS_DONE = "10005"  # Concluído com evidência
+STATUS_DOING = "3"  # Em andamento / Em execução
+STATUS_PLANNED = "10004"  # Selected for Development / Próximas entregas
 _TARGET = {"done": STATUS_DONE, "doing": STATUS_DOING, "planned": STATUS_PLANNED}
 
 
 def _creds() -> tuple[str, str, str]:
     env = Path.home() / ".config" / "jira-pessoal.env"
-    data: dict[str, str] = {}
-    for line in env.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, val = line.split("=", 1)
-        data[key.strip()] = val.strip().strip('"').strip("'")
+    # Reusa o python-dotenv (carregador único do projeto, config/env.py) em vez
+    # de parser artesanal — porteiro test_no_hand_written_env_parser_left.
+    values = dotenv_values(env)
+    data = {k: v for k, v in values.items() if v is not None}
     site = data.get("JIRA_SITE") or data.get("JIRA_BASE_URL") or ""
     if site and not site.startswith("http"):
         site = "https://" + site
@@ -84,8 +84,11 @@ def _transition(key: str, target_status: str) -> bool:
         return False
     for t in trans.get("transitions", []):
         if str(t.get("to", {}).get("id", "")) == target_status:
-            code, _ = _req("POST", f"/rest/api/3/issue/{key}/transitions",
-                           {"transition": {"id": t["id"]}})
+            code, _ = _req(
+                "POST",
+                f"/rest/api/3/issue/{key}/transitions",
+                {"transition": {"id": t["id"]}},
+            )
             return code in (200, 204)
     return False
 
@@ -103,7 +106,9 @@ def _features(cwd: Path) -> list[dict]:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--feature", type=int, help="número da feature no feature_list.json")
+    ap.add_argument(
+        "--feature", type=int, help="número da feature no feature_list.json"
+    )
     ap.add_argument("--status", choices=list(_TARGET), help="status alvo")
     ap.add_argument("--all", action="store_true", help="reconcilia passes=true -> done")
     ap.add_argument("--cwd", default=".", help="diretório do projeto")
@@ -122,7 +127,10 @@ def main() -> int:
         return 0
 
     if args.feature is None or args.status is None:
-        print("[jira_sync] uso: --feature N --status doing|done|planned | --all", file=sys.stderr)
+        print(
+            "[jira_sync] uso: --feature N --status doing|done|planned | --all",
+            file=sys.stderr,
+        )
         return 0
     feat = next((f for f in features if f.get("number") == args.feature), None)
     if not feat:
@@ -131,7 +139,9 @@ def main() -> int:
     if not key:
         return 0  # sem mapeamento -> sync opt-in, ignora
     ok = _transition(key, _TARGET[args.status])
-    print(f"[jira_sync] feature {args.feature} ({key}) -> {args.status}: {'ok' if ok else 'no-op/falha'}")
+    print(
+        f"[jira_sync] feature {args.feature} ({key}) -> {args.status}: {'ok' if ok else 'no-op/falha'}"
+    )
     return 0
 
 
