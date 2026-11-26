@@ -1,6 +1,8 @@
 {
   "approval_status": "pending_approval",
+  "blast_radius_scope": "multi_service",
   "is_safe": false,
+  "recommendation": "⛔ ACTION BLOCKED: Blast radius too large: 4 services exceeds max of 3. Review the mitigation plan and propose a safer alternative.",
   "requires_human": true,
   "risk_level": "MEDIUM",
   "risk_score": 35.0

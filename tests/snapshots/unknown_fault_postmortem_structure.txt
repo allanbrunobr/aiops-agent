@@ -4,7 +4,7 @@
 
 - **Date**: NORMALIZED_TIMESTAMP NORMALIZED_TIMESTAMP
 - **Scenario**: unknown-fault
-- **LLM Model**: unknown
+- **LLM Model**: heuristic
 - **Duration**: ~35 minutes (scenario: deploy to reference fix time)
 - **Severity**: CRITICAL
 - **Impact**: Service degradation detected via automated analysis
@@ -54,8 +54,8 @@ Data corruption or serialization/schema error detected in data-processor
 - **Risk Score**: 50.0/100
 - **Approval Status**: pending_approval
 - **Requires Human**: Yes
-- **Blast Radius**: N/A
-- **Recommendation**: N/A
+- **Blast Radius**: multi_service
+- **Recommendation**: ⛔ ACTION BLOCKED: Blast radius too large: 4 services exceeds max of 3. Review the mitigation plan and propose a safer alternative.
 
 ## Remediation CVE/Version Validation
 
@@ -81,7 +81,7 @@ Data corruption or serialization/schema error detected in data-processor
 ## Lessons Learned
 
 - Automated detection identified the incident promptly
-- Diagnosis provided low-confidence assessment
+- Heuristic diagnosis provided low-confidence assessment
 - TNR did not verify the mitigation (no post-action health measurement)
 - Pipeline stopped at the human approval gate (mitigation awaiting approval)
 

@@ -183,16 +183,18 @@ def test_tracking_survives_a_failed_diagnosis():
     assert tracker.calls[0][1] == "medium"
 
 
-def test_replica_pipeline_uses_the_production_transition_text():
-    """Os snapshots vêm da réplica do pipeline em conftest.py: ela tem de gravar
-    o mesmo texto que main.step_agents, senão o snapshot não mede a correção."""
+def test_snapshot_pipeline_drives_the_production_engine():
+    """Os snapshots vêm do conftest.py: ele tem de dirigir o pipeline de produção
+    (V1 via app.builders + state_to_result), não uma réplica com texto próprio."""
     import pathlib
 
     conftest = (pathlib.Path(__file__).parent / "conftest.py").read_text(
         encoding="utf-8"
     )
     assert "aguardando aprovação" not in conftest
-    assert "safety gate decides next" in conftest
+    assert "build_engine" in conftest
+    assert "state_to_result" in conftest
+    assert "from agents.diagnoser import" not in conftest
 
 
 def test_diagnosis_lesson_names_the_llm(tmp_path):

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import io
 from contextlib import redirect_stderr, redirect_stdout
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -65,457 +65,83 @@ class TestHelpShowsExitCodes:
         assert "3  Safety blocked action" in help_text
 
 
+class _FakeEngine:
+    """Engine V1 falsa: devolve o estado (com veredito) ou levanta PipelineAborted."""
+
+    def __init__(self, *, verdict: str | None = None, abort: str | None = None):
+        self._verdict = verdict
+        self._abort = abort
+
+    def run(self, _pipeline, state):
+        import dataclasses
+
+        from blueprint.engine import PipelineAborted
+
+        if self._abort is not None:
+            raise PipelineAborted(self._abort)
+        return dataclasses.replace(state, safety_verdict=self._verdict)
+
+
+def _run_main_v1(engine: _FakeEngine, tmp_path) -> int:
+    """Roda main() --pipeline-v1 com a engine falsa; saída em tmp_path."""
+    from main import main
+
+    test_args = [
+        "main.py",
+        "--pipeline-v1",
+        "--no-llm",
+        "--no-rag",
+        "--output-dir",
+        str(tmp_path),
+    ]
+    with (
+        patch("sys.argv", test_args),
+        patch("main.load_local_env"),
+        patch("interfaces.cli.v1_runner.load_local_env"),
+        patch("app.builders.build_engine", return_value=engine),
+        redirect_stdout(io.StringIO()),
+        redirect_stderr(io.StringIO()),
+    ):
+        return main()
+
+
 @pytest.mark.unit
 class TestMainExitCodes:
-    """Testes de exit codes retornados por main()."""
+    """Testes de exit codes retornados por main() (pipeline V1)."""
 
-    def test_main_returns_zero_on_success(self) -> None:
+    def test_main_returns_zero_on_success(self, tmp_path) -> None:
         """main() deve retornar 0 quando pipeline completa com sucesso."""
-        from main import EXIT_SUCCESS, main
+        from main import EXIT_SUCCESS
 
-        test_args = ["main.py", "--no-llm", "--no-rag"]
+        assert _run_main_v1(_FakeEngine(verdict="APPROVED"), tmp_path) == EXIT_SUCCESS
 
-        # Mock step functions para simular pipeline de sucesso.
-        mock_result = {
-            "success": True,
-            "stages": {
-                "detection": {"is_incident": True, "severity": "HIGH", "signals": []},
-                "diagnosis": {
-                    "root_cause": "test",
-                    "evidence": [],
-                    "affected_services": ["svc"],
-                    "confidence": "high",
-                    "timeline": [],
-                },
-                "mitigation": {"pattern_matched": "test", "action": None},
-                "verification": {
-                    "result": "success",
-                    "health_delta": 10.0,
-                    "message": "ok",
-                },
-                "safety_validation": {"is_safe": True, "requires_human": False},
-                "remediation_validation": {"is_safe": True},
-            },
-            "timeline": [],
-        }
-        mock_orchestrator = MagicMock()
-        mock_orchestrator.history = []
+    def test_main_returns_one_on_exception(self, tmp_path) -> None:
+        """main() deve retornar 1 quando o pipeline aborta por erro não-tratado."""
+        from main import EXIT_ERROR
 
-        mock_safety = MagicMock()
-        mock_safety.requires_human = False
-        mock_safety.risk_level.value = "LOW"
-        mock_safety.risk_score = 10
-        mock_safety.approval_status.value = "auto_approved"
-        mock_safety.blast_radius.scope = "single_pod"
-        mock_safety.blast_radius.affected_services = 1
-        mock_safety.blast_radius.affected_pods_estimate = 1
-        mock_safety.blast_radius.is_reversible = True
-        mock_safety.blast_radius.is_data_destructive = False
-        mock_safety.blast_radius.estimated_downtime_seconds = 0
-        mock_safety.checks_passed = []
-        mock_safety.checks_failed = []
-        mock_safety.warnings = []
-        mock_safety.recommendation = "OK"
+        engine = _FakeEngine(abort="stage failure")
+        assert _run_main_v1(engine, tmp_path) == EXIT_ERROR
 
-        mock_remediation = MagicMock()
-        mock_remediation.is_safe = True
-        mock_remediation.risk.name = "SAFE"
-        mock_remediation.blocked_patterns = []
-        mock_remediation.warnings = []
-        mock_remediation.checks = []
-
-        mock_incident = MagicMock()
-        mock_incident.deploy_time = MagicMock()
-        mock_incident.fix_time = MagicMock()
-        mock_incident.fix_time.__sub__ = MagicMock(
-            return_value=MagicMock(total_seconds=MagicMock(return_value=600))
-        )
-
-        with (
-            patch("sys.argv", test_args),
-            patch("main.load_local_env"),
-            patch("interfaces.cli.v0_pipeline.print_banner"),
-            patch(
-                "main.step_generate_data", return_value=(mock_incident, "test-scenario")
-            ),
-            patch(
-                "main.step_sanitize",
-                return_value=MagicMock(threat_detected=False, total_entries=100),
-            ),
-            patch("interfaces.cli.v0_pipeline.step_pipeline", return_value=MagicMock()),
-            patch(
-                "main.step_compression",
-                return_value=(
-                    MagicMock(),
-                    "text",
-                    MagicMock(
-                        compression_ratio=0.5,
-                        critical_preserved=100,
-                        chunks_kept=5,
-                        chunks_removed=3,
-                    ),
-                ),
-            ),
-            patch("interfaces.cli.v0_pipeline.step_agents", return_value=mock_result),
-            patch(
-                "interfaces.cli.v0_pipeline.step_safety_validation",
-                return_value=mock_safety,
-            ),
-            patch(
-                "interfaces.cli.v0_pipeline.step_remediation_validation",
-                return_value=mock_remediation,
-            ),
-            patch(
-                "interfaces.cli.v0_pipeline.step_postmortem",
-                return_value=(MagicMock(), None),
-            ),
-            redirect_stdout(io.StringIO()),
-            redirect_stderr(io.StringIO()),
-        ):
-            exit_code = main()
-
-        assert exit_code == EXIT_SUCCESS
-
-    def test_main_returns_one_on_exception(self) -> None:
-        """main() deve retornar 1 quando exceção não-tratada ocorre."""
-        from main import EXIT_ERROR, main
-
-        test_args = ["main.py", "--no-llm", "--no-rag"]
-
-        with (
-            patch("sys.argv", test_args),
-            patch("main.load_local_env"),
-            patch("interfaces.cli.v0_pipeline.print_banner"),
-            patch(
-                "interfaces.cli.v0_pipeline.step_generate_data",
-                side_effect=RuntimeError("stage failure"),
-            ),
-            redirect_stdout(io.StringIO()),
-            redirect_stderr(io.StringIO()),
-        ):
-            exit_code = main()
-
-        assert exit_code == EXIT_ERROR
-
-    def test_main_returns_two_on_regression(self) -> None:
+    def test_main_returns_two_on_regression(self, tmp_path) -> None:
         """main() deve retornar 2 quando TNR detecta regressão."""
-        from main import EXIT_REGRESSION, main
+        from main import EXIT_REGRESSION
 
-        test_args = ["main.py", "--no-llm", "--no-rag"]
+        engine = _FakeEngine(abort="TNR regression: health dropped")
+        assert _run_main_v1(engine, tmp_path) == EXIT_REGRESSION
 
-        mock_result = {
-            "success": False,
-            "stages": {
-                "detection": {"is_incident": True, "severity": "HIGH", "signals": []},
-                "diagnosis": {
-                    "root_cause": "test",
-                    "evidence": [],
-                    "affected_services": ["svc"],
-                    "confidence": "high",
-                    "timeline": [],
-                },
-                "mitigation": {"pattern_matched": "test", "action": None},
-                "verification": {
-                    "result": "regression",
-                    "health_delta": -15.0,
-                    "message": "REGRESSION: health dropped",
-                },
-                "safety_validation": {"is_safe": True, "requires_human": False},
-                "remediation_validation": {"is_safe": True},
-                "rollback": {"message": "Rollback executado"},
-            },
-            "timeline": [],
-        }
-        mock_orchestrator = MagicMock()
-        mock_orchestrator.history = []
-
-        mock_safety = MagicMock()
-        mock_safety.requires_human = False
-        mock_safety.risk_level.value = "LOW"
-        mock_safety.risk_score = 10
-        mock_safety.approval_status.value = "auto_approved"
-        mock_safety.blast_radius.scope = "single_pod"
-        mock_safety.blast_radius.affected_services = 1
-        mock_safety.blast_radius.affected_pods_estimate = 1
-        mock_safety.blast_radius.is_reversible = True
-        mock_safety.blast_radius.is_data_destructive = False
-        mock_safety.blast_radius.estimated_downtime_seconds = 0
-        mock_safety.checks_passed = []
-        mock_safety.checks_failed = []
-        mock_safety.warnings = []
-        mock_safety.recommendation = "OK"
-
-        mock_remediation = MagicMock()
-        mock_remediation.is_safe = True
-        mock_remediation.risk.name = "SAFE"
-        mock_remediation.blocked_patterns = []
-        mock_remediation.warnings = []
-        mock_remediation.checks = []
-
-        mock_incident = MagicMock()
-        mock_incident.deploy_time = MagicMock()
-        mock_incident.fix_time = MagicMock()
-        mock_incident.fix_time.__sub__ = MagicMock(
-            return_value=MagicMock(total_seconds=MagicMock(return_value=600))
-        )
-
-        with (
-            patch("sys.argv", test_args),
-            patch("main.load_local_env"),
-            patch("interfaces.cli.v0_pipeline.print_banner"),
-            patch(
-                "main.step_generate_data", return_value=(mock_incident, "test-scenario")
-            ),
-            patch(
-                "main.step_sanitize",
-                return_value=MagicMock(threat_detected=False, total_entries=100),
-            ),
-            patch("interfaces.cli.v0_pipeline.step_pipeline", return_value=MagicMock()),
-            patch(
-                "main.step_compression",
-                return_value=(
-                    MagicMock(),
-                    "text",
-                    MagicMock(
-                        compression_ratio=0.5,
-                        critical_preserved=100,
-                        chunks_kept=5,
-                        chunks_removed=3,
-                    ),
-                ),
-            ),
-            patch("interfaces.cli.v0_pipeline.step_agents", return_value=mock_result),
-            patch(
-                "interfaces.cli.v0_pipeline.step_safety_validation",
-                return_value=mock_safety,
-            ),
-            patch(
-                "interfaces.cli.v0_pipeline.step_remediation_validation",
-                return_value=mock_remediation,
-            ),
-            patch(
-                "interfaces.cli.v0_pipeline.step_postmortem",
-                return_value=(MagicMock(), None),
-            ),
-            redirect_stdout(io.StringIO()),
-            redirect_stderr(io.StringIO()),
-        ):
-            exit_code = main()
-
-        assert exit_code == EXIT_REGRESSION
-
-    def test_main_returns_three_on_approval_needed(self) -> None:
+    def test_main_returns_three_on_approval_needed(self, tmp_path) -> None:
         """main() deve retornar 3 quando safety requer aprovação humana."""
-        from main import EXIT_APPROVAL_NEEDED, main
+        from main import EXIT_APPROVAL_NEEDED
 
-        test_args = ["main.py", "--no-llm", "--no-rag"]
+        engine = _FakeEngine(verdict="NEEDS_REVIEW")
+        assert _run_main_v1(engine, tmp_path) == EXIT_APPROVAL_NEEDED
 
-        mock_result = {
-            "success": True,
-            "stages": {
-                "detection": {"is_incident": True, "severity": "HIGH", "signals": []},
-                "diagnosis": {
-                    "root_cause": "test",
-                    "evidence": [],
-                    "affected_services": ["svc"],
-                    "confidence": "high",
-                    "timeline": [],
-                },
-                "mitigation": {"pattern_matched": "test", "action": None},
-                "verification": {
-                    "result": "success",
-                    "health_delta": 10.0,
-                    "message": "ok",
-                },
-                "safety_validation": {"is_safe": False, "requires_human": True},
-                "remediation_validation": {"is_safe": True},
-            },
-            "timeline": [],
-        }
-        mock_orchestrator = MagicMock()
-        mock_orchestrator.history = []
-
-        mock_safety = MagicMock()
-        mock_safety.requires_human = True
-        mock_safety.risk_level.value = "HIGH"
-        mock_safety.risk_score = 80
-        mock_safety.approval_status.value = "requires_human"
-        mock_safety.blast_radius.scope = "cluster"
-        mock_safety.blast_radius.affected_services = 5
-        mock_safety.blast_radius.affected_pods_estimate = 20
-        mock_safety.blast_radius.is_reversible = True
-        mock_safety.blast_radius.is_data_destructive = False
-        mock_safety.blast_radius.estimated_downtime_seconds = 60
-        mock_safety.checks_passed = []
-        mock_safety.checks_failed = ["blast_radius_exceeded"]
-        mock_safety.warnings = []
-        mock_safety.recommendation = "Requires human approval"
-
-        mock_remediation = MagicMock()
-        mock_remediation.is_safe = True
-        mock_remediation.risk.name = "SAFE"
-        mock_remediation.blocked_patterns = []
-        mock_remediation.warnings = []
-        mock_remediation.checks = []
-
-        mock_incident = MagicMock()
-        mock_incident.deploy_time = MagicMock()
-        mock_incident.fix_time = MagicMock()
-        mock_incident.fix_time.__sub__ = MagicMock(
-            return_value=MagicMock(total_seconds=MagicMock(return_value=600))
-        )
-
-        with (
-            patch("sys.argv", test_args),
-            patch("main.load_local_env"),
-            patch("interfaces.cli.v0_pipeline.print_banner"),
-            patch(
-                "main.step_generate_data", return_value=(mock_incident, "test-scenario")
-            ),
-            patch(
-                "main.step_sanitize",
-                return_value=MagicMock(threat_detected=False, total_entries=100),
-            ),
-            patch("interfaces.cli.v0_pipeline.step_pipeline", return_value=MagicMock()),
-            patch(
-                "main.step_compression",
-                return_value=(
-                    MagicMock(),
-                    "text",
-                    MagicMock(
-                        compression_ratio=0.5,
-                        critical_preserved=100,
-                        chunks_kept=5,
-                        chunks_removed=3,
-                    ),
-                ),
-            ),
-            patch("interfaces.cli.v0_pipeline.step_agents", return_value=mock_result),
-            patch(
-                "interfaces.cli.v0_pipeline.step_safety_validation",
-                return_value=mock_safety,
-            ),
-            patch(
-                "interfaces.cli.v0_pipeline.step_remediation_validation",
-                return_value=mock_remediation,
-            ),
-            patch(
-                "interfaces.cli.v0_pipeline.step_postmortem",
-                return_value=(MagicMock(), None),
-            ),
-            redirect_stdout(io.StringIO()),
-            redirect_stderr(io.StringIO()),
-        ):
-            exit_code = main()
-
-        assert exit_code == EXIT_APPROVAL_NEEDED
-
-    def test_regression_takes_precedence_over_approval(self) -> None:
+    def test_regression_takes_precedence_over_approval(self, tmp_path) -> None:
         """Regressão (exit 2) deve ter prioridade sobre approval-needed (exit 3)."""
-        from main import EXIT_REGRESSION, main
+        from main import EXIT_REGRESSION
 
-        test_args = ["main.py", "--no-llm", "--no-rag"]
-
-        mock_result = {
-            "success": False,
-            "stages": {
-                "detection": {"is_incident": True, "severity": "HIGH", "signals": []},
-                "diagnosis": {
-                    "root_cause": "test",
-                    "evidence": [],
-                    "affected_services": ["svc"],
-                    "confidence": "high",
-                    "timeline": [],
-                },
-                "mitigation": {"pattern_matched": "test", "action": None},
-                "verification": {
-                    "result": "regression",
-                    "health_delta": -15.0,
-                    "message": "REGRESSION detected",
-                },
-                "safety_validation": {"is_safe": False, "requires_human": True},
-                "remediation_validation": {"is_safe": True},
-                "rollback": {"message": "Rollback executado"},
-            },
-            "timeline": [],
-        }
-        mock_orchestrator = MagicMock()
-        mock_orchestrator.history = []
-
-        mock_safety = MagicMock()
-        mock_safety.requires_human = True
-        mock_safety.risk_level.value = "HIGH"
-        mock_safety.risk_score = 80
-        mock_safety.approval_status.value = "requires_human"
-        mock_safety.blast_radius.scope = "cluster"
-        mock_safety.blast_radius.affected_services = 5
-        mock_safety.blast_radius.affected_pods_estimate = 20
-        mock_safety.blast_radius.is_reversible = True
-        mock_safety.blast_radius.is_data_destructive = False
-        mock_safety.blast_radius.estimated_downtime_seconds = 60
-        mock_safety.checks_passed = []
-        mock_safety.checks_failed = []
-        mock_safety.warnings = []
-        mock_safety.recommendation = "Requires human approval"
-
-        mock_remediation = MagicMock()
-        mock_remediation.is_safe = True
-        mock_remediation.risk.name = "SAFE"
-        mock_remediation.blocked_patterns = []
-        mock_remediation.warnings = []
-        mock_remediation.checks = []
-
-        mock_incident = MagicMock()
-        mock_incident.deploy_time = MagicMock()
-        mock_incident.fix_time = MagicMock()
-        mock_incident.fix_time.__sub__ = MagicMock(
-            return_value=MagicMock(total_seconds=MagicMock(return_value=600))
-        )
-
-        with (
-            patch("sys.argv", test_args),
-            patch("main.load_local_env"),
-            patch("interfaces.cli.v0_pipeline.print_banner"),
-            patch(
-                "main.step_generate_data", return_value=(mock_incident, "test-scenario")
-            ),
-            patch(
-                "main.step_sanitize",
-                return_value=MagicMock(threat_detected=False, total_entries=100),
-            ),
-            patch("interfaces.cli.v0_pipeline.step_pipeline", return_value=MagicMock()),
-            patch(
-                "main.step_compression",
-                return_value=(
-                    MagicMock(),
-                    "text",
-                    MagicMock(
-                        compression_ratio=0.5,
-                        critical_preserved=100,
-                        chunks_kept=5,
-                        chunks_removed=3,
-                    ),
-                ),
-            ),
-            patch("interfaces.cli.v0_pipeline.step_agents", return_value=mock_result),
-            patch(
-                "interfaces.cli.v0_pipeline.step_safety_validation",
-                return_value=mock_safety,
-            ),
-            patch(
-                "interfaces.cli.v0_pipeline.step_remediation_validation",
-                return_value=mock_remediation,
-            ),
-            patch(
-                "interfaces.cli.v0_pipeline.step_postmortem",
-                return_value=(MagicMock(), None),
-            ),
-            redirect_stdout(io.StringIO()),
-            redirect_stderr(io.StringIO()),
-        ):
-            exit_code = main()
-
-        assert exit_code == EXIT_REGRESSION
+        engine = _FakeEngine(abort="regression detected; safety blocked")
+        assert _run_main_v1(engine, tmp_path) == EXIT_REGRESSION
 
 
 @pytest.mark.integration
@@ -531,7 +157,14 @@ class TestExitCodeIntegration:
         """
         from main import EXIT_APPROVAL_NEEDED, main
 
-        test_args = ["main.py", "--no-llm", "--no-rag", "--output-dir", str(tmp_path)]
+        test_args = [
+            "main.py",
+            "--pipeline-v1",
+            "--no-llm",
+            "--no-rag",
+            "--output-dir",
+            str(tmp_path),
+        ]
 
         with (
             patch("sys.argv", test_args),
@@ -547,7 +180,14 @@ class TestExitCodeIntegration:
         """main() deve retornar um inteiro válido (0-3)."""
         from main import main
 
-        test_args = ["main.py", "--no-llm", "--no-rag", "--output-dir", str(tmp_path)]
+        test_args = [
+            "main.py",
+            "--pipeline-v1",
+            "--no-llm",
+            "--no-rag",
+            "--output-dir",
+            str(tmp_path),
+        ]
 
         with (
             patch("sys.argv", test_args),
