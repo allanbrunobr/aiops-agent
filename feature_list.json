@@ -140,7 +140,7 @@
       "Se C1 gap→implementar decisão agregada",
       "unit verde; nenhum bypass exit0"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 11,

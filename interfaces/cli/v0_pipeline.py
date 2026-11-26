@@ -692,6 +692,16 @@ def _record_safety_decision(result, safety_result, remediation_result) -> bool:
     if remediation_result is not None and not remediation_result.is_safe:
         blocked_by.append("version_validator")
     requires_human = _requires_human(safety_result, remediation_result)
+    # C1: veredito agregado do orquestrador também governa (fail-closed). Camada
+    # bloqueadora que não é pre/version (tnr, sanitizer) antes era invisível.
+    aggregate = result.get("stages", {}).get("safety_aggregate")
+    if aggregate is not None and (
+        not aggregate.get("approved", False) or aggregate.get("blocked_by")
+    ):
+        requires_human = True
+        for layer in aggregate.get("blocked_by") or ["orchestrator"]:
+            if layer not in blocked_by:
+                blocked_by.append(layer)
     result.setdefault("stages", {})["safety_decision"] = {
         "requires_human": requires_human,
         "blocked_by": blocked_by,
@@ -781,6 +791,13 @@ def step_safety_validation(result, config: AppConfig | None = None):
     action = mitigation["action"]
     orch_result = orchestrator.validate(action, diagnosis)
     safety_result = orch_result.layer_details["pre_validator"]
+    # C1: o veredito AGREGADO (sanitizer/TNR/version incluídos) não é descartado;
+    # _record_safety_decision o consulta para o exit 3.
+    result["stages"]["safety_aggregate"] = {
+        "approved": bool(orch_result.approved),
+        "blocked_by": list(orch_result.blocked_by),
+        "risk_score": orch_result.risk_score,
+    }
 
     # Display results
     table = Table(

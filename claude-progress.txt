@@ -142,3 +142,14 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - NÃO verificado: test_databricks_retry na suíte completa (poluição de ordem pré-existente F6/F7, intocada).
 - Efeito colateral aceito: upgrade para versão não listada de pacote conhecido (ex.: nginx:1.25) vira CAUTION (is_safe geral continua True; só warning).
 - Próxima: Feature 10; idealmente corrigir antes a poluição do test_databricks_retry.
+
+## Sessão Feature 10 — C5 (concluída)
+- tests/test_approval_invariant.py (novo): corpus adversarial (vazio/espaços/None, destrutivos, injeção ; && $(), curl file/metadata, risk CRITICAL/HIGH/desconhecido, versão maliciosa)
+  pelo fluxo real do CLI (step_safety_validation + step_remediation_validation + _record_safety_decision) → flag on: tudo exit 3; flag off: corpus ainda exit 3
+  (rollout restart LOW é allowlist legítima, pulado); AUTO_APPROVED só flag off + LOW + read-only; regressão mantém exit 2.
+- GAP C1 confirmado (2 testes falhavam): CLI descartava o agregado do SafetyOrchestrator. Corrigido em interfaces/cli/v0_pipeline.py: step_safety_validation grava
+  result["stages"]["safety_aggregate"]; _record_safety_decision funde approved/blocked_by do agregado (tnr, sanitizer…) → requires_human=True → exit 3.
+- Verde no M5 (M5_LEVE=1): unit sem test_databricks_retry 2060 passed/7 skipped; ruff check ok; ruff format do arquivo novo ok.
+- NÃO verificado: test_databricks_retry na suíte completa (poluição pré-existente); `ruff format --check` de v0_pipeline.py já falhava em HEAD (pré-existente).
+- Efeito: ações que o TNR projeta como regressão agora exigem humano no CLI (fail-closed intencional). C1 item display (display.py) não alterado — _requires_human segue com 2 camadas; decisão agregada vive em _record_safety_decision.
+- Próxima: Feature 11 (C6).
