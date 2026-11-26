@@ -297,6 +297,55 @@ def run_v1(args: argparse.Namespace) -> int:
             console.print(f"[yellow]Slack: {event_type} failed: {_exc}[/yellow]")
             log.warning("slack.fire_failed", event_type=event_type, error=str(_exc))
 
+    def _fire_prediction(st) -> None:
+        """prediction.warning/alert quando o node preditivo cruzou o limiar."""
+        pred = st.metadata.get("_prediction")
+        level = getattr(pred, "event_level", None)
+        if not level:
+            return
+        _fire(
+            level,
+            node_name="predictive_stage",
+            cid=st.correlation_id,
+            data={
+                "event_level": level,
+                "risk_score": pred.risk_score,
+                "eta_minutes": pred.eta_minutes,
+                "signals": pred.signals,
+                "matched_history": getattr(pred, "matched_history", []),
+            },
+        )
+
+    def _fire_diagnosis(st) -> None:
+        """diagnosis.completed (V0: não dispara sem incidente)."""
+        from application.use_cases.postmortem import _no_incident
+        from blueprint.adapters.state_adapter import state_to_result
+
+        if not st.diagnosis:
+            return
+        res = state_to_result(st)
+        if _no_incident(res):
+            return
+        diag = res["stages"].get("diagnosis", {})
+        action = (res["stages"].get("mitigation") or {}).get("action")
+        _fire(
+            "diagnosis.completed",
+            cid=st.correlation_id,
+            data={
+                "root_cause": diag.get("root_cause") or "",
+                "proposed_fix": diag.get("proposed_fix")
+                or diag.get("fix_command")
+                or (getattr(action, "command", None) if action else None)
+                or "",
+                "risk_level": st.safety_verdict or "unknown",
+                "requires_human": bool(
+                    res["stages"].get("safety_decision", {}).get("requires_human")
+                ),
+                "confidence": float(confidence_to_score(diag.get("confidence"))),
+                "evidence": list(diag.get("evidence", []))[:5],
+            },
+        )
+
     # 1b. Tracker — resolvido antes do pipeline para falhar rápido (como o V0)
     tracker = _resolve_tracker(getattr(args, "tracker", None))
 
@@ -394,6 +443,8 @@ def run_v1(args: argparse.Namespace) -> int:
         _aborted_state = _state_after_abort(exc, app_config)
         if _aborted_state is not None:
             state = _aborted_state
+        _fire_prediction(state)
+        _fire_diagnosis(state)
         _fire("pipeline.failed", cid=_cid, data={"error": str(exc)})
         if "regression" in str(exc).lower():
             exit_code = EXIT_REGRESSION
@@ -411,6 +462,8 @@ def run_v1(args: argparse.Namespace) -> int:
         # exige humano, como no V0 (exit 3).
         if state.safety_verdict == "NEEDS_REVIEW":
             exit_code = EXIT_APPROVAL_NEEDED
+        _fire_prediction(state)
+        _fire_diagnosis(state)
         diagnosis = state.diagnosis or {}
         _conf_v1 = diagnosis.get("confidence", 0.0)
         _fire(

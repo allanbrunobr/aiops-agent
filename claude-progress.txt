@@ -257,3 +257,11 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - Verde M5 (M5_LEVE=1, sem pipe): unit 2119 passed/7 skipped (test_databricks_retry deselecionado, poluição pré-existente); ruff check ok. Smoke: --output-format json/both em dir aninhado gera .json(+.md); exit 3 em V1 e V0.
 - Limites: tracker/Databricks testados só com fakes (sem Jira/Databricks reais); com abort de safety o tracking roda mas o markdown não é re-renderizado com a seção de tracking; cache FAISS real não exercitado (faiss mockado).
 - Próxima: P4 (predictive node + Slack progressivo).
+
+## Sessão Feature 1 (lote 2) — P4a node preditivo + Slack progressivo (concluída)
+- blueprint/adapters/pipeline_nodes.py: make_predictive_node (run_predictive_stage sobre metadata/aggregated_report["_report_obj"]; guarda PredictionReport|None em metadata["_prediction"]; nunca levanta). blueprint/pipelines/incident_response.py: node "predictive" (DETERMINISTIC, SKIP) após context_compressor → 9 nodes (build_pipeline em app/builders.py é re-export, sem mudança). state_adapter: stages.prediction.
+- interfaces/cli/v1_runner.py: _fire_prediction (prediction.warning/alert) e _fire_diagnosis (diagnosis.completed, não dispara sem incidente, como V0) — no caminho de sucesso e de abort, antes de pipeline.completed/failed. Agora V1 emite os 5 tipos de evento.
+- tests/test_v1_predictive.py (8 testes; 7 falhavam antes). Atualizados tests/test_blueprint_pipeline_nodes.py e test_blueprint_safety_nodes.py (8→9 nodes, ordem com "predictive") — fora do write-set, necessário.
+- Verde M5 (M5_LEVE=1, sem pipe): unit 2127 passed/7 skipped (test_databricks_retry deselecionado, poluição pré-existente); ruff check/format ok nos arquivos tocados; mypy: só erros pré-existentes em v1_runner.py. Smoke V1 --no-llm --no-rag exit 3.
+- Limites: prediction.* dispara após engine.run (V0 dispara durante o estágio 4d) — ordem relativa a pipeline.started/diagnosis.completed preservada; per-node node.completed e total_duration_ms real não feitos. Sem Slack real (notifier fake).
+- Próxima: Feature 2 (P4b memória episódica + skill learning).

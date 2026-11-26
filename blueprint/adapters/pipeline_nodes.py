@@ -102,6 +102,31 @@ def make_context_compressor_node(
     return execute
 
 
+def make_predictive_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]:
+    """Cria o adaptador do estágio preditivo (run_predictive_stage).
+
+    Guarda o PredictionReport (ou None) em ``metadata["_prediction"]``; o
+    state_adapter o expõe como ``stages.prediction``. Nunca levanta: falha
+    ou ausência de report degradam para ``None`` (paridade com step_predict V0).
+    """
+
+    def execute(state: IncidentState) -> IncidentState:
+        prediction = None
+        report_obj = (state.aggregated_report or {}).get("_report_obj")
+        if report_obj is not None:
+            try:
+                from pipeline.predictive_stage import run_predictive_stage
+
+                prediction = run_predictive_stage(report_obj)
+            except Exception as exc:  # noqa: BLE001 — preditivo é best-effort
+                log.warning("predictive.failed", error=repr(exc))
+        return dataclasses.replace(
+            state, metadata={**state.metadata, "_prediction": prediction}
+        )
+
+    return execute
+
+
 def _ensure_rag_index(state: IncidentState, report_obj) -> None:
     """Build lazy do índice RAG a partir do report agregado (F2-2).
 

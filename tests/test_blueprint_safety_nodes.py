@@ -18,10 +18,10 @@ pytestmark = pytest.mark.unit
 
 
 def test_pipeline_has_8_nodes():
-    """Pipeline completo deve ter 8 nodes (4 pipeline + 4 safety)."""
+    """Pipeline completo deve ter 9 nodes (5 pipeline + 4 safety; P4a)."""
     config = AppConfig()
     pipeline = build_incident_response_pipeline(config)
-    assert len(pipeline.nodes) == 8
+    assert len(pipeline.nodes) == 9
 
 
 def test_all_safety_nodes_are_deterministic_abort():
@@ -73,6 +73,7 @@ def test_pipeline_node_order_with_safety():
         "sanitizer",
         "aggregator",
         "context_compressor",
+        "predictive",
         "diagnoser",
         "version_validator",
         "pre_validator",

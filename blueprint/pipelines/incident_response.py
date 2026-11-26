@@ -15,6 +15,7 @@ from blueprint.adapters.pipeline_nodes import (
     make_diagnoser_node,
     make_postmortem_fallback,
     make_postmortem_node,
+    make_predictive_node,
 )
 from blueprint.adapters.safety_nodes import (
     make_pre_validator_node,
@@ -34,15 +35,16 @@ from config.loader import AppConfig
 def build_incident_response_pipeline(config: AppConfig) -> PipelineDefinition:
     """Constroi a definicao do pipeline de incident response com safety layers.
 
-    Ordem de execucao (8 nodes):
+    Ordem de execucao (9 nodes):
       1. sanitizer       (safety/deterministic) — BEFORE any processing
       2. aggregator      (deterministic) — LogParser + MetricFilter + TraceFilter
       3. context_compressor (deterministic) — Compressao de contexto
-      4. diagnoser       (agentic) — ReAct loop com Claude + fallback heuristico
-      5. version_validator (safety/deterministic) — CVE/version check on remediation
-      6. pre_validator    (safety/deterministic) — Blast radius + blocklist
-      7. tnr              (safety/deterministic) — Pre/post health comparison
-      8. postmortem       (agentic) — Geracao de postmortem
+      4. predictive      (deterministic) — Risk score preditivo (best-effort)
+      5. diagnoser       (agentic) — ReAct loop com Claude + fallback heuristico
+      6. version_validator (safety/deterministic) — CVE/version check on remediation
+      7. pre_validator    (safety/deterministic) — Blast radius + blocklist
+      8. tnr              (safety/deterministic) — Pre/post health comparison
+      9. postmortem       (agentic) — Geracao de postmortem
 
     Safety invariant: ALL 4 safety layers execute before any action proposal.
       - sanitizer: before ALL processing (Layer 1)
@@ -79,6 +81,13 @@ def build_incident_response_pipeline(config: AppConfig) -> PipelineDefinition:
             execute=make_context_compressor_node(config),
             on_failure=OnFailure.SKIP,
             description="Acon+AOI context compression for LLM token optimization",
+        ),
+        BlueprintNode(
+            id="predictive",
+            node_type=NodeType.DETERMINISTIC,
+            execute=make_predictive_node(config),
+            on_failure=OnFailure.SKIP,
+            description="Predictive stage: risk score + ETA from trends (best-effort)",
         ),
         # === Agentic Processing ===
         BlueprintNode(

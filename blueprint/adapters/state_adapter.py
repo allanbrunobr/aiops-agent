@@ -80,6 +80,9 @@ def state_to_result(state: IncidentState) -> dict[str, Any]:
     if verification is not None:
         stages["verification"] = dict(verification)
 
+    if "_prediction" in meta:
+        stages["prediction"] = meta["_prediction"]
+
     regression = (
         state.regression_detected or (verification or {}).get("result") == "regression"
     )
