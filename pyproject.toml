@@ -101,6 +101,7 @@ markers = [
     "slow: Testes lentos de performance (podem demorar >10s)",
     "e2e: Testes end-to-end Playwright do demo (browser headless; requer chromium + CDN)",
     "rust: Testes que exigem a extensão _aiops_rust (rodam só no job rust-build)",
+    "real_rag: testes que carregam modelos reais (torch/faiss/sentence-transformers); rodar em linux x86_64 ou arm64",
 ]
 addopts = "-v --tb=short"
 filterwarnings = [

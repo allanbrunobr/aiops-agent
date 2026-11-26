@@ -12,7 +12,7 @@
       "pytest tests -m real_rag -v verde no M5",
       "unit segue verde sem torch"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 2,

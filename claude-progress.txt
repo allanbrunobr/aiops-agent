@@ -37,3 +37,19 @@ Prioridade máxima: A1+A2 (CI com RAG real) fecha o ponto cego que causou o inci
 
 ## Próxima tarefa
 Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
+
+## Sessão Feature 1 — A1 (concluída)
+- Marker `real_rag` em pyproject.toml; tests/real_rag/test_real_rag_smoke.py com 6 cenários
+  (load dim384, build_index ntotal>0, relevância payment-pool top-3, roundtrip save/load +
+  hash stale, CrossEncoder real + rerank Tier2, CLI --rebuild-rag exit∈{0,3} com postmortem em tmp_path).
+- Verde no M5: `M5_LEVE=1 .venv/bin/python -m pytest tests -m real_rag -q` → 6 passed.
+  Mutação: num_workers=0 em rag/indexer.py (encode) → ValueError, testes falham (revertido).
+- Achados: (1) importorskip importa torch na coleta e viola o gate AC#4 de tests/conftest.py →
+  usado importlib.util.find_spec + skipif. (2) O gate exige marcador de nível; real_rag não está em
+  TIER_MARKERS (conftest fora do write-set) → testes também levam `integration`.
+  (3) macOS: torch+faiss abortam em faiss.search (libomp duplicado) → KMP_DUPLICATE_LIB_OK=TRUE
+  setado no módulo de teste (inócuo no Linux). Possível follow-up: TIER_MARKERS += real_rag.
+- Unit: só verificada a coleta (1972 selecionados, sem ML importado); suíte completa não rodada no M5
+  (hook m5-guard) — nenhum arquivo de produção alterado.
+- Próxima: Feature 2 — A2 (job CI real-rag em .github/workflows/ci.yml + scripts/ci-local.sh).
+  Lembrar: o job precisa de KMP_DUPLICATE_LIB_OK só no macOS; ubuntu não.
