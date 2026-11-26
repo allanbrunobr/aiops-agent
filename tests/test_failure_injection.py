@@ -152,16 +152,12 @@ def test_model_load_failure_never_reports_false_success(tmp_path: Path) -> None:
         )
 
     assert load.called, "_load_model nunca foi chamado: sem injeção"
-    if code == EXIT_ERROR:
-        # Antes de B1: fail-closed, sem postmortem de sucesso.
-        assert not _postmortems(tmp_path)
-    else:
-        # Depois de B1: degradação registrada, exit válido — nunca silencioso.
-        assert code in VALID_EXITS, f"exit inesperado {code}"
-        pm = _postmortem_json(tmp_path)
-        assert "rag_degraded" in json.dumps(pm), (
-            "falha do modelo engolida sem registrar degradação (falso sucesso)"
-        )
+    # B1: degradação graciosa — sem RAG o agente segue, registrando a degradação.
+    assert code in VALID_EXITS, f"exit inesperado {code}"
+    pm = _postmortem_json(tmp_path)
+    assert pm["meta"].get("rag_degraded") is True, (
+        "falha do modelo engolida sem registrar degradação (falso sucesso)"
+    )
 
 
 # ── 5. Telemetria malformada → None ou score limitado, sem crash ─────────────

@@ -163,6 +163,8 @@ def serialize_result(result: dict[str, Any], incident: Any) -> dict[str, Any]:
         # Veredito do gate junto de meta.success: o JSON não pode dizer
         # success=true sem o "awaiting_human"/"resolution" do markdown.
         **_postmortem_verdict(result),
+        # Só aparece quando o RAG caiu (B1): JSON de run normal fica idêntico.
+        **({"rag_degraded": True} if result.get("rag_degraded") else {}),
         "duration_minutes": round(
             (incident.fix_time - incident.deploy_time).total_seconds() / 60, 1
         ),

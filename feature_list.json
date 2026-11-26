@@ -69,7 +69,7 @@
       "Atualizar A4 cenário4",
       "unit+integration verde"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 6,

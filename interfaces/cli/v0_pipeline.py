@@ -1136,8 +1136,18 @@ def run_v0(args: argparse.Namespace) -> int:
         compressor, compressed_text, compression_stats = step_compression(report)
 
         # 3. RAG Indexing
+        rag_degraded = False
         if not args.no_rag:
-            retriever = step_rag(report, rebuild=args.rebuild_rag)
+            try:
+                retriever = step_rag(report, rebuild=args.rebuild_rag)
+            except Exception as rag_exc:  # noqa: BLE001 - degradação graciosa (B1)
+                _log.warning("rag_degraded", error=str(rag_exc))
+                console.print(
+                    f"[yellow]Warning: RAG unavailable ({type(rag_exc).__name__}); "
+                    "continuing without RAG[/yellow]"
+                )
+                retriever = None
+                rag_degraded = True
         else:
             if args.rebuild_rag:
                 console.print(
@@ -1210,6 +1220,8 @@ def run_v0(args: argparse.Namespace) -> int:
 
         # Armazena nome do cenário e config no resultado para postmortem e summary.
         result["scenario_name"] = scenario_name
+        if rag_degraded:
+            result["rag_degraded"] = True
         result["config_source"] = config_source
         result["threshold_config"] = threshold_config
 

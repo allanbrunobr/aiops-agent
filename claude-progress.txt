@@ -89,3 +89,12 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
   (só depois do teste novo — antes dele a mutação em :147 passava; o mock estrito sozinho não cobria esse caminho).
 - NÃO verificado: suíte unit completa (pesada, vedada no M5); só os 2 arquivos tocados.
 - Próxima: Feature 5 (conforme feature_list.json).
+
+## Sessão Feature 5 — B1 (concluída)
+- v0_pipeline.py: `step_rag` em try/except (Exception) → `_log.warning("rag_degraded")` + aviso no console +
+  retriever=None + `result["rag_degraded"]=True`. Consumidores já aceitam None (diagnoser `if retriever:`; orchestrator só repassa; caminho --no-rag já usava None).
+- application/use_cases/postmortem.py (fora do write-set estrito, 2 linhas): `meta.rag_degraded=true` no JSON só quando degradado (run normal inalterado).
+- tests/test_failure_injection.py cenário 4: agora exige exit∈{0,3} + meta.rag_degraded (falhava antes do fix: exit 1).
+- Verde no M5 (M5_LEVE=1): integration 189 passed/3 skipped/1 xfailed; unit 1970 passed/6 skipped; ruff ok.
+- Não alterei exit code por degradação (exit segue só safety/regressão); fail-closed vem do gate existente.
+- Próxima: Feature 6 (conforme feature_list.json).
