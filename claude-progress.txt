@@ -246,3 +246,12 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - NÃO verde: `ruff format --check interfaces/cli/v1_runner.py` acusa bloco pré-existente (_state_after_abort, linhas ~61-75), não tocado.
 - Snapshots NÃO regenerados (P5).
 - Próxima: Feature 3 (P3 flags no run_v1).
+
+## Sessão Feature 3 — P3 flags no run_v1 (concluída)
+- interfaces/cli/v1_runner.py: --output-format (markdown/json/both; JSON via serialize_result+json_default), --tracker (_resolve_tracker fail-fast antes dos dados; step_tracking; re-render do postmortem com seção Incident Tracking; _attach_postmortem_to_tracker), --data-source databricks (_create_databricks_sources→EXIT_ERROR se faltar env; step_fetch_databricks_data; drop_invalid_metric_points; alerta não herda texto payment-pool), --rebuild-rag (metadata _rebuild_rag/_rag_cache_dir + aviso com --no-rag).
+- blueprint/adapters/pipeline_nodes.py::_ensure_rag_index: load/save de cache FAISS em disco quando _rag_cache_dir presente (opt-in; testes existentes inalterados); rebuild ignora cache.
+- interfaces/cli/display.py: save_postmortem_v1 mkdir(parents=True).
+- tests/test_v1_flags.py (12 testes; 11 falhavam antes).
+- Verde M5 (M5_LEVE=1, sem pipe): unit 2119 passed/7 skipped (test_databricks_retry deselecionado, poluição pré-existente); ruff check ok. Smoke: --output-format json/both em dir aninhado gera .json(+.md); exit 3 em V1 e V0.
+- Limites: tracker/Databricks testados só com fakes (sem Jira/Databricks reais); com abort de safety o tracking roda mas o markdown não é re-renderizado com a seção de tracking; cache FAISS real não exercitado (faiss mockado).
+- Próxima: P4 (predictive node + Slack progressivo).

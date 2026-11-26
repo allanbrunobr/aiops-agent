@@ -302,7 +302,7 @@ def display_results(state: IncidentState, compact: bool = False) -> None:
 def save_postmortem_v1(postmortem_md: str, output_dir: str = "output") -> Path | None:
     """Salva postmortem em arquivo markdown."""
     output_path = Path(output_dir)
-    output_path.mkdir(exist_ok=True)
+    output_path.mkdir(parents=True, exist_ok=True)
     filename = f"postmortem_{datetime.now().strftime('%Y-%m-%d_%H%M%S')}.md"
     path = output_path / filename
     path.write_text(postmortem_md)

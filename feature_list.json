@@ -44,7 +44,7 @@
       "Smoke de cada flag; --output-format json gera .json; exit codes inalterados; unit green.",
       "Commit (message inclua P3); marcar passes:true."
     ],
-    "passes": false,
+    "passes": true,
     "jira_key": "AIOPS-92"
   }
 ]

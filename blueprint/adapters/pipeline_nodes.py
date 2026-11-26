@@ -118,12 +118,33 @@ def _ensure_rag_index(state: IncidentState, report_obj) -> None:
     indexer = getattr(retriever, "indexer", None)
     if indexer is None or getattr(indexer, "index", None) is not None:
         return
+    # Cache em disco só quando a composition root informa o diretório (CLI):
+    # --rebuild-rag ignora o cache, como o step_rag do V0.
+    cache_dir = state.metadata.get("_rag_cache_dir")
+    rebuild = bool(state.metadata.get("_rebuild_rag", False))
+    content_hash = None
     try:
+        if cache_dir:
+            from rag.indexer import ObservabilityIndexer
+
+            content_hash = ObservabilityIndexer._compute_content_hash(
+                report_obj.log_templates,
+                report_obj.metric_anomalies,
+                report_obj.slow_traces,
+            )
+            if not rebuild and indexer.load_index(cache_dir, content_hash=content_hash):
+                indexer._load_model()  # embedding das queries
+                return
         indexer.build_index(
             report_obj.log_templates,
             report_obj.metric_anomalies,
             report_obj.slow_traces,
         )
+        if cache_dir and content_hash is not None:
+            try:
+                indexer.save_index(cache_dir, content_hash=content_hash)
+            except Exception as exc:  # cache é otimização
+                log.warning("rag.index_cache_save_failed", error=str(exc))
     except Exception as exc:
         log.warning(
             "rag.index_build_failed",

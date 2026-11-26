@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
 import time
 from datetime import datetime
+from pathlib import Path
 
 import structlog
 from rich.rule import Rule
@@ -22,6 +24,11 @@ from data.sample_incident import create_incident
 from domain.confidence import confidence_to_score
 from domain.incident_state import IncidentState
 from interfaces.cli.console import console
+from interfaces.cli.data_sources import (
+    _create_databricks_sources,
+    drop_invalid_metric_points,
+    step_fetch_databricks_data,
+)
 from interfaces.cli.display import display_results, save_postmortem_v1
 from interfaces.cli.exit_codes import (
     EXIT_APPROVAL_NEEDED,
@@ -30,6 +37,13 @@ from interfaces.cli.exit_codes import (
     EXIT_REGRESSION,
     EXIT_SUCCESS,
 )
+from interfaces.cli.trackers import (
+    _attach_postmortem_to_tracker,
+    _resolve_tracker,
+    step_tracking,
+)
+
+RAG_CACHE_DIR = ".aiops-cache/rag"
 
 _persist_log = structlog.get_logger("main.persistence")
 
@@ -72,10 +86,23 @@ def _state_after_abort(exc, config):
     return state
 
 
+def _dominant_service(incident: object | None) -> str:
+    """Serviço mais frequente nos logs do incidente (``unknown`` sem logs)."""
+    from collections import Counter
+
+    counts = Counter(
+        getattr(entry, "service", None)
+        for entry in (getattr(incident, "logs", None) or [])
+        if getattr(entry, "service", None)
+    )
+    return counts.most_common(1)[0][0] if counts else "unknown"
+
+
 def create_incident_state(
     args: argparse.Namespace,
     incident_data: dict,
     incident: object | None = None,
+    scenario_name: str | None = None,
 ) -> "IncidentState":
     """Cria IncidentState a partir de dados simulados e flags da CLI.
 
@@ -84,6 +111,8 @@ def create_incident_state(
         incident_data: Dicionario com logs, metrics, traces do simulador.
         incident: SimulatedIncident de origem; guardado em ``metadata["_incident"]``
             (o postmortem rico lê deploy/spike/detection/fix times dele).
+        scenario_name: Rótulo da fonte (ex.: ``databricks-live``). Para dado real
+            o alerta não herda o texto do cenário simulado de payment-pool.
 
     Returns:
         IncidentState pronto para o pipeline.
@@ -97,18 +126,31 @@ def create_incident_state(
     now = datetime.now(timezone.utc)
     correlation_id = f"inc-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
 
+    live = scenario_name is not None and scenario_name.endswith("-live")
+    if live:
+        alert_fields = dict(
+            source=scenario_name,
+            source_id="live-001",
+            title=f"Live telemetry window ({scenario_name})",
+            description=f"Telemetry fetched from {scenario_name}; no simulated scenario",
+            service=_dominant_service(incident),
+        )
+    else:
+        alert_fields = dict(
+            source="simulated",
+            source_id="sim-001",
+            title="Simulated incident from data/sample_incident.py",
+            description="Payment service connection pool exhaustion after config deploy",
+            service="payment-svc",
+        )
     alert = NormalizedAlert(
-        source="simulated",
-        source_id="sim-001",
         correlation_id=correlation_id,
-        title="Simulated incident from data/sample_incident.py",
-        description="Payment service connection pool exhaustion after config deploy",
         severity="critical",
         alert_type="HighErrorRate",
         timestamp=now,
         detection_timestamp=now,
-        service="payment-svc",
         environment="production",
+        **alert_fields,
     )
 
     return IncidentState(
@@ -122,11 +164,74 @@ def create_incident_state(
         metadata={
             "raw_incident_data": incident_data,
             **({"_incident": incident} if incident is not None else {}),
-            "scenario": getattr(args, "scenario", None) or "payment-pool-exhaustion",
+            "scenario": scenario_name
+            or getattr(args, "scenario", None)
+            or "payment-pool-exhaustion",
             "output_format": getattr(args, "output_format", "markdown"),
             "compact": getattr(args, "compact", False),
         },
     )
+
+
+def _save_outputs(
+    state: IncidentState,
+    args: argparse.Namespace,
+    tracker: object | None,
+    *,
+    aborted: bool,
+) -> None:
+    """Tracking + postmortem nos formatos de ``--output-format`` (como o V0)."""
+    from application.use_cases.postmortem import (
+        json_default,
+        render_postmortem_markdown,
+        serialize_result,
+    )
+    from blueprint.adapters.state_adapter import state_to_result
+
+    output_dir = getattr(args, "output_dir", "output")
+    fmt = getattr(args, "output_format", "markdown")
+    incident = state.metadata.get("_incident")
+    markdown = state.postmortem_md
+    result = state_to_result(state) if state.diagnosis else None
+
+    issue_key = None
+    if tracker is not None and result is not None:
+        issue_key = step_tracking(result, tracker)
+        if issue_key:
+            result["stages"]["tracking"] = {"issue_key": issue_key, "url": tracker.url}
+            if markdown and not aborted and incident is not None:
+                # O node de postmortem rodou antes do tracking: re-renderiza
+                # com a seção Incident Tracking.
+                markdown = render_postmortem_markdown(
+                    result,
+                    incident,
+                    now=datetime.now(),
+                    tracker_url=tracker.url,
+                    tracker_issue_key=issue_key,
+                )
+
+    if markdown and fmt in ("markdown", "both"):
+        save_postmortem_v1(markdown, output_dir=output_dir)
+
+    if fmt in ("json", "both"):
+        if result is None or incident is None:
+            console.print("[yellow]JSON postmortem skipped: no diagnosis.[/yellow]")
+        else:
+            out = Path(output_dir)
+            out.mkdir(parents=True, exist_ok=True)
+            path = out / f"postmortem_{datetime.now().strftime('%Y-%m-%d_%H%M%S')}.json"
+            path.write_text(
+                json.dumps(
+                    serialize_result(result, incident),
+                    default=json_default,
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            )
+            console.print(f"[green]Postmortem (JSON) saved: {path}[/green]")
+
+    if tracker is not None and issue_key and result is not None:
+        _attach_postmortem_to_tracker(tracker, issue_key, result)
 
 
 def run_v1(args: argparse.Namespace) -> int:
@@ -192,8 +297,24 @@ def run_v1(args: argparse.Namespace) -> int:
             console.print(f"[yellow]Slack: {event_type} failed: {_exc}[/yellow]")
             log.warning("slack.fire_failed", event_type=event_type, error=str(_exc))
 
-    # 2. Gera dados simulados
-    if args.scenario:
+    # 1b. Tracker — resolvido antes do pipeline para falhar rápido (como o V0)
+    tracker = _resolve_tracker(getattr(args, "tracker", None))
+
+    # 2. Gera dados (simulados ou Databricks)
+    scenario_name: str | None = None
+    if getattr(args, "data_source", "simulated") == "databricks":
+        sources = _create_databricks_sources()
+        if sources is None:
+            console.print(
+                "[red]Cannot proceed without Databricks connection. Exiting.[/red]"
+            )
+            return EXIT_ERROR
+        telemetry_stats: dict[str, int] = {}
+        incident, scenario_name = step_fetch_databricks_data(
+            *sources, stats=telemetry_stats
+        )
+        drop_invalid_metric_points(incident)
+    elif args.scenario:
         incident = get_scenario(args.scenario)(seed=42)
     else:
         incident = create_incident()
@@ -211,7 +332,22 @@ def run_v1(args: argparse.Namespace) -> int:
 
     # 4. Constroi pipeline e estado inicial
     pipeline = build_pipeline(app_config)
-    state = create_incident_state(args, incident_data, incident=incident)
+    state = create_incident_state(
+        args, incident_data, incident=incident, scenario_name=scenario_name
+    )
+    rebuild_rag = bool(getattr(args, "rebuild_rag", False))
+    state = dataclasses.replace(
+        state,
+        metadata={
+            **state.metadata,
+            "_rebuild_rag": rebuild_rag,
+            "_rag_cache_dir": RAG_CACHE_DIR,
+        },
+    )
+    if rebuild_rag and args.no_rag:
+        console.print(
+            "[yellow]Warning: --rebuild-rag has no effect with --no-rag.[/yellow]"
+        )
 
     # 5. RAG (se habilitado)
     if not args.no_rag:
@@ -231,6 +367,7 @@ def run_v1(args: argparse.Namespace) -> int:
     # 6. Executa pipeline
     start_time = time.monotonic()
     exit_code = EXIT_SUCCESS
+    aborted = False
 
     _cid = state.correlation_id
     _fire(
@@ -253,6 +390,7 @@ def run_v1(args: argparse.Namespace) -> int:
         console.print(f"[red]Pipeline aborted: {exc}[/red]")
         # Mostra o que o pipeline já tinha apurado (diagnóstico, postmortem),
         # não o estado inicial.
+        aborted = True
         _aborted_state = _state_after_abort(exc, app_config)
         if _aborted_state is not None:
             state = _aborted_state
@@ -294,10 +432,8 @@ def run_v1(args: argparse.Namespace) -> int:
     # 7. Exibe resultados
     display_results(state, compact=args.compact)
 
-    # 8. Salva postmortem
-    output_dir = getattr(args, "output_dir", "output")
-    if state.postmortem_md:
-        save_postmortem_v1(state.postmortem_md, output_dir=output_dir)
+    # 8. Tracking (opcional) e persistência do postmortem
+    _save_outputs(state, args, tracker, aborted=aborted)
 
     # 9. Resumo final
     console.print(Rule("[bold]Summary[/bold]", style="cyan"))
