@@ -82,6 +82,9 @@ class BlastRadius:
     is_reversible: bool
     estimated_downtime_seconds: int
     scope: str  # "single_pod", "single_service", "multi_service", "cluster_wide"
+    # C6: diagnóstico ausente/vazio num comando que não é read-only → escopo
+    # desconhecido (estimativa conservadora, piso de risco MEDIUM).
+    scope_unknown: bool = False
 
 
 # === Regras de segurança ===
@@ -207,7 +210,12 @@ class PreExecutionValidator:
             checks_failed.append(f"Command safety: {cmd_msg}")
 
         # 2. Blast radius estimation
+        diagnosis = diagnosis or {}
         blast_radius = self._estimate_blast_radius(action, diagnosis)
+        if blast_radius.scope_unknown:
+            warnings.append(
+                "Blast radius: scope unknown (diagnosis without affected_services)"
+            )
         if blast_radius.affected_services <= self.max_blast_radius:
             checks_passed.append(
                 f"Blast radius: {blast_radius.affected_services} services "
@@ -429,8 +437,9 @@ class PreExecutionValidator:
 
     def _estimate_blast_radius(self, action, diagnosis: dict) -> BlastRadius:
         """Estima o raio de impacto da ação."""
-        affected = diagnosis.get("affected_services", [])
+        affected = (diagnosis or {}).get("affected_services") or []
         command = (action.command or "").lower()
+        scope_unknown = not affected and not self._is_read_only(command)
 
         # Scope estimation
         if "namespace" in command or "--all" in command:
@@ -470,13 +479,24 @@ class PreExecutionValidator:
             downtime = 60
 
         return BlastRadius(
-            affected_services=len(affected) if affected else 1,
+            # Sem diagnóstico não se sabe o escopo: assume 2 (não 1) em vez de subestimar.
+            affected_services=len(affected)
+            if affected
+            else (2 if scope_unknown else 1),
             affected_pods_estimate=pods_estimate,
             is_data_destructive=is_destructive,
             is_reversible=is_reversible,
             estimated_downtime_seconds=downtime,
             scope=scope,
+            scope_unknown=scope_unknown,
         )
+
+    @staticmethod
+    def _is_read_only(command: str) -> bool:
+        """True só para comando na allowlist read-only e sem metacaractere de shell."""
+        if re.search(r"[;&|`$<>\n]", command):
+            return False
+        return any(re.match(p, command.strip()) for p in SAFE_PATTERNS)
 
     def _calculate_risk_score(
         self,
@@ -511,6 +531,10 @@ class PreExecutionValidator:
         # Confidence (0-10)
         confidence_scores = {"high": 0, "medium": 5, "low": 10}
         score += confidence_scores.get(confidence, 5)
+
+        # C6: escopo desconhecido + não read-only → piso MEDIUM (>=20).
+        if blast_radius.scope_unknown:
+            score = max(score, 20.0)
 
         return min(score, 100)
 

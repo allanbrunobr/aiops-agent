@@ -153,3 +153,11 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - NÃO verificado: test_databricks_retry na suíte completa (poluição pré-existente); `ruff format --check` de v0_pipeline.py já falhava em HEAD (pré-existente).
 - Efeito: ações que o TNR projeta como regressão agora exigem humano no CLI (fail-closed intencional). C1 item display (display.py) não alterado — _requires_human segue com 2 camadas; decisão agregada vive em _record_safety_decision.
 - Próxima: Feature 11 (C6).
+
+## Sessão Feature 11 — C6 (concluída)
+- safety/pre_validator.py: diagnosis None/vazio/sem affected_services + comando não read-only (allowlist SAFE_PATTERNS, sem metacaractere shell)
+  → BlastRadius.scope_unknown=True, affected_services=2, warning "scope unknown", piso score 20 (MEDIUM) em _calculate_risk_score. validate() aceita diagnosis=None (antes crashava).
+- tests/test_safety.py: test_blast_radius_sem_diagnostico_conservador (falha em HEAD anterior, verde agora): rollout restart -n prod com None/{}/[] → ≥MEDIUM, requires_human, nunca AUTO_APPROVED; read-only e diagnóstico presente inalterados.
+- Verde no M5 (M5_LEVE=1): unit (sem test_databricks_retry) 2012 passed/7 skipped; test_safety+approval_invariant 118 passed; ruff check/format ok.
+- NÃO verificado: test_databricks_retry na suíte completa (poluição pré-existente).
+- Próxima: Feature 12 (D1).

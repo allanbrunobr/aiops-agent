@@ -449,6 +449,37 @@ class TestPreExecutionValidator:
         assert blast.affected_services == 4
         assert blast.scope == "multi_service"
 
+    def test_blast_radius_sem_diagnostico_conservador(self):
+        """C6: diagnosis None/vazio + comando não read-only → services=2, scope_unknown, risco>=MEDIUM."""
+        from safety.pre_validator import (
+            ApprovalStatus,
+            PreExecutionValidator,
+            RiskLevel,
+        )
+
+        validator = PreExecutionValidator()
+        action = _make_mitigation_action(
+            command="kubectl rollout restart deployment/x -n prod"
+        )
+        for diagnosis in (None, {}, {"affected_services": []}):
+            blast = validator._estimate_blast_radius(action, diagnosis)
+            assert blast.affected_services == 2
+            assert blast.scope_unknown is True
+            result = validator.validate(action, diagnosis)
+            assert result.risk_level != RiskLevel.LOW
+            assert result.requires_human is True
+            assert result.approval_status != ApprovalStatus.AUTO_APPROVED
+            assert any("scope unknown" in w for w in result.warnings)
+
+        # Read-only não é penalizado; com diagnóstico, estimativa inalterada.
+        ro = _make_mitigation_action(command="kubectl get pods -n prod")
+        assert validator._estimate_blast_radius(ro, None).scope_unknown is False
+        assert validator._estimate_blast_radius(ro, None).affected_services == 1
+        piped = _make_mitigation_action(command="kubectl get pods; rm x")
+        assert validator._estimate_blast_radius(piped, {}).scope_unknown is True
+        known = validator._estimate_blast_radius(action, {"affected_services": ["x"]})
+        assert known.affected_services == 1 and known.scope_unknown is False
+
     def test_risk_score_calculation(self):
         """Verifica que componentes do score de risco (command safety, blast radius, etc.) são somados."""
         from safety.pre_validator import PreExecutionValidator

@@ -154,7 +154,7 @@
       "Teste blast radius",
       "unit verde"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 12,
