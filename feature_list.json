@@ -168,7 +168,7 @@
       "Documentar 3 caminhos",
       "Container exit0 no Intel; nenhum torch nativo no Intel"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 13,

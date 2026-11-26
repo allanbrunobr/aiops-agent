@@ -161,3 +161,11 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - Verde no M5 (M5_LEVE=1): unit (sem test_databricks_retry) 2012 passed/7 skipped; test_safety+approval_invariant 118 passed; ruff check/format ok.
 - NÃO verificado: test_databricks_retry na suíte completa (poluição pré-existente).
 - Próxima: Feature 12 (D1).
+
+## Sessão Feature 12 — A3 (concluída)
+- docker/real-rag.Dockerfile (novo): FROM --platform=linux/amd64 python:3.12-slim; uv; `uv sync --frozen --no-install-project --group test` (projeto usa maturin/Rust → não instalar o pacote); CMD pytest -m real_rag; HF_HOME=/work/.hf-cache.
+- scripts/real-rag-docker.sh (novo, +x): build --platform linux/amd64 + run (volume nomeado p/ cache HF); args extras → pytest; env DOCKER="docker --context m1-docker".
+- docs/testing.md (novo): 3 caminhos (CI ubuntu / container Intel / nativo arm64 M5).
+- tests/test_real_rag_docker.py (4 testes estáticos; falhavam antes dos artefatos): verde no M5 (M5_LEVE=1), ruff ok, test_packaging_consistency ok.
+- NÃO verificado: build/run real do container (M5 não roda docker); `uv sync --frozen --group test` não foi exercitado. Validar no M1: `DOCKER="docker --context m1-docker" scripts/real-rag-docker.sh`.
+- Próxima: Feature 13.
