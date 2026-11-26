@@ -8,8 +8,6 @@ Precedência: AIOPS_LLM_MODEL (legado, documentado) > llm.model_name > padrão.
 
 from __future__ import annotations
 
-import io
-from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -40,87 +38,6 @@ class TestResolveLlmModel:
 
 @pytest.mark.unit
 class TestEntrypointsUseTheConfig:
-    def test_main_passes_config_model_to_agents(self, tmp_path, monkeypatch):
-        import main
-
-        monkeypatch.delenv("AIOPS_LLM_MODEL", raising=False)
-        cfg = tmp_path / "aiops.yaml"
-        cfg.write_text("llm:\n  model_name: claude-from-yaml\n")
-        agents = MagicMock(
-            return_value={
-                "success": True,
-                "stages": {
-                    "detection": {
-                        "is_incident": True,
-                        "severity": "HIGH",
-                        "signals": [],
-                    },
-                    "diagnosis": {
-                        "root_cause": "x",
-                        "evidence": [],
-                        "affected_services": ["svc"],
-                        "confidence": "high",
-                        "timeline": [],
-                    },
-                    "mitigation": {"pattern_matched": "x", "action": None},
-                    "verification": {
-                        "result": "not_verified",
-                        "health_delta": 0.0,
-                        "message": "",
-                    },
-                },
-                "timeline": [],
-            }
-        )
-        incident = MagicMock()
-        incident.fix_time.__sub__ = MagicMock(
-            return_value=MagicMock(total_seconds=MagicMock(return_value=1))
-        )
-        with (
-            patch(
-                "sys.argv",
-                [
-                    "main.py",
-                    "--no-rag",
-                    "--config",
-                    str(cfg),
-                    "--output-dir",
-                    str(tmp_path),
-                ],
-            ),
-            patch("main.load_local_env"),
-            patch("interfaces.cli.v0_pipeline.print_banner"),
-            patch("interfaces.cli.v0_pipeline.step_generate_data", return_value=(incident, "s")),
-            patch(
-                "interfaces.cli.v0_pipeline.step_sanitize",
-                return_value=MagicMock(threat_detected=False, total_entries=1),
-            ),
-            patch("interfaces.cli.v0_pipeline.step_pipeline", return_value=MagicMock()),
-            patch(
-                "interfaces.cli.v0_pipeline.step_compression",
-                return_value=(
-                    MagicMock(),
-                    "t",
-                    MagicMock(
-                        compression_ratio=0.5,
-                        critical_preserved=1,
-                        chunks_kept=1,
-                        chunks_removed=0,
-                    ),
-                ),
-            ),
-            patch("interfaces.cli.v0_pipeline.step_agents", agents),
-            patch("interfaces.cli.v0_pipeline.step_predict"),
-            patch("interfaces.cli.v0_pipeline.step_safety_validation", return_value=None),
-            patch("interfaces.cli.v0_pipeline.step_remediation_validation", return_value=None),
-            patch("interfaces.cli.v0_pipeline.step_postmortem", return_value=(MagicMock(), None)),
-            patch("interfaces.cli.v0_pipeline.step_persist_incident", return_value=True),
-            redirect_stdout(io.StringIO()),
-            redirect_stderr(io.StringIO()),
-        ):
-            main.main()
-        assert agents.call_args.kwargs["llm_model"] == "claude-from-yaml"
-
     def test_v1_diagnoser_node_uses_config_model(self, monkeypatch):
         from blueprint.adapters.pipeline_nodes import make_diagnoser_node
 

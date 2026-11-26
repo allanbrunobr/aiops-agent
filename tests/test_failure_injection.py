@@ -123,7 +123,7 @@ def test_empty_rag_results_do_not_crash(tmp_path: Path) -> None:
     retriever = MagicMock()
     retriever.search.return_value = []
 
-    with patch("interfaces.cli.v0_pipeline.step_rag", return_value=retriever):
+    with patch("app.builders.build_rag", return_value=(MagicMock(), retriever)):
         code = _run_main(
             ["--no-llm", "--output-dir", str(tmp_path), "--output-format", "json"]
         )
@@ -237,10 +237,7 @@ def test_pipeline_survives_nan_metric_points(tmp_path: Path) -> None:
         )
         for i in range(10)
     )
-    with patch(
-        "interfaces.cli.v0_pipeline.step_generate_data",
-        return_value=(incident, "nan-injected"),
-    ):
+    with patch("interfaces.cli.v1_runner.create_incident", return_value=incident):
         code = _run_main(
             [
                 "--no-llm",
@@ -310,24 +307,19 @@ def test_missing_connector_credentials_exit_error(tmp_path: Path) -> None:
     assert not _postmortems(tmp_path)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "BUG CONHECIDO (achado em A4): com todas as fontes Databricks fora o "
-        "pipeline roda sobre telemetria vazia, não detecta incidente e sai com "
-        "exit 0 ('resolved') — falso sucesso. Fora do write-set de A4; corrigir "
-        "(ex.: B8/fail-closed em step_fetch_databricks_data) e remover este xfail."
-    ),
-)
 def test_all_connectors_down_never_reports_success(tmp_path: Path) -> None:
-    """Todas as fontes levantam DatabricksConnectorError: sem dados ≠ sucesso."""
+    """Todas as fontes levantam DatabricksConnectorError: sem dados ≠ sucesso.
+
+    Antes (V0) era um xfail strict: o run saía com exit 0 sobre telemetria vazia.
+    No V1 (único engine desde F5-4 P6) o pipeline para no gate humano (exit 3).
+    """
     down = MagicMock()
     down.search.side_effect = _dbx_error()
     down.query.side_effect = _dbx_error()
     down.find_traces.side_effect = _dbx_error()
 
     with patch(
-        "interfaces.cli.v0_pipeline._create_databricks_sources",
+        "interfaces.cli.v1_runner._create_databricks_sources",
         return_value=(down, down, down),
     ):
         code = _run_main(

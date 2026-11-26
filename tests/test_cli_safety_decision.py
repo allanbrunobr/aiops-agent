@@ -2,7 +2,7 @@
 
 Regressão de F03 (docs/analise-20261109.md): requires_human, o exit code e o
 evento Slack olhavam só a camada pre_validator; o veredito do VersionValidator
-(step_remediation_validation) era exibido no resumo e descartado.
+(version validator) era exibido no resumo e descartado.
 
 Caso real, com as classes de verdade: `kubectl rollout restart
 deployment/postgres:9.4` sai AUTO_APPROVED no PreExecutionValidator e
@@ -11,13 +11,9 @@ MALICIOUS no VersionValidator.
 
 from __future__ import annotations
 
-import io
-from contextlib import redirect_stderr, redirect_stdout
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
-from domain.incident import MitigationAction
 
 RISKY_ALLOWED = "kubectl rollout restart deployment/postgres:9.4"
 
@@ -51,148 +47,49 @@ class TestRequiresHumanCombinesLayers:
 @pytest.mark.unit
 class TestRealLayersOnRiskyAllowedCommand:
     def test_version_validator_verdict_is_not_discarded(self):
-        from main import (
-            _record_safety_decision,
-            _requires_human,
-            step_remediation_validation,
-            step_safety_validation,
-        )
+        """V1: pre-validator aprova, VersionValidator bloqueia → grafo aborta (exit 3)."""
+        import dataclasses
+        from argparse import Namespace
 
-        diagnosis = {
-            "root_cause": "x",
-            "affected_services": ["postgres"],
-            "confidence": "high",
-        }
-        action = MitigationAction(
-            description="restart",
-            command=RISKY_ALLOWED,
-            risk_level="LOW",
-            rollback_command="kubectl rollout undo deployment/postgres",
+        from blueprint.adapters.safety_nodes import (
+            SafetyBlockedError,
+            make_pre_validator_node,
+            make_version_validator_node,
         )
-        result = {"stages": {"diagnosis": diagnosis, "mitigation": {"action": action}}}
+        from config.loader import AppConfig
+        from interfaces.cli.v1_runner import create_incident_state
 
-        # Mesma sequência do main(): as duas etapas e depois o veredito combinado.
         # Config que permite auto-aprovação: o cenário é "o pre-validator aprova
         # e o VersionValidator bloqueia". Com require_human_approval=true (o
         # padrão do YAML) o pre-validator nunca auto-aprova.
-        from config.loader import AppConfig
-
-        allow_auto = AppConfig(safety={"require_human_approval": False})
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            pre = step_safety_validation(result, config=allow_auto)
-            rem = step_remediation_validation(result)
-            _record_safety_decision(result, pre, rem)
+        cfg = AppConfig(safety={"require_human_approval": False})
+        state = create_incident_state(
+            Namespace(
+                no_llm=True,
+                no_rag=True,
+                scenario=None,
+                output_format="markdown",
+                compact=True,
+            ),
+            {"logs": [], "metrics": [], "traces": []},
+        )
+        state = dataclasses.replace(
+            state,
+            diagnosis={
+                "root_cause": "x",
+                "affected_services": ["postgres"],
+                "confidence": "high",
+            },
+            proposed_action={
+                "description": "restart",
+                "command": RISKY_ALLOWED,
+                "risk_level": "LOW",
+                "rollback": "kubectl rollout undo deployment/postgres",
+            },
+        )
 
         # O caso que o relatório descreve: uma camada aprova, a outra bloqueia.
-        assert pre.requires_human is False
-        assert rem.is_safe is False
-        assert _requires_human(pre, rem) is True
-        assert result["stages"]["safety_decision"]["requires_human"] is True
-        assert "version_validator" in result["stages"]["safety_decision"]["blocked_by"]
-
-
-def _main_with_layers(pre: MagicMock, rem: MagicMock):
-    """Roda main() com as etapas pesadas substituídas; devolve o exit code.
-
-    F5-2: main() delega para interfaces.cli.v0_pipeline.run_v0 — os patches
-    precisam mirar o namespace que run_v0 realmente usa, não o reexport em
-    main (patchear main.* deixava o pipeline real rodar e gravar em output/).
-    """
-    from main import main
-
-    mock_result = {
-        "success": True,
-        "stages": {
-            "detection": {"is_incident": True, "severity": "HIGH", "signals": []},
-            "diagnosis": {
-                "root_cause": "test",
-                "evidence": [],
-                "affected_services": ["svc"],
-                "confidence": "high",
-                "timeline": [],
-            },
-            "mitigation": {"pattern_matched": "test", "action": None},
-            "verification": {
-                "result": "success",
-                "health_delta": 10.0,
-                "message": "ok",
-            },
-        },
-        "timeline": [],
-    }
-    incident = MagicMock()
-    incident.fix_time.__sub__ = MagicMock(
-        return_value=MagicMock(total_seconds=MagicMock(return_value=600))
-    )
-    with (
-        patch("sys.argv", ["main.py", "--no-llm", "--no-rag"]),
-        patch("main.load_local_env"),
-        patch("interfaces.cli.v0_pipeline.print_banner"),
-        patch(
-            "interfaces.cli.v0_pipeline.step_generate_data",
-            return_value=(incident, "test-scenario"),
-        ),
-        patch(
-            "interfaces.cli.v0_pipeline.step_sanitize",
-            return_value=MagicMock(threat_detected=False, total_entries=100),
-        ),
-        patch("interfaces.cli.v0_pipeline.step_pipeline", return_value=MagicMock()),
-        patch(
-            "interfaces.cli.v0_pipeline.step_compression",
-            return_value=(
-                MagicMock(),
-                "text",
-                MagicMock(
-                    compression_ratio=0.5,
-                    critical_preserved=100,
-                    chunks_kept=5,
-                    chunks_removed=3,
-                ),
-            ),
-        ),
-        patch("interfaces.cli.v0_pipeline.step_agents", return_value=mock_result),
-        patch("interfaces.cli.v0_pipeline.step_safety_validation", return_value=pre),
-        patch("interfaces.cli.v0_pipeline.step_remediation_validation", return_value=rem),
-        patch(
-            "interfaces.cli.v0_pipeline.step_postmortem",
-            return_value=(MagicMock(), None),
-        ),
-        redirect_stdout(io.StringIO()),
-        redirect_stderr(io.StringIO()),
-    ):
-        return main()
-
-
-def _pre(requires_human: bool) -> MagicMock:
-    m = MagicMock()
-    m.requires_human = requires_human
-    m.is_safe = True
-    m.risk_level.value = "LOW"
-    m.risk_score = 10
-    m.approval_status.value = "auto_approved"
-    m.blast_radius.scope = "single_pod"
-    m.checks_passed, m.checks_failed, m.warnings = [], [], []
-    return m
-
-
-def _rem(is_safe: bool) -> MagicMock:
-    m = MagicMock()
-    m.is_safe = is_safe
-    m.risk.name = "SAFE" if is_safe else "MALICIOUS"
-    m.blocked_patterns = [] if is_safe else ["vulnerable version"]
-    m.warnings, m.checks = [], []
-    return m
-
-
-@pytest.mark.unit
-@pytest.mark.usefixtures("isolated_cli")
-class TestMainExitCodeUsesAllLayers:
-    def test_version_validator_block_yields_approval_needed(self):
-        from main import EXIT_APPROVAL_NEEDED
-
-        assert _main_with_layers(_pre(False), _rem(False)) == EXIT_APPROVAL_NEEDED
-
-    def test_all_layers_ok_yields_success(self):
-        from main import EXIT_SUCCESS
-
-        assert _main_with_layers(_pre(False), _rem(True)) == EXIT_SUCCESS
+        approved = make_pre_validator_node(cfg)(state)
+        assert approved.safety_verdict == "APPROVED"
+        with pytest.raises(SafetyBlockedError):
+            make_version_validator_node(cfg)(state)

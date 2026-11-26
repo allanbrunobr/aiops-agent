@@ -84,7 +84,7 @@ Each tool method receives the live `AggregatedReport` object via `self.report` a
 
 ## Pipeline Stage Contracts
 
-Each `step_*()` function in `interfaces/cli/v0_pipeline.py` (V0 CLI engine) writes to `result["stages"]`:
+Each Blueprint node (`blueprint/adapters/`) records its output in `IncidentState`; `state_to_result` maps it to `result["stages"]`:
 
 | Stage Key | Type | Producer | Consumers |
 |-----------|------|----------|-----------|

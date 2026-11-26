@@ -121,7 +121,7 @@ RemediationValidation
 Path (output/postmortem_YYYY-MM-DD_HHMMSS.md)
 ```
 
-The `step_*()` functions above live in `interfaces/cli/v0_pipeline.py` (V0 CLI engine); `step_postmortem()` is in `interfaces/cli/postmortem.py` and renders through `application/use_cases/postmortem.py`.
+The stage data above is produced by the Blueprint nodes in `blueprint/adapters/` (`state_to_result` assembles the `result` dict); `step_postmortem()` is in `interfaces/cli/postmortem.py` and renders through `application/use_cases/postmortem.py`.
 
 ---
 

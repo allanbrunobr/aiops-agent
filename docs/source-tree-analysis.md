@@ -9,9 +9,8 @@
 ```
 aiops-agent/
 ├── main.py                            # ENTRY POINT — thin CLI (parse args, load env, dispatch)
-│                                      #   Usage: python main.py [--no-llm] [--no-rag] [--pipeline-v1]
-│                                      #   step_*()/run_v0 live in interfaces/cli/v0_pipeline.py,
-│                                      #   run_v1 in interfaces/cli/v1_runner.py
+│                                      #   Usage: python main.py [--no-llm] [--no-rag]
+│                                      #   run_v1 in interfaces/cli/v1_runner.py (V1 is the only engine)
 ├── requirements.txt                   # 9 dependencies with version constraints
 ├── CLAUDE.md                          # Claude Code AI agent guidance
 ├── ARCHITECTURE - AIOPS-AGENT.md      # 78KB academic architecture document (14 sections)

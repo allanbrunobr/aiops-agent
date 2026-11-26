@@ -111,8 +111,7 @@ def _rag_config(config: AppConfig | None) -> RagConfig:
 # Agentes (Fase 5 do plano de refatoração — F5-1)
 #
 # Imports de ``agents.*`` são lazy: este módulo é importado por composition
-# roots que não usam agentes (webhook server, HTTP app) e os testes do V0
-# patcham as classes no namespace de ``interfaces.cli.v0_pipeline``.
+# roots que não usam agentes (webhook server, HTTP app).
 # ---------------------------------------------------------------------------
 
 

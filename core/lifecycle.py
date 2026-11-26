@@ -9,7 +9,7 @@ from typing import Any, Protocol, runtime_checkable
 class LifecycleEvent:
     """Evento de ciclo de vida do pipeline, consumido por ``LifecycleObserver``.
 
-    Emitido pelas composition roots (CLI ``run_v1``/``run_v0``, webhook
+    Emitido pelas composition roots (CLI ``run_v1``, webhook
     ``PipelineRunner``, demo server) — que têm o loop async — e NÃO pelo
     ``BlueprintEngine`` (síncrono). Decisão F6-3: manter o contrato aqui e a
     emissão na borda, em vez de embutir um loop async no engine.

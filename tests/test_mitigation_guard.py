@@ -124,21 +124,6 @@ class TestProposeSafe:
 
 
 @pytest.mark.unit
-class TestMainHeuristicPathSurvivesMitigatorFailure:
-    def test_step_agents_without_llm(self):
-        import main
-        from data.sample_incident import create_incident
-
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            report = main.step_pipeline(create_incident())
-            with patch.object(
-                MitigationAgent, "propose", side_effect=RuntimeError("boom")
-            ):
-                result = main.step_agents(report, None, use_llm=False)
-        _assert_manual_review(result["stages"]["mitigation"])
-
-
-@pytest.mark.unit
 class TestBlueprintFallbackSurvivesMitigatorFailure:
     def test_v1_no_llm_pipeline_sends_manual_review_to_safety(self, tmp_path):
         from argparse import Namespace

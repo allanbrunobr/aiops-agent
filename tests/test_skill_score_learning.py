@@ -44,7 +44,9 @@ def _client():
 
 
 def test_llm_run_updates_score_and_uses(tmp_path):
-    from main import step_skill_learning
+    from blueprint.adapters.pipeline_nodes import (
+        learn_skills_step as step_skill_learning,
+    )
 
     db = IncidentMemoryDB(db_path=str(tmp_path / "m.db"))
     skill = _seed(db, score=0.6, uses=0)
@@ -71,7 +73,9 @@ def test_pending_proposal_blocks_new_rewrites_of_the_default_skill(tmp_path):
     enfileirava mais uma proposta (medido no pré-PR: 4 pendentes em 6 rodadas).
     """
     from agents.skill_router import SkillRouter
-    from main import step_skill_learning
+    from blueprint.adapters.pipeline_nodes import (
+        learn_skills_step as step_skill_learning,
+    )
 
     db = IncidentMemoryDB(db_path=str(tmp_path / "m.db"))
     router = SkillRouter(db)
@@ -95,7 +99,9 @@ def test_pending_proposal_blocks_new_rewrites_of_the_default_skill(tmp_path):
 
 
 def test_low_scores_trigger_a_pending_proposal(tmp_path):
-    from main import step_skill_learning
+    from blueprint.adapters.pipeline_nodes import (
+        learn_skills_step as step_skill_learning,
+    )
 
     db = IncidentMemoryDB(db_path=str(tmp_path / "m.db"))
     skill = _seed(db, score=0.31, uses=2)
@@ -115,7 +121,9 @@ def test_low_scores_trigger_a_pending_proposal(tmp_path):
 
 
 def test_no_llm_run_does_not_move_the_score(tmp_path):
-    from main import step_skill_learning
+    from blueprint.adapters.pipeline_nodes import (
+        learn_skills_step as step_skill_learning,
+    )
 
     db = IncidentMemoryDB(db_path=str(tmp_path / "m.db"))
     skill = _seed(db, score=0.6, uses=0)

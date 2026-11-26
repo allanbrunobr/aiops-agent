@@ -8,7 +8,7 @@ e compatibilidade com demais flags (--no-llm, --no-rag).
 from __future__ import annotations
 
 import io
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import redirect_stderr
 
 import pytest
 
@@ -87,61 +87,32 @@ class TestArgparseScenarioFlag:
 
 
 @pytest.mark.unit
-class TestStepGenerateDataScenarioSelection:
-    """Testes de step_generate_data() com seleção de cenário (AC: #1, #2)."""
+class TestScenarioSelection:
+    """Seleção de cenário via registry (o que ``run_v1`` usa) (AC: #1, #2)."""
 
-    def test_step_generate_data_default(self) -> None:
-        """Sem scenario_name, retorna incidente payment-pool-exhaustion."""
-        from main import step_generate_data
+    def test_default_scenario_is_payment_pool_exhaustion(self) -> None:
+        from data.registry import get_scenario
+        from data.sample_incident import create_incident
 
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            incident, effective_scenario = step_generate_data()
-
-        assert effective_scenario == "payment-pool-exhaustion"
-        assert (
-            "connection pool" in incident.actual_root_cause.lower()
-            or "pool" in incident.actual_root_cause.lower()
-        )
+        incident = create_incident()
+        assert "pool" in incident.actual_root_cause.lower()
+        explicit = get_scenario("payment-pool-exhaustion")(seed=42)
         assert len(incident.logs) > 0
         assert len(incident.metrics) > 0
         assert len(incident.traces) > 0
+        assert "pool" in explicit.actual_root_cause.lower()
 
-    def test_step_generate_data_memory_leak(self) -> None:
-        """Com scenario_name='memory-leak', retorna incidente memory-leak."""
-        from main import step_generate_data
+    def test_memory_leak_scenario(self) -> None:
+        from data.registry import get_scenario
 
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            incident, effective_scenario = step_generate_data(
-                scenario_name="memory-leak"
-            )
-
-        assert effective_scenario == "memory-leak"
+        incident = get_scenario("memory-leak")(seed=42)
         assert "memory" in incident.actual_root_cause.lower()
         assert len(incident.logs) > 0
         assert len(incident.metrics) > 0
         assert len(incident.traces) > 0
 
-    def test_step_generate_data_explicit_default(self) -> None:
-        """Com scenario_name='payment-pool-exhaustion', mesmo resultado que default."""
-        from main import step_generate_data
-
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            incident, effective_scenario = step_generate_data(
-                scenario_name="payment-pool-exhaustion",
-            )
-
-        assert effective_scenario == "payment-pool-exhaustion"
-        assert len(incident.logs) > 0
-
-    def test_step_generate_data_returns_tuple(self) -> None:
-        """step_generate_data() deve retornar tupla (incident, scenario_name)."""
+    def test_scenario_returns_simulated_incident(self) -> None:
         from data.models import SimulatedIncident
-        from main import step_generate_data
+        from data.registry import get_scenario
 
-        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-            result = step_generate_data()
-
-        assert isinstance(result, tuple)
-        assert len(result) == 2
-        assert isinstance(result[0], SimulatedIncident)
-        assert isinstance(result[1], str)
+        assert isinstance(get_scenario("memory-leak")(seed=42), SimulatedIncident)

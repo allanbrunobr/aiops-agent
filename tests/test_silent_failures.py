@@ -5,7 +5,7 @@ Regressão de F07/F5-02, ARQ-05/F5-01 e da parte de PII de 4B-03/SEC-08
 porque o erro era engolido sem log:
 
 - a memória institucional nunca gravava: float("medium") levantava ValueError;
-- o bloco "2c. Predictive Stage" chamava step_predict com assinatura errada;
+- o bloco "2c. Predictive Stage" do V0 chamava step_predict com assinatura errada (V0 aposentado);
 - a busca MCP devolvia texto sem redação de PII quando o sanitizer falhava.
 
 O primeiro teste é um portão determinístico: varre o código de produção por
@@ -15,9 +15,6 @@ AST e falha se aparecer um handler amplo cujo corpo é só `pass`.
 from __future__ import annotations
 
 import ast
-import inspect
-import io
-from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -159,13 +156,18 @@ class TestIncidentPersistence:
 
     @pytest.mark.parametrize("confidence", ["medium", "low", "high", 0.7])
     def test_textual_confidence_is_persisted(self, tmp_path, confidence):
-        from main import step_persist_incident
+        from blueprint.adapters.pipeline_nodes import persist_incident_step
         from rag.memory import IncidentMemoryDB
 
         db = IncidentMemoryDB(db_path=str(tmp_path / "mem.db"))
-        report = MagicMock(log_templates=[], metric_anomalies=[], trace_anomalies=[])
+        report = MagicMock(
+            affected_services=["payment-svc"],
+            log_templates=[],
+            metric_anomalies=[],
+            trace_anomalies=[],
+        )
         assert (
-            step_persist_incident(self._result(confidence), report, "s", 1.0, db=db)
+            persist_incident_step(db, self._result(confidence), report, "s", 1.0)
             is True
         )
         rows = db.find_similar_incidents(
@@ -177,14 +179,19 @@ class TestIncidentPersistence:
         )
 
     def test_failure_is_logged_not_swallowed(self, tmp_path):
-        from main import step_persist_incident
+        from blueprint.adapters.pipeline_nodes import persist_incident_step
 
         db = MagicMock()
         db.save_incident.side_effect = RuntimeError("disk full")
-        report = MagicMock(log_templates=[], metric_anomalies=[], trace_anomalies=[])
-        with patch("interfaces.cli.v0_pipeline._persist_log") as log:
+        report = MagicMock(
+            affected_services=["payment-svc"],
+            log_templates=[],
+            metric_anomalies=[],
+            trace_anomalies=[],
+        )
+        with patch("blueprint.adapters.pipeline_nodes.log") as log:
             assert (
-                step_persist_incident(self._result("medium"), report, "s", 1.0, db=db)
+                persist_incident_step(db, self._result("medium"), report, "s", 1.0)
                 is False
             )
         assert log.warning.called
@@ -205,83 +212,6 @@ class TestSuiteDoesNotTouchRepoMemoryDb:
                 init = vars(obj).get("__init__") if isinstance(obj, type) else None
                 defaults = getattr(init, "__defaults__", None) or ()
                 assert "data/incident_memory.db" not in defaults, (mod_name, obj)
-
-
-@pytest.mark.unit
-@pytest.mark.usefixtures("isolated_cli")
-class TestNoDeadPredictCall:
-    def test_step_predict_is_only_called_with_its_real_signature(self):
-        import main
-
-        signature = inspect.signature(main.step_predict)
-        calls: list[str] = []
-
-        def spy(*args, **kwargs):
-            try:
-                signature.bind(*args, **kwargs)
-                calls.append("ok")
-            except TypeError:
-                calls.append("bad-signature")
-
-        mock_result = {
-            "success": True,
-            "stages": {
-                "detection": {"is_incident": True, "severity": "HIGH", "signals": []},
-                "diagnosis": {
-                    "root_cause": "x",
-                    "evidence": [],
-                    "affected_services": ["svc"],
-                    "confidence": "high",
-                    "timeline": [],
-                },
-                "mitigation": {"pattern_matched": "x", "action": None},
-                "verification": {
-                    "result": "success",
-                    "health_delta": 1.0,
-                    "message": "ok",
-                },
-            },
-            "timeline": [],
-        }
-        incident = MagicMock()
-        incident.fix_time.__sub__ = MagicMock(
-            return_value=MagicMock(total_seconds=MagicMock(return_value=1))
-        )
-        with (
-            patch("sys.argv", ["main.py", "--no-llm", "--no-rag"]),
-            patch("main.load_local_env"),
-            patch("interfaces.cli.v0_pipeline.print_banner"),
-            patch("interfaces.cli.v0_pipeline.step_generate_data", return_value=(incident, "s")),
-            patch(
-                "interfaces.cli.v0_pipeline.step_sanitize",
-                return_value=MagicMock(threat_detected=False, total_entries=1),
-            ),
-            patch("interfaces.cli.v0_pipeline.step_pipeline", return_value=MagicMock()),
-            patch(
-                "interfaces.cli.v0_pipeline.step_compression",
-                return_value=(
-                    MagicMock(),
-                    "t",
-                    MagicMock(
-                        compression_ratio=0.5,
-                        critical_preserved=1,
-                        chunks_kept=1,
-                        chunks_removed=0,
-                    ),
-                ),
-            ),
-            patch("interfaces.cli.v0_pipeline.step_agents", return_value=mock_result),
-            patch("interfaces.cli.v0_pipeline.step_predict", side_effect=spy),
-            patch("interfaces.cli.v0_pipeline.step_safety_validation", return_value=None),
-            patch("interfaces.cli.v0_pipeline.step_remediation_validation", return_value=None),
-            patch("interfaces.cli.v0_pipeline.step_postmortem", return_value=(MagicMock(), None)),
-            patch("interfaces.cli.v0_pipeline.step_persist_incident", return_value=True),
-            redirect_stdout(io.StringIO()),
-            redirect_stderr(io.StringIO()),
-        ):
-            main.main()
-
-        assert calls == ["ok"]
 
 
 @pytest.mark.unit

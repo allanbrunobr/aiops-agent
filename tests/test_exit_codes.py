@@ -82,13 +82,13 @@ class _FakeEngine:
         return dataclasses.replace(state, safety_verdict=self._verdict)
 
 
-def _run_main_v1(engine: _FakeEngine, tmp_path) -> int:
-    """Roda main() --pipeline-v1 com a engine falsa; saída em tmp_path."""
+def _run_main_v1(engine: _FakeEngine, tmp_path, *extra: str) -> int:
+    """Roda main() (V1 é o default, sem flag) com a engine falsa; saída em tmp_path."""
     from main import main
 
     test_args = [
         "main.py",
-        "--pipeline-v1",
+        *extra,
         "--no-llm",
         "--no-rag",
         "--output-dir",
@@ -136,6 +136,15 @@ class TestMainExitCodes:
         engine = _FakeEngine(verdict="NEEDS_REVIEW")
         assert _run_main_v1(engine, tmp_path) == EXIT_APPROVAL_NEEDED
 
+    def test_deprecated_pipeline_v1_flag_is_an_accepted_noop(self, tmp_path) -> None:
+        """--pipeline-v1 não quebra callers antigos: mesmo exit, mesmo engine."""
+        from main import EXIT_APPROVAL_NEEDED, EXIT_SUCCESS
+
+        ok = _FakeEngine(verdict="APPROVED")
+        review = _FakeEngine(verdict="NEEDS_REVIEW")
+        assert _run_main_v1(ok, tmp_path, "--pipeline-v1") == EXIT_SUCCESS
+        assert _run_main_v1(review, tmp_path, "--pipeline-v1") == EXIT_APPROVAL_NEEDED
+
     def test_regression_takes_precedence_over_approval(self, tmp_path) -> None:
         """Regressão (exit 2) deve ter prioridade sobre approval-needed (exit 3)."""
         from main import EXIT_REGRESSION
@@ -159,7 +168,6 @@ class TestExitCodeIntegration:
 
         test_args = [
             "main.py",
-            "--pipeline-v1",
             "--no-llm",
             "--no-rag",
             "--output-dir",
@@ -182,7 +190,6 @@ class TestExitCodeIntegration:
 
         test_args = [
             "main.py",
-            "--pipeline-v1",
             "--no-llm",
             "--no-rag",
             "--output-dir",

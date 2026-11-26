@@ -114,10 +114,7 @@ def test_pipeline_reports_telemetry_dropped(tmp_path: Path) -> None:
         "json",
     ]
     with (
-        patch(
-            "interfaces.cli.v0_pipeline.step_generate_data",
-            return_value=(incident, "nan-injected"),
-        ),
+        patch("interfaces.cli.v1_runner.create_incident", return_value=incident),
         patch("sys.argv", argv),
         patch("main.load_local_env"),
         redirect_stdout(io.StringIO()),

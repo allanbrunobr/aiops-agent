@@ -236,3 +236,22 @@ def test_is_safe_true_within_configured_limit() -> None:
     sv = _run_pre_validator(5, ["a", "b", "c", "d"])
     assert sv["is_safe"] is True
     assert sv["requires_human"] is True
+
+
+def test_rag_degraded_and_telemetry_dropped_reach_the_result() -> None:
+    """B1/B8: marcas de degradação do V1 chegam ao result (meta do postmortem)."""
+    import dataclasses
+
+    state = dataclasses.replace(
+        _initial_state(),
+        metadata={"_rag_degraded": True, "_telemetry_dropped": 10},
+    )
+    result = state_to_result(state)
+    assert result["rag_degraded"] is True
+    assert result["telemetry_dropped"] == 10
+
+
+def test_clean_run_has_no_degradation_marks() -> None:
+    result = state_to_result(_initial_state())
+    assert "rag_degraded" not in result
+    assert "telemetry_dropped" not in result

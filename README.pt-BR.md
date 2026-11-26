@@ -92,12 +92,7 @@ A implementação é fundamentada em sete artigos acadêmicos de AIOps (2024–2
  Postmortem (Markdown/JSON) · Slack · Jira
 ```
 
-O projeto oferece dois motores de execução:
-
-| Motor | Ativação | Descrição |
-|-------|----------|-----------|
-| V0 (sequencial) | `python main.py` | Script de demonstração em `main.py`. Não passa por `app/builders.py`. |
-| V1 (Blueprint Engine) | só `--pipeline-v1` | Grafo em `blueprint/`. `--data-source databricks` não seleciona este motor. |
+O projeto tem um único motor de execução, o Blueprint Engine (V1): grafo tipado em `blueprint/`, montado por `app/builders.py`. `python main.py` o executa por padrão. O motor sequencial V0 foi aposentado no F5-4; `--pipeline-v1` continua aceita como no-op deprecated.
 
 ### Camadas
 
@@ -172,7 +167,7 @@ python main.py [opções]
 | `--compact` | Saída compacta no terminal | desativado |
 | `--scenario NAME` | `payment-pool-exhaustion`, `memory-leak` ou `unknown-fault` | `payment-pool-exhaustion` |
 | `--data-source SOURCE` | `simulated` ou `databricks` | `simulated` |
-| `--pipeline-v1` | Usa o Blueprint Engine (V1) | desativado |
+| `--pipeline-v1` | **No-op deprecated**: o Blueprint Engine (V1) é o único pipeline | — |
 | `--config FILE` | Arquivo YAML com limiares de análise | `config/defaults.yaml` |
 | `--output-dir DIR` | Diretório dos postmortems | `output/` |
 | `--output-format FORMAT` | `markdown`, `json` ou `both` | `markdown` |

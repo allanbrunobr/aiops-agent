@@ -251,8 +251,8 @@ class AgentOrchestrator:
       3. EXECUTE       — executa steps com reflect entre cada um
       4. SAFETY        — Mitigation + TNR internamente (para replanning);
                          VersionValidator e PreValidator ficam no pipeline externo
-                         (step_safety_validation / step_remediation_validation em main.py).
-      5. LEARN         — reflexão final; persistência fica no caller (main.py)
+                         (nodes version_validator / pre_validator do V1).
+      5. LEARN         — reflexão final; persistência fica no caller (run_v1)
     """
 
     MAX_REPLANS = 2

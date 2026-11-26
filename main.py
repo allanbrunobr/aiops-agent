@@ -2,8 +2,8 @@
 AIOps Agent - entrypoint da CLI.
 
 O conteúdo vive em ``interfaces/cli/`` (args, console, display, trackers,
-data_sources, postmortem, v0_pipeline, v1_runner); este arquivo só faz parse,
-carrega o ambiente e despacha para o engine escolhido.
+data_sources, postmortem, v1_runner); este arquivo só faz parse,
+carrega o ambiente e despacha para o Blueprint Engine (V1, único engine).
 
 Uso:
   python main.py                              # demo completo (cenario default: payment-pool-exhaustion)
@@ -29,7 +29,7 @@ import sys
 # ---------------------------------------------------------------------------
 # Compat (F5-2): nomes que a suíte de testes ainda importa de ``main``.
 # Os módulos definitivos são ``interfaces/cli``, ``core`` e ``application``;
-# este bloco inteiro é removido em F5-4 junto com o engine V0.
+# o engine V0 foi aposentado em F5-4 (P6).
 # Cada linha tem o próprio ``noqa: F401`` — sem isso ``ruff --fix`` apaga.
 # ---------------------------------------------------------------------------
 from application.use_cases.postmortem import (
@@ -81,23 +81,6 @@ from interfaces.cli.trackers import (
     _resolve_tracker,  # noqa: F401
     step_tracking,  # noqa: F401
 )
-from interfaces.cli.v0_pipeline import (
-    _extract_fault_tags,  # noqa: F401
-    _persist_log,  # noqa: F401
-    _record_safety_decision,  # noqa: F401
-    run_v0,
-    step_agents,  # noqa: F401
-    step_compression,  # noqa: F401
-    step_generate_data,  # noqa: F401
-    step_persist_incident,  # noqa: F401
-    step_pipeline,  # noqa: F401
-    step_predict,  # noqa: F401
-    step_rag,  # noqa: F401
-    step_remediation_validation,  # noqa: F401
-    step_safety_validation,  # noqa: F401
-    step_sanitize,  # noqa: F401
-    step_skill_learning,  # noqa: F401
-)
 from interfaces.cli.v1_runner import create_incident_state  # noqa: F401
 from interfaces.cli.v1_runner import run_v1 as main_v1
 
@@ -105,8 +88,8 @@ from interfaces.cli.v1_runner import run_v1 as main_v1
 def main() -> int:
     """Entry point principal. Retorna exit code baseado no resultado do pipeline.
 
-    O pipeline sequencial V0 (step_*) é o default; ``--pipeline-v1`` delega ao
-    Blueprint Engine via ``main_v1``. Databricks e tracker só existem no V0.
+    O Blueprint Engine (V1) é o único engine; ``--pipeline-v1`` é um alias
+    deprecated sem efeito.
     """
     parser = build_arg_parser()
     args = parser.parse_args()
@@ -140,10 +123,7 @@ def main() -> int:
 
         return run_monitor(args)
 
-    if getattr(args, "pipeline_v1", False):
-        return main_v1(args)
-
-    return run_v0(args)
+    return main_v1(args)
 
 
 if __name__ == "__main__":

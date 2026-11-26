@@ -64,7 +64,6 @@ def test_prometheus_scheme_accepted() -> None:
     [
         ["--scenario", "payment-pool-exhaustion"],
         ["--data-source", "databricks"],
-        ["--pipeline-v1"],
         ["--tracker", "jira"],
     ],
 )

@@ -217,11 +217,11 @@ def test_json_carries_the_same_verdict_as_markdown(tmp_path):
 
 
 def test_transition_before_the_gate_does_not_claim_pending_approval():
-    """step_agents grava a transição VERIFYING -> RESOLVED antes de o gate
-    (step_safety_validation) decidir; ela não pode afirmar o veredito."""
-    import main
+    """A transição VERIFYING -> RESOLVED é gravada antes de o gate de safety
+    decidir; ela não pode afirmar o veredito."""
+    from blueprint.adapters import pipeline_nodes
 
-    assert "human approval still pending" not in inspect.getsource(main.step_agents)
+    assert "human approval still pending" not in inspect.getsource(pipeline_nodes)
 
 
 # ── Pré-PR em 2b4f094: o resto do fluxo também sabe que não houve incidente ──
@@ -373,18 +373,24 @@ def test_cli_does_not_announce_a_diagnosis_without_incident():
     """O disparo de diagnosis.completed fica dentro de `if not
     _no_incident(result)`, e o pipeline.completed leva a marca no_incident.
 
-    F5-2: main() delega o V0 para interfaces.cli.v0_pipeline.run_v0 — a
-    orquestração (e portanto a guarda) vive lá; main apenas reexporta.
+    F5-4: o V1 (``run_v1``) é o único engine — a guarda vive lá.
     """
     import ast
 
-    import main
+    from interfaces.cli import v1_runner
 
-    tree = ast.parse(inspect.getsource(main.run_v0))
+    tree = ast.parse(inspect.getsource(v1_runner.run_v1))
     guarded, flagged = False, False
     for node in ast.walk(tree):
-        if isinstance(node, ast.If) and "_no_incident" in ast.unparse(node.test):
+        # Guarda em forma de retorno antecipado dentro de _fire_diagnosis:
+        # `if _no_incident(res): return` antes do disparo de diagnosis.completed.
+        if isinstance(node, ast.FunctionDef) and node.name == "_fire_diagnosis":
             guarded |= any(
+                isinstance(n, ast.If)
+                and "_no_incident" in ast.unparse(n.test)
+                and any(isinstance(b, ast.Return) for b in n.body)
+                for n in ast.walk(node)
+            ) and any(
                 isinstance(c, ast.Constant) and c.value == "diagnosis.completed"
                 for c in ast.walk(node)
             )

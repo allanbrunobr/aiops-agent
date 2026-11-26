@@ -8,7 +8,7 @@
 
 One process, two ways in.
 
-The default `python main.py` path is the sequential V0 pipeline in `interfaces/cli/v0_pipeline.py` (`main.py` is a thin entrypoint: parse args, load env, dispatch). It does not use `app/builders.py`. `--data-source databricks` changes the data source only. The Blueprint graph (`blueprint/`) runs when you pass `--pipeline-v1`, and when the HTTP app is created with `create_app`.
+`python main.py` runs the Blueprint graph (`blueprint/`, the V1 engine) through `interfaces/cli/v1_runner.py` (`main.py` is a thin entrypoint: parse args, load env, dispatch). The old sequential V0 pipeline was retired in F5-4; `--pipeline-v1` is a deprecated no-op. `--data-source databricks` changes the data source only. The same graph runs when the HTTP app is created with `create_app`.
 
 `create_app` mounts health, optional MCP, optional OAuth, and A2A. The webhook receiver is a separate process (`infra/run_webhook_server.py`). Its pipeline executor still logs `pipeline.stub_executed`. The demo dashboard is `interfaces/demo/server.py` and binds to `127.0.0.1` unless you pass `--host`.
 
@@ -104,7 +104,7 @@ IDLE → DETECTING → DIAGNOSING → MITIGATING → VERIFYING → RESOLVED
                        (on TNR regression detection)
 ```
 
-The CLI records these names in a list inside `interfaces/cli/v0_pipeline.py` (`_transition`, in `step_agents`). There is no `VALID_TRANSITIONS` map and no `InvalidTransitionError` in this tree. A TNR pass appends `RESOLVED` before the safety gate. If that gate sets `requires_human`, the process exits 3 and the summary says `AWAITING HUMAN`.
+The CLI records these names in a list in `metadata["_timeline"]` (written by the nodes in `blueprint/adapters/pipeline_nodes.py`). There is no `VALID_TRANSITIONS` map and no `InvalidTransitionError` in this tree. A TNR pass appends `RESOLVED` before the safety gate. If that gate sets `requires_human`, the process exits 3 and the summary says `AWAITING HUMAN`.
 
 ---
 

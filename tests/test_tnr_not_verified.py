@@ -128,14 +128,34 @@ class TestOrchestratorDoesNotTreatNotVerifiedAsRegression:
 class TestCliVerificationStage:
     def test_heuristic_path_reports_not_verified_and_is_not_a_regression(self):
         import io
-        from contextlib import redirect_stdout
+        from argparse import Namespace
+        from contextlib import redirect_stderr, redirect_stdout
 
-        import main
+        from app.builders import build_engine, build_pipeline
+        from blueprint.adapters.state_adapter import state_to_result
+        from config.loader import AppConfig
         from data.sample_incident import create_incident
+        from interfaces.cli.v1_runner import create_incident_state
 
-        with redirect_stdout(io.StringIO()):
-            report = main.step_pipeline(create_incident())
-            result = main.step_agents(report, None, use_llm=False)
+        incident = create_incident()
+        state = create_incident_state(
+            Namespace(
+                no_llm=True,
+                no_rag=True,
+                scenario=None,
+                output_format="markdown",
+                compact=True,
+            ),
+            {
+                "logs": incident.logs,
+                "metrics": incident.metrics,
+                "traces": incident.traces,
+            },
+            incident=incident,
+        )
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            final = build_engine(AppConfig()).run(build_pipeline(AppConfig()), state)
+        result = state_to_result(final)
         assert result["stages"]["verification"]["result"] == "not_verified"
         assert "rollback" not in result["stages"]
 

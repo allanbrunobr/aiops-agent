@@ -94,6 +94,12 @@ def state_to_result(state: IncidentState) -> dict[str, Any]:
     )
     return {
         "success": state.diagnosis is not None and not regression,
+        **({"rag_degraded": True} if meta.get("_rag_degraded") else {}),
+        **(
+            {"telemetry_dropped": meta["_telemetry_dropped"]}
+            if meta.get("_telemetry_dropped")
+            else {}
+        ),
         "stages": stages,
         "timeline": list(meta.get("_timeline", [])),
         "scenario_name": meta.get("scenario", "unknown"),

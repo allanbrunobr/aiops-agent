@@ -171,6 +171,9 @@ def _ensure_rag_index(state: IncidentState, report_obj) -> None:
             except Exception as exc:  # cache é otimização
                 log.warning("rag.index_cache_save_failed", error=str(exc))
     except Exception as exc:
+        # B1: degradação registrada (postmortem JSON ``meta.rag_degraded``);
+        # os nodes copiam ``state.metadata`` adiante, então a marca propaga.
+        state.metadata["_rag_degraded"] = True
         log.warning(
             "rag.index_build_failed",
             correlation_id=state.correlation_id,
@@ -200,7 +203,7 @@ def proposed_action_from_mitigation(mitigation: dict | None) -> dict | None:
 def _record_diagnosis_timeline(metadata: dict, detection: dict | None = None) -> dict:
     """Transições da máquina de estados cobertas pelo node de diagnóstico.
 
-    Mesmas transições e razões do V0 (``v0_pipeline`` ``_transition``): inclui
+    Mesmas transições e razões do V0 (``_transition`` do V0, aposentado): inclui
     IDLE→DETECTING e nomeia os serviços afetados. ``detection`` também é
     guardada em ``metadata["_detection"]`` (alimenta ``stages.detection``).
     """

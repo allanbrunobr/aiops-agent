@@ -89,7 +89,7 @@ Postmortems are saved to `output/postmortem_YYYY-MM-DD_HHMMSS.md`. The `output/`
 
 ## Adding New Pipeline Stages
 
-1. Create a `step_*()` function in `interfaces/cli/v0_pipeline.py` following the existing pattern (V0 engine; the V1 equivalent is a node in `blueprint/`)
+1. Create a node in `blueprint/adapters/` following the existing pattern and register it in `blueprint/pipelines/incident_response.py`
 2. Stage numbering: primary stages increment (6, 7...), sub-stages use letter suffix (4d, 4e...)
 3. Write output to `result["stages"]["stage_name"]` dict
 4. Update `render_postmortem_markdown()` in `application/use_cases/postmortem.py` to include the new stage in generated postmortems

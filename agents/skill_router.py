@@ -2,7 +2,7 @@
 Skill Router — seleciona a melhor DiagnosticSkill para um incidente.
 
 Fluxo:
-  1. Extrai tags do incidente (via _extract_fault_tags em main.py)
+  1. Extrai tags do incidente (via extract_fault_tags em blueprint/adapters/pipeline_nodes.py)
   2. Busca skill com maior utility_score no IncidentMemoryDB
   3. Retorna DEFAULT_SKILL se nenhuma skill qualificada for encontrada
 """

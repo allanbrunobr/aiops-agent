@@ -390,6 +390,7 @@ def run_v1(args: argparse.Namespace) -> int:
 
     # 2. Gera dados (simulados ou Databricks)
     scenario_name: str | None = None
+    telemetry_stats: dict[str, int] = {}
     if getattr(args, "data_source", "simulated") == "databricks":
         sources = _create_databricks_sources()
         if sources is None:
@@ -397,15 +398,19 @@ def run_v1(args: argparse.Namespace) -> int:
                 "[red]Cannot proceed without Databricks connection. Exiting.[/red]"
             )
             return EXIT_ERROR
-        telemetry_stats: dict[str, int] = {}
         incident, scenario_name = step_fetch_databricks_data(
             *sources, stats=telemetry_stats
         )
-        drop_invalid_metric_points(incident)
     elif args.scenario:
         incident = get_scenario(args.scenario)(seed=42)
     else:
         incident = create_incident()
+
+    # B8: validação na borda — cobre qualquer fonte (a de Databricks já
+    # descartou os crus; aqui pegamos o que sobrou).
+    telemetry_dropped = telemetry_stats.get(
+        "telemetry_dropped", 0
+    ) + drop_invalid_metric_points(incident)
 
     incident_data = {
         "logs": incident.logs,
@@ -430,6 +435,7 @@ def run_v1(args: argparse.Namespace) -> int:
             **state.metadata,
             "_rebuild_rag": rebuild_rag,
             "_rag_cache_dir": RAG_CACHE_DIR,
+            "_telemetry_dropped": telemetry_dropped,
         },
     )
     if rebuild_rag and args.no_rag:
@@ -451,6 +457,9 @@ def run_v1(args: argparse.Namespace) -> int:
             )
         except Exception as exc:
             console.print(f"[yellow]RAG skipped: {exc}[/yellow]")
+            state = dataclasses.replace(
+                state, metadata={**state.metadata, "_rag_degraded": True}
+            )
 
     # 6. Executa pipeline
     start_time = time.monotonic()
@@ -503,6 +512,9 @@ def run_v1(args: argparse.Namespace) -> int:
             exit_code = EXIT_APPROVAL_NEEDED
         _fire_prediction(state)
         _fire_diagnosis(state)
+        from application.use_cases.postmortem import _no_incident as _no_inc
+        from blueprint.adapters.state_adapter import state_to_result as _to_result
+
         diagnosis = state.diagnosis or {}
         _conf_v1 = diagnosis.get("confidence", 0.0)
         _fire(
@@ -516,6 +528,7 @@ def run_v1(args: argparse.Namespace) -> int:
                 "risk_level": state.safety_verdict or "unknown",
                 "evidence": diagnosis.get("evidence", []),
                 "total_duration_ms": 0,  # preenchido abaixo
+                "no_incident": _no_inc(_to_result(state)),
             },
         )
 

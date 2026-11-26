@@ -1,25 +1,23 @@
 """C5 — suíte-guarda: nenhum caminho bypassa a aprovação humana.
 
-Roda o fluxo REAL de decisão do CLI (step_safety_validation +
-step_remediation_validation + _record_safety_decision, que alimenta o exit 3 de
-run_v0) sobre um corpus adversarial. Invariantes:
+Roda o fluxo REAL de decisão do V1 (nós version_validator + pre_validator +
+``state_to_result``, que alimentam o exit 3 de ``run_v1``) sobre um corpus
+adversarial. Invariantes:
 
 1. Com ``require_human_approval=true`` (default) toda ação não-read-only exige
    humano (exit 3).
 2. AUTO_APPROVED só com flag desligada + LOW + allowlist read-only.
-3. O veredito agregado do SafetyOrchestrator governa: camada que bloqueia
-   (ex.: TNR projetando regressão) não é anulada pelo pre_validator.
+3. Camada que bloqueia (SafetyBlockedError) aborta o grafo → exit 3.
 """
 
 from __future__ import annotations
 
-import io
-from contextlib import redirect_stdout
+import dataclasses
+from argparse import Namespace
 
 import pytest
 
 from config.loader import AppConfig
-from domain.incident import MitigationAction
 
 # (descrição, command, risk_level) — nenhum é read-only. Strings apenas
 # alimentam o validador; nada é executado.
@@ -53,41 +51,58 @@ READ_ONLY = [
 
 
 def _decide(command, risk, *, require: bool, diagnosis=None) -> dict:
-    """Mesma sequência de run_v0; devolve o veredito gravado em result."""
-    from main import (
-        _record_safety_decision,
-        step_remediation_validation,
-        step_safety_validation,
-    )
+    """Mesma sequência dos nós de safety do V1 (version → pre-validator).
 
-    action = MitigationAction(
-        description="adversarial",
-        command=command,
-        risk_level=risk,
-        rollback_command="kubectl rollout undo deployment/api",
+    ``SafetyBlockedError`` (camada bloqueou) aborta o grafo e o CLI sai com 3;
+    aqui conta como ``requires_human=True``. Sem bloqueio, o veredito vem de
+    ``state_to_result(...)['stages']['safety_decision']``.
+    """
+    from blueprint.adapters.safety_nodes import (
+        SafetyBlockedError,
+        make_pre_validator_node,
+        make_version_validator_node,
     )
-    result = {
-        "stages": {
-            "diagnosis": diagnosis
-            or {"root_cause": "x", "affected_services": ["api"], "confidence": "high"},
-            "mitigation": {"action": action},
-        }
-    }
+    from blueprint.adapters.state_adapter import state_to_result
+    from interfaces.cli.v1_runner import create_incident_state
+
     cfg = AppConfig(safety={"require_human_approval": require})
-    with redirect_stdout(io.StringIO()):
-        pre = step_safety_validation(result, config=cfg)
-        rem = step_remediation_validation(result)
-        requires_human = _record_safety_decision(result, pre, rem)
+    state = create_incident_state(
+        Namespace(
+            no_llm=True,
+            no_rag=True,
+            scenario=None,
+            output_format="markdown",
+            compact=True,
+        ),
+        {"logs": [], "metrics": [], "traces": []},
+    )
+    state = dataclasses.replace(
+        state,
+        diagnosis=diagnosis
+        or {"root_cause": "x", "affected_services": ["api"], "confidence": "high"},
+        proposed_action={
+            "description": "adversarial",
+            "command": command,
+            "risk_level": risk,
+            "rollback": "kubectl rollout undo deployment/api",
+        },
+    )
+    try:
+        state = make_version_validator_node(cfg)(state)
+        state = make_pre_validator_node(cfg)(state)
+    except SafetyBlockedError:
+        return {"requires_human": True, "approval_status": "blocked", "blocked": True}
+    stages = state_to_result(state)["stages"]
     return {
-        "requires_human": requires_human,
-        "pre": pre,
-        "decision": result["stages"]["safety_decision"],
+        "requires_human": stages["safety_decision"]["requires_human"],
+        "approval_status": stages["safety_validation"]["approval_status"],
+        "blocked": False,
     }
 
 
 def _exit_code(requires_human: bool, regression: bool = False) -> int:
-    """Espelha a regra de run_v0 (v0_pipeline.py, 'Determine exit code')."""
-    from interfaces.cli.v0_pipeline import (
+    """Espelha a regra de exit code do ``run_v1`` (regressão > aprovação)."""
+    from interfaces.cli.exit_codes import (
         EXIT_APPROVAL_NEEDED,
         EXIT_REGRESSION,
         EXIT_SUCCESS,
@@ -107,7 +122,7 @@ class TestApprovalInvariant:
     def test_flag_on_every_non_read_only_needs_human(self, name, command, risk):
         out = _decide(command, risk, require=True)
         assert out["requires_human"] is True, name
-        assert out["pre"].approval_status.value != "auto_approved", name
+        assert out["approval_status"] != "auto_approved", name
         assert _exit_code(out["requires_human"]) == 3, name
 
     @pytest.mark.parametrize(("name", "command", "risk"), NON_READ_ONLY)
@@ -127,7 +142,7 @@ class TestApprovalInvariant:
     @pytest.mark.parametrize("command", READ_ONLY)
     def test_auto_approved_only_flag_off_low_allowlist(self, command):
         off = _decide(command, "LOW", require=False)
-        assert off["pre"].approval_status.value == "auto_approved"
+        assert off["approval_status"] == "auto_approved"
         assert off["requires_human"] is False
         # flag ligada (default): nem o read-only sai sem humano
         on = _decide(command, "LOW", require=True)
@@ -138,28 +153,3 @@ class TestApprovalInvariant:
 
     def test_default_config_requires_human(self):
         assert AppConfig().safety.require_human_approval is True
-
-
-@pytest.mark.unit
-class TestAggregateVerdictGovernsExit:
-    """C1: o agregado do SafetyOrchestrator não pode ser descartado pelo CLI."""
-
-    @pytest.mark.parametrize("layer", ["tnr", "sanitizer"])
-    def test_layer_blocked_in_aggregate_forces_human(self, monkeypatch, layer):
-        """Camadas individuais aprovam; o agregado bloqueia (TNR/sanitizer)."""
-        from safety.orchestrator import SafetyOrchestrator
-
-        real = SafetyOrchestrator.validate
-
-        def validate_with_block(self, *a, **kw):
-            res = real(self, *a, **kw)
-            res.blocked_by.append(layer)
-            res.approved = False
-            return res
-
-        monkeypatch.setattr(SafetyOrchestrator, "validate", validate_with_block)
-        out = _decide("kubectl get pods -n prod", "LOW", require=False)
-        assert out["pre"].requires_human is False  # camada individual aprova
-        assert out["requires_human"] is True
-        assert layer in out["decision"]["blocked_by"]
-        assert _exit_code(out["requires_human"]) == 3

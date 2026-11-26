@@ -95,12 +95,7 @@ The implementation is based on seven academic AIOps papers (2024–2025). See [A
  Postmortem (Markdown/JSON) · Slack · Jira
 ```
 
-The project has two execution engines:
-
-| Engine | How to enable | Description |
-|--------|---------------|-------------|
-| V0 (sequential) | default `python main.py` | Demo script in `main.py`. It does not go through `app/builders.py`. |
-| V1 (Blueprint Engine) | `--pipeline-v1` only | Typed graph in `blueprint/`. `--data-source databricks` does not select this engine. |
+The project has one execution engine, the Blueprint Engine (V1): a typed graph in `blueprint/`, wired through `app/builders.py`. `python main.py` runs it by default. The old sequential V0 engine was retired in F5-4; `--pipeline-v1` is still accepted as a deprecated no-op.
 
 ### Layers
 
@@ -175,7 +170,7 @@ python main.py [options]
 | `--compact` | Compact terminal output | off |
 | `--scenario NAME` | `payment-pool-exhaustion`, `memory-leak` or `unknown-fault` | `payment-pool-exhaustion` |
 | `--data-source SOURCE` | `simulated` or `databricks` | `simulated` |
-| `--pipeline-v1` | Use the Blueprint Engine (V1) | off |
+| `--pipeline-v1` | **Deprecated no-op**: the Blueprint Engine (V1) is the only pipeline | — |
 | `--config FILE` | YAML file with analysis thresholds | `config/defaults.yaml` |
 | `--output-dir DIR` | Postmortem output directory | `output/` |
 | `--output-format FORMAT` | `markdown`, `json` or `both` | `markdown` |
@@ -211,7 +206,7 @@ python scripts/run_continuous_demo.py
 
 | Flag | Descrição | Padrão |
 |------|-----------|--------|
-| `--monitor` | Ativa o modo (exclusivo: não combina com `--scenario`, `--data-source databricks`, `--pipeline-v1`) | off |
+| `--monitor` | Ativa o modo (exclusivo: não combina com `--scenario`, `--data-source databricks`, `--tracker`) | off |
 | `--source URL` | Obrigatória: `csv://<arquivo>` ou `prometheus://<url>` | — |
 | `--interval SEGUNDOS` | Intervalo entre ticks (> 0) | `60` |
 | `--ticks N` | Roda N ticks e sai | sem limite |

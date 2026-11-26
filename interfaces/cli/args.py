@@ -1,8 +1,8 @@
 """Parser de argumentos da CLI e validação de exclusão mútua.
 
 Separado do entrypoint para permitir testes sem executar o pipeline.
-``--pipeline-v1`` seleciona o Blueprint Engine; o V0 sequencial é o default
-até a remoção prevista em F5-4.
+O Blueprint Engine (V1) é o único engine; ``--pipeline-v1`` sobrevive como
+alias deprecated sem efeito (F5-4 P6).
 """
 
 from __future__ import annotations
@@ -49,7 +49,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--no-rag", action="store_true", help="Skip RAG indexing (faster)"
     )
     parser.add_argument(
-        "--pipeline-v1", action="store_true", help="Use Blueprint Engine (V1) pipeline"
+        "--pipeline-v1",
+        action="store_true",
+        help="DEPRECATED no-op: the Blueprint Engine (V1) is now the only pipeline",
     )
     parser.add_argument(
         "--scenario",
@@ -160,7 +162,6 @@ def _validate_monitor_args(
         for flag, active in (
             ("--scenario", args.scenario is not None),
             ("--data-source databricks", args.data_source == "databricks"),
-            ("--pipeline-v1", args.pipeline_v1),
             ("--tracker", args.tracker is not None),
         )
         if active

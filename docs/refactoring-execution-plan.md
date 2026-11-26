@@ -246,8 +246,8 @@ adapters stay independent of the input framework.
 
 **Note (2026-11-17):** the agent builders are consumed by the Blueprint node
 (`blueprint/adapters/pipeline_nodes.py`), which is the surviving path. The V0
-CLI engine (`interfaces/cli/v0_pipeline.py`) keeps its inline wiring on purpose:
-it is deleted whole in F5-4, and its tests patch the agent classes in that module.
+CLI engine (`interfaces/cli/v0_pipeline.py`) kept its inline wiring on purpose;
+it was deleted whole in F5-4 (P6).
 
 **Acceptance criteria:**
 

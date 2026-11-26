@@ -28,7 +28,7 @@ python scripts/run_continuous_demo.py [--seed 42] [--source csv://<arquivo>] [--
 
 | Flag | Significado | Padrão |
 |---|---|---|
-| `--monitor` | Ativa o modo; exige `--source`; exclusivo com `--scenario`, `--data-source databricks`, `--pipeline-v1` | off |
+| `--monitor` | Ativa o modo; exige `--source`; exclusivo com `--scenario`, `--data-source databricks`, `--tracker` | off |
 | `--source URL` | `csv://<caminho>` ou `prometheus://<url>`; outro esquema é erro | — |
 | `--interval S` | Segundos entre ticks (> 0). No CSV é o passo do relógio simulado | `60` |
 | `--ticks N` | Número de ticks (> 0). Sem ele: CSV roda até o fim; Prometheus roda até Ctrl+C | — |
