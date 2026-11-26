@@ -33,7 +33,7 @@
   `render_postmortem_markdown`/`serialize_result` esperam, e fazer os safety nodes guardarem
   os dicts estruturados (hoje só guardam verdict/reasons).
 - **Mapa**: §1 (dados necessários por seção) + §6 P1.
-- **Write-set**: `application/use_cases/state_adapter.py` (novo, `state_to_result(state)->dict`),
+- **Write-set**: `blueprint/adapters/state_adapter.py` (novo, `state_to_result(state)->dict`),
   `blueprint/adapters/safety_nodes.py` (guardar safety_validation dict :189→:213-221 e remediation dict :109→:142),
   `blueprint/adapters/pipeline_nodes.py` (guardar stats/san_report se necessário),
   `domain/incident_state.py` (campo timeline OU convenção `metadata["_timeline"]`),

@@ -28,7 +28,7 @@
       "Smoke main.py --pipeline-v1 --no-llm --no-rag --output-dir /tmp/x → 12 seções, exit 3; diff vs V0 justificado no commit; unit green; NÃO regen snapshots.",
       "Commit (message inclua P2); marcar passes:true."
     ],
-    "passes": false,
+    "passes": true,
     "jira_key": "AIOPS-91"
   },
   {

@@ -75,12 +75,15 @@ def _state_after_abort(exc, config):
 def create_incident_state(
     args: argparse.Namespace,
     incident_data: dict,
+    incident: object | None = None,
 ) -> "IncidentState":
     """Cria IncidentState a partir de dados simulados e flags da CLI.
 
     Args:
         args: Argumentos da CLI.
         incident_data: Dicionario com logs, metrics, traces do simulador.
+        incident: SimulatedIncident de origem; guardado em ``metadata["_incident"]``
+            (o postmortem rico lê deploy/spike/detection/fix times dele).
 
     Returns:
         IncidentState pronto para o pipeline.
@@ -118,6 +121,7 @@ def create_incident_state(
         no_rag=getattr(args, "no_rag", False),
         metadata={
             "raw_incident_data": incident_data,
+            **({"_incident": incident} if incident is not None else {}),
             "scenario": getattr(args, "scenario", None) or "payment-pool-exhaustion",
             "output_format": getattr(args, "output_format", "markdown"),
             "compact": getattr(args, "compact", False),
@@ -207,7 +211,7 @@ def run_v1(args: argparse.Namespace) -> int:
 
     # 4. Constroi pipeline e estado inicial
     pipeline = build_pipeline(app_config)
-    state = create_incident_state(args, incident_data)
+    state = create_incident_state(args, incident_data, incident=incident)
 
     # 5. RAG (se habilitado)
     if not args.no_rag:

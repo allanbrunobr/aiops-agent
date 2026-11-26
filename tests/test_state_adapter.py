@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from application.use_cases.state_adapter import state_to_result
+from blueprint.adapters.state_adapter import state_to_result
 from blueprint.engine import BlueprintEngine
 from blueprint.pipelines.incident_response import build_incident_response_pipeline
 from config.loader import AppConfig

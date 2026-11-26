@@ -234,3 +234,15 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - Não feito (fora do write-set de P1): guardar SimulatedIncident em metadata["_incident"] no v1_runner, compression stats, sanitizer report — ficam para P2/P6.
 - Incidente de processo: rodei `git stash` nu por engano; recuperei via diff do SHA e dropei só a minha entrada. Nada perdido.
 - Próxima: Feature 2 (P2 postmortem rico via adapter).
+
+## Sessão Feature 2 — P2 postmortem rico no V1 (concluída)
+- blueprint/adapters/pipeline_nodes.py: make_postmortem_node agora chama render_postmortem_markdown(state_to_result(state), metadata["_incident"], now=...). Sem _incident (alerta real) usa stand-in com started_at nos 4 horários (não inventa dados). Fallback e _state_after_abort herdam.
+- interfaces/cli/v1_runner.py: create_incident_state(args, data, incident=None) guarda o SimulatedIncident em metadata["_incident"]; run_v1 passa o incident.
+- TNR no-LLM: já coberto por P1 (not_verified honesto em safety_nodes); nenhuma mudança em safety_nodes.py.
+- CORREÇÃO de P1: state_adapter.py violava test_layer_dependencies (application → safety.tnr). Movido para blueprint/adapters/state_adapter.py (imports/docs atualizados). Fora do write-set, mas necessário para unit verde.
+- tests/test_v1_postmortem_parity.py (14 testes; falhavam antes — kwarg incident inexistente / seções ausentes).
+- Smoke: main.py --pipeline-v1 --no-llm --no-rag --output-dir <tmp> → 11 headings "##/###" idênticos ao V0 (12ª seção, Incident Tracking, é condicional a --tracker); exit 3 em V1 e V0.
+- Verde no M5 (M5_LEVE=1, sem pipe): unit 2107 passed/7 skipped (test_databricks_retry deselecionado, poluição pré-existente); ruff check ok.
+- NÃO verde: `ruff format --check interfaces/cli/v1_runner.py` acusa bloco pré-existente (_state_after_abort, linhas ~61-75), não tocado.
+- Snapshots NÃO regenerados (P5).
+- Próxima: Feature 3 (P3 flags no run_v1).

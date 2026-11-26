@@ -23,8 +23,8 @@ def _mitigation_stage(state: IncidentState) -> dict[str, Any]:
     proposed = state.proposed_action
     if not proposed:
         return {}
-    # Import tardio: safety.tnr é camada de domínio de safety, sem custo no
-    # import deste módulo para quem só lê o resultado.
+    # safety.tnr: por isso o adapter vive em blueprint/adapters e não em
+    # application (regra de camadas, tests/test_layer_dependencies.py).
     from safety.tnr import MitigationAction
 
     action = MitigationAction(

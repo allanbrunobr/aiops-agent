@@ -261,43 +261,26 @@ def make_diagnoser_fallback(
 
 
 def make_postmortem_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]:
-    """Cria funcao adaptadora para geracao de postmortem (agentic — usa LLM)."""
+    """Cria funcao adaptadora para geracao de postmortem (renderer rico, sem LLM)."""
 
     def execute(state: IncidentState) -> IncidentState:
-        # Gera postmortem a partir do diagnostico e dados do pipeline
-        diagnosis = state.diagnosis or {}
-        report_data = state.aggregated_report or {}
+        from datetime import datetime, timezone
+        from types import SimpleNamespace
 
-        # Template de postmortem simplificado (equivalente ao step_postmortem de main.py)
-        root_cause = diagnosis.get("root_cause", "Unknown")
-        evidence = diagnosis.get("evidence", [])
-        affected = diagnosis.get("affected_services", [])
-        confidence = diagnosis.get("confidence", "unknown")
-        timeline = diagnosis.get("timeline", "N/A")
+        from application.use_cases.postmortem import render_postmortem_markdown
+        from blueprint.adapters.state_adapter import state_to_result
 
-        postmortem = f"""# Incident Postmortem
-
-## Summary
-- **Root Cause:** {root_cause}
-- **Confidence:** {confidence}
-- **Affected Services:** {", ".join(affected) if affected else "Unknown"}
-- **Severity:** {report_data.get("severity", "Unknown")}
-
-## Evidence
-{chr(10).join(f"- {e}" for e in evidence)}
-
-## Timeline
-{timeline}
-
-## Lessons Learned
-- Automated detection identified the incident via correlated signals
-- {"LLM-assisted" if not state.no_llm else "Heuristic"} diagnosis with {confidence} confidence
-
-## Action Items
-- [ ] Review root cause and verify fix
-- [ ] Update monitoring thresholds if needed
-- [ ] Document lessons learned in knowledge base
-"""
+        incident = state.metadata.get("_incident")
+        if incident is None:
+            # Estado sem SimulatedIncident (ex.: alerta real): a tabela de
+            # Timeline usa o instante de início do estado, sem inventar horários.
+            t0 = state.started_at or datetime.now(timezone.utc)
+            incident = SimpleNamespace(
+                deploy_time=t0, spike_start=t0, detection_time=t0, fix_time=t0
+            )
+        postmortem = render_postmortem_markdown(
+            state_to_result(state), incident, now=datetime.now()
+        )
         return dataclasses.replace(state, postmortem_md=postmortem)
 
     return execute
