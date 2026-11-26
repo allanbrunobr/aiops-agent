@@ -53,6 +53,7 @@ class VersionCheck:
     reason: str
     known_cves: list[str] = field(default_factory=list)
     recommendation: str = ""
+    unassessed: bool = False  # pacote fora da base: SAFE sem avaliação real
 
 
 @dataclass
@@ -202,6 +203,24 @@ INSECURE_CONFIG_PATTERNS = [
     ),
 ]
 
+_PACKAGE_ALIASES: dict[str, str] = {
+    "postgresql": "postgres",
+    "pg": "postgres",
+    "psql": "postgres",
+    "nodejs": "node",
+    "node.js": "node",
+    "py": "python",
+    "python3": "python",
+    "jdk": "java",
+    "jre": "java",
+    "openjdk": "java",
+    "k8s": "kubernetes",
+    "redis-server": "redis",
+    "nginx-core": "nginx",
+    "openssl-dev": "openssl",
+    "libssl": "openssl",
+}
+
 # Padrões de downgrade (ataque ⋆down)
 DOWNGRADE_PATTERNS = [
     r"(?:downgrade|revert|rollback)\s+(?:to\s+)?(\w+)[\s=]+v?([\d.]+)",
@@ -297,6 +316,8 @@ class VersionValidator:
         version_checks = self._check_version_safety(combined_text)
         checks.extend(version_checks)
         for vc in version_checks:
+            if vc.unassessed:
+                warnings.append(vc.reason)  # informativo: não altera o risco
             if not vc.is_safe:
                 if vc.known_cves:
                     overall_risk = RemediationRisk.MALICIOUS
@@ -443,19 +464,52 @@ class VersionValidator:
                             ),
                         )
                     )
+                elif self._is_known_package(package):
+                    # Pacote COM base de CVEs mas versão fora das linhas listadas:
+                    # ausência de evidência ≠ segurança → não verificável (CAUTION).
+                    checks.append(
+                        VersionCheck(
+                            package=package,
+                            proposed_version=version,
+                            is_safe=False,
+                            reason=(
+                                f"Versão {version} de {package} não verificável: "
+                                f"fora das linhas mapeadas na base de CVEs"
+                            ),
+                            recommendation=(
+                                f"Confirme manualmente que {package} {version} "
+                                f"não possui CVEs antes de aprovar."
+                            ),
+                        )
+                    )
                 else:
-                    # Versão não está na base de CVEs — caution mas não bloqueia
+                    # Pacote fora da base: SAFE, mas avisa que não foi avaliado.
                     checks.append(
                         VersionCheck(
                             package=package,
                             proposed_version=version,
                             is_safe=True,
-                            reason=f"No known CVEs for {package} {version}",
-                            recommendation=f"Version {package} {version} appears safe (no known CVEs).",
+                            reason=(
+                                f"Pacote {package} fora da base de CVEs: "
+                                f"não avaliado (sem CVEs conhecidos ≠ seguro)"
+                            ),
+                            recommendation=(
+                                f"{package} {version}: sem dados na base local; "
+                                f"verifique CVEs por outra fonte."
+                            ),
+                            unassessed=True,
                         )
                     )
 
         return checks
+
+    @staticmethod
+    def _normalize_package(package: str) -> str:
+        return _PACKAGE_ALIASES.get(package, package)
+
+    def _is_known_package(self, package: str) -> bool:
+        """True se o pacote (após alias) existe na base de CVEs."""
+        return self._normalize_package(package) in self.vulnerable_versions
 
     def _lookup_cves(self, package: str, version: str) -> list[str]:
         """
@@ -465,24 +519,7 @@ class VersionValidator:
         ou OSV.dev API. Aqui usamos a base local simplificada.
         """
         # Normaliza nomes de pacotes
-        package_aliases = {
-            "postgresql": "postgres",
-            "pg": "postgres",
-            "psql": "postgres",
-            "nodejs": "node",
-            "node.js": "node",
-            "py": "python",
-            "python3": "python",
-            "jdk": "java",
-            "jre": "java",
-            "openjdk": "java",
-            "k8s": "kubernetes",
-            "redis-server": "redis",
-            "nginx-core": "nginx",
-            "openssl-dev": "openssl",
-            "libssl": "openssl",
-        }
-        normalized_pkg = package_aliases.get(package, package)
+        normalized_pkg = self._normalize_package(package)
 
         if normalized_pkg not in self.vulnerable_versions:
             return []

@@ -132,3 +132,13 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - Verde no M5 (M5_LEVE=1): 6 arquivos safety 154 passed; unit sem test_databricks_retry: 2012 passed/6 skipped; integration 5 passed; ruff ok.
 - NÃO verificado: test_databricks_retry na suíte completa (poluição de ordem pré-existente da F6/F7, não tocada).
 - Próxima: Feature 9; antes, corrigir poluição do test_databricks_retry.
+
+## Sessão Feature 9 — C4 (concluída)
+- safety/version_validator.py: pacote presente em KNOWN_VULNERABLE_VERSIONS (inclui aliases, via _normalize_package/_PACKAGE_ALIASES) mas versão fora das
+  linhas mapeadas → VersionCheck.is_safe=False, "não verificável" → CAUTION + warning (antes: SAFE). Pacote fora da base → SAFE + warning informativo
+  "não avaliado" (novo campo VersionCheck.unassessed; não altera risco). Versão listada continua MALICIOUS.
+- tests/test_version_validator_unknown.py: 4 testes; 3 falham no código anterior (verificado com HEAD), 4 verdes após fix.
+- Verde no M5 (M5_LEVE=1): version_validator_unknown+lines+test_safety 88 passed; unit (sem test_databricks_retry) 2016 passed/6 skipped; ruff check/format ok.
+- NÃO verificado: test_databricks_retry na suíte completa (poluição de ordem pré-existente F6/F7, intocada).
+- Efeito colateral aceito: upgrade para versão não listada de pacote conhecido (ex.: nginx:1.25) vira CAUTION (is_safe geral continua True; só warning).
+- Próxima: Feature 10; idealmente corrigir antes a poluição do test_databricks_retry.
