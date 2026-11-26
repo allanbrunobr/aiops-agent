@@ -217,3 +217,8 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - NÃO verde: unit test_local_env_loader::test_no_hand_written_env_parser_left — causado por scripts/jira_sync.py (WIP não commitado do usuário), pré-existente e fora do escopo; test_databricks_retry deselecionado (poluição pré-existente).
 - Ressalva: recall/precision 1.0 em dado sintético não é evidência de produção (TD3 aprofunda circularidade).
 - Próxima: Feature 3 (TD3 documentar circularidade).
+
+## Sessão Feature 3 — TD3 documentar circularidade (concluída)
+- docs/continuous-monitor.md: seção "Honestidade" virou "Limitações do backtest sintético": circularidade (LOW-3), amostra 50 seeds ainda sintética (MEDIUM-1), 1,0 não é evidência de produção, dado real bloqueado (Grafana/SRE); referência a docs/review-qwen-result.md. Nenhum código alterado.
+- Verificado (M5_LEVE=1, sem pipe): unit 2083 passed/7 skipped, 1 failed: test_local_env_loader::test_no_hand_written_env_parser_left — causado por scripts/jira_sync.py (WIP não commitado do usuário), pré-existente, fora do escopo. test_databricks_retry deselecionado (poluição pré-existente).
+- Fila TD1–TD3 concluída. Próxima: obter dado real (SRE/Grafana) para validar o monitor.

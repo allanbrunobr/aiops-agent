@@ -80,14 +80,23 @@ seeds detectadas (50/50): min 171 / max 194 / média 185,9 / desvio-padrão popu
 (ddof=0) 4,8 min. Lead time médio global nos detectados: 59,2 min. O relatório traz também
 recall por kind e taxa de falso alarme por kind negativo.
 
-### Honestidade: o backtest é sintético
+### Limitações do backtest sintético
 
 Mesmo com 50 seeds, **todas** as séries vêm de geradores internos
-(`data/hpa_saturation_scenario.py`, `scripts/backtest_predictive.py`): recall/precision = 1,0
-é um sanity check de que o monitor detecta o que o gerador foi desenhado para produzir, **não**
-evidência estatística de desempenho em produção. Os negativos (flat/ruído) são trivialmente
-separáveis e a variância entre seeds só reflete o ruído do gerador. **Não generaliza para
-produção.** A validação em dado real segue bloqueada (Grafana Cloudflare / SRE sem CSV).
+(`data/hpa_saturation_scenario.py`, `scripts/backtest_predictive.py`). Leia os números acima
+com estas limitações (review: `MEDIUM-1` e `LOW-3` em [`review-qwen-result.md`](review-qwen-result.md)):
+
+- **Circularidade (LOW-3).** Gerador e detector compartilham pressupostos: o cenário é construído
+  com um padrão de falha claro, para ser detectável, e o detector é avaliado nele. O número mede
+  "detecta o que foi gerado para ser detectável". Não é defeito de código; é inerente a backtest
+  sintético.
+- **Amostra ainda sintética (MEDIUM-1).** Subir de 5 para 50 seeds reduz o acaso da amostragem,
+  mas não tira a circularidade: seeds diferentes só variam o ruído do mesmo gerador. Os negativos
+  (flat/ruído/noise_heavy) são trivialmente separáveis.
+- **`recall/precision = 1,0` não é evidência de produção.** É um sanity check de regressão, não
+  uma estimativa de desempenho real. **Não generaliza para produção.**
+- **Dado real bloqueado.** A validação em dado real segue bloqueada (Grafana Cloudflare / SRE
+  sem CSV). Obtê-lo é a prioridade para sair do sanity check.
 
 ## Limitações e trabalho futuro
 

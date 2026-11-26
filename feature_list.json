@@ -48,6 +48,6 @@
       "pytest -m unit -q verde (sanity)",
       "passes:true + commit docs(backtest): TD3"
     ],
-    "passes": false
+    "passes": true
   }
 ]
