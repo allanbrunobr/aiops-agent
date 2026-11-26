@@ -3,16 +3,15 @@ Verifique com `.venv/bin/python -m pytest tests -m unit -q` DIRETO. NÃO use
 `scripts/ci-local.sh unit` (venv fresco=pesado, m5-guard bloqueia→deferral→falha).
 NÃO vá pro M1. Marque passes:true após verde+commit. UMA sessão por tarefa basta.
 
-★ PRÓXIMA FILA: épico F5-4 paridade V1, LOTE 3 — P5 (docs/f5-4-parity-agent-prompt.md).
-LOTES 1+2 DONE+verificado+PUSHED (origin/main 0a19bb3): P1 adapter, P2 postmortem rico≡V0,
-P3 flags, P4a preditivo+Slack, P4b memória+skills, P4c cache+tabela. unit 2143 green,
-exit V0=3 V1=3, snapshots 17 intactos. V1 funcionalmente completo.
-P5 (AIOPS-96): migrar conftest._run_pipeline→V1 + regen snapshots SUPERVISIONADO +
-migrar test_exit_codes. ★GATE EQUIVALÊNCIA: rode snapshot SEM regen, classifique CADA diff
-(benigno vs semântico); SÓ regen se todos benignos+justificados; diff semântico→NÃO regen,
-passes=false, documente e PARE (coordenador resolve). NUNCA mascare regressão.
-P6 (remoção V0) GATED fora desta fila — precisa OK explícito do user. Cards movem sozinhos.
-O hook long-run chama scripts/jira_sync.py doing/done; --all reconcilia no fim.
+★ PRÓXIMA FILA: épico F5-4, P5a PARITY-FIX (AIOPS-96). LOTES 1+2 DONE+PUSHED (0a19bb3).
+P5 parou no gate: conftest→V1 revela 8 snapshot diffs (docs/f5-4-p5-snapshot-diffs.txt).
+P5a = restaurar CAT1 (detection fields, mitigation diagnosis block, IDLE->DETECTING+razões)
++ alinhar is_safe FAIL-CLOSED como V0 (false medium+ requires_human) + ACEITAR CAT2 enhancements
+(prediction/safety_decision/blast_radius/recommendation/llm_model/verification_mode).
+GATE: git apply docs/f5-4-p5-conftest-v1.patch TEMP; pytest -m snapshot; gerar
+docs/f5-4-p5-snapshot-diffs-after.txt; reverter conftest. SÓ passes:true se diffs restantes
+APENAS adições CAT2 (zero regressão CAT1, is_safe≡V0). NÃO regen snapshots, NÃO commit conftest,
+NÃO remover V0 (P5b/P6 depois). P6 GATED precisa OK user. Cards movem sozinhos (jira_sync).
 
 --- HISTÓRICO ---
 # Progresso — aiops-agent (fila long-run: Robustez Eixos A/B/C)

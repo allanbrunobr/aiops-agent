@@ -2,16 +2,19 @@
   {
     "number": 1,
     "category": "functional",
-    "title": "P5: conftest→V1 + regen snapshots supervisionado + migrar test_exit_codes",
-    "description": "SPEC: docs/f5-4-parity-agent-prompt.md tarefa P5. MAPA: docs/f5-4-parity-map.md (conftest._run_pipeline:243-383 espelha V0; test_exit_codes usa V0). P1-P4 DONE: V1 tem postmortem rico≡V0, flags, preditivo+Slack, memória+skills, cache+tabela. Migre conftest._run_pipeline para dirigir V1 (run_v1) mantendo a interface que os testes usam; migre tests/test_exit_codes.py para V1. ★GATE EQUIVALÊNCIA (CRÍTICO, NÃO PULE): ANTES de regenerar QUALQUER snapshot, rode `.venv/bin/python -m pytest tests -m snapshot -q` SEM regen e capture CADA diff. Classifique cada um: BENIGNO (formatação/ordem/timestamp/espaçamento) vs SEMÂNTICO (dado faltante, valor/seção diferente, evidência a menos). SÓ regenere se TODOS os diffs forem BENIGNOS e justifique cada um no commit message. Se QUALQUER diff SEMÂNTICO → NÃO regenere, NÃO commit, passes=false, documente o diff exato em claude-progress.md e PARE (coordenador resolve). NUNCA mascare regressão regenerando às cegas. Regras: verificação LOCAL M5 `.venv/bin/python -m pytest tests -m unit -q` (NÃO ci-local.sh/M1); tmp_path; sem deps; exit codes V0=3 V1=3 já paridade (não replanejar); NÃO remover V0 (P6 gated).",
+    "title": "P5a: parity-fix V1↔V0 (restaurar campos + is_safe fail-closed)",
+    "description": "SPEC: docs/f5-4-parity-agent-prompt.md. EVIDÊNCIA DO GATE: docs/f5-4-p5-snapshot-diffs.txt (8 snapshot diffs V1↔V0 em 3 categorias) + docs/f5-4-p5-conftest-v1.patch (migração conftest proposta). OBJETIVO: tornar V1 ⊇ V0 semanticamente ANTES de regenerar snapshots (P5b separado). CAT1 RESTAURAR (V1 perdeu, V0 tem): (a) detection result: affected_services, anomaly_count, signals[], slow_trace_count, total_errors (hoje V1 só is_incident+severity); (b) mitigation result: bloco nested diagnosis (affected_services/confidence/deployed_version/evidence[]/root_cause/timeline) nos 3 cenários; (c) timeline+postmortem State Machine: transição IDLE->DETECTING + razões nomeando serviços (V0 'Investigando incidente em {services}', 'Propondo remediação...'). CAT3 ALINHAR is_safe FAIL-CLOSED como V0: safety_validation.is_safe deve ser false quando requires_human em risco medium+ (V0=false, V1=true hoje). INVESTIGAR por que diverge: V0 v0_pipeline.py:774-866 step_safety_validation usa SafetyOrchestrator.validate(action,diagnosis); V1 safety_nodes.py:160-215 make_pre_validator_node build MitigationAction de state.proposed_action. is_safe=pre_validator.py:273 len(checks_failed)==0. Corrigir contexto/action/diagnosis V1 para paridade fail-closed. CAT2 ACEITAR (NÃO remover): prediction stage, safety_decision, blast_radius_scope, recommendation, llm_model heuristic, verification_mode — enhancements legítimos do épico. GATE: aplicar docs/f5-4-p5-conftest-v1.patch TEMPORARIAMENTE (git apply), rodar `.venv/bin/python -m pytest tests -m snapshot -q`, gerar docs/f5-4-p5-snapshot-diffs-after.txt; reverter patch (git checkout tests/conftest.py). SÓ passes:true se diffs restantes forem APENAS adições CAT2 (zero deleção CAT1, is_safe≡V0 false). Se resta regressão→passes:false, documentar, parar. NÃO regenerar snapshots (--snapshot-update proibido), NÃO commitar migração conftest, NÃO remover V0 (isso é P5b/P6). Regras: teste falha antes; verificação LOCAL M5 `.venv/bin/python -m pytest tests -m unit -q` (NÃO ci-local.sh unit, NÃO M1); nada output/ repo (tmp_path); sem deps novas; ruff/mypy gate clean; commit message inclua P5a; marque passes:true após gate verde+commit.",
     "dependencies": "none",
     "steps": [
-      "Ler docs/f5-4-parity-map.md + conftest._run_pipeline:243-383 + tests/test_exit_codes.py; confirmar file:line.",
-      "Migrar conftest._run_pipeline para V1 (run_v1) preservando interface dos testes.",
-      "Rodar pytest -m snapshot SEM regen; capturar e classificar CADA diff (benigno vs semântico).",
-      "Se diffs todos benignos: regen snapshots + justificar cada diff no commit. Se algum semântico: NÃO regen, passes=false, documentar e parar.",
-      "Migrar test_exit_codes para V1; unit + snapshot green; exit codes 3 preservados; ruff/mypy gate clean.",
-      "Commit (message inclua P5 + justificativa dos diffs); marcar passes:true SÓ se gate equivalência passou."
+      "Ler docs/f5-4-p5-snapshot-diffs.txt (8 diffs) + docs/f5-4-parity-map.md; confirmar file:line.",
+      "Restaurar CAT1 detection fields (state_adapter.py / pipeline_nodes.py detection node).",
+      "Restaurar CAT1 mitigation nested diagnosis block (3 cenários).",
+      "Restaurar CAT1 timeline IDLE->DETECTING + razões nomeando serviços.",
+      "Investigar + alinhar CAT3 is_safe fail-closed (safety_nodes.py vs v0_pipeline.py:774-866).",
+      "Escrever/ajustar testes: V1 detection/mitigation/timeline ≡ V0 campos; is_safe false medium+.",
+      "GATE: git apply patch conftest temporário; pytest -m snapshot; gerar diffs-after.txt; reverter conftest.",
+      "Confirmar diffs-after SÓ adições CAT2 (zero regressão, is_safe≡V0). Unit green; ruff/mypy gate clean.",
+      "Commit (message inclua P5a); marcar passes:true SÓ se gate passou."
     ],
     "passes": false,
     "jira_key": "AIOPS-96"
