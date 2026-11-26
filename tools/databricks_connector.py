@@ -10,6 +10,7 @@ and three connectors implementing their respective ABCs:
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -125,7 +126,28 @@ class DatabricksConnection:
             )
         return self._client
 
+    # B7: 1 retry com backoff curto, SOMENTE para error_type == "timeout".
+    TIMEOUT_RETRY_BACKOFF_SECONDS = 2.0
+
     def _execute_query(
+        self,
+        sql: str,
+        parameters: list[tuple[str, object]] | None = None,
+    ) -> list[dict]:
+        """Executa a query com 1 retry (backoff 2s) apenas em timeout.
+
+        Erros de query/auth/config propagam sem retry; na falha final
+        levanta DatabricksConnectorError.
+        """
+        try:
+            return self._execute_query_once(sql, parameters)
+        except DatabricksConnectorError as e:
+            if e.error_type != "timeout":
+                raise
+        time.sleep(self.TIMEOUT_RETRY_BACKOFF_SECONDS)
+        return self._execute_query_once(sql, parameters)
+
+    def _execute_query_once(
         self,
         sql: str,
         parameters: list[tuple[str, object]] | None = None,

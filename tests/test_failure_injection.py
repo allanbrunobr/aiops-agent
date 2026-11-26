@@ -345,3 +345,19 @@ def test_all_connectors_down_never_reports_success(tmp_path: Path) -> None:
 
     assert down.search.called and down.query.called and down.find_traces.called
     assert code != EXIT_SUCCESS, "todas as fontes fora e o run reportou sucesso"
+
+
+# ── B7: cliente Anthropic com timeout/retries explícitos ─────────────────────
+
+
+@pytest.mark.unit
+def test_anthropic_client_built_with_timeout_60_and_max_retries_2():
+    from unittest.mock import patch
+
+    from adapters.llm.anthropic_client import create_anthropic_llm_client
+
+    with patch("adapters.llm.anthropic_client.Anthropic") as ctor:
+        create_anthropic_llm_client(api_key="sk-test")
+    kwargs = ctor.call_args.kwargs
+    assert kwargs["timeout"] == 60.0
+    assert kwargs["max_retries"] == 2

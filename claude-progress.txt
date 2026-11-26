@@ -98,3 +98,14 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - Verde no M5 (M5_LEVE=1): integration 189 passed/3 skipped/1 xfailed; unit 1970 passed/6 skipped; ruff ok.
 - Não alterei exit code por degradação (exit segue só safety/regressão); fail-closed vem do gate existente.
 - Próxima: Feature 6 (conforme feature_list.json).
+
+## Sessão Feature 6 — B7 (concluída)
+- tools/databricks_connector.py: `_execute_query` agora envolve `_execute_query_once` (corpo antigo): 1 retry, backoff 2s
+  (`TIMEOUT_RETRY_BACKOFF_SECONDS`), SOMENTE se DatabricksConnectorError.error_type=="timeout"; query/auth/config sem retry.
+- tests/test_databricks_retry.py (5 testes, SDK mockado, sleep patchado): timeout→SUCCEEDED; 2 timeouts→erro (2 chamadas);
+  PermissionError/ValueError/estado FAILED→sem retry. tests/test_failure_injection.py: Anthropic construído com timeout=60.0, max_retries=2.
+  APITimeoutError→fallback já coberto pelo cenário 1 de A4.
+- Verde no M5 (M5_LEVE=1): 5 arquivos databricks+failure_injection → 128 passed/1 xfailed; integration 190 passed/3 skipped/1 xfailed; ruff check ok.
+  Mutação (retry desligado) → 2 testes falham.
+- NÃO verificado: suíte unit completa; `ruff format --check .` global acusa 14 arquivos pré-existentes (meus 3 estão ok).
+- Próxima: Feature 7 (B8 validação de telemetria).

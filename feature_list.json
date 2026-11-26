@@ -83,7 +83,7 @@
       "Teste kwargs Anthropic timeout60 retries2",
       "integration verde; não-timeout inalterado"
     ],
-    "passes": false
+    "passes": true
   },
   {
     "number": 7,
