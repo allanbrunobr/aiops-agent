@@ -2,21 +2,18 @@
   {
     "number": 1,
     "category": "functional",
-    "title": "P5a: parity-fix V1↔V0 (restaurar campos + is_safe fail-closed)",
-    "description": "SPEC: docs/f5-4-parity-agent-prompt.md. EVIDÊNCIA DO GATE: docs/f5-4-p5-snapshot-diffs.txt (8 snapshot diffs V1↔V0 em 3 categorias) + docs/f5-4-p5-conftest-v1.patch (migração conftest proposta). OBJETIVO: tornar V1 ⊇ V0 semanticamente ANTES de regenerar snapshots (P5b separado). CAT1 RESTAURAR (V1 perdeu, V0 tem): (a) detection result: affected_services, anomaly_count, signals[], slow_trace_count, total_errors (hoje V1 só is_incident+severity); (b) mitigation result: bloco nested diagnosis (affected_services/confidence/deployed_version/evidence[]/root_cause/timeline) nos 3 cenários; (c) timeline+postmortem State Machine: transição IDLE->DETECTING + razões nomeando serviços (V0 'Investigando incidente em {services}', 'Propondo remediação...'). CAT3 ALINHAR is_safe FAIL-CLOSED como V0: safety_validation.is_safe deve ser false quando requires_human em risco medium+ (V0=false, V1=true hoje). INVESTIGAR por que diverge: V0 v0_pipeline.py:774-866 step_safety_validation usa SafetyOrchestrator.validate(action,diagnosis); V1 safety_nodes.py:160-215 make_pre_validator_node build MitigationAction de state.proposed_action. is_safe=pre_validator.py:273 len(checks_failed)==0. Corrigir contexto/action/diagnosis V1 para paridade fail-closed. CAT2 ACEITAR (NÃO remover): prediction stage, safety_decision, blast_radius_scope, recommendation, llm_model heuristic, verification_mode — enhancements legítimos do épico. GATE: aplicar docs/f5-4-p5-conftest-v1.patch TEMPORARIAMENTE (git apply), rodar `.venv/bin/python -m pytest tests -m snapshot -q`, gerar docs/f5-4-p5-snapshot-diffs-after.txt; reverter patch (git checkout tests/conftest.py). SÓ passes:true se diffs restantes forem APENAS adições CAT2 (zero deleção CAT1, is_safe≡V0 false). Se resta regressão→passes:false, documentar, parar. NÃO regenerar snapshots (--snapshot-update proibido), NÃO commitar migração conftest, NÃO remover V0 (isso é P5b/P6). Regras: teste falha antes; verificação LOCAL M5 `.venv/bin/python -m pytest tests -m unit -q` (NÃO ci-local.sh unit, NÃO M1); nada output/ repo (tmp_path); sem deps novas; ruff/mypy gate clean; commit message inclua P5a; marque passes:true após gate verde+commit.",
+    "title": "P5b: aplicar conftest→V1 + regen snapshots + migrar test_exit_codes",
+    "jira_key": "AIOPS-96",
+    "description": "SPEC: docs/f5-4-parity-agent-prompt.md tarefa P5 (4e) + docs/f5-4-p5-snapshot-diffs-after.txt. P5a JÁ fechou paridade (HEAD 75454a6): CAT1 restaurado no source (pipeline_nodes/state_adapter), is_safe alinhado (test config blast_radius_limit=3 espelha V0; real default=5 V0≡V1). Restam SÓ 4 diffs CAT2 enhancements VERIFICADOS pelo coordenador (safety_validation +blast_radius_scope+recommendation; full_pipeline_result +llm_model+prediction+safety_decision+verification_mode; postmortem LLM Model heuristic/Blast Radius multi_service/Recommendation/'Heuristic diagnosis'). AGORA: (1) git apply docs/f5-4-p5-conftest-v1.patch PERMANENTE (conftest._run_pipeline→V1 via app.builders+state_to_result, SafetyConfig blast_radius_limit=3). (2) Migrar tests/test_exit_codes.py p/ V1 (exit codes JÁ paridade 3; usar --pipeline-v1 ou conftest V1). (3) REGEN snapshots: .venv/bin/python -m pytest tests -m snapshot --snapshot-update — ACEITAR só os 4 diffs CAT2 verificados; se aparecer diff NOVO não-CAT2, PARE e reporte. (4) NÃO remover V0 (P6 gated). Verificação LOCAL M5: .venv/bin/python -m pytest tests -m unit -q (TUDO verde, não só snapshot); .venv/bin/python -m pytest tests -m snapshot -q verde; V0 exit3 V1 exit3; ruff check .; mypy domain application core. Commit msg inclua 'P5b'. passes:true após verde+commit.",
     "dependencies": "none",
     "steps": [
-      "Ler docs/f5-4-p5-snapshot-diffs.txt (8 diffs) + docs/f5-4-parity-map.md; confirmar file:line.",
-      "Restaurar CAT1 detection fields (state_adapter.py / pipeline_nodes.py detection node).",
-      "Restaurar CAT1 mitigation nested diagnosis block (3 cenários).",
-      "Restaurar CAT1 timeline IDLE->DETECTING + razões nomeando serviços.",
-      "Investigar + alinhar CAT3 is_safe fail-closed (safety_nodes.py vs v0_pipeline.py:774-866).",
-      "Escrever/ajustar testes: V1 detection/mitigation/timeline ≡ V0 campos; is_safe false medium+.",
-      "GATE: git apply patch conftest temporário; pytest -m snapshot; gerar diffs-after.txt; reverter conftest.",
-      "Confirmar diffs-after SÓ adições CAT2 (zero regressão, is_safe≡V0). Unit green; ruff/mypy gate clean.",
-      "Commit (message inclua P5a); marcar passes:true SÓ se gate passou."
+      "git apply docs/f5-4-p5-conftest-v1.patch (conftest.py permanente)",
+      "migrar tests/test_exit_codes.py para V1",
+      "regen snapshots --snapshot-update; revisar diffs = só CAT2 verificado",
+      ".venv/bin/python -m pytest tests -m unit -q TUDO verde + -m snapshot verde",
+      "V0 exit3 V1 exit3; ruff check .; mypy domain application core",
+      "commit msg 'P5b'; passes:true; NÃO remover V0"
     ],
-    "passes": true,
-    "jira_key": "AIOPS-96"
+    "passes": false
   }
 ]
