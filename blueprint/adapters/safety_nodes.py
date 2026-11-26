@@ -15,7 +15,7 @@ from typing import Callable
 
 from config.loader import AppConfig
 from core.logging import get_logger
-from domain.incident_state import IncidentState
+from domain.incident_state import IncidentState, with_transition
 
 log = get_logger("safety")
 
@@ -110,6 +110,14 @@ def make_version_validator_node(
             command=command, description=description
         )
 
+        remediation_dict = {
+            "is_safe": result.is_safe,
+            "risk": result.risk.name,
+            "blocked_patterns": list(result.blocked_patterns),
+            "warnings": list(result.warnings),
+            "recommendation": result.recommendation,
+        }
+
         log.info(
             "safety.version_validator.completed",
             correlation_id=state.correlation_id,
@@ -143,6 +151,7 @@ def make_version_validator_node(
                 *state.safety_reasons,
                 f"VersionValidator: {result.risk.name}",
             ],
+            metadata={**state.metadata, "_remediation_validation": remediation_dict},
         )
 
     return execute
@@ -191,6 +200,16 @@ def make_pre_validator_node(
             diagnosis=diagnosis,
         )
 
+        validation_dict = {
+            "is_safe": result.is_safe,
+            "risk_level": result.risk_level.value,
+            "risk_score": result.risk_score,
+            "approval_status": result.approval_status.value,
+            "requires_human": result.requires_human,
+            "blast_radius_scope": result.blast_radius.scope,
+            "recommendation": result.recommendation,
+        }
+
         log.info(
             "safety.pre_validator.completed",
             correlation_id=state.correlation_id,
@@ -223,6 +242,7 @@ def make_pre_validator_node(
                 *state.safety_reasons,
                 f"PreValidator: {result.risk_level.value} — {result.approval_status.value}",
             ],
+            metadata={**state.metadata, "_safety_validation": validation_dict},
         )
 
     return execute
@@ -265,12 +285,43 @@ def make_tnr_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]
             )
             # Sem medição pós-ação não há verificação: registra em vez de
             # passar em silêncio (quem lê safety_reasons vê que não rodou).
+            outcome = state.metadata.get("_agent_outcome")
+            if outcome is not None and getattr(outcome, "tnr_result", None):
+                # Caminho LLM: o orchestrator já verificou (TNR simulado).
+                verification = {
+                    "result": outcome.tnr_result,
+                    "health_delta": outcome.tnr_health_delta,
+                    "message": outcome.tnr_message,
+                    "verification_mode": outcome.tnr_verification_mode,
+                }
+            else:
+                verification = {
+                    "result": "not_verified",
+                    "health_delta": 0.0,
+                    "message": "TNR not verified: no post-action health "
+                    "measurement (the action was not executed)",
+                    "verification_mode": "measured",
+                }
+            metadata = with_transition(
+                state.metadata,
+                "MITIGATING",
+                "VERIFYING",
+                "Verificando impacto (TNR)...",
+            )
+            metadata = with_transition(
+                {**metadata, "_verification": verification},
+                "VERIFYING",
+                "RESOLVED",
+                "Mitigation proposed (not executed); safety gate decides next: "
+                + verification["message"],
+            )
             return dataclasses.replace(
                 state,
                 safety_reasons=[
                     *state.safety_reasons,
                     "TNR: not verified — no pre/post-action health snapshots",
                 ],
+                metadata=metadata,
             )
 
         # Converte dicts para HealthSnapshot se necessario
@@ -314,12 +365,30 @@ def make_tnr_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]
                 f"below threshold {config.thresholds.regression_threshold}"
             )
 
+        metadata = with_transition(
+            state.metadata, "MITIGATING", "VERIFYING", "Verificando impacto (TNR)..."
+        )
+        metadata = with_transition(
+            {
+                **metadata,
+                "_verification": {
+                    "result": tnr_report.result.value,
+                    "health_delta": tnr_report.health_delta,
+                    "message": tnr_report.message,
+                    "verification_mode": tnr_report.verification_mode,
+                },
+            },
+            "VERIFYING",
+            "RESOLVED",
+            f"TNR check: {tnr_report.message}",
+        )
         return dataclasses.replace(
             state,
             safety_reasons=[
                 *state.safety_reasons,
                 f"TNR: {tnr_report.result.value} (delta={tnr_report.health_delta:.1f})",
             ],
+            metadata=metadata,
         )
 
     return execute

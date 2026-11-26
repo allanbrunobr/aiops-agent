@@ -151,6 +151,18 @@ def proposed_action_from_mitigation(mitigation: dict | None) -> dict | None:
     }
 
 
+def _record_diagnosis_timeline(metadata: dict) -> dict:
+    """Transições da máquina de estados cobertas pelo node de diagnóstico."""
+    from domain.incident_state import with_transition
+
+    metadata = with_transition(
+        metadata, "DETECTING", "DIAGNOSING", "Diagnosticando causa raiz..."
+    )
+    return with_transition(
+        metadata, "DIAGNOSING", "MITIGATING", "Propondo mitigação..."
+    )
+
+
 def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]:
     """Cria node agentic que usa AgentOrchestrator (Estágio 2) ou fallback heurístico."""
 
@@ -176,11 +188,20 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
         orchestrator = build_agent_orchestrator(config)
         outcome = orchestrator.run(report_obj, retriever, detection=detection)
 
+        metadata = _record_diagnosis_timeline(
+            {
+                **state.metadata,
+                "_agent_outcome": outcome,
+                "_pattern_matched": (outcome.mitigation or {}).get(
+                    "pattern_matched", "unknown"
+                ),
+            }
+        )
         return dataclasses.replace(
             state,
             diagnosis=outcome.diagnosis,
             proposed_action=proposed_action_from_mitigation(outcome.mitigation),
-            metadata={**state.metadata, "_agent_outcome": outcome},
+            metadata=metadata,
         )
 
     return execute
@@ -221,17 +242,19 @@ def make_diagnoser_fallback(
         # sem ela, os safety nodes seguintes não têm o que validar (F2-1,
         # inclusive no modo --no-llm).
         proposed_action = None
+        extra: dict = {}
         if diagnosis.get("root_cause"):
             from agents.mitigator import MitigationAgent
 
-            proposed_action = proposed_action_from_mitigation(
-                MitigationAgent().propose_safe(diagnosis)
-            )
+            mitigation = MitigationAgent().propose_safe(diagnosis)
+            proposed_action = proposed_action_from_mitigation(mitigation)
+            extra["_pattern_matched"] = mitigation.get("pattern_matched", "unknown")
 
         return dataclasses.replace(
             state,
             diagnosis=diagnosis,
             proposed_action=proposed_action,
+            metadata=_record_diagnosis_timeline({**state.metadata, **extra}),
         )
 
     return execute

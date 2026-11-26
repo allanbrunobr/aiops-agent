@@ -225,3 +225,12 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - docs/continuous-monitor.md: seção "Honestidade" virou "Limitações do backtest sintético": circularidade (LOW-3), amostra 50 seeds ainda sintética (MEDIUM-1), 1,0 não é evidência de produção, dado real bloqueado (Grafana/SRE); referência a docs/review-qwen-result.md. Nenhum código alterado.
 - Verificado (M5_LEVE=1, sem pipe): unit 2083 passed/7 skipped, 1 failed: test_local_env_loader::test_no_hand_written_env_parser_left — causado por scripts/jira_sync.py (WIP não commitado do usuário), pré-existente, fora do escopo. test_databricks_retry deselecionado (poluição pré-existente).
 - Fila TD1–TD3 concluída. Próxima: obter dado real (SRE/Grafana) para validar o monitor.
+
+## Sessão Feature 1 — P1 adapter state→result + captura estruturada (concluída)
+- application/use_cases/state_adapter.py (novo): state_to_result(state) monta o dict V0-shaped (diagnosis, mitigation.action como MitigationAction reconstruído + pattern_matched, safety_validation, safety_decision, remediation_validation, verification, timeline).
+- Captura em state.metadata: _timeline (helper with_transition em domain/incident_state.py), _pattern_matched (diagnoser LLM e fallback), _safety_validation / _remediation_validation (safety_nodes), _verification (TNR: not_verified explícito sem snapshots; caminho LLM copia do _agent_outcome).
+- tests/test_state_adapter.py (9 testes; falhavam antes — módulo inexistente); renderer rico renderiza as 6 seções a partir do adapter.
+- Verde no M5 (sem pipe): unit 2093 passed/7 skipped (test_databricks_retry deselecionado, poluição pré-existente); ruff check/format ok; mypy sem erro novo nos arquivos tocados (outros erros pré-existentes). Exit codes V0 e V1 --no-llm --no-rag = 3.
+- Não feito (fora do write-set de P1): guardar SimulatedIncident em metadata["_incident"] no v1_runner, compression stats, sanitizer report — ficam para P2/P6.
+- Incidente de processo: rodei `git stash` nu por engano; recuperei via diff do SHA e dropei só a minha entrada. Nada perdido.
+- Próxima: Feature 2 (P2 postmortem rico via adapter).

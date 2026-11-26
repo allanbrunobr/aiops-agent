@@ -75,3 +75,21 @@ class IncidentState:
 
     # Dados brutos e resultados de processamento (usado pelo sanitizer adapter e testes)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+def with_transition(
+    metadata: dict[str, Any], from_state: str, to_state: str, reason: str
+) -> dict[str, Any]:
+    """Devolve cópia de ``metadata`` com a transição anexada em ``_timeline``.
+
+    O estado é frozen e ``state`` é uma string única; o log de transições da
+    máquina de estados (paridade com o V0) vive em ``metadata["_timeline"]``,
+    como lista de ``{time, from, to, reason}``.
+    """
+    entry = {
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "from": from_state,
+        "to": to_state,
+        "reason": reason,
+    }
+    return {**metadata, "_timeline": [*metadata.get("_timeline", []), entry]}

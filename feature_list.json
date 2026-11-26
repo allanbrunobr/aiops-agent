@@ -12,7 +12,7 @@
       "Sem mudança de comportamento V1; .venv/bin/python -m pytest tests -m unit -q verde; ruff/mypy gate clean.",
       "Commit (message inclua P1); marcar passes:true."
     ],
-    "passes": false,
+    "passes": true,
     "jira_key": "AIOPS-90"
   },
   {
