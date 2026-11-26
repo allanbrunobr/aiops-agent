@@ -12,7 +12,8 @@
       "pytest tests -m real_rag -v verde no M5",
       "unit segue verde sem torch"
     ],
-    "passes": true
+    "passes": true,
+    "jira_key": "AIOPS-69"
   },
   {
     "number": 2,
@@ -26,7 +27,8 @@
       "YAML válido + job local roda",
       "Push normal verde; num_workers=0 reintroduzido→vermelho"
     ],
-    "passes": true
+    "passes": true,
+    "jira_key": "AIOPS-70"
   },
   {
     "number": 3,
@@ -40,7 +42,8 @@
       "pytest tests -m integration -q verde",
       "Cenário4 invariante estável antes/depois B1"
     ],
-    "passes": true
+    "passes": true,
+    "jira_key": "AIOPS-72"
   },
   {
     "number": 4,
@@ -54,7 +57,8 @@
       "pytest test_indexer_decomposed test_reranker_integration -v verde",
       "unit verde"
     ],
-    "passes": true
+    "passes": true,
+    "jira_key": "AIOPS-73"
   },
   {
     "number": 5,
@@ -69,7 +73,8 @@
       "Atualizar A4 cenário4",
       "unit+integration verde"
     ],
-    "passes": true
+    "passes": true,
+    "jira_key": "AIOPS-74"
   },
   {
     "number": 6,
@@ -83,7 +88,8 @@
       "Teste kwargs Anthropic timeout60 retries2",
       "integration verde; não-timeout inalterado"
     ],
-    "passes": true
+    "passes": true,
+    "jira_key": "AIOPS-78"
   },
   {
     "number": 7,
@@ -97,7 +103,8 @@
       "Testes NaN/inf/campos ausentes",
       "unit verde; domínio puro intacto"
     ],
-    "passes": true
+    "passes": true,
+    "jira_key": "AIOPS-79"
   },
   {
     "number": 8,
@@ -112,7 +119,8 @@
       "command None→REVIEW",
       "Testes falham antes do fix; unit verde; read-only legítimo não encolhe"
     ],
-    "passes": true
+    "passes": true,
+    "jira_key": "AIOPS-80"
   },
   {
     "number": 9,
@@ -126,7 +134,8 @@
       "Testes novos verdes",
       "unit verde"
     ],
-    "passes": true
+    "passes": true,
+    "jira_key": "AIOPS-81"
   },
   {
     "number": 10,
@@ -140,7 +149,8 @@
       "Se C1 gap→implementar decisão agregada",
       "unit verde; nenhum bypass exit0"
     ],
-    "passes": true
+    "passes": true,
+    "jira_key": "AIOPS-82"
   },
   {
     "number": 11,
@@ -154,7 +164,8 @@
       "Teste blast radius",
       "unit verde"
     ],
-    "passes": true
+    "passes": true,
+    "jira_key": "AIOPS-83"
   },
   {
     "number": 12,
@@ -168,7 +179,8 @@
       "Documentar 3 caminhos",
       "Container exit0 no Intel; nenhum torch nativo no Intel"
     ],
-    "passes": true
+    "passes": true,
+    "jira_key": "AIOPS-71"
   },
   {
     "number": 13,
@@ -183,7 +195,8 @@
       "Rust guarda+teste",
       "cargo test+clippy verde; paridade mantida; unit verde"
     ],
-    "passes": true
+    "passes": true,
+    "jira_key": "AIOPS-75"
   },
   {
     "number": 14,
@@ -197,6 +210,7 @@
       "Testes funções raise",
       "unit verde"
     ],
-    "passes": true
+    "passes": true,
+    "jira_key": "AIOPS-77"
   }
 ]
