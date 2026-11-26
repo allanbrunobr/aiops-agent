@@ -1,0 +1,216 @@
+[
+  {
+    "number": 1,
+    "category": "functional",
+    "title": "A1: testes real-RAG com modelo real",
+    "description": "Marker real_rag em pyproject.toml; tests/real_rag/test_real_rag_smoke.py (importorskip sentence_transformers/faiss): load real dim384, build_index ntotal>0, busca relevância payment-pool top3, roundtrip save/load, CrossEncoder real, smoke CLI --rebuild-rag exit∈{0,3}. Não tocar rag/. | ROBUSTNESS_PLAN.md §3 A1 (~:93). SPEC AUTORITATIVA: leia docs/robustness-abc-agent-prompt.md + ROBUSTNESS_PLAN.md seção indicada. Verifique AQUI no M5 direto com .venv/bin/python -m pytest (NÃO ci-local.sh unit, NÃO M1). Teste falha antes do fix; write-set explícito; nada output/ repo (tmp_path); fail-closed exit3; não quebrar V0; sem deps novas. Marque passes:true após verde+commit.",
+    "dependencies": "none",
+    "steps": [
+      "Registrar marker real_rag",
+      "Criar tests/real_rag/ com importorskip",
+      "6 cenários real-RAG",
+      "pytest tests -m real_rag -v verde no M5",
+      "unit segue verde sem torch"
+    ],
+    "passes": true,
+    "jira_key": "AIOPS-69"
+  },
+  {
+    "number": 2,
+    "category": "functional",
+    "title": "A2: job CI real-rag",
+    "description": "Job real-rag em .github/workflows/ci.yml (ubuntu-latest, timeout20, cache HF ~/.cache/huggingface, pytest -m real_rag); 5º job em scripts/ci-local.sh (venv /tmp/aiops-ci-venv-real-rag). | ROBUSTNESS_PLAN.md §3 A2 (~:111). SPEC AUTORITATIVA: leia docs/robustness-abc-agent-prompt.md + ROBUSTNESS_PLAN.md seção indicada. Verifique AQUI no M5 direto com .venv/bin/python -m pytest (NÃO ci-local.sh unit, NÃO M1). Teste falha antes do fix; write-set explícito; nada output/ repo (tmp_path); fail-closed exit3; não quebrar V0; sem deps novas. Marque passes:true após verde+commit.",
+    "dependencies": "1",
+    "steps": [
+      "Adicionar job real-rag ci.yml com cache HF",
+      "Espelhar em ci-local.sh",
+      "YAML válido + job local roda",
+      "Push normal verde; num_workers=0 reintroduzido→vermelho"
+    ],
+    "passes": true,
+    "jira_key": "AIOPS-70"
+  },
+  {
+    "number": 3,
+    "category": "functional",
+    "title": "A4: suíte failure-injection",
+    "description": "tests/test_failure_injection.py (marker integration, mocks que levantam exceção): LLM timeout→fallback, LLMBudgetExceeded→EXIT_ERROR, RAG vazio→sem crash, load modelo falha→sem falso sucesso, telemetria NaN→score limitado, conector fora→fallback/EXIT_ERROR. | ROBUSTNESS_PLAN.md §3 A4 (~:134). SPEC AUTORITATIVA: leia docs/robustness-abc-agent-prompt.md + ROBUSTNESS_PLAN.md seção indicada. Verifique AQUI no M5 direto com .venv/bin/python -m pytest (NÃO ci-local.sh unit, NÃO M1). Teste falha antes do fix; write-set explícito; nada output/ repo (tmp_path); fail-closed exit3; não quebrar V0; sem deps novas. Marque passes:true após verde+commit.",
+    "dependencies": "none",
+    "steps": [
+      "6 cenários com mocks que raise",
+      "Cada um falha se falso sucesso",
+      "pytest tests -m integration -q verde",
+      "Cenário4 invariante estável antes/depois B1"
+    ],
+    "passes": true,
+    "jira_key": "AIOPS-72"
+  },
+  {
+    "number": 4,
+    "category": "functional",
+    "title": "A5: mocks com assinatura estrita",
+    "description": "tests/test_indexer_decomposed.py:62-79 + test_reranker_integration.py:36-40: trocar MagicMock por mock com assinatura real de encode (sem num_workers)→kwarg desconhecido levanta TypeError. Teste-regressão num_workers=0→TypeError. | ROBUSTNESS_PLAN.md §3 A5 (~:149). SPEC AUTORITATIVA: leia docs/robustness-abc-agent-prompt.md + ROBUSTNESS_PLAN.md seção indicada. Verifique AQUI no M5 direto com .venv/bin/python -m pytest (NÃO ci-local.sh unit, NÃO M1). Teste falha antes do fix; write-set explícito; nada output/ repo (tmp_path); fail-closed exit3; não quebrar V0; sem deps novas. Marque passes:true após verde+commit.",
+    "dependencies": "none",
+    "steps": [
+      "Mock estrito encode sem num_workers",
+      "Teste regressão num_workers=0→TypeError",
+      "pytest test_indexer_decomposed test_reranker_integration -v verde",
+      "unit verde"
+    ],
+    "passes": true,
+    "jira_key": "AIOPS-73"
+  },
+  {
+    "number": 5,
+    "category": "functional",
+    "title": "B1: degradação graciosa RAG no run_v0",
+    "description": "interfaces/cli/v0_pipeline.py:1140 step_rag em try/except→retriever=None+rag_degraded=True+warning; consumidores aceitam None (diagnoser:474, orchestrator:291). Atualizar cenário4 de A4 p/ exit∈{0,3}+rag_degraded. | ROBUSTNESS_PLAN.md §4 B1 (~:165). SPEC AUTORITATIVA: leia docs/robustness-abc-agent-prompt.md + ROBUSTNESS_PLAN.md seção indicada. Verifique AQUI no M5 direto com .venv/bin/python -m pytest (NÃO ci-local.sh unit, NÃO M1). Teste falha antes do fix; write-set explícito; nada output/ repo (tmp_path); fail-closed exit3; não quebrar V0; sem deps novas. Marque passes:true após verde+commit.",
+    "dependencies": "3",
+    "steps": [
+      "try/except step_rag→retriever None+rag_degraded",
+      "Verificar consumidores None",
+      "_load_model raise→main --no-llm exit∈{0,3}+postmortem rag_degraded",
+      "Atualizar A4 cenário4",
+      "unit+integration verde"
+    ],
+    "passes": true,
+    "jira_key": "AIOPS-74"
+  },
+  {
+    "number": 6,
+    "category": "functional",
+    "title": "B7: retry conector Databricks + LLM",
+    "description": "tools/databricks_connector.py:128-202: 1 retry backoff 2s só error_type==timeout; teste timeout→SUCCEEDED. Teste cliente Anthropic timeout=60 max_retries=2 + APITimeoutError→fallback (coord A4.1). | ROBUSTNESS_PLAN.md §4 B7 (~:230). SPEC AUTORITATIVA: leia docs/robustness-abc-agent-prompt.md + ROBUSTNESS_PLAN.md seção indicada. Verifique AQUI no M5 direto com .venv/bin/python -m pytest (NÃO ci-local.sh unit, NÃO M1). Teste falha antes do fix; write-set explícito; nada output/ repo (tmp_path); fail-closed exit3; não quebrar V0; sem deps novas. Marque passes:true após verde+commit.",
+    "dependencies": "3",
+    "steps": [
+      "1 retry timeout-only Databricks",
+      "Teste mock SDK timeout→sucesso/2falhas→Error",
+      "Teste kwargs Anthropic timeout60 retries2",
+      "integration verde; não-timeout inalterado"
+    ],
+    "passes": true,
+    "jira_key": "AIOPS-78"
+  },
+  {
+    "number": 7,
+    "category": "functional",
+    "title": "B8: validação de telemetria na ingestão",
+    "description": "interfaces/cli/data_sources.py / pipeline/aggregator.py: descartar MetricPoint value não-finito/campos ausentes na borda, contar result['telemetry_dropped']. Não alterar dataclass domain/incident.py. Testes payloads malformados (coord A4.5). | ROBUSTNESS_PLAN.md §4 B8 (~:241). SPEC AUTORITATIVA: leia docs/robustness-abc-agent-prompt.md + ROBUSTNESS_PLAN.md seção indicada. Verifique AQUI no M5 direto com .venv/bin/python -m pytest (NÃO ci-local.sh unit, NÃO M1). Teste falha antes do fix; write-set explícito; nada output/ repo (tmp_path); fail-closed exit3; não quebrar V0; sem deps novas. Marque passes:true após verde+commit.",
+    "dependencies": "none",
+    "steps": [
+      "Validação na borda de ingestão",
+      "telemetry_dropped no relatório",
+      "Testes NaN/inf/campos ausentes",
+      "unit verde; domínio puro intacto"
+    ],
+    "passes": true,
+    "jira_key": "AIOPS-79"
+  },
+  {
+    "number": 8,
+    "category": "functional",
+    "title": "C3: edge cases pre_validator e TNR",
+    "description": "safety/pre_validator.py: --replicas[=\\s]+0+\\b HIGH_RISK; risk_map CRITICAL=4 default3; curl allowlist só https?:// bloqueia file://169.254.169.254 metadata; command=None→REVIEW. safety/tnr.py simulate_action_effect forma espaço; version_validator command or ''. Corpus adversarial. | ROBUSTNESS_PLAN.md §5 C3 (~:275). SPEC AUTORITATIVA: leia docs/robustness-abc-agent-prompt.md + ROBUSTNESS_PLAN.md seção indicada. Verifique AQUI no M5 direto com .venv/bin/python -m pytest (NÃO ci-local.sh unit, NÃO M1). Teste falha antes do fix; write-set explícito; nada output/ repo (tmp_path); fail-closed exit3; não quebrar V0; sem deps novas. Marque passes:true após verde+commit.",
+    "dependencies": "none",
+    "steps": [
+      "Pattern --replicas 0 espaço",
+      "CRITICAL risk_map default3",
+      "curl file:// metadata bloqueado",
+      "command None→REVIEW",
+      "Testes falham antes do fix; unit verde; read-only legítimo não encolhe"
+    ],
+    "passes": true,
+    "jira_key": "AIOPS-80"
+  },
+  {
+    "number": 9,
+    "category": "functional",
+    "title": "C4: versão desconhecida ≠ segura",
+    "description": "safety/version_validator.py:416-458: pacote em KNOWN_VULNERABLE_VERSIONS mas versão não reconhecida→is_safe=False/CAUTION warning 'não verificável'; pacote fora da base→SAFE+warning informativo. | ROBUSTNESS_PLAN.md §5 C4 (~:288). SPEC AUTORITATIVA: leia docs/robustness-abc-agent-prompt.md + ROBUSTNESS_PLAN.md seção indicada. Verifique AQUI no M5 direto com .venv/bin/python -m pytest (NÃO ci-local.sh unit, NÃO M1). Teste falha antes do fix; write-set explícito; nada output/ repo (tmp_path); fail-closed exit3; não quebrar V0; sem deps novas. Marque passes:true após verde+commit.",
+    "dependencies": "none",
+    "steps": [
+      "Downgrade conhecido p/ versão não-listada→não SAFE",
+      "Pacote desconhecido→SAFE+warning",
+      "Testes novos verdes",
+      "unit verde"
+    ],
+    "passes": true,
+    "jira_key": "AIOPS-81"
+  },
+  {
+    "number": 10,
+    "category": "functional",
+    "title": "C5: invariante de aprovação humana (suite-guarda)",
+    "description": "tests/test_approval_invariant.py: corpus (vazio, destrutivos, injeção, None, CRITICAL)→require_human_approval=true toda ação não-read-only exit3(ou2 regressão); AUTO_APPROVED só flag off+LOW+allowlist. Se falhar por decisão agregada (C1) não governar exit→implementar C1 (v0_pipeline.py:753-846, display.py:48-59) nesta tarefa. | ROBUSTNESS_PLAN.md §5 C5 (~:294). SPEC AUTORITATIVA: leia docs/robustness-abc-agent-prompt.md + ROBUSTNESS_PLAN.md seção indicada. Verifique AQUI no M5 direto com .venv/bin/python -m pytest (NÃO ci-local.sh unit, NÃO M1). Teste falha antes do fix; write-set explícito; nada output/ repo (tmp_path); fail-closed exit3; não quebrar V0; sem deps novas. Marque passes:true após verde+commit.",
+    "dependencies": "8",
+    "steps": [
+      "Corpus de ações adversariais",
+      "Assert invariante aprovação",
+      "Se C1 gap→implementar decisão agregada",
+      "unit verde; nenhum bypass exit0"
+    ],
+    "passes": true,
+    "jira_key": "AIOPS-82"
+  },
+  {
+    "number": 11,
+    "category": "functional",
+    "title": "C6: blast radius conservador sem diagnóstico",
+    "description": "safety/pre_validator.py _estimate_blast_radius/_calculate_risk_score: diagnosis None/vazio + comando não single-service→services=2+flag 'scope unknown'+piso MEDIUM não-read-only. Teste diagnosis None+kubectl rollout restart -n prod→risco≥MEDIUM requer aprovação. | ROBUSTNESS_PLAN.md §5 C6 (~:301). SPEC AUTORITATIVA: leia docs/robustness-abc-agent-prompt.md + ROBUSTNESS_PLAN.md seção indicada. Verifique AQUI no M5 direto com .venv/bin/python -m pytest (NÃO ci-local.sh unit, NÃO M1). Teste falha antes do fix; write-set explícito; nada output/ repo (tmp_path); fail-closed exit3; não quebrar V0; sem deps novas. Marque passes:true após verde+commit.",
+    "dependencies": "none",
+    "steps": [
+      "Estimativa conservadora diagnosis ausente",
+      "Piso MEDIUM não-read-only",
+      "Teste blast radius",
+      "unit verde"
+    ],
+    "passes": true,
+    "jira_key": "AIOPS-83"
+  },
+  {
+    "number": 12,
+    "category": "functional",
+    "title": "A3: container real-RAG Intel-Mac",
+    "description": "docker/real-rag.Dockerfile (python:3.12-slim linux/amd64, uv sync --frozen, pytest -m real_rag); scripts/real-rag-docker.sh (build --platform linux/amd64 + run); docs 3 caminhos (CI ubuntu/container Intel/nativo arm64 M5). | ROBUSTNESS_PLAN.md §3 A3 (~:122). SPEC AUTORITATIVA: leia docs/robustness-abc-agent-prompt.md + ROBUSTNESS_PLAN.md seção indicada. Verifique AQUI no M5 direto com .venv/bin/python -m pytest (NÃO ci-local.sh unit, NÃO M1). Teste falha antes do fix; write-set explícito; nada output/ repo (tmp_path); fail-closed exit3; não quebrar V0; sem deps novas. Marque passes:true após verde+commit.",
+    "dependencies": "1",
+    "steps": [
+      "Dockerfile linux/amd64",
+      "script real-rag-docker.sh",
+      "Documentar 3 caminhos",
+      "Container exit0 no Intel; nenhum torch nativo no Intel"
+    ],
+    "passes": true,
+    "jira_key": "AIOPS-71"
+  },
+  {
+    "number": 13,
+    "category": "functional",
+    "title": "B3: guards NaN/inf/span (Python+Rust)",
+    "description": "safety/tnr.py:203,251 delta não-finito→ERROR; HealthSnapshot entradas inválidas→ERROR/NOT_VERIFIED. risk_scorer.py:61-76 não-finito→0+warning. metric_predictor.py span<1→ValueError. rust/src/cusum_ewma/analyzer.rs:42-62 mesma guarda+testes; paridade test_rust_python_parity.py casos NaN/span. | ROBUSTNESS_PLAN.md §4 B3 (~:188). SPEC AUTORITATIVA: leia docs/robustness-abc-agent-prompt.md + ROBUSTNESS_PLAN.md seção indicada. Verifique AQUI no M5 direto com .venv/bin/python -m pytest (NÃO ci-local.sh unit, NÃO M1). Teste falha antes do fix; write-set explícito; nada output/ repo (tmp_path); fail-closed exit3; não quebrar V0; sem deps novas. Marque passes:true após verde+commit.",
+    "dependencies": "none",
+    "steps": [
+      "TNR delta NaN→ERROR",
+      "risk_scorer warning explícito",
+      "metric_predictor span<1 ValueError",
+      "Rust guarda+teste",
+      "cargo test+clippy verde; paridade mantida; unit verde"
+    ],
+    "passes": true,
+    "jira_key": "AIOPS-75"
+  },
+  {
+    "number": 14,
+    "category": "functional",
+    "title": "B6: post_state/rollback no try do TNR",
+    "description": "safety/tnr.py execute_with_safety ~160-240: envolver post_state_fn()/rollback_fn(action) em try/except→falha TNRResult.ERROR+blocked_by; rollback que levanta não pode ser ROLLBACK_COMPLETE. Testes funções que levantam. | ROBUSTNESS_PLAN.md §4 B6 (~:224). SPEC AUTORITATIVA: leia docs/robustness-abc-agent-prompt.md + ROBUSTNESS_PLAN.md seção indicada. Verifique AQUI no M5 direto com .venv/bin/python -m pytest (NÃO ci-local.sh unit, NÃO M1). Teste falha antes do fix; write-set explícito; nada output/ repo (tmp_path); fail-closed exit3; não quebrar V0; sem deps novas. Marque passes:true após verde+commit.",
+    "dependencies": "none",
+    "steps": [
+      "try/except post_state/rollback",
+      "rollback falha≠ROLLBACK_COMPLETE",
+      "Testes funções raise",
+      "unit verde"
+    ],
+    "passes": true,
+    "jira_key": "AIOPS-77"
+  }
+]

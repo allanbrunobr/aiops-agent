@@ -1,3 +1,14 @@
+⛔ REGRA VERIFICAÇÃO (SOBREPÕE NOTAS ANTIGAS): AQUI é M5 arm64, .venv pronto.
+Verifique com `.venv/bin/python -m pytest tests -m unit -q` DIRETO. NÃO use
+`scripts/ci-local.sh unit` (venv fresco=pesado, m5-guard bloqueia→deferral→falha).
+NÃO vá pro M1. Marque passes:true após verde+commit. UMA sessão por tarefa basta.
+
+★ PRÓXIMA FILA: 3 débitos técnicos (docs/tech-debt-agent-prompt.md).
+TD1 stub _aiops_rust.pyi+guards (AIOPS-87) → TD2 seeds 50+variância (AIOPS-85)
+→ TD3 docs circularidade (AIOPS-86, dep TD2). Cards movem sozinhos (jira_key).
+O hook long-run chama scripts/jira_sync.py doing/done; --all reconcilia no fim.
+
+--- HISTÓRICO ---
 # Progresso — aiops-agent (fila long-run: Robustez Eixos A/B/C)
 
 ## ⛔ REGRA DE VERIFICAÇÃO (sobrepõe qualquer nota antiga)
