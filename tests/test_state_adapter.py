@@ -160,3 +160,79 @@ def test_adapter_tolerates_bare_state() -> None:
     assert out["timeline"] == []
     assert out["stages"]["mitigation"] == {}
     assert out["success"] is False
+
+
+# --- P5a: paridade V1 ⊇ V0 (CAT1 restaurar + is_safe fail-closed) ----------
+
+
+def test_detection_stage_has_v0_fields(result: dict) -> None:
+    detection = result["stages"]["detection"]
+    for key in (
+        "is_incident",
+        "severity",
+        "affected_services",
+        "anomaly_count",
+        "signals",
+        "slow_trace_count",
+        "total_errors",
+    ):
+        assert key in detection, f"detection sem {key} (V0 tem)"
+    assert detection["signals"] and detection["total_errors"] > 0
+
+
+def test_mitigation_nests_diagnosis_like_v0(
+    result: dict, final_state: IncidentState
+) -> None:
+    nested = result["stages"]["mitigation"]["diagnosis"]
+    assert nested == final_state.diagnosis
+    for key in ("affected_services", "confidence", "evidence", "root_cause"):
+        assert key in nested
+
+
+def test_timeline_starts_idle_to_detecting_and_names_services(result: dict) -> None:
+    timeline = result["timeline"]
+    assert (timeline[0]["from"], timeline[0]["to"]) == ("IDLE", "DETECTING")
+    diagnosing = next(e for e in timeline if e["to"] == "DIAGNOSING")
+    services = result["stages"]["detection"]["affected_services"]
+    assert diagnosing["reason"] == f"Investigando incidente em {', '.join(services)}"
+    mitigating = next(e for e in timeline if e["to"] == "MITIGATING")
+    assert mitigating["reason"] == "Propondo remediação..."
+
+
+def _run_pre_validator(limit: int, services: list[str]) -> dict:
+    from dataclasses import replace
+
+    from blueprint.adapters.safety_nodes import make_pre_validator_node
+    from config.loader import AppConfig, SafetyConfig
+
+    config = AppConfig(safety=SafetyConfig(blast_radius_limit=limit))
+    state = replace(
+        _initial_state(),
+        diagnosis={
+            "root_cause": "pool",
+            "confidence": "medium",
+            "affected_services": services,
+        },
+        proposed_action={
+            "description": "rollback",
+            "command": "kubectl rollout undo deployment/payment-svc",
+            "risk_level": "LOW",
+            "rollback": "kubectl rollout undo deployment/payment-svc",
+        },
+    )
+    out = make_pre_validator_node(config)(state)
+    return out.metadata["_safety_validation"]
+
+
+def test_is_safe_fail_closed_when_blast_radius_exceeds_limit() -> None:
+    """V0 (conftest, limite 3) com 4 serviços: is_safe=False e requires_human."""
+    sv = _run_pre_validator(3, ["a", "b", "c", "d"])
+    assert sv["is_safe"] is False
+    assert sv["requires_human"] is True
+    assert sv["risk_level"] in ("MEDIUM", "HIGH", "CRITICAL")
+
+
+def test_is_safe_true_within_configured_limit() -> None:
+    sv = _run_pre_validator(5, ["a", "b", "c", "d"])
+    assert sv["is_safe"] is True
+    assert sv["requires_human"] is True

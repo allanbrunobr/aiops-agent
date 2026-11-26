@@ -197,15 +197,27 @@ def proposed_action_from_mitigation(mitigation: dict | None) -> dict | None:
     }
 
 
-def _record_diagnosis_timeline(metadata: dict) -> dict:
-    """Transições da máquina de estados cobertas pelo node de diagnóstico."""
+def _record_diagnosis_timeline(metadata: dict, detection: dict | None = None) -> dict:
+    """Transições da máquina de estados cobertas pelo node de diagnóstico.
+
+    Mesmas transições e razões do V0 (``v0_pipeline`` ``_transition``): inclui
+    IDLE→DETECTING e nomeia os serviços afetados. ``detection`` também é
+    guardada em ``metadata["_detection"]`` (alimenta ``stages.detection``).
+    """
     from domain.incident_state import with_transition
 
+    detection = detection or {}
+    affected = ", ".join(detection.get("affected_services", []))
+    if detection:
+        metadata = {**metadata, "_detection": detection}
     metadata = with_transition(
-        metadata, "DETECTING", "DIAGNOSING", "Diagnosticando causa raiz..."
+        metadata, "IDLE", "DETECTING", "Analisando dados de observabilidade..."
+    )
+    metadata = with_transition(
+        metadata, "DETECTING", "DIAGNOSING", f"Investigando incidente em {affected}"
     )
     return with_transition(
-        metadata, "DIAGNOSING", "MITIGATING", "Propondo mitigação..."
+        metadata, "DIAGNOSING", "MITIGATING", "Propondo remediação..."
     )
 
 
@@ -241,7 +253,8 @@ def make_diagnoser_node(config: AppConfig) -> Callable[[IncidentState], Incident
                 "_pattern_matched": (outcome.mitigation or {}).get(
                     "pattern_matched", "unknown"
                 ),
-            }
+            },
+            detection,
         )
         return dataclasses.replace(
             state,
@@ -282,6 +295,9 @@ def make_diagnoser_fallback(
             )
 
         _ensure_rag_index(state, report_obj)
+        from app.builders import build_detector_agent
+
+        detection = build_detector_agent(config).detect(report_obj)
         diagnosis = diagnoser.heuristic_diagnosis(report_obj)
 
         # Mesma proposta que o caminho com LLM faz dentro do AgentOrchestrator:
@@ -300,7 +316,7 @@ def make_diagnoser_fallback(
             state,
             diagnosis=diagnosis,
             proposed_action=proposed_action,
-            metadata=_record_diagnosis_timeline({**state.metadata, **extra}),
+            metadata=_record_diagnosis_timeline({**state.metadata, **extra}, detection),
         )
 
     return execute

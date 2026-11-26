@@ -1,0 +1,191 @@
+/Users/allanbrunom5/Projetos/pessoais/aiops-agent/.venv/lib/python3.12/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to "function" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session". Set it to "fixture-scope" to keep the current behavior.
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+============================= test session starts ==============================
+platform darwin -- Python 3.12.14, pytest-9.2.0, pluggy-1.7.0
+rootdir: /Users/allanbrunom5/Projetos/pessoais/aiops-agent
+configfile: pyproject.toml
+plugins: cov-7.1.0, mock-3.17.0, anyio-4.16.0, asyncio-1.5.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 2492 items / 2475 deselected / 1 skipped / 17 selected
+
+tests/test_memory_leak_snapshots.py ..                                   [ 11%]
+tests/test_snapshots.py ........F.FF                                     [ 82%]
+tests/test_unknown_fault.py ..F                                          [100%]
+
+=================================== FAILURES ===================================
+_________ TestPipelineResultSnapshots.test_safety_validation_snapshot __________
+tests/test_snapshots.py:91: in test_safety_validation_snapshot
+    snapshot_manager.assert_match(safety, "safety_validation")
+tests/snapshot_utils.py:235: in assert_match
+    raise AssertionError(
+E   AssertionError: Snapshot mismatch para 'safety_validation'.
+E   Execute com --snapshot-update para regenerar.
+E   
+E   --- stored/safety_validation.json
+E   +++ current/safety_validation.json
+E   @@ -1,6 +1,8 @@
+E    {
+E      "approval_status": "pending_approval",
+E   -  "is_safe": false,
+E   +  "blast_radius_scope": "multi_service",
+E   +  "is_safe": true,
+E   +  "recommendation": "🟡 MEDIUM RISK: Recommended to confirm before execution. Action is reversible.",
+E      "requires_human": true,
+E      "risk_level": "MEDIUM",
+E      "risk_score": 35.0
+________ TestPipelineResultSnapshots.test_full_pipeline_result_snapshot ________
+tests/test_snapshots.py:104: in test_full_pipeline_result_snapshot
+    snapshot_manager.assert_match(pipeline_result, "full_pipeline_result")
+tests/snapshot_utils.py:235: in assert_match
+    raise AssertionError(
+E   AssertionError: Snapshot mismatch para 'full_pipeline_result'.
+E   Execute com --snapshot-update para regenerar.
+E   
+E   --- stored/full_pipeline_result.json
+E   +++ current/full_pipeline_result.json
+E   @@ -1,4 +1,5 @@
+E    {
+E   +  "llm_model": "heuristic",
+E      "scenario_name": "payment-pool-exhaustion",
+E      "stages": {
+E        "detection": {
+E   @@ -66,6 +67,15 @@
+E          },
+E          "pattern_matched": "connection pool"
+E        },
+E   +    "prediction": {
+E   +      "eta_minutes": null,
+E   +      "event_level": null,
+E   +      "matched_history": [],
+E   +      "risk_score": 6.0,
+E   +      "signals": [
+E   +        "log_burst"
+E   +      ]
+E   +    },
+E        "remediation_validation": {
+E          "blocked_patterns": [],
+E          "is_safe": true,
+E   @@ -73,9 +83,17 @@
+E          "risk": "SAFE",
+E          "warnings": []
+E        },
+E   +    "safety_decision": {
+E   +      "blocked_by": [
+E   +        "pre_validator"
+E   +      ],
+E   +      "requires_human": true
+E   +    },
+E        "safety_validation": {
+E          "approval_status": "pending_approval",
+E   -      "is_safe": false,
+E   +      "blast_radius_scope": "multi_service",
+E   +      "is_safe": true,
+E   +      "recommendation": "🟡 MEDIUM RISK: Recommended to confirm before execution. Action is reversible.",
+E          "requires_human": true,
+E          "risk_level": "MEDIUM",
+E          "risk_score": 35.0
+E   @@ -83,7 +101,8 @@
+E        "verification": {
+E          "health_delta": 0.0,
+E          "message": "TNR not verified: no post-action health measurement (the action was not executed)",
+E   -      "result": "not_verified"
+E   +      "result": "not_verified",
+E   +      "verification_mode": "measured"
+E        }
+E      },
+E      "success": true,
+________ TestPipelineResultSnapshots.test_postmortem_structure_snapshot ________
+tests/test_snapshots.py:134: in test_postmortem_structure_snapshot
+    snapshot_manager.assert_text_match(postmortem_text, "postmortem_structure")
+tests/snapshot_utils.py:266: in assert_text_match
+    raise AssertionError(
+E   AssertionError: Snapshot mismatch para 'postmortem_structure'.
+E   Execute com --snapshot-update para regenerar.
+E   
+E   --- stored/postmortem_structure.txt
+E   +++ current/postmortem_structure.txt
+E   @@ -4,7 +4,7 @@
+E    
+E    - **Date**: NORMALIZED_TIMESTAMP NORMALIZED_TIMESTAMP
+E    - **Scenario**: payment-pool-exhaustion
+E   -- **LLM Model**: unknown
+E   +- **LLM Model**: heuristic
+E    - **Duration**: ~9 minutes (scenario: deploy to reference fix time)
+E    - **Severity**: CRITICAL
+E    - **Impact**: Service degradation detected via automated analysis
+E   @@ -54,8 +54,8 @@
+E    - **Risk Score**: 35.0/100
+E    - **Approval Status**: pending_approval
+E    - **Requires Human**: Yes
+E   -- **Blast Radius**: N/A
+E   -- **Recommendation**: N/A
+E   +- **Blast Radius**: multi_service
+E   +- **Recommendation**: 🟡 MEDIUM RISK: Recommended to confirm before execution. Action is reversible.
+E    
+E    ## Remediation CVE/Version Validation
+E    
+E   @@ -82,7 +82,7 @@
+E    ## Lessons Learned
+E    
+E    - Automated detection identified the incident promptly
+E   -- Diagnosis provided medium-confidence assessment
+E   +- Heuristic diagnosis provided medium-confidence assessment
+E    - TNR did not verify the mitigation (no post-action health measurement)
+E    - Pipeline stopped at the human approval gate (mitigation awaiting approval)
+_ TestUnknownFaultPipelineSnapshots.test_unknown_fault_postmortem_structure_snapshot _
+tests/test_unknown_fault.py:421: in test_unknown_fault_postmortem_structure_snapshot
+    snapshot_manager.assert_text_match(
+tests/snapshot_utils.py:266: in assert_text_match
+    raise AssertionError(
+E   AssertionError: Snapshot mismatch para 'unknown_fault_postmortem_structure'.
+E   Execute com --snapshot-update para regenerar.
+E   
+E   --- stored/unknown_fault_postmortem_structure.txt
+E   +++ current/unknown_fault_postmortem_structure.txt
+E   @@ -4,7 +4,7 @@
+E    
+E    - **Date**: NORMALIZED_TIMESTAMP NORMALIZED_TIMESTAMP
+E    - **Scenario**: unknown-fault
+E   -- **LLM Model**: unknown
+E   +- **LLM Model**: heuristic
+E    - **Duration**: ~35 minutes (scenario: deploy to reference fix time)
+E    - **Severity**: CRITICAL
+E    - **Impact**: Service degradation detected via automated analysis
+E   @@ -54,8 +54,8 @@
+E    - **Risk Score**: 50.0/100
+E    - **Approval Status**: pending_approval
+E    - **Requires Human**: Yes
+E   -- **Blast Radius**: N/A
+E   -- **Recommendation**: N/A
+E   +- **Blast Radius**: multi_service
+E   +- **Recommendation**: 🟠 HIGH RISK: Requires human approval before execution. Estimated downtime: 30s. Warnings: Low diagnosis confidence increases mitigation risk
+E    
+E    ## Remediation CVE/Version Validation
+E    
+E   @@ -81,7 +81,7 @@
+E    ## Lessons Learned
+E    
+E    - Automated detection identified the incident promptly
+E   -- Diagnosis provided low-confidence assessment
+E   +- Heuristic diagnosis provided low-confidence assessment
+E    - TNR did not verify the mitigation (no post-action health measurement)
+E    - Pipeline stopped at the human approval gate (mitigation awaiting approval)
+=============================== warnings summary ===============================
+tests/test_memory_leak_snapshots.py::TestMemoryLeakPipelineSnapshots::test_memory_leak_diagnosis_snapshot
+tests/test_memory_leak_snapshots.py::TestMemoryLeakPipelineSnapshots::test_memory_leak_diagnosis_snapshot
+tests/test_snapshots.py::TestPreProcessingSnapshots::test_log_templates_snapshot
+tests/test_snapshots.py::TestPipelineResultSnapshots::test_detection_snapshot
+tests/test_snapshots.py::TestPipelineResultSnapshots::test_detection_snapshot
+tests/test_unknown_fault.py::TestUnknownFaultPipelineSnapshots::test_unknown_fault_diagnosis_snapshot
+tests/test_unknown_fault.py::TestUnknownFaultPipelineSnapshots::test_unknown_fault_diagnosis_snapshot
+  <string>:10: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_snapshots.py::TestPipelineResultSnapshots::test_safety_validation_snapshot
+FAILED tests/test_snapshots.py::TestPipelineResultSnapshots::test_full_pipeline_result_snapshot
+FAILED tests/test_snapshots.py::TestPipelineResultSnapshots::test_postmortem_structure_snapshot
+FAILED tests/test_unknown_fault.py::TestUnknownFaultPipelineSnapshots::test_unknown_fault_postmortem_structure_snapshot
+===== 4 failed, 13 passed, 1 skipped, 2475 deselected, 7 warnings in 1.44s =====

@@ -4,6 +4,7 @@ O renderer rico (``application.use_cases.postmortem``) consome o dict que o
 engine V0 montava. Este módulo reconstrói esse dict a partir do estado e dos
 dados estruturados que os nodes do blueprint guardam em ``state.metadata``:
 
+- ``_detection``: saída do DetectorAgent (stages.detection)
 - ``_timeline``: transições da máquina de estados
 - ``_pattern_matched``: padrão da mitigação (alimenta Action Items)
 - ``_safety_validation`` / ``_remediation_validation``: dicts dos validators
@@ -36,6 +37,8 @@ def _mitigation_stage(state: IncidentState) -> dict[str, Any]:
     return {
         "action": action,
         "pattern_matched": state.metadata.get("_pattern_matched", "unknown"),
+        # V0 (MitigationAgent.propose) devolve o diagnóstico aninhado.
+        "diagnosis": dict(state.diagnosis or {}),
     }
 
 
@@ -60,7 +63,10 @@ def state_to_result(state: IncidentState) -> dict[str, Any]:
     stages: dict[str, Any] = {}
 
     report = state.aggregated_report or {}
-    if state.diagnosis is not None or report:
+    detection = meta.get("_detection")
+    if detection is not None:
+        stages["detection"] = dict(detection)
+    elif state.diagnosis is not None or report:
         stages["detection"] = {
             "is_incident": True,
             "severity": report.get("severity", "UNKNOWN"),
