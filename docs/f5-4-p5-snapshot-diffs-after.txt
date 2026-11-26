@@ -28,10 +28,9 @@ E   +++ current/safety_validation.json
 E   @@ -1,6 +1,8 @@
 E    {
 E      "approval_status": "pending_approval",
-E   -  "is_safe": false,
 E   +  "blast_radius_scope": "multi_service",
-E   +  "is_safe": true,
-E   +  "recommendation": "🟡 MEDIUM RISK: Recommended to confirm before execution. Action is reversible.",
+E      "is_safe": false,
+E   +  "recommendation": "⛔ ACTION BLOCKED: Blast radius too large: 4 services exceeds max of 3. Review the mitigation plan and propose a safer alternative.",
 E      "requires_human": true,
 E      "risk_level": "MEDIUM",
 E      "risk_score": 35.0
@@ -79,10 +78,9 @@ E   +      "requires_human": true
 E   +    },
 E        "safety_validation": {
 E          "approval_status": "pending_approval",
-E   -      "is_safe": false,
 E   +      "blast_radius_scope": "multi_service",
-E   +      "is_safe": true,
-E   +      "recommendation": "🟡 MEDIUM RISK: Recommended to confirm before execution. Action is reversible.",
+E          "is_safe": false,
+E   +      "recommendation": "⛔ ACTION BLOCKED: Blast radius too large: 4 services exceeds max of 3. Review the mitigation plan and propose a safer alternative.",
 E          "requires_human": true,
 E          "risk_level": "MEDIUM",
 E          "risk_score": 35.0
@@ -122,7 +120,7 @@ E    - **Requires Human**: Yes
 E   -- **Blast Radius**: N/A
 E   -- **Recommendation**: N/A
 E   +- **Blast Radius**: multi_service
-E   +- **Recommendation**: 🟡 MEDIUM RISK: Recommended to confirm before execution. Action is reversible.
+E   +- **Recommendation**: ⛔ ACTION BLOCKED: Blast radius too large: 4 services exceeds max of 3. Review the mitigation plan and propose a safer alternative.
 E    
 E    ## Remediation CVE/Version Validation
 E    
@@ -160,7 +158,7 @@ E    - **Requires Human**: Yes
 E   -- **Blast Radius**: N/A
 E   -- **Recommendation**: N/A
 E   +- **Blast Radius**: multi_service
-E   +- **Recommendation**: 🟠 HIGH RISK: Requires human approval before execution. Estimated downtime: 30s. Warnings: Low diagnosis confidence increases mitigation risk
+E   +- **Recommendation**: ⛔ ACTION BLOCKED: Blast radius too large: 4 services exceeds max of 3. Review the mitigation plan and propose a safer alternative.
 E    
 E    ## Remediation CVE/Version Validation
 E    
@@ -188,4 +186,4 @@ FAILED tests/test_snapshots.py::TestPipelineResultSnapshots::test_safety_validat
 FAILED tests/test_snapshots.py::TestPipelineResultSnapshots::test_full_pipeline_result_snapshot
 FAILED tests/test_snapshots.py::TestPipelineResultSnapshots::test_postmortem_structure_snapshot
 FAILED tests/test_unknown_fault.py::TestUnknownFaultPipelineSnapshots::test_unknown_fault_postmortem_structure_snapshot
-===== 4 failed, 13 passed, 1 skipped, 2475 deselected, 7 warnings in 1.44s =====
+===== 4 failed, 13 passed, 1 skipped, 2475 deselected, 7 warnings in 1.50s =====

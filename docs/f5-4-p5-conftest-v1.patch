@@ -2,7 +2,7 @@ diff --git a/tests/conftest.py b/tests/conftest.py
 index b053db4..8c6b6f0 100644
 --- a/tests/conftest.py
 +++ b/tests/conftest.py
-@@ -240,137 +240,48 @@ def no_llm_args():
+@@ -240,137 +240,49 @@ def no_llm_args():
  
  
  def _run_pipeline(incident, scenario_name: str | None = None):
@@ -35,7 +35,7 @@ index b053db4..8c6b6f0 100644
 +    from app.builders import build_engine, build_pipeline
 +    from blueprint.adapters.state_adapter import state_to_result
 +    from blueprint.engine import PipelineAborted
-+    from config.loader import load_config
++    from config.loader import SafetyConfig, load_config
 +    from interfaces.cli.v1_runner import _state_after_abort, create_incident_state
 +
 +    args = argparse.Namespace(no_llm=True, no_rag=True, compact=False, scenario=None)
@@ -157,7 +157,8 @@ index b053db4..8c6b6f0 100644
 -                "warnings": validation.warnings,
 -                "recommendation": validation.recommendation,
 -            }
-+        config = load_config(None)
++        # espelha o PreExecutionValidator(max_blast_radius=3) do conftest legado
++        config = load_config(None).model_copy(update={"safety": SafetyConfig(blast_radius_limit=3)})
 +        engine = build_engine(config, InMemoryStore(), EnvCredentialProvider())
 +        pipeline = build_pipeline(config)
 +        state = create_incident_state(args, incident_data, incident=incident)

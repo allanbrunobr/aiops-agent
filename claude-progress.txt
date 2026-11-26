@@ -330,3 +330,10 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - Re-verifiquei a evidência: tests/conftest.py:350 hardcoda max_blast_radius=3 (V0 de teste) vs config/defaults.yaml:25 blast_radius_limit=5 (V0 produção e V1). diffs-after.txt mostra is_safe false→true; diffs-after-limit3.txt (limite 3) mostra is_safe≡V0 e só adições CAT2.
 - Nenhum .py mudou desde 33dcab6. Forçar is_safe=false no produto divergiria do V0 de produção; correção cabe ao conftest (P5b).
 - Próxima: despachar P5b (conftest→V1 com safety.blast_radius_limit=3 + regen supervisionado), não re-despachar P5a.
+
+## Sessão Feature 1 (lote 3, 2º re-despacho P5a) — gate FECHADO → passes:true
+- Código P5a (33dcab6) inalterado. Causa do is_safe: conftest legado usa max_blast_radius=3 vs V1 blast_radius_limit=5. Ajustei o PATCH de migração (docs/f5-4-p5-conftest-v1.patch) para espelhar o teste legado: load_config(None).model_copy(update={"safety": SafetyConfig(blast_radius_limit=3)}). Produto não mudou.
+- Gate (patch aplicado temporário, revertido; sem --snapshot-update): docs/f5-4-p5-snapshot-diffs-after.txt → 4 falhas restantes, TODAS aditivas CAT2 (prediction, safety_decision, blast_radius_scope, recommendation, llm_model heuristic, verification_mode; N/A→valor real em Blast Radius/Recommendation do postmortem; "Heuristic diagnosis"). Zero deleção CAT1; is_safe=false≡V0.
+- Ressalva: o limite 3 vem do config de teste do V0, não do produto (V0 prod = 5).
+- Verde M5 (M5_LEVE=1): unit 2143 passed/7 skipped (databricks_retry deselecionado); ruff check ok; ruff format dos arquivos tocados ok (13 arquivos antigos fora do escopo falham format --check, pré-existente); mypy blueprint/adapters.
+- Próxima: P5b — aplicar o patch no conftest, regenerar snapshots com diff justificado (só CAT2), migrar test_exit_codes.

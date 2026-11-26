@@ -16,7 +16,7 @@
       "Confirmar diffs-after SÓ adições CAT2 (zero regressão, is_safe≡V0). Unit green; ruff/mypy gate clean.",
       "Commit (message inclua P5a); marcar passes:true SÓ se gate passou."
     ],
-    "passes": false,
+    "passes": true,
     "jira_key": "AIOPS-96"
   }
 ]
