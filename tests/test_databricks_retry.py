@@ -1,6 +1,11 @@
 """B7: 1 retry (backoff 2s) no conector Databricks, só para timeout.
 
 Mock do SDK (WorkspaceClient) — nada de rede; time.sleep é patchado.
+
+NOTA: as classes são buscadas do módulo em tempo de execução (helpers abaixo),
+não importadas no topo. TestLazyImport em test_databricks_connector.py faz
+importlib.reload() do módulo, criando novas identidades de classe; imports no
+topo ficariam desatualizados e pytest.raises() não casaria a exceção levantada.
 """
 
 from __future__ import annotations
@@ -9,16 +14,23 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from tools.databricks_connector import (
-    DatabricksConnectorError,
-    DatabricksLogSource,
-)
-
 _CREDS = {
     "host": "https://test.databricks.com",
     "token": "dapi_test_token",
     "warehouse_id": "test_warehouse_123",
 }
+
+
+def _connector_module():
+    """Módulo atual (pós-reload) para identidade de classe consistente."""
+    import tools.databricks_connector
+
+    return tools.databricks_connector
+
+
+def _err():
+    """Classe DatabricksConnectorError atual do módulo (ver nota no topo)."""
+    return _connector_module().DatabricksConnectorError
 
 
 def _ok_response():
@@ -32,7 +44,11 @@ def _ok_response():
 
 
 def _source(side_effect):
-    source = DatabricksLogSource(**_CREDS)
+    source = _connector_module().DatabricksLogSource(
+        host=_CREDS["host"],
+        token=_CREDS["token"],
+        warehouse_id=_CREDS["warehouse_id"],
+    )
     client = MagicMock()
     client.statement_execution.execute_statement.side_effect = side_effect
     source._client = client
@@ -53,7 +69,7 @@ def test_timeout_then_success_retries_once_with_backoff():
 def test_two_timeouts_raise_connector_error_after_one_retry():
     source, call = _source([TimeoutError("timed out"), TimeoutError("timed out")])
     with patch("tools.databricks_connector.time.sleep"):
-        with pytest.raises(DatabricksConnectorError) as exc:
+        with pytest.raises(_err()) as exc:
             source._execute_query("SELECT 1")
     assert exc.value.error_type == "timeout"
     assert call.call_count == 2  # 1 tentativa + 1 retry, nunca mais
@@ -67,7 +83,7 @@ def test_two_timeouts_raise_connector_error_after_one_retry():
 def test_non_timeout_errors_are_not_retried(error):
     source, call = _source([error, _ok_response()])
     with patch("tools.databricks_connector.time.sleep") as sleep:
-        with pytest.raises(DatabricksConnectorError) as exc:
+        with pytest.raises(_err()) as exc:
             source._execute_query("SELECT 1")
     assert exc.value.error_type != "timeout"
     assert call.call_count == 1
@@ -81,7 +97,7 @@ def test_failed_query_state_is_not_retried():
     resp.status.error.message = "boom"
     source, call = _source([resp, _ok_response()])
     with patch("tools.databricks_connector.time.sleep") as sleep:
-        with pytest.raises(DatabricksConnectorError) as exc:
+        with pytest.raises(_err()) as exc:
             source._execute_query("SELECT 1")
     assert exc.value.error_type == "query"
     assert call.call_count == 1
