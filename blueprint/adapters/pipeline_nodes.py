@@ -338,3 +338,181 @@ def make_postmortem_fallback(
     """Fallback para postmortem — mesma logica, sem LLM."""
     # Para V1, o postmortem e template-based (nao usa LLM), entao fallback = execute
     return make_postmortem_node(config)
+
+
+# ---------------------------------------------------------------------------
+# P4b (F5-4): memória episódica + aprendizado de skills (paridade com o V0)
+# ---------------------------------------------------------------------------
+
+
+def extract_fault_tags(report) -> list[str]:
+    """Fault tags do AggregatedReport para roteamento/persistência de skills.
+
+    Mesma heurística do ``_extract_fault_tags`` do V0 (removido junto com ele
+    no F5-4f); mantida aqui para o V1 não depender do módulo V0.
+    """
+    tags: list[str] = []
+    for tpl in getattr(report, "log_templates", []):
+        tpl_lower = tpl.template.lower()
+        if "connection pool" in tpl_lower or "pool exhausted" in tpl_lower:
+            tags.append("connection_pool")
+        if "memory" in tpl_lower or "oom" in tpl_lower or "heap" in tpl_lower:
+            tags.append("memory_leak")
+        if "timeout" in tpl_lower:
+            tags.append("timeout")
+        if "serial" in tpl_lower or "schema" in tpl_lower:
+            tags.append("serialization_error")
+    return list(set(tags)) or ["unknown"]
+
+
+def persist_incident_step(
+    memory_db, result: dict, report, scenario_name: str, elapsed_sec: float
+) -> bool:
+    """Grava o IncidentRecord (V0 ``step_persist_incident``). Best-effort.
+
+    Returns:
+        True se gravou; False se não havia root_cause ou se a gravação falhou.
+    """
+    from domain.confidence import confidence_to_score
+    from rag.memory import IncidentRecord
+
+    stages = result.get("stages", {})
+    diagnosis = stages.get("diagnosis", {})
+    root_cause = diagnosis.get("root_cause") or ""
+    if not root_cause:
+        return False
+    try:
+        services = getattr(report, "affected_services", None) or diagnosis.get(
+            "affected_services", []
+        )
+        record = IncidentRecord.new(
+            scenario=scenario_name,
+            root_cause=root_cause,
+            affected_services=list(services),
+            diagnosis_confidence=confidence_to_score(diagnosis.get("confidence")),
+            resolution_time_sec=elapsed_sec,
+            tags=extract_fault_tags(report),
+            evidence_summary="; ".join(
+                str(e) for e in diagnosis.get("evidence", [])[:5]
+            ),
+        )
+        memory_db.save_incident(record)
+        return True
+    except Exception as exc:  # noqa: BLE001 — best-effort, mas registrado
+        log.warning(
+            "persistence.save_incident_failed",
+            scenario=scenario_name,
+            error=repr(exc),
+        )
+        return False
+
+
+def learn_skills_step(
+    memory_db,
+    skill,
+    *,
+    tnr_result: str,
+    reflection: dict,
+    tools_used: list,
+    iteration_count: int,
+    use_llm: bool,
+    client,
+):
+    """WRITE + EVOLVE do ciclo de skills (V0 ``step_skill_learning``).
+
+    Grava o SkillOutcome (também em ``--no-llm``); o EMA de utility só roda com
+    LLM (sem LLM a reflexão é placeholder, F16); skill fraca é reescrita como
+    proposta pendente de revisão humana. Retorna a skill candidata ou None.
+    """
+    import datetime as _dt
+    import uuid
+
+    from agents.skill_evolver import SkillEvolver
+    from rag.memory import SkillOutcome
+
+    skill_id = getattr(skill, "skill_id", "default")
+    tnr_passed = tnr_result == "success"
+    outcome = SkillOutcome(
+        outcome_id=str(uuid.uuid4()),
+        skill_id=skill_id,
+        incident_id=str(uuid.uuid4()),
+        tnr_passed=tnr_passed,
+        reflection_score=float(reflection.get("score", 0.5)),
+        reflection_lesson=str(reflection.get("lesson", "")),
+        tools_used=tools_used,
+        iteration_count=iteration_count,
+        timestamp=_dt.datetime.now(_dt.timezone.utc).isoformat(),
+    )
+    memory_db.save_skill_outcome(outcome)
+
+    if use_llm and skill is not None:
+        memory_db.update_skill_score(skill_id, tnr_passed, outcome.reflection_score)
+        skill = memory_db.get_skill(skill_id) or skill
+
+    if skill is None:
+        return None
+    evolver = SkillEvolver(client=client, memory_db=memory_db)
+    if not evolver.should_evolve(skill):
+        return None
+    return evolver.evolve(skill)
+
+
+def record_run_memory(
+    state: IncidentState,
+    *,
+    use_llm: bool,
+    elapsed_sec: float,
+    memory_db=None,
+    client=None,
+) -> dict:
+    """Persiste o incidente e o aprendizado de skills do run V1. Best-effort.
+
+    Nunca levanta (não pode alterar o exit code). Retorna
+    ``{"incident_saved": bool, "skill": <skill_id|None>, "evolved": <skill|None>}``.
+    """
+    summary: dict = {"incident_saved": False, "skill": None, "evolved": None}
+    if not state.diagnosis:
+        return summary
+    try:
+        from agents.skill_router import SkillRouter
+        from blueprint.adapters.state_adapter import state_to_result
+
+        if memory_db is None:
+            from app.builders import build_memory_db
+
+            memory_db = build_memory_db()
+        result = state_to_result(state)
+        report = (state.aggregated_report or {}).get("_report_obj")
+        scenario = str(state.metadata.get("scenario") or "unknown")
+
+        summary["incident_saved"] = persist_incident_step(
+            memory_db, result, report, scenario, elapsed_sec
+        )
+
+        # READ + ROUTE: mesma skill que o roteador escolhe para este incidente.
+        tags = extract_fault_tags(report)
+        services = list(getattr(report, "affected_services", []) or [])
+        router = SkillRouter(memory_db)
+        router.seed_default_skills()
+        skill = router.route(tags, services)
+        summary["skill"] = getattr(skill, "skill_id", None)
+
+        outcome = state.metadata.get("_agent_outcome")
+        reflection = {"lesson": "no-llm mode", "score": 0.5, "priority_tools": []}
+        outcome_reflection = getattr(outcome, "reflection", None)
+        if use_llm and outcome_reflection:
+            reflection = outcome_reflection
+        tnr = (result["stages"].get("verification") or {}).get("result", "unknown")
+        summary["evolved"] = learn_skills_step(
+            memory_db,
+            skill,
+            tnr_result=tnr,
+            reflection=reflection,
+            tools_used=list(getattr(outcome, "tools_used", []) or []),
+            iteration_count=int(getattr(outcome, "iterations", 0) or 0),
+            use_llm=use_llm,
+            client=client if use_llm else None,
+        )
+    except Exception as exc:  # noqa: BLE001 — memória é best-effort
+        log.warning("v1.memory_skills_failed", error=repr(exc))
+    return summary

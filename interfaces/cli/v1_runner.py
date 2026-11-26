@@ -72,17 +72,21 @@ def _state_after_abort(exc, config):
     if state.diagnosis and not state.postmortem_md:
         try:
             from blueprint.adapters.pipeline_nodes import make_postmortem_node
+
             state = make_postmortem_node(config)(state)
         except Exception as pm_exc:  # noqa: BLE001 — sem postmortem, mas registrado
             _persist_log.warning("v1.postmortem_after_block_failed", error=repr(pm_exc))
     if state.postmortem_md:
-        state = dataclasses.replace(state, postmortem_md=(
-            state.postmortem_md
-            + "\n## Safety\n"
-            + f"- **Verdict:** BLOCKED by `{node_id}`\n"
-            + f"- **Reason:** {exc.__cause__}\n"
-            + "- The proposed action was not approved and requires human review.\n"
-        ))
+        state = dataclasses.replace(
+            state,
+            postmortem_md=(
+                state.postmortem_md
+                + "\n## Safety\n"
+                + f"- **Verdict:** BLOCKED by `{node_id}`\n"
+                + f"- **Reason:** {exc.__cause__}\n"
+                + "- The proposed action was not approved and requires human review.\n"
+            ),
+        )
     return state
 
 
@@ -232,6 +236,33 @@ def _save_outputs(
 
     if tracker is not None and issue_key and result is not None:
         _attach_postmortem_to_tracker(tracker, issue_key, result)
+
+
+def _persist_memory(state, args, elapsed: float) -> None:
+    """Grava incidente + outcome de skill; falha nunca muda o exit code."""
+    from blueprint.adapters.pipeline_nodes import record_run_memory
+
+    use_llm = not getattr(args, "no_llm", False)
+    client = None
+    if use_llm:
+        try:
+            import os
+
+            from adapters.llm.anthropic_client import create_anthropic_llm_client
+
+            key = os.environ.get("ANTHROPIC_API_KEY", "")
+            client = create_anthropic_llm_client(api_key=key) if key else None
+        except Exception as exc:  # noqa: BLE001 — evolver degrada sem client
+            _persist_log.warning("persistence.llm_client_failed", error=repr(exc))
+    summary = record_run_memory(
+        state, use_llm=use_llm, elapsed_sec=elapsed, client=client
+    )
+    evolved = summary.get("evolved")
+    if evolved is not None:
+        console.print(
+            f"  [dim]Skill rewrite proposed for {evolved.name} "
+            f"(v{evolved.version}) — pending human review[/dim]"
+        )
 
 
 def run_v1(args: argparse.Namespace) -> int:
@@ -484,6 +515,9 @@ def run_v1(args: argparse.Namespace) -> int:
 
     # 7. Exibe resultados
     display_results(state, compact=args.compact)
+
+    # 7b. Memória episódica + aprendizado de skills (best-effort, como o V0)
+    _persist_memory(state, args, elapsed)
 
     # 8. Tracking (opcional) e persistência do postmortem
     _save_outputs(state, args, tracker, aborted=aborted)

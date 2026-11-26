@@ -166,6 +166,13 @@ def build_diagnoser_agent(
     return DiagnosisAgent(**kwargs)
 
 
+def build_memory_db() -> IncidentMemoryDB:
+    """``IncidentMemoryDB`` default (memória episódica + skills) da composition root."""
+    from rag.memory import IncidentMemoryDB
+
+    return IncidentMemoryDB()
+
+
 def build_agent_orchestrator(
     config: AppConfig,
     *,

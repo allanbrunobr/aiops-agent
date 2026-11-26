@@ -265,3 +265,10 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - Verde M5 (M5_LEVE=1, sem pipe): unit 2127 passed/7 skipped (test_databricks_retry deselecionado, poluição pré-existente); ruff check/format ok nos arquivos tocados; mypy: só erros pré-existentes em v1_runner.py. Smoke V1 --no-llm --no-rag exit 3.
 - Limites: prediction.* dispara após engine.run (V0 dispara durante o estágio 4d) — ordem relativa a pipeline.started/diagnosis.completed preservada; per-node node.completed e total_duration_ms real não feitos. Sem Slack real (notifier fake).
 - Próxima: Feature 2 (P4b memória episódica + skill learning).
+
+## Sessão Feature 2 (lote 2) — P4b memória episódica + skill learning (concluída)
+- blueprint/adapters/pipeline_nodes.py: extract_fault_tags, persist_incident_step (IncidentRecord, como step_persist_incident), learn_skills_step (SkillOutcome + update_skill_score só com LLM + SkillEvolver, como step_skill_learning), record_run_memory (route via SkillRouter + persist + learn; nunca levanta). app/builders.py: build_memory_db. interfaces/cli/v1_runner.py: _persist_memory chamado após display_results (sucesso e abort com diagnóstico); não altera exit code.
+- tests/test_v1_memory_skills.py (8 testes; 7 falhavam antes). Memória isolada em tmp_path pelo autouse do conftest.
+- Verde M5 (M5_LEVE=1, sem pipe): unit 2135 passed/7 skipped (test_databricks_retry deselecionado, poluição pré-existente); ruff check/format e mypy limpos nos 3 arquivos tocados. ruff format também reformatou bloco pré-existente de _state_after_abort.
+- Limites: skill é re-roteada após o run (não lida do orchestrator); com LLM o client do evolver só é criado se ANTHROPIC_API_KEY; _extract_fault_tags duplicado em pipeline_nodes (V0 intocado; P6 remove o do V0). Evolução com LLM real não exercitada (fake).
+- Próxima: Feature 3 (P4c cache FAISS disco + tabela-resumo).

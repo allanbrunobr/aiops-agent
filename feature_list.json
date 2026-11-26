@@ -28,7 +28,7 @@
    "Unit green; best-effort não quebra exit codes; ruff/mypy gate clean.",
    "Commit (message inclua P4b); marcar passes:true."
   ],
-  "passes": false,
+  "passes": true,
   "jira_key": "AIOPS-94"
  },
  {
