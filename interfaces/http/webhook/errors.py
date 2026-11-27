@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -20,9 +22,10 @@ class WebhookError(Exception):
 
 async def webhook_error_handler(
     request: Request,
-    exc: WebhookError,
+    exc: Exception,
 ) -> JSONResponse:
     """Converte WebhookError em resposta RFC 7807 application/problem+json."""
+    exc = cast(WebhookError, exc)
     return JSONResponse(
         status_code=exc.problem.status,
         content=exc.problem.model_dump(exclude_none=True),

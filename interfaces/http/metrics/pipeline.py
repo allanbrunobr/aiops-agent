@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
@@ -157,7 +158,7 @@ class PipelineMetricsCollector:
             )
 
 
-def _percentile(sorted_values: list[int | float], p: int) -> float:
+def _percentile(sorted_values: Sequence[int | float], p: int) -> float:
     """Calcula percentil de lista já ordenada. Usa interpolação linear."""
     if not sorted_values:
         return 0.0

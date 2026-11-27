@@ -15,13 +15,16 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import jwt as pyjwt
 import structlog
 from fastapi import APIRouter, HTTPException, Request
 
 from auth.jwt_validator import MIN_HMAC_KEY_BYTES, validate_token
+
+if TYPE_CHECKING:
+    from config.loader import AppConfig
 
 log = structlog.get_logger()
 
@@ -295,7 +298,7 @@ async def _handle_diagnose(task_id: str, data: dict, request: Request) -> list[d
         from app.builders import build_pipeline
 
         config = getattr(request.app.state, "config", None)
-        pipeline = build_pipeline(config)
+        pipeline = build_pipeline(cast("AppConfig", config))
         # engine.run é síncrono e pode levar até pipeline_timeout_seconds —
         # roda em thread para não bloquear o event loop (F3-2 / 4B-04)
         result = await asyncio.to_thread(engine.run, pipeline, state)

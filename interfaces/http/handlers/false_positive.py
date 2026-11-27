@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 import structlog
 
 from domain.incident_state import IncidentState
+
+if TYPE_CHECKING:
+    from rag.knowledge_store import KnowledgeStore
 
 logger = logging.getLogger(__name__)
 log = structlog.get_logger(__name__)
@@ -14,7 +18,7 @@ async def handle_false_positive_side_effects(
     correlation_id: str,
     notes: str,
     incident: IncidentState,
-    knowledge_store: object | None = None,
+    knowledge_store: KnowledgeStore | None = None,
 ) -> None:
     """Processa efeitos colaterais de um falso positivo.
 
@@ -50,7 +54,7 @@ async def handle_false_positive_side_effects(
 
 def _mark_knowledge_pattern_negative(
     incident: IncidentState,
-    knowledge_store: object,
+    knowledge_store: KnowledgeStore,
     correlation_id: str,
 ) -> str | None:
     """Marca padrão correspondente como negative_example na base de conhecimento.

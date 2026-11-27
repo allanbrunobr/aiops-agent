@@ -313,11 +313,11 @@ async def receive_webhook(request: Request) -> WebhookResponse:
         try:
             accepted = await pipeline_runner.submit(alert)
         except BaseException:
-            if fingerprint is not None:
+            if fingerprint is not None and dedup_store is not None:
                 dedup_store.release(fingerprint, alert.correlation_id)
             raise
         if not accepted:
-            if fingerprint is not None:
+            if fingerprint is not None and dedup_store is not None:
                 dedup_store.release(fingerprint, alert.correlation_id)
             bound_log.warning("webhook.rejected", reason="queue_full")
             raise WebhookError(

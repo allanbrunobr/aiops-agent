@@ -10,12 +10,17 @@ História 5.6: Montagem condicional com base em config.mcp.enabled.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import structlog
 from fastapi import Depends, FastAPI
 
 from config.loader import AppConfig
+
+if TYPE_CHECKING:
+    from interfaces.http.notifications.slack import SlackNotifier
 
 log = structlog.get_logger()
 
@@ -23,7 +28,7 @@ log = structlog.get_logger()
 class LazyRAG:
     """Carrega índice RAG sob demanda sem importar sentence-transformers no __init__."""
 
-    def __init__(self, index_path: object = None) -> None:
+    def __init__(self, index_path: str | os.PathLike[str] | None = None) -> None:
         self._index_path = (
             Path(index_path) if index_path is not None else Path("data/faiss_index.bin")
         )
@@ -289,7 +294,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 async def handle_prediction_event(
     event_type: str,
     data: dict,
-    slack_notifier: object,
+    slack_notifier: SlackNotifier,
 ) -> None:
     """Handler de evento de predição — envia notificação Slack proativa.
 
@@ -302,7 +307,7 @@ async def handle_prediction_event(
         slack_notifier: Instância de SlackNotifier configurada.
     """
     try:
-        blocks = slack_notifier._build_prediction_blocks(data)  # type: ignore[union-attr]
+        blocks = slack_notifier._build_prediction_blocks(data)
 
         client = getattr(slack_notifier, "_client", None)
         dry_run = getattr(slack_notifier, "_dry_run", False)

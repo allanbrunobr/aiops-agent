@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 from collections.abc import Mapping
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, cast
 
 import structlog
 from slack_sdk.errors import SlackApiError
@@ -615,7 +615,7 @@ class SlackNotifier:
             return
 
         async def _send() -> None:
-            await self._client.chat_postMessage(
+            await cast(AsyncWebClient, self._client).chat_postMessage(
                 channel=self._channel,
                 text=f"{event.event_type}: {scenario}",
                 attachments=[{"color": color, "blocks": _fit_blocks(blocks)}],

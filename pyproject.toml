@@ -84,6 +84,15 @@ explicit_package_bases = true
 module = "*"
 ignore_errors = true
 
+# "*" só casa módulos de topo; submódulos ainda não limpos (importados por
+# interfaces.http) precisam de supressão explícita até seus lotes (AIOPS-99).
+[[tool.mypy.overrides]]
+module = [
+    "interfaces.mcp", "interfaces.mcp.*",
+    "validation", "validation.*",
+]
+ignore_errors = true
+
 [[tool.mypy.overrides]]
 module = [
     "domain", "domain.*",
@@ -96,6 +105,7 @@ module = [
     "tools", "tools.*",
     "rag", "rag.*",
     "auth", "auth.*",
+    "interfaces.http", "interfaces.http.*",
 ]
 ignore_errors = false
 
