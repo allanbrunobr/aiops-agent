@@ -2,19 +2,16 @@
   {
     "number": 1,
     "category": "functional",
-    "title": "P6: aposentar V0 — V1 canônico, --pipeline-v1 deprecated no-op",
-    "jira_key": "AIOPS-97",
-    "description": "SPEC docs/f5-4-parity-agent-prompt.md tarefa P6 (4f). P1-P5 done+pushed 408488c. Remover v0_pipeline.py+step_* exclusivos V0; main.py V1 default único; --pipeline-v1 alias deprecated no-op; docs atualizados; testes V0-only removidos mantendo exit codes V1. Não quebrar contrato CLI 0/1/2/3. Verificação LOCAL M5 unit+snapshot+smoke exit3+ruff+mypy domain application core. Commit P6. passes:true.",
+    "title": "B5: estado terminal honesto + mapa completo de exit codes",
+    "description": "SPEC AUTORITATIVA: leia docs/b5-terminal-state-agent-prompt.md + ROBUSTNESS_PLAN.md B5(:211)/C1(:251). V0 removido (F5-4); re-mapear p/ V1. Gaps: (1) terminal state RESOLVED só c/ TNR medido success ou read-only auto-aprovado, senão AWAITING_APPROVAL+success=False+exit3 (domain/incident_state.py:43); (2) skill learning tnr_passed gate verification_mode==measured (blueprint/adapters/pipeline_nodes.py:453/468, orchestrator simulated); (3) documentar matriz exit codes README/docs; (4) testes matriz TNR×exit-code p/ cada TNRResult (tests/test_exit_codes.py). Já correto: success=TNR SUCCESS (pipeline_nodes:426), exit map v1_runner:170-213.",
     "dependencies": "none",
     "steps": [
-      "remover interfaces/cli/v0_pipeline.py + step_* exclusivos V0",
-      "main.py V1 default único; --pipeline-v1 deprecated no-op",
-      "docs README/docs atualizados V1 canônico",
-      "testes V0-only removidos; exit codes V1 mantidos",
-      ".venv/bin/python -m pytest tests -m unit -q + -m snapshot verde",
-      "main.py --no-llm --no-rag exit3; ruff; mypy domain application core",
-      "commit P6; passes:true"
+      "Leia docs/b5-terminal-state-agent-prompt.md + ROBUSTNESS_PLAN.md B5/C1; confirme file:line (V0 removido).",
+      "TDD: teste matriz TNR×exit-code falha antes; implemente terminal state honesto + AWAITING_APPROVAL + skill learning medido + docs.",
+      "Verificação LOCAL M5: .venv/bin/python -m pytest tests -m unit -q TUDO verde + snapshot + smoke exit3 + ruff + mypy domain application core. NÃO ci-local.sh/M1.",
+      "Commit msg incluindo B5; setar feature_list passes:true; reportar números."
     ],
-    "passes": true
+    "passes": false,
+    "jira_key": "AIOPS-76"
   }
 ]
