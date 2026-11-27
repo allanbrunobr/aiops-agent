@@ -13,6 +13,7 @@ import os
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from tools.interfaces import LogSource, MetricsSource, TraceSource
 
@@ -94,7 +95,7 @@ class DatabricksConnection:
         self.token = token or os.environ.get("DATABRICKS_TOKEN")
         self.warehouse_id = warehouse_id or os.environ.get("DATABRICKS_WAREHOUSE_ID")
         self.timeout_seconds = timeout_seconds
-        self._client = None
+        self._client: Any = None
         self._validate_config()
 
     def _validate_config(self) -> None:

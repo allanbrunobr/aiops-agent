@@ -187,7 +187,7 @@ class ScenarioEngine:
             trad_items, self._trad_logs, self._trad_metrics, self._trad_spans
         )
 
-        trad_result = (
+        trad_result: dict = (
             self._trad_analyzer.analyze(
                 self._trad_logs, self._trad_metrics, self._trad_spans
             )

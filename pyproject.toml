@@ -77,6 +77,7 @@ ignore = ["E402"]
 python_version = "3.12"
 ignore_missing_imports = true
 explicit_package_bases = true
+check_untyped_defs = true
 
 # Módulos puros (domain/application/core) são type-checados; o resto é
 # permissivo por enquanto (expansão gradual conforme o plano de melhorias).
@@ -100,6 +101,8 @@ module = [
     "interfaces.mcp", "interfaces.mcp.*",
     "interfaces.cli", "interfaces.cli.*",
     "validation", "validation.*",
+    "app", "app.*",
+    "interfaces.demo", "interfaces.demo.*",
 ]
 ignore_errors = false
 
