@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from rag.models import KnowledgePattern
+
+if TYPE_CHECKING:
+    from rag.knowledge_store import KnowledgeStore
 
 
 @dataclass
@@ -21,7 +25,7 @@ class KnowledgeWriteReadScenario:
     name = "knowledge_write_read_cycle"
 
     def execute(
-        self, knowledge_store: object, incident_store: object, temp_dir: str
+        self, knowledge_store: KnowledgeStore, incident_store: object, temp_dir: str
     ) -> CheckResult:
         """Executa ciclo write/read com rebuild de índice."""
         from rag.indexer import ObservabilityIndexer
@@ -58,6 +62,7 @@ class KnowledgeWriteReadScenario:
             import numpy as np
 
             indexer._load_model()
+            assert indexer.model is not None  # _load_model() garante
             embeddings = indexer.model.encode(texts, normalize_embeddings=True)
             embeddings = np.array(embeddings, dtype=np.float32)
             indexer.index = faiss.IndexFlatIP(embeddings.shape[1])

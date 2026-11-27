@@ -44,7 +44,7 @@ jobs:
         run: ruff format --check .
 
       - name: Mypy (gate estendido)
-        run: mypy domain application core pipeline safety data agents tools rag auth interfaces/http interfaces/mcp interfaces/cli
+        run: mypy domain application core pipeline safety data agents tools rag auth interfaces/http interfaces/mcp interfaces/cli validation
 
   unit-tests:
     name: Unit Tests (stdlib-only)

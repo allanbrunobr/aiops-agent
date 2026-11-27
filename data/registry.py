@@ -10,12 +10,17 @@ Módulo stdlib-only — não importa dependências pesadas (torch, faiss, etc.).
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Protocol
 
 from data.models import SimulatedIncident
 
+
 # Tipo para funções geradoras de cenário: recebem seed, retornam incidente.
-ScenarioFn = Callable[[int], SimulatedIncident]
+class ScenarioFn(Protocol):
+    """Gerador de cenário: `seed` é opcional (default no cenário real)."""
+
+    def __call__(self, seed: int = ...) -> SimulatedIncident: ...
+
 
 # Registry interno — populado via register_scenario().
 _REGISTRY: dict[str, ScenarioFn] = {}
