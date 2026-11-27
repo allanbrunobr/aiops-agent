@@ -19,6 +19,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
+from typing import Callable
 
 from domain.incident import MitigationAction
 
@@ -224,9 +225,9 @@ class TNRSafetyGuard:
         self,
         action: MitigationAction,
         pre_state: HealthSnapshot,
-        execute_fn: callable,
-        post_state_fn: callable,
-        rollback_fn: callable | None = None,
+        execute_fn: Callable[[MitigationAction], object],
+        post_state_fn: Callable[[], HealthSnapshot],
+        rollback_fn: Callable[[MitigationAction], object] | None = None,
     ) -> TNRReport:
         """
         Executa ação com verificação TNR.

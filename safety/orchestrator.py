@@ -11,12 +11,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from domain.incident import MitigationAction
     from safety.pre_validator import PreExecutionValidator
     from safety.tnr import TNRSafetyGuard
     from safety.version_validator import VersionValidator
+
+
+class _TextSanitizer(Protocol):
+    """Contrato mínimo do sanitizer injetado (Camada 1)."""
+
+    def sanitize_text(self, text: str) -> str: ...
 
 
 @dataclass
@@ -58,7 +65,7 @@ class SafetyOrchestrator:
         pre_validator: PreExecutionValidator | None = None,
         tnr: TNRSafetyGuard | None = None,
         version_validator: VersionValidator | None = None,
-        sanitizer: object | None = None,
+        sanitizer: _TextSanitizer | None = None,
     ) -> None:
         """Inicializa o orquestrador com validadores injetados.
 
@@ -93,7 +100,7 @@ class SafetyOrchestrator:
 
     def validate(
         self,
-        action: object,
+        action: MitigationAction,
         diagnosis: dict | None = None,
         system_state: dict | None = None,
         *,
@@ -123,7 +130,7 @@ class SafetyOrchestrator:
         if self._sanitizer is not None:
             command = getattr(action, "command", "")
             try:
-                sanitized = self._sanitizer.sanitize_text(command)  # type: ignore[union-attr]
+                sanitized = self._sanitizer.sanitize_text(command)
                 sanitizer_ok = sanitized == command
                 layer_details["sanitizer"] = {"passed": sanitizer_ok}
             except Exception as exc:  # noqa: BLE001 — falha fechado, registrado no detalhe

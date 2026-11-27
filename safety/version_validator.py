@@ -544,7 +544,7 @@ class VersionValidator:
     ) -> tuple[RemediationRisk, list[str], list[str]]:
         """Detecta enfraquecimento de configurações de segurança (⋆conf)."""
         blocked = []
-        warnings = []
+        warnings: list[str] = []
         risk = RemediationRisk.SAFE
 
         for pattern, description in self._compiled_configs:
