@@ -2,15 +2,15 @@
   {
     "number": 1,
     "category": "functional",
-    "title": "AIOPS-98: higiene mypy fora do gate + estender gate",
-    "description": "SPEC AUTORITATIVA: leia docs/mypy-hygiene-agent-prompt.md. Zerar erros mypy fora do gate SEM mudar comportamento (2169 unit tests idênticos), depois estender gate scripts/ci-local.sh:79 + .github/workflows/ci.yml:47. Inventário: pipeline 9 (context_compressor 4/trace_filter/log_parser/aggregator), safety 12 (tnr.py callable->Callable), agents 23, tools 6, data 2, interfaces 1 (conflito module names), tests/test_cli_safety_decision.py:65 dict->SafetyConfig. Ordem incremental: pipeline+data+test -> safety -> agents+tools+interfaces -> estender gate. ZERO type:ignore genérico/Any; sem regen snapshots; sem deps.",
+    "title": "AIOPS-98 fase2: estender gate mypy + corrigir rag",
+    "description": "SPEC AUTORITATIVA: docs/mypy-gate-extension-agent-prompt.md. Fase1 (0574104/c0dccc5/11e849f) já limpou pipeline/safety/data/agents/tools. ARMADILHA: pyproject module=\"*\" ignore_errors=true suprime erros; verificar com /tmp/strict-mypy.ini ignore_errors=False. Tarefa: (1) corrigir 3 erros rag (enrichment_node:52 knowledge_retriever object→KnowledgeRetriever TYPE_CHECKING; reranker:293/296 _cross_encoder None→_Predictor|None Protocol+cast); (2) flip override add pipeline/safety/data/agents/tools/rag (.*) à ignore_errors=false, MANTER \"*\" true p/ interfaces/auth/validation/app; (3) update ci-local.sh:79+ci.yml:47 comando p/ mypy domain application core pipeline safety data agents tools rag; (4) verificar gate estendido Success. interfaces/auth=follow-up FORA escopo.",
     "dependencies": "none",
     "steps": [
-      "Leia docs/mypy-hygiene-agent-prompt.md + pyproject [tool.mypy]; rode mypy por pacote p/ inventário fresco.",
-      "Corrija tipos SEM mudar comportamento (anotações/guards None/Callable/Optional/cast/TYPE_CHECKING/.pyi). Testes 2169 idênticos.",
-      "Verificação LOCAL M5: unit 2169 + snapshot 17 inalterados + mypy pacotes limpos + ruff + smoke exit3. NÃO ci-local.sh/M1.",
-      "Estenda gate (ci-local.sh:79 + ci.yml:47) só após TODOS limpos; configure explicit_package_bases se conflito.",
-      "Commit msg incluindo AIOPS-98; passes:true só quando gate estendido verde completo; senão parcial reporta."
+      "Leia docs/mypy-gate-extension-agent-prompt.md; confirme file:line.",
+      "Corrigir 3 erros rag sem mudar comportamento; mypy --config-file /tmp/strict-mypy.ini rag Success.",
+      "Flip override pyproject + update ci-local.sh:79/ci.yml:47; mypy domain application core pipeline safety data agents tools rag Success.",
+      "Verificação LOCAL M5: unit 2169 idêntico + snapshot 17 inalterados + ruff + smoke exit3. NÃO ci-local.sh unit/M1.",
+      "Commit msg AIOPS-98; passes:true só com gate estendido verde completo; reportar números."
     ],
     "passes": false,
     "jira_key": "AIOPS-98"
