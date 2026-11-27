@@ -2,17 +2,17 @@
   {
     "number": 1,
     "category": "functional",
-    "title": "AIOPS-99 lote1: mypy limpo em auth + gate estendido",
-    "description": "SPEC AUTORITATIVA: docs/mypy-auth-batch-agent-prompt.md. ESCOPO FECHADO: somente auth/ (NAO interfaces/validation/app). 16 erros strict em 2 files: keys.py:63/75/76 (union-attr public_numbers/.n/.e→isinstance RSAPublicKey guard, remover type:ignore[attr-defined]); oidc_validator.py:121 (arg-type object→tipar _find_key retorno ou cast). Verificar strict /tmp/strict-mypy.ini ignore_errors=False. Depois flip override add auth/auth.* ignore_errors=false (MANTER \"*\" true) + update ci-local.sh:79/ci.yml:47 comando +auth. Gate estendido Success.",
+    "title": "AIOPS-99 lote2: mypy interfaces/http + gate",
+    "description": "SPEC AUTORITATIVA: docs/mypy-http-batch-agent-prompt.md. ESCOPO FECHADO interfaces/http/. 16 erros own em 7 files (metrics/pipeline _percentile list[int]→Sequence[int|float]; webhook/router DedupStore|None guard; webhook/errors handler Exception; routes/a2a build_pipeline AppConfig guard; notifications/slack AsyncWebClient|None guard; handlers/false_positive object→tipo store; app.py Path object+_build_prediction_blocks). Flip override +interfaces/http.* MANTER \"*\" true; update ci-local.sh:79+ci.yml:47. NÃO interfaces/mcp,cli,validation,app.",
     "dependencies": "none",
     "steps": [
-      "Leia docs/mypy-auth-batch-agent-prompt.md; confirme file:line. SOMENTE auth/.",
-      "Corrigir keys.py isinstance RSAPublicKey + oidc_validator _find_key tipo; mypy --config-file /tmp/strict-mypy.ini auth Success.",
-      "Flip override pyproject +auth; update ci-local.sh:79/ci.yml:47; mypy domain application core pipeline safety data agents tools rag auth Success.",
+      "Leia docs/mypy-http-batch-agent-prompt.md; confirme file:line.",
+      "Corrigir 16 erros interfaces/http sem mudar comportamento; strict interfaces/http own=0.",
+      "Flip override +interfaces/http.* + update gate command; gate estendido Success.",
       "Verificação LOCAL M5: unit 2169 idêntico + snapshot 17 inalterados + ruff + smoke exit3. NÃO ci-local.sh unit/M1.",
-      "Commit msg AIOPS-99 lote1; passes:true só com gate estendido verde; reportar números."
+      "Commit msg AIOPS-99; passes:true só com gate verde; reportar números."
     ],
-    "passes": true,
+    "passes": false,
     "jira_key": "AIOPS-99"
   }
 ]
