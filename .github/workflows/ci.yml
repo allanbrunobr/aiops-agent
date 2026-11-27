@@ -43,8 +43,8 @@ jobs:
       - name: Ruff format
         run: ruff format --check .
 
-      - name: Mypy (pure modules only)
-        run: mypy domain application core
+      - name: Mypy (gate estendido)
+        run: mypy domain application core pipeline safety data agents tools rag
 
   unit-tests:
     name: Unit Tests (stdlib-only)

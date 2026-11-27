@@ -89,6 +89,12 @@ module = [
     "domain", "domain.*",
     "application", "application.*",
     "core", "core.*",
+    "pipeline", "pipeline.*",
+    "safety", "safety.*",
+    "data", "data.*",
+    "agents", "agents.*",
+    "tools", "tools.*",
+    "rag", "rag.*",
 ]
 ignore_errors = false
 

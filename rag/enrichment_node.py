@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from rag.knowledge_retriever import KnowledgeRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +18,7 @@ class RAGEnrichmentNode:
     sem enriquecimento RAG. Nunca propaga exceções.
     """
 
-    def __init__(self, knowledge_retriever: object, top_k: int = 5) -> None:
+    def __init__(self, knowledge_retriever: KnowledgeRetriever, top_k: int = 5) -> None:
         """Inicializa nó com retriever e configuração."""
         self.retriever = knowledge_retriever
         self.top_k = top_k

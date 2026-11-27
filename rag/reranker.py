@@ -12,6 +12,13 @@ from __future__ import annotations
 
 import warnings
 from dataclasses import dataclass
+from typing import Any, Protocol, cast
+
+
+class _Predictor(Protocol):
+    """Interface mínima do cross-encoder (sentence-transformers)."""
+
+    def predict(self, pairs: list[Any]) -> Any: ...
 
 
 @dataclass
@@ -73,7 +80,7 @@ class DomainReranker:
         """
         self.service_criticality_map: dict[str, float] = service_criticality_map or {}
         self.use_cross_encoder: bool = False
-        self._cross_encoder = None
+        self._cross_encoder: _Predictor | None = None
 
         if use_cross_encoder:
             try:
@@ -290,10 +297,14 @@ class DomainReranker:
         # Re-score com cross-encoder
         pairs = [(query, r.chunk.text) for r, _ in top_half]  # type: ignore[attr-defined]
         try:
-            ce_scores_raw: list[float] = self._cross_encoder.predict(pairs).tolist()
+            ce_scores_raw: list[float] = (
+                cast(_Predictor, self._cross_encoder).predict(pairs).tolist()
+            )
         except Exception:
             try:
-                ce_scores_raw = list(self._cross_encoder.predict(pairs))
+                ce_scores_raw = list(
+                    cast(_Predictor, self._cross_encoder).predict(pairs)
+                )
             except Exception:
                 # Fallback: retorna resultado Tier 1 inalterado
                 return tier1_results
