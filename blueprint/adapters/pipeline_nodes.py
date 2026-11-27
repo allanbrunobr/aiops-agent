@@ -436,6 +436,7 @@ def learn_skills_step(
     iteration_count: int,
     use_llm: bool,
     client,
+    verification_mode: str | None = None,
 ):
     """WRITE + EVOLVE do ciclo de skills (V0 ``step_skill_learning``).
 
@@ -450,7 +451,19 @@ def learn_skills_step(
     from rag.memory import SkillOutcome
 
     skill_id = getattr(skill, "skill_id", "default")
-    tnr_passed = tnr_result == "success"
+    # B5: só sucesso MEDIDO conta como aprendizado; TNR simulado não infla
+    # o score como se fosse medido — default fail-closed quando o modo é desconhecido.
+    from domain.terminal_state import is_measured
+
+    measured = is_measured(verification_mode)
+    tnr_passed = tnr_result == "success" and measured
+    log.info(
+        "skills.learning_gate",
+        skill_id=skill_id,
+        tnr_result=tnr_result,
+        verification_mode=verification_mode,
+        counts_as_success=tnr_passed,
+    )
     outcome = SkillOutcome(
         outcome_id=str(uuid.uuid4()),
         skill_id=skill_id,
@@ -521,7 +534,8 @@ def record_run_memory(
         outcome_reflection = getattr(outcome, "reflection", None)
         if use_llm and outcome_reflection:
             reflection = outcome_reflection
-        tnr = (result["stages"].get("verification") or {}).get("result", "unknown")
+        verification = result["stages"].get("verification") or {}
+        tnr = verification.get("result", "unknown")
         summary["evolved"] = learn_skills_step(
             memory_db,
             skill,
@@ -531,6 +545,7 @@ def record_run_memory(
             iteration_count=int(getattr(outcome, "iterations", 0) or 0),
             use_llm=use_llm,
             client=client if use_llm else None,
+            verification_mode=verification.get("verification_mode"),
         )
     except Exception as exc:  # noqa: BLE001 — memória é best-effort
         log.warning("v1.memory_skills_failed", error=repr(exc))

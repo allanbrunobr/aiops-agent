@@ -59,11 +59,33 @@ def test_llm_run_updates_score_and_uses(tmp_path):
         iteration_count=2,
         use_llm=True,
         client=None,
+        verification_mode="measured",
     )
     updated = db.get_skill("pool")
     assert updated.total_uses == 1
     assert updated.success_count == 1
     assert updated.utility_score == pytest.approx(0.3 * 1.0 + 0.7 * 0.6)
+
+
+@pytest.mark.parametrize("mode", ["simulated", None])
+def test_simulated_success_does_not_count_as_measured_success(tmp_path, mode):
+    """B5: TNR 'success' simulado (ou de modo desconhecido) não infla a skill."""
+    from blueprint.adapters.pipeline_nodes import learn_skills_step
+
+    db = IncidentMemoryDB(db_path=str(tmp_path / "m.db"))
+    skill = _seed(db, score=0.6, uses=0)
+    learn_skills_step(
+        db,
+        skill,
+        tnr_result="success",
+        reflection={"score": 1.0, "lesson": "l"},
+        tools_used=[],
+        iteration_count=1,
+        use_llm=True,
+        client=None,
+        verification_mode=mode,
+    )
+    assert db.get_skill("pool").success_count == 0
 
 
 def test_pending_proposal_blocks_new_rewrites_of_the_default_skill(tmp_path):

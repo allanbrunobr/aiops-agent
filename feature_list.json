@@ -11,7 +11,7 @@
       "Verificação LOCAL M5: .venv/bin/python -m pytest tests -m unit -q TUDO verde + snapshot + smoke exit3 + ruff + mypy domain application core. NÃO ci-local.sh/M1.",
       "Commit msg incluindo B5; setar feature_list passes:true; reportar números."
     ],
-    "passes": false,
+    "passes": true,
     "jira_key": "AIOPS-76"
   }
 ]

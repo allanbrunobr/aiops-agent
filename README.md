@@ -184,8 +184,10 @@ python main.py [options]
 |------|---------|
 | `0` | Pipeline completed with no regression and no action awaiting approval. Without a post-action health measurement, TNR reports `not_verified`, not success |
 | `1` | Invalid arguments, or an unrecoverable error in a pipeline stage |
-| `2` | Regression detected by TNR (measured post-action health worse than pre-action) |
-| `3` | Action blocked by the safety layer (requires human approval) |
+| `2` | TNR `regression`, `rollback_complete` or `error` (post-action health worse, rolled back, or measurement unreliable) |
+| `3` | Action awaiting human approval: blocked/`NEEDS_REVIEW` by the safety layer, or proposed but not verified |
+
+Precedence: **2 > 3 > 0** (regression wins over approval). Full matrix: [`docs/exit-codes.md`](docs/exit-codes.md).
 
 ---
 

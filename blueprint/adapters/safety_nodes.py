@@ -16,6 +16,7 @@ from typing import Callable
 from config.loader import AppConfig
 from core.logging import get_logger
 from domain.incident_state import IncidentState, with_transition
+from domain.terminal_state import TerminalOutcome, classify_terminal
 
 log = get_logger("safety")
 
@@ -248,6 +249,17 @@ def make_pre_validator_node(
     return execute
 
 
+def _terminal_for(state: IncidentState, verification: dict) -> TerminalOutcome:
+    """Estado terminal honesto (B5) a partir do TNR + veredito de segurança."""
+    return classify_terminal(
+        tnr_result=verification.get("result"),
+        verification_mode=verification.get("verification_mode"),
+        has_proposed_action=state.proposed_action is not None,
+        auto_approved=state.safety_verdict == "APPROVED",
+        needs_review=state.safety_verdict == "NEEDS_REVIEW",
+    )
+
+
 def make_tnr_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]:
     """Cria adaptador para TNR (Layer 3 — Transactional No-Regression).
 
@@ -308,15 +320,17 @@ def make_tnr_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]
                 "VERIFYING",
                 "Verificando impacto (TNR)...",
             )
+            terminal = _terminal_for(state, verification)
             metadata = with_transition(
                 {**metadata, "_verification": verification},
                 "VERIFYING",
-                "RESOLVED",
+                terminal.state,
                 "Mitigation proposed (not executed); safety gate decides next: "
                 + verification["message"],
             )
             return dataclasses.replace(
                 state,
+                state=terminal.state,
                 safety_reasons=[
                     *state.safety_reasons,
                     "TNR: not verified — no pre/post-action health snapshots",
@@ -368,22 +382,22 @@ def make_tnr_node(config: AppConfig) -> Callable[[IncidentState], IncidentState]
         metadata = with_transition(
             state.metadata, "MITIGATING", "VERIFYING", "Verificando impacto (TNR)..."
         )
+        verification = {
+            "result": tnr_report.result.value,
+            "health_delta": tnr_report.health_delta,
+            "message": tnr_report.message,
+            "verification_mode": tnr_report.verification_mode,
+        }
+        terminal = _terminal_for(state, verification)
         metadata = with_transition(
-            {
-                **metadata,
-                "_verification": {
-                    "result": tnr_report.result.value,
-                    "health_delta": tnr_report.health_delta,
-                    "message": tnr_report.message,
-                    "verification_mode": tnr_report.verification_mode,
-                },
-            },
+            {**metadata, "_verification": verification},
             "VERIFYING",
-            "RESOLVED",
+            terminal.state,
             f"TNR check: {tnr_report.message}",
         )
         return dataclasses.replace(
             state,
+            state=terminal.state,
             safety_reasons=[
                 *state.safety_reasons,
                 f"TNR: {tnr_report.result.value} (delta={tnr_report.health_delta:.1f})",

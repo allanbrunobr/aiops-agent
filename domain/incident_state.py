@@ -40,7 +40,10 @@ class IncidentState:
     started_at: datetime  # = alert.timestamp
 
     # Estado do pipeline
-    state: str = "DETECTING"  # DETECTING|DIAGNOSING|MITIGATING|VERIFYING|RESOLVED
+    # DETECTING|DIAGNOSING|MITIGATING|VERIFYING|RESOLVED|AWAITING_APPROVAL|FAILED
+    # RESOLVED só com TNR medido success ou ação read-only auto-aprovada;
+    # AWAITING_APPROVAL = ação proposta pendente de humano (B5, terminal_state.py).
+    state: str = "DETECTING"
 
     # Resultados do pipeline (preenchidos por nodes)
     aggregated_report: dict[str, Any] | None = None

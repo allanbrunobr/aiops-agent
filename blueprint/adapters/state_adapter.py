@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Any
 
 from domain.incident_state import IncidentState
+from domain.terminal_state import TerminalOutcome, classify_terminal
 
 
 def _mitigation_stage(state: IncidentState) -> dict[str, Any]:
@@ -57,6 +58,19 @@ def _safety_decision(
     }
 
 
+def terminal_outcome(state: IncidentState) -> TerminalOutcome:
+    """Estado terminal honesto (B5): RESOLVED só com TNR medido ou read-only."""
+    verification = state.metadata.get("_verification") or {}
+    return classify_terminal(
+        tnr_result=verification.get("result"),
+        verification_mode=verification.get("verification_mode"),
+        has_proposed_action=state.proposed_action is not None,
+        auto_approved=state.safety_verdict == "APPROVED",
+        needs_review=state.safety_verdict == "NEEDS_REVIEW",
+        regression=state.regression_detected,
+    )
+
+
 def state_to_result(state: IncidentState) -> dict[str, Any]:
     """Monta o dict ``result`` (formato V0) a partir do estado do pipeline V1."""
     meta = state.metadata
@@ -93,7 +107,10 @@ def state_to_result(state: IncidentState) -> dict[str, Any]:
         state.regression_detected or (verification or {}).get("result") == "regression"
     )
     return {
-        "success": state.diagnosis is not None and not regression,
+        "success": state.diagnosis is not None
+        and not regression
+        and terminal_outcome(state).success,
+        "terminal_state": terminal_outcome(state).state,
         **({"rag_degraded": True} if meta.get("_rag_degraded") else {}),
         **(
             {"telemetry_dropped": meta["_telemetry_dropped"]}

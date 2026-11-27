@@ -508,8 +508,11 @@ def run_v1(args: argparse.Namespace) -> int:
     else:
         # Pipeline completou. Ação que o PreValidator mandou para revisão
         # exige humano, como no V0 (exit 3).
-        if state.safety_verdict == "NEEDS_REVIEW":
-            exit_code = EXIT_APPROVAL_NEEDED
+        # B5: o estado terminal honesto decide o exit (regressão/rollback/erro
+        # → 2 > aprovação pendente/NEEDS_REVIEW/NOT_VERIFIED → 3 > resolvido → 0).
+        from blueprint.adapters.state_adapter import terminal_outcome
+
+        exit_code = terminal_outcome(state).exit_code
         _fire_prediction(state)
         _fire_diagnosis(state)
         from application.use_cases.postmortem import _no_incident as _no_inc

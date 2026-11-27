@@ -68,9 +68,18 @@ class TestHelpShowsExitCodes:
 class _FakeEngine:
     """Engine V1 falsa: devolve o estado (com veredito) ou levanta PipelineAborted."""
 
-    def __init__(self, *, verdict: str | None = None, abort: str | None = None):
+    def __init__(
+        self,
+        *,
+        verdict: str | None = None,
+        abort: str | None = None,
+        tnr: tuple[str, str] | None = None,
+        action: bool = False,
+    ):
         self._verdict = verdict
         self._abort = abort
+        self._tnr = tnr  # (result, verification_mode)
+        self._action = action
 
     def run(self, _pipeline, state):
         import dataclasses
@@ -79,7 +88,20 @@ class _FakeEngine:
 
         if self._abort is not None:
             raise PipelineAborted(self._abort)
-        return dataclasses.replace(state, safety_verdict=self._verdict)
+        meta = dict(state.metadata)
+        if self._tnr is not None:
+            meta["_verification"] = {
+                "result": self._tnr[0],
+                "verification_mode": self._tnr[1],
+            }
+        return dataclasses.replace(
+            state,
+            safety_verdict=self._verdict,
+            proposed_action={"command": "kubectl rollout restart deploy/x"}
+            if self._action
+            else None,
+            metadata=meta,
+        )
 
 
 def _run_main_v1(engine: _FakeEngine, tmp_path, *extra: str) -> int:
@@ -205,3 +227,115 @@ class TestExitCodeIntegration:
 
         assert isinstance(exit_code, int)
         assert 0 <= exit_code <= 3
+
+
+# --- B5 (AIOPS-76): matriz TNRResult × (estado terminal, success, exit code) ---
+
+# (tnr_result, mode, safety_verdict) com ação proposta pendente -> esperado
+_MATRIX = [
+    # TNR medido success -> resolvido
+    ("success", "real", None, ("RESOLVED", True, 0)),
+    # revisão humana pendente vence mesmo com TNR medido success
+    ("success", "real", "NEEDS_REVIEW", ("AWAITING_APPROVAL", False, 3)),
+    ("success", "measured", "APPROVED", ("RESOLVED", True, 0)),
+    # success SIMULADO não é medição: precisa de read-only auto-aprovado
+    ("success", "simulated", "APPROVED", ("RESOLVED", True, 0)),
+    ("success", "simulated", "NEEDS_REVIEW", ("AWAITING_APPROVAL", False, 3)),
+    ("success", "simulated", None, ("AWAITING_APPROVAL", False, 3)),
+    # NOT_VERIFIED + ação pendente: nunca exit 0
+    ("not_verified", "measured", "NEEDS_REVIEW", ("AWAITING_APPROVAL", False, 3)),
+    ("not_verified", "measured", None, ("AWAITING_APPROVAL", False, 3)),
+    ("not_verified", "measured", "APPROVED", ("RESOLVED", True, 0)),  # read-only
+    # regressão / rollback / erro -> exit 2, com precedência sobre aprovação
+    ("regression", "real", "NEEDS_REVIEW", ("FAILED", False, 2)),
+    ("rollback_complete", "real", "NEEDS_REVIEW", ("FAILED", False, 2)),
+    ("rollback_complete", "real", "APPROVED", ("FAILED", False, 2)),
+    ("error", "simulated", "NEEDS_REVIEW", ("FAILED", False, 2)),
+    ("error", "simulated", "APPROVED", ("FAILED", False, 2)),
+]
+
+
+@pytest.mark.unit
+class TestTnrExitMatrix:
+    def test_matrix_covers_every_tnr_result(self) -> None:
+        from safety.tnr import TNRResult
+
+        covered = {row[0] for row in _MATRIX}
+        assert covered == {r.value for r in TNRResult}
+
+    @pytest.mark.parametrize("tnr,mode,verdict,expected", _MATRIX)
+    def test_classify_terminal(self, tnr, mode, verdict, expected) -> None:
+        from domain.terminal_state import classify_terminal
+
+        out = classify_terminal(
+            tnr_result=tnr,
+            verification_mode=mode,
+            has_proposed_action=True,
+            auto_approved=verdict == "APPROVED",
+            needs_review=verdict == "NEEDS_REVIEW",
+        )
+        assert (out.state, out.success, out.exit_code) == expected
+
+    @pytest.mark.parametrize("tnr,mode,verdict,expected", _MATRIX)
+    def test_cli_exit_code_and_result(
+        self, tnr, mode, verdict, expected, tmp_path
+    ) -> None:
+        from blueprint.adapters.state_adapter import terminal_outcome
+
+        engine = _FakeEngine(verdict=verdict, tnr=(tnr, mode), action=True)
+        assert _run_main_v1(engine, tmp_path) == expected[2]
+        state = engine.run(None, _minimal_state())
+        out = terminal_outcome(state)
+        assert (out.state, out.success, out.exit_code) == expected
+
+    def test_not_verified_pending_action_never_exit_zero_or_resolved(
+        self, tmp_path
+    ) -> None:
+        engine = _FakeEngine(
+            verdict=None, tnr=("not_verified", "measured"), action=True
+        )
+        assert _run_main_v1(engine, tmp_path) == 3
+
+    def test_no_pending_action_is_resolved(self, tmp_path) -> None:
+        assert _run_main_v1(_FakeEngine(verdict=None), tmp_path) == 0
+
+    def test_state_to_result_success_false_when_awaiting(self) -> None:
+        from blueprint.adapters.state_adapter import state_to_result
+
+        engine = _FakeEngine(
+            verdict="NEEDS_REVIEW", tnr=("not_verified", "measured"), action=True
+        )
+        state = engine.run(None, _minimal_state())
+        import dataclasses
+
+        state = dataclasses.replace(state, diagnosis={"root_cause": "x"})
+        res = state_to_result(state)
+        assert res["success"] is False
+        assert res["terminal_state"] == "AWAITING_APPROVAL"
+
+
+def _minimal_state():
+    from datetime import datetime, timezone
+
+    from domain.alert import NormalizedAlert
+    from domain.incident_state import IncidentState
+
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    alert = NormalizedAlert(
+        source="test",
+        source_id="s1",
+        correlation_id="b5",
+        title="t",
+        description="d",
+        severity="error",
+        alert_type="x",
+        timestamp=now,
+        detection_timestamp=now,
+    )
+    return IncidentState(
+        incident_id="b5",
+        correlation_id="b5",
+        alert=alert,
+        received_at=now,
+        started_at=now,
+    )

@@ -336,3 +336,10 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - tests/test_postmortem_coherence.py: test_replica_pipeline_uses_the_production_transition_text (guardava a réplica V0 no conftest, que não existe mais) → test_snapshot_pipeline_drives_the_production_engine (conftest usa build_engine/state_to_result, sem réplica).
 - Snapshots regenerados: SÓ 4 arquivos, todos CAT2 aditivos (full_pipeline_result: llm_model/prediction/safety_decision/blast_radius_scope/recommendation/verification_mode; safety_validation: +blast_radius_scope+recommendation; postmortem_structure e unknown_fault_postmortem_structure: LLM Model heuristic, Blast Radius multi_service, Recommendation, "Heuristic diagnosis"). Nenhum diff CAT1/novo.
 - Verde M5 (M5_LEVE=1, status de saída direto, sem pipe): unit 2148 passed/7 skipped (rc 0); snapshot 17 passed/1 skipped; V0 exit 3; V1 exit 3; ruff check ok; ruff format dos 3 arquivos tocados ok; mypy domain application core ok. V0 não removido (P6 gated).
+
+## Sessão B5 (AIOPS-76) — estado terminal honesto + matriz exit codes → passes:true
+- Re-mapeado p/ V1 (spec desatualizada): success real vivia em state_adapter.py:96 (diagnosis and not regression), NÃO em pipeline_nodes:426; RESOLVED vinha de safety_nodes.py (2 transições hardcoded); exit do runner só via NEEDS_REVIEW/abort.
+- domain/terminal_state.py (puro): classify_terminal → RESOLVED|AWAITING_APPROVAL|FAILED; precedência 2>3>0. Ligado em safety_nodes (state.state + timeline), state_adapter (success + terminal_state) e v1_runner (exit).
+- learn_skills_step: tnr_passed só com success + modo medido (real/measured); TNRResult real tem 5 valores (sem SKIPPED); modos reais: simulated/real.
+- Snapshots: 3 regenerados (success true→false, RESOLVED→AWAITING_APPROVAL no cenário default sem TNR medido) — mudança consciente.
+- Docs: docs/exit-codes.md + README.
