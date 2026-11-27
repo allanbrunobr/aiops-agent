@@ -195,7 +195,7 @@ class TraceFilter:
         if not roots:
             return spans[: self.max_hops]
 
-        path = []
+        path: list = []
         current = [roots[0]]
         while current and len(path) < self.max_hops:
             span = current[0]

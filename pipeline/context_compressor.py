@@ -21,6 +21,7 @@ import re
 from dataclasses import dataclass
 from enum import Enum
 from types import ModuleType
+from typing import TypedDict
 
 _rust: ModuleType | None
 try:
@@ -75,6 +76,12 @@ class CompressionStats:
         )
 
 
+class _Threshold(TypedDict):
+    min_priority: Priority
+    max_similar: int
+    summary_ratio: float
+
+
 class ContextCompressor:
     """
     Compressor de contexto inspirado no Acon e AOI.
@@ -101,7 +108,7 @@ class ContextCompressor:
         self.compression_level = compression_level
 
         # Thresholds por nível de compressão
-        self._thresholds = {
+        self._thresholds: dict[str, _Threshold] = {
             "minimal": {
                 "min_priority": Priority.NOISE,
                 "max_similar": 10,

@@ -56,13 +56,13 @@ class TestRealLayersOnRiskyAllowedCommand:
             make_pre_validator_node,
             make_version_validator_node,
         )
-        from config.loader import AppConfig
+        from config.loader import AppConfig, SafetyConfig
         from interfaces.cli.v1_runner import create_incident_state
 
         # Config que permite auto-aprovação: o cenário é "o pre-validator aprova
         # e o VersionValidator bloqueia". Com require_human_approval=true (o
         # padrão do YAML) o pre-validator nunca auto-aprova.
-        cfg = AppConfig(safety={"require_human_approval": False})
+        cfg = AppConfig(safety=SafetyConfig(require_human_approval=False))
         state = create_incident_state(
             Namespace(
                 no_llm=True,

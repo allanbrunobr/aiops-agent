@@ -234,4 +234,4 @@ class AggregatedReport:
 
         if not service_scores:
             return "unknown"
-        return max(service_scores, key=service_scores.get)
+        return max(service_scores, key=lambda svc: service_scores[svc])

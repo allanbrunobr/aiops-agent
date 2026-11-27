@@ -216,8 +216,7 @@ class LogParser:
         # Executar ambos com estado limpo
         rust_templates = self._rust_parse(logs)
 
-        py_parser = LogParser.__new__(LogParser)
-        py_parser.__init__()
+        py_parser = LogParser()
         py_templates = py_parser._python_drain3_parse(logs)
 
         rust_set = {t.template for t in rust_templates}

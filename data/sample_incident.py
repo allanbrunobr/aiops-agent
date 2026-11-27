@@ -150,6 +150,7 @@ def generate_metrics(
         is_degrading = DEPLOY_TIME <= ts < SPIKE_START
 
         # --- payment-svc metrics ---
+        conn_pool: float
         if is_incident:
             cpu = 85 + random.gauss(0, 3)
             memory = 78 + random.gauss(0, 2)
@@ -317,7 +318,7 @@ def create_incident() -> SimulatedIncident:
 
     Mantida para backward-compatibility — delega ao registry.
     """
-    return get_scenario("payment-pool-exhaustion")(seed=42)
+    return get_scenario("payment-pool-exhaustion")(42)
 
 
 if __name__ == "__main__":
