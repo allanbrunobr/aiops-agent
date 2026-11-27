@@ -57,10 +57,13 @@ def public_key_to_jwk(public_key_pem: str, kid: str = "aiops-rs256-1") -> dict:
     Returns:
         Dict com campos kty, use, alg, kid, n, e no formato JWK.
     """
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
     from cryptography.hazmat.primitives.serialization import load_pem_public_key
 
     key = load_pem_public_key(public_key_pem.encode())
-    pub_numbers = key.public_numbers()  # type: ignore[attr-defined]
+    if not isinstance(key, RSAPublicKey):
+        raise ValueError("public_key_to_jwk espera chave pública RSA")
+    pub_numbers = key.public_numbers()
 
     def _int_to_base64url(n: int) -> str:
         length = (n.bit_length() + 7) // 8

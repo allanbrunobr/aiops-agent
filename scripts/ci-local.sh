@@ -76,7 +76,7 @@ run_lint() {
   cd "$ROOT"
   ruff check .
   ruff format --check .
-  mypy domain application core pipeline safety data agents tools rag
+  mypy domain application core pipeline safety data agents tools rag auth
   deactivate
 }
 

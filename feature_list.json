@@ -12,7 +12,7 @@
       "Verificação LOCAL M5: unit 2169 idêntico + snapshot 17 inalterados + ruff + smoke exit3. NÃO ci-local.sh unit/M1.",
       "Commit msg AIOPS-99 lote1; passes:true só com gate estendido verde; reportar números."
     ],
-    "passes": false,
+    "passes": true,
     "jira_key": "AIOPS-99"
   }
 ]

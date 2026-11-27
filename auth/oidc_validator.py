@@ -16,9 +16,12 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from typing import cast
 
 import httpx
 import jwt as pyjwt
+from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
+from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from jwt.algorithms import ECAlgorithm, RSAAlgorithm
 
 from auth.jwt_validator import TokenClaims
@@ -182,7 +185,9 @@ class OIDCValidator:
         self._jwks_cache[issuer] = (jwks, now + self._cache_ttl)
         return jwks
 
-    def _find_key(self, jwks: dict, kid: str | None) -> object:
+    def _find_key(
+        self, jwks: dict, kid: str | None
+    ) -> RSAPublicKey | EllipticCurvePublicKey:
         """Seleciona a chave pública correta do JWKS pelo kid e kty (F4-3).
 
         kid desconhecido → rejeita (o caller faz refresh único antes de
@@ -208,9 +213,9 @@ class OIDCValidator:
         jwk = candidates[0]
         kty = jwk.get("kty")
         if kty == "RSA":
-            return RSAAlgorithm.from_jwk(jwk)
+            return cast(RSAPublicKey, RSAAlgorithm.from_jwk(jwk))
         if kty == "EC":
-            return ECAlgorithm.from_jwk(jwk)
+            return cast(EllipticCurvePublicKey, ECAlgorithm.from_jwk(jwk))
         raise pyjwt.InvalidTokenError(f"kty '{kty}' não suportado")
 
     def _may_force_refresh(self, issuer: str) -> bool:

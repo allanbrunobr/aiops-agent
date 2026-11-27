@@ -95,6 +95,7 @@ module = [
     "agents", "agents.*",
     "tools", "tools.*",
     "rag", "rag.*",
+    "auth", "auth.*",
 ]
 ignore_errors = false
 

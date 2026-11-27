@@ -343,3 +343,7 @@ Feature 1 — A1: testes real-RAG com modelo real (ROBUSTNESS_PLAN.md §3 A1).
 - learn_skills_step: tnr_passed só com success + modo medido (real/measured); TNRResult real tem 5 valores (sem SKIPPED); modos reais: simulated/real.
 - Snapshots: 3 regenerados (success true→false, RESOLVED→AWAITING_APPROVAL no cenário default sem TNR medido) — mudança consciente.
 - Docs: docs/exit-codes.md + README.
+
+## AIOPS-99 lote 1 — mypy limpo em auth + gate estendido
+- auth/keys.py: guard isinstance(RSAPublicKey) (ValueError se não RSA), sem type: ignore. auth/oidc_validator.py: _find_key tipado RSAPublicKey|EllipticCurvePublicKey via cast nos from_jwk.
+- Gate: mypy domain application core pipeline safety data agents tools rag auth (pyproject, ci-local.sh, ci.yml). Unit 2169 passed; snapshot 17 passed; ruff ok; smoke exit 3. Restam interfaces/validation/app.
