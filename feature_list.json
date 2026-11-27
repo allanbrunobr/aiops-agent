@@ -2,16 +2,17 @@
   {
     "number": 1,
     "category": "functional",
-    "title": "B5: estado terminal honesto + mapa completo de exit codes",
-    "description": "SPEC AUTORITATIVA: leia docs/b5-terminal-state-agent-prompt.md + ROBUSTNESS_PLAN.md B5(:211)/C1(:251). V0 removido (F5-4); re-mapear p/ V1. Gaps: (1) terminal state RESOLVED só c/ TNR medido success ou read-only auto-aprovado, senão AWAITING_APPROVAL+success=False+exit3 (domain/incident_state.py:43); (2) skill learning tnr_passed gate verification_mode==measured (blueprint/adapters/pipeline_nodes.py:453/468, orchestrator simulated); (3) documentar matriz exit codes README/docs; (4) testes matriz TNR×exit-code p/ cada TNRResult (tests/test_exit_codes.py). Já correto: success=TNR SUCCESS (pipeline_nodes:426), exit map v1_runner:170-213.",
+    "title": "AIOPS-98: higiene mypy fora do gate + estender gate",
+    "description": "SPEC AUTORITATIVA: leia docs/mypy-hygiene-agent-prompt.md. Zerar erros mypy fora do gate SEM mudar comportamento (2169 unit tests idênticos), depois estender gate scripts/ci-local.sh:79 + .github/workflows/ci.yml:47. Inventário: pipeline 9 (context_compressor 4/trace_filter/log_parser/aggregator), safety 12 (tnr.py callable->Callable), agents 23, tools 6, data 2, interfaces 1 (conflito module names), tests/test_cli_safety_decision.py:65 dict->SafetyConfig. Ordem incremental: pipeline+data+test -> safety -> agents+tools+interfaces -> estender gate. ZERO type:ignore genérico/Any; sem regen snapshots; sem deps.",
     "dependencies": "none",
     "steps": [
-      "Leia docs/b5-terminal-state-agent-prompt.md + ROBUSTNESS_PLAN.md B5/C1; confirme file:line (V0 removido).",
-      "TDD: teste matriz TNR×exit-code falha antes; implemente terminal state honesto + AWAITING_APPROVAL + skill learning medido + docs.",
-      "Verificação LOCAL M5: .venv/bin/python -m pytest tests -m unit -q TUDO verde + snapshot + smoke exit3 + ruff + mypy domain application core. NÃO ci-local.sh/M1.",
-      "Commit msg incluindo B5; setar feature_list passes:true; reportar números."
+      "Leia docs/mypy-hygiene-agent-prompt.md + pyproject [tool.mypy]; rode mypy por pacote p/ inventário fresco.",
+      "Corrija tipos SEM mudar comportamento (anotações/guards None/Callable/Optional/cast/TYPE_CHECKING/.pyi). Testes 2169 idênticos.",
+      "Verificação LOCAL M5: unit 2169 + snapshot 17 inalterados + mypy pacotes limpos + ruff + smoke exit3. NÃO ci-local.sh/M1.",
+      "Estenda gate (ci-local.sh:79 + ci.yml:47) só após TODOS limpos; configure explicit_package_bases se conflito.",
+      "Commit msg incluindo AIOPS-98; passes:true só quando gate estendido verde completo; senão parcial reporta."
     ],
-    "passes": true,
-    "jira_key": "AIOPS-76"
+    "passes": false,
+    "jira_key": "AIOPS-98"
   }
 ]
