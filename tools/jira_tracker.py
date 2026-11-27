@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from datetime import datetime
+from typing import cast
 
 from tools.interfaces import IncidentTracker
 
@@ -94,7 +95,7 @@ class JiraIncidentTracker(IncidentTracker):
 
     def _get_auth(self) -> tuple[str, str]:
         """Retorna credenciais para HTTP Basic Auth (Jira Cloud)."""
-        return (self.email, self.api_token)
+        return cast(tuple[str, str], (self.email, self.api_token))
 
     def _post(self, endpoint: str, payload: dict) -> dict:
         """Executa POST na Jira REST API com tratamento padronizado.

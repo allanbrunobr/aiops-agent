@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
+from typing import cast
 
 from agents.detector import DetectionAgent
 from agents.diagnoser import DiagnosisAgent
@@ -462,7 +463,7 @@ class AgentOrchestrator:
                 self._llm_budget_exhausted = True
                 raise LLMCallBudgetExhausted(f"max_llm_calls={limit} reached")
             self._llm_calls += 1
-        return self.client.create_message(**kwargs)
+        return cast(LLMClient, self.client).create_message(**kwargs)
 
     def _generate_plan(self, report, skill, similar) -> InvestigationPlan:
         """LLM gera plano de investigação baseado em contexto + skill."""

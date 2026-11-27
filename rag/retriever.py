@@ -7,10 +7,18 @@ from __future__ import annotations
 import hashlib
 import logging
 import warnings
+from typing import Any, Protocol
 
 import numpy as np
 
 from rag.indexer import IndexedChunk, ObservabilityIndexer
+
+
+class Reranker(Protocol):
+    """Contrato mínimo do reranker (DomainReranker)."""
+
+    def rerank(self, results: list[Any], query: str, top_k: int = ...) -> list[Any]: ...
+
 
 # Cache de embeddings de query. F6-3: chave inclui o modelo (trocar o modelo
 # de embedding não pode devolver vetores do modelo anterior) e o tamanho é
@@ -32,7 +40,7 @@ class ObservabilityRetriever:
     def __init__(
         self,
         indexer: ObservabilityIndexer,
-        reranker: object | None = None,
+        reranker: Reranker | None = None,
     ) -> None:
         """Inicializa o retriever com indexer obrigatório e reranker opcional.
 
@@ -83,6 +91,7 @@ class ObservabilityRetriever:
         if key not in _query_cache:
             if len(_query_cache) >= _QUERY_CACHE_MAX:
                 _query_cache.pop(next(iter(_query_cache)))  # FIFO: mais antigo
+            assert self.indexer.model is not None
             _query_cache[key] = np.array(
                 self.indexer.model.encode([query], normalize_embeddings=True),
                 dtype=np.float32,
@@ -98,6 +107,7 @@ class ObservabilityRetriever:
 
         # Índice FAISS contém apenas embeddings únicos; mapeia de volta para chunks
         faiss_to_chunks = getattr(self.indexer, "_faiss_to_chunks", None)
+        assert self.indexer.index is not None
         n_faiss = self.indexer.index.ntotal
         distances, indices = self.indexer.index.search(
             query_embedding,
@@ -137,9 +147,9 @@ class ObservabilityRetriever:
                 break
 
         # Aplica reranking se ativo
-        if reranking_active and results:
+        if reranking_active and self.reranker is not None and results:
             try:
-                results = self.reranker.rerank(results, query, top_k=top_k)  # type: ignore[attr-defined]
+                results = self.reranker.rerank(results, query, top_k=top_k)
             except Exception as exc:
                 warnings.warn(
                     f"Reranker falhou — retornando resultados FAISS brutos: {exc}",

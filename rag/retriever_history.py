@@ -9,7 +9,7 @@ antes do diagnóstico (Epic 7 — Institutional Memory).
 from __future__ import annotations
 
 from rag.indexer import ObservabilityIndexer
-from rag.retriever import ObservabilityRetriever
+from rag.retriever import ObservabilityRetriever, Reranker
 
 
 class ObservabilityRetrieverWithHistory(ObservabilityRetriever):
@@ -19,7 +19,7 @@ class ObservabilityRetrieverWithHistory(ObservabilityRetriever):
         self,
         indexer: ObservabilityIndexer,
         db_path: str = "data/incident_memory.db",
-        reranker: object | None = None,
+        reranker: Reranker | None = None,
     ) -> None:
         # F6-2: a subclasse não aceitava reranker — era impossível ligar o
         # DomainReranker no retriever que a CLI V0 realmente usa.

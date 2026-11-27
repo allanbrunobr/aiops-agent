@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import Any
 
 from application.ports.llm_client import LLMClient
 from application.ports.reporter import (
@@ -100,7 +101,7 @@ class DiagnosisAgent:
         self._client_factory = client_factory
         self.max_iterations = max_iterations
         self.model = model
-        self.client = None
+        self.client: LLMClient | None = None
         self.similar_incidents: list = similar_incidents or []
         self.skill = skill
         self.tools_used: list[str] = []
@@ -151,7 +152,7 @@ class DiagnosisAgent:
         tools = self._build_tools(report, retriever)
 
         # ReAct loop
-        messages = [
+        messages: list[dict[str, Any]] = [
             {
                 "role": "user",
                 "content": (
@@ -275,7 +276,7 @@ class DiagnosisAgent:
             mode=mode,
         )
 
-    def _call_llm(self, messages: list, tools: list) -> object:
+    def _call_llm(self, messages: list, tools: list) -> Any:
         """Chama Claude com tools, usando prompt da skill se disponível."""
         client = self._get_client()
         prompt = self.skill.system_prompt if self.skill else SYSTEM_PROMPT
@@ -773,7 +774,7 @@ class DiagnosisAgent:
             "performance_degradation": 0.0,
             "deployment_issue": 0.0,
         }
-        evidence = {k: [] for k in fault_scores}
+        evidence: dict[str, list[str]] = {k: [] for k in fault_scores}
 
         # Analyze logs
         for tpl in report.log_templates:
@@ -893,7 +894,7 @@ class DiagnosisAgent:
         pelo node de fallback do Blueprint e pelo modo ``--no-llm`` da CLI.
         """
         # Encontra o serviço mais afetado
-        service_errors = {}
+        service_errors: dict[str, int] = {}
         for tpl in report.log_templates:
             if tpl.level in ("ERROR", "FATAL"):
                 for svc in tpl.services:

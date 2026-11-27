@@ -15,11 +15,22 @@ import logging
 import os
 import sys
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 
+if TYPE_CHECKING:
+    import faiss
+
+
+class SentenceEncoder(Protocol):
+    """Contrato mínimo do modelo de embeddings (SentenceTransformer)."""
+
+    def encode(self, sentences: list[str], **kwargs: Any) -> np.ndarray: ...
+
+
 # Cache de modelos para evitar recarga entre instâncias (evaluate cria nova instância por volume)
-_model_cache: dict[str, object] = {}
+_model_cache: dict[str, SentenceEncoder] = {}
 
 # Cache de embeddings para evitar re-encode entre volumes do evaluate_scale.
 # F6-3: chave (model_name, texto) — um texto codificado por outro modelo não
@@ -40,10 +51,12 @@ class IndexedChunk:
 class ObservabilityIndexer:
     """Indexa dados de observabilidade para busca semântica."""
 
+    _faiss_to_chunks: list[list[int]] | None
+
     def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
         self.model_name = model_name
-        self.model: object | None = None
-        self.index: object | None = None
+        self.model: SentenceEncoder | None = None
+        self.index: faiss.Index | None = None
         self.chunks: list[IndexedChunk] = []
 
     def _load_model(self):
@@ -144,6 +157,7 @@ class ObservabilityIndexer:
         mn = self.model_name
         uncached = [t for t in unique_texts if (mn, t) not in _embedding_cache]
         if uncached:
+            assert self.model is not None  # _load_model() garante
             new_embs = self.model.encode(
                 uncached,
                 batch_size=512,
@@ -225,6 +239,7 @@ class ObservabilityIndexer:
         os.makedirs(cache_dir, exist_ok=True)
 
         # 1. Salva índice FAISS (binário nativo)
+        assert self.index is not None
         faiss.write_index(self.index, os.path.join(cache_dir, "faiss.index"))
 
         # 2. Salva chunks como JSON (IndexedChunk é serializável)
@@ -571,6 +586,7 @@ class ObservabilityIndexerWithHistory(ObservabilityIndexer):
             return 0
 
         unique_texts = list(dict.fromkeys(texts))
+        assert self.model is not None  # _load_model() garante
         unique_embeddings = self.model.encode(
             unique_texts,
             batch_size=512,
