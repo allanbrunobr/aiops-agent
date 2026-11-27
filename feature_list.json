@@ -2,17 +2,17 @@
   {
     "number": 1,
     "category": "functional",
-    "title": "AIOPS-98 fase2: estender gate mypy + corrigir rag",
-    "description": "SPEC AUTORITATIVA: docs/mypy-gate-extension-agent-prompt.md. Fase1 (0574104/c0dccc5/11e849f) já limpou pipeline/safety/data/agents/tools. ARMADILHA: pyproject module=\"*\" ignore_errors=true suprime erros; verificar com /tmp/strict-mypy.ini ignore_errors=False. Tarefa: (1) corrigir 3 erros rag (enrichment_node:52 knowledge_retriever object→KnowledgeRetriever TYPE_CHECKING; reranker:293/296 _cross_encoder None→_Predictor|None Protocol+cast); (2) flip override add pipeline/safety/data/agents/tools/rag (.*) à ignore_errors=false, MANTER \"*\" true p/ interfaces/auth/validation/app; (3) update ci-local.sh:79+ci.yml:47 comando p/ mypy domain application core pipeline safety data agents tools rag; (4) verificar gate estendido Success. interfaces/auth=follow-up FORA escopo.",
+    "title": "AIOPS-99 lote1: mypy limpo em auth + gate estendido",
+    "description": "SPEC AUTORITATIVA: docs/mypy-auth-batch-agent-prompt.md. ESCOPO FECHADO: somente auth/ (NAO interfaces/validation/app). 16 erros strict em 2 files: keys.py:63/75/76 (union-attr public_numbers/.n/.e→isinstance RSAPublicKey guard, remover type:ignore[attr-defined]); oidc_validator.py:121 (arg-type object→tipar _find_key retorno ou cast). Verificar strict /tmp/strict-mypy.ini ignore_errors=False. Depois flip override add auth/auth.* ignore_errors=false (MANTER \"*\" true) + update ci-local.sh:79/ci.yml:47 comando +auth. Gate estendido Success.",
     "dependencies": "none",
     "steps": [
-      "Leia docs/mypy-gate-extension-agent-prompt.md; confirme file:line.",
-      "Corrigir 3 erros rag sem mudar comportamento; mypy --config-file /tmp/strict-mypy.ini rag Success.",
-      "Flip override pyproject + update ci-local.sh:79/ci.yml:47; mypy domain application core pipeline safety data agents tools rag Success.",
+      "Leia docs/mypy-auth-batch-agent-prompt.md; confirme file:line. SOMENTE auth/.",
+      "Corrigir keys.py isinstance RSAPublicKey + oidc_validator _find_key tipo; mypy --config-file /tmp/strict-mypy.ini auth Success.",
+      "Flip override pyproject +auth; update ci-local.sh:79/ci.yml:47; mypy domain application core pipeline safety data agents tools rag auth Success.",
       "Verificação LOCAL M5: unit 2169 idêntico + snapshot 17 inalterados + ruff + smoke exit3. NÃO ci-local.sh unit/M1.",
-      "Commit msg AIOPS-98; passes:true só com gate estendido verde completo; reportar números."
+      "Commit msg AIOPS-99 lote1; passes:true só com gate estendido verde; reportar números."
     ],
-    "passes": true,
-    "jira_key": "AIOPS-98"
+    "passes": false,
+    "jira_key": "AIOPS-99"
   }
 ]
