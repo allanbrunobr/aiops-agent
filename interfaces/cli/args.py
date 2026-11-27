@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from typing import NoReturn
 
 from data.registry import list_scenarios
 from interfaces.cli.exit_codes import EXIT_ERROR
@@ -22,7 +23,7 @@ TRACKER_CHOICES: tuple[str, ...] = ("jira",)
 class _CliParser(argparse.ArgumentParser):
     """Erros de argumento saem com código 1. O código 2 fica para regressão do TNR."""
 
-    def error(self, message: str) -> None:
+    def error(self, message: str) -> NoReturn:
         self.print_usage(sys.stderr)
         self.exit(EXIT_ERROR, f"{self.prog}: error: {message}\n")
 

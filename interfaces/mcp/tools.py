@@ -14,8 +14,10 @@ import json
 import os
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Protocol, cast
 
 import structlog
 
@@ -25,7 +27,34 @@ from domain.confidence import CONFIDENCE_SCORES, confidence_to_score
 from domain.incident import MitigationAction
 from safety.orchestrator import SafetyOrchestrator
 
+if TYPE_CHECKING:
+    from blueprint.engine import BlueprintEngine
+    from safety.pre_validator import PreExecutionValidator
+    from safety.tnr import TNRSafetyGuard
+    from safety.version_validator import VersionValidator
+
 log = structlog.get_logger()
+
+
+class _Retriever(Protocol):
+    """Contrato mínimo do retriever RAG injetado."""
+
+    def search(self, query: str, top_k: int) -> Sequence[object]: ...
+
+
+class _TextSanitizer(Protocol):
+    """Contrato mínimo do sanitizer injetado."""
+
+    def sanitize_text(self, text: str) -> str: ...
+
+
+class _AlertNormalizer(Protocol):
+    """Contrato mínimo do registry de normalizers injetado."""
+
+    def normalize(
+        self, source: str, payload: dict[str, str]
+    ) -> NormalizedAlert | None: ...
+
 
 # Severidades válidas conforme schema do MCP tool
 VALID_SEVERITIES = {"critical", "high", "medium", "low"}
@@ -102,7 +131,7 @@ async def handle_search_incidents(
 
     try:
         # Busca semântica via FAISS — busca extra para compensar filtragem
-        raw_results = retriever.search(query, top_k=top_k * 2)
+        raw_results = cast(_Retriever, retriever).search(query, top_k=top_k * 2)
     except Exception as exc:
         log.error("mcp.search_incidents.faiss_unavailable", error=str(exc))
         return json.dumps(
@@ -207,7 +236,9 @@ def _sanitize_result(result: dict, sanitizer: object) -> dict:
     for field_name in text_fields:
         if field_name in result and result[field_name]:
             try:
-                result[field_name] = sanitizer.sanitize_text(result[field_name])
+                result[field_name] = cast(_TextSanitizer, sanitizer).sanitize_text(
+                    result[field_name]
+                )
             except Exception as exc:  # noqa: BLE001
                 # Falha fechado: sem redação confirmada, o texto não sai.
                 # Antes o original era devolvido sem remover PII.
@@ -320,9 +351,9 @@ async def handle_validate_action(
 
     # Camadas 2-4: SafetyOrchestrator — PreValidator → TNR → VersionValidator
     orchestrator = SafetyOrchestrator(
-        pre_validator=pre_validator,
-        tnr=tnr,
-        version_validator=version_validator,
+        pre_validator=cast("PreExecutionValidator | None", pre_validator),
+        tnr=cast("TNRSafetyGuard | None", tnr),
+        version_validator=cast("VersionValidator | None", version_validator),
     )
     action = MitigationAction(
         description=f"MCP validate_action: {command[:80]}",
@@ -423,7 +454,7 @@ async def handle_validate_action(
 def _check_sanitizer(command: str, sanitizer: object) -> LayerResult:
     """Camada 1: verifica se comando contém PII ou padrões adversariais."""
     try:
-        sanitized = sanitizer.sanitize_text(command)
+        sanitized = cast(_TextSanitizer, sanitizer).sanitize_text(command)
         has_pii = sanitized != command
         return LayerResult(
             layer_name="TelemetrySanitizer",
@@ -469,7 +500,9 @@ def _check_pre_validator(
             "affected_services": [target_service],
             "confidence": "medium",
         }
-        result = pre_validator.validate(action, diagnosis)
+        result = cast("PreExecutionValidator", pre_validator).validate(
+            action, diagnosis
+        )
         passed = getattr(result, "is_safe", getattr(result, "approved", True))
         risk = getattr(result, "risk_score", 0.0)
         # Normaliza risk_score de 0-100 para 0-1 se necessário
@@ -496,7 +529,9 @@ def _check_pre_validator(
 def _check_version_validator(command: str, version_validator: object) -> LayerResult:
     """Camada 4: verificação de CVE e versões em pacotes/imagens referenciados."""
     try:
-        result = version_validator.validate_remediation(command)
+        result = cast("VersionValidator", version_validator).validate_remediation(
+            command
+        )
         passed = getattr(result, "is_safe", True)
         detail = getattr(
             result, "recommendation", "No known CVEs in referenced versions"
@@ -692,7 +727,9 @@ async def handle_diagnose_incident(
         )
         pipeline = build_pipeline(getattr(engine, "config", None) or AppConfig())
         # engine.run é síncrono (nodes com LLM): fora do event loop (4B-04).
-        result = await asyncio.to_thread(engine.run, pipeline, state)
+        result = await asyncio.to_thread(
+            cast("BlueprintEngine", engine).run, pipeline, state
+        )
 
         elapsed_ms = (time.monotonic() - start_time) * 1000
 
@@ -717,7 +754,8 @@ async def handle_diagnose_incident(
                 "diagnosis": diagnosis,
                 "evidence_chain": list(diagnosis.get("evidence", []) or []),
                 "confidence": round(confidence, 2),
-                "proposed_fix": proposed.get("description") or proposed.get("command", ""),
+                "proposed_fix": proposed.get("description")
+                or proposed.get("command", ""),
                 "risk_assessment": {
                     "safety_verdict": result.safety_verdict,
                     "safety_reasons": list(result.safety_reasons),
@@ -834,7 +872,7 @@ def _normalize_alert(
     description: str,
     service: str | None,
     normalizer_registry: object | None,
-) -> object:
+) -> NormalizedAlert:
     """Normaliza alerta MCP para formato do pipeline.
 
     Reutiliza normalizer_registry se disponível, caso contrário cria
@@ -850,7 +888,9 @@ def _normalize_alert(
             "service": service or "",
         }
         try:
-            normalized = normalizer_registry.normalize(source, payload)
+            normalized = cast(_AlertNormalizer, normalizer_registry).normalize(
+                source, payload
+            )
             if normalized is not None:
                 return normalized
         except Exception as exc:  # noqa: BLE001 — fallback para objeto simples

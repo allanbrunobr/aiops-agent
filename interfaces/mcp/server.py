@@ -13,11 +13,15 @@ from __future__ import annotations
 import asyncio
 import json
 from contextvars import ContextVar
+from typing import TYPE_CHECKING, cast
 
 import structlog
 
 from mcp.server import Server
 from mcp.types import TextContent, Tool
+
+if TYPE_CHECKING:
+    from interfaces.mcp.rate_limiter import RateLimiter
 
 log = structlog.get_logger()
 
@@ -117,7 +121,7 @@ def create_server(
 
         # Rate limit check — antes de qualquer lógica de negócio
         if rate_limiter is not None:
-            result = rate_limiter.check(client_id, name)
+            result = cast("RateLimiter", rate_limiter).check(client_id, name)
             if not result.allowed:
                 log.warning(
                     "mcp.rate_limit.exceeded",

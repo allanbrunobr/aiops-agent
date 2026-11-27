@@ -88,7 +88,6 @@ ignore_errors = true
 # interfaces.http) precisam de supressão explícita até seus lotes (AIOPS-99).
 [[tool.mypy.overrides]]
 module = [
-    "interfaces.mcp", "interfaces.mcp.*",
     "validation", "validation.*",
 ]
 ignore_errors = true
@@ -106,6 +105,8 @@ module = [
     "rag", "rag.*",
     "auth", "auth.*",
     "interfaces.http", "interfaces.http.*",
+    "interfaces.mcp", "interfaces.mcp.*",
+    "interfaces.cli", "interfaces.cli.*",
 ]
 ignore_errors = false
 

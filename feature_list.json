@@ -12,7 +12,7 @@
       "Verificação LOCAL M5 unit 2169+snapshot inalterados+ruff+smoke exit3.",
       "Commit AIOPS-99; passes:true só com gate verde; reportar números."
     ],
-    "passes": false,
+    "passes": true,
     "jira_key": "AIOPS-99"
   }
 ]

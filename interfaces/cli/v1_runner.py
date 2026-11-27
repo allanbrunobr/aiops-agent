@@ -14,7 +14,7 @@ import json
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import structlog
 from rich.rule import Rule
@@ -43,6 +43,16 @@ from interfaces.cli.trackers import (
     _resolve_tracker,
     step_tracking,
 )
+
+if TYPE_CHECKING:
+    from interfaces.http.notifications.slack import SlackNotifier
+
+
+class _UrlTracker(Protocol):
+    """Contrato mínimo do tracker usado em ``_save_outputs``."""
+
+    url: str
+
 
 RAG_CACHE_DIR = ".aiops-cache/rag"
 
@@ -100,7 +110,7 @@ def _dominant_service(incident: object | None) -> str:
         for entry in (getattr(incident, "logs", None) or [])
         if getattr(entry, "service", None)
     )
-    return counts.most_common(1)[0][0] if counts else "unknown"
+    return cast(str, counts.most_common(1)[0][0]) if counts else "unknown"
 
 
 def create_incident_state(
@@ -133,21 +143,17 @@ def create_incident_state(
 
     live = scenario_name is not None and scenario_name.endswith("-live")
     if live:
-        alert_fields = dict(
-            source=scenario_name,
-            source_id="live-001",
-            title=f"Live telemetry window ({scenario_name})",
-            description=f"Telemetry fetched from {scenario_name}; no simulated scenario",
-            service=_dominant_service(incident),
-        )
+        source = cast(str, scenario_name)
+        source_id = "live-001"
+        title = f"Live telemetry window ({scenario_name})"
+        description = f"Telemetry fetched from {scenario_name}; no simulated scenario"
+        service = _dominant_service(incident)
     else:
-        alert_fields = dict(
-            source="simulated",
-            source_id="sim-001",
-            title="Simulated incident from data/sample_incident.py",
-            description="Payment service connection pool exhaustion after config deploy",
-            service="payment-svc",
-        )
+        source = "simulated"
+        source_id = "sim-001"
+        title = "Simulated incident from data/sample_incident.py"
+        description = "Payment service connection pool exhaustion after config deploy"
+        service = "payment-svc"
     alert = NormalizedAlert(
         correlation_id=correlation_id,
         severity="critical",
@@ -155,7 +161,11 @@ def create_incident_state(
         timestamp=now,
         detection_timestamp=now,
         environment="production",
-        **alert_fields,
+        source=source,
+        source_id=source_id,
+        title=title,
+        description=description,
+        service=service,
     )
 
     return IncidentState(
@@ -206,7 +216,10 @@ def _save_outputs(
     if tracker is not None and result is not None:
         issue_key = step_tracking(result, tracker)
         if issue_key:
-            result["stages"]["tracking"] = {"issue_key": issue_key, "url": tracker.url}
+            result["stages"]["tracking"] = {
+                "issue_key": issue_key,
+                "url": cast(_UrlTracker, tracker).url,
+            }
             if markdown and not aborted and incident is not None:
                 # O node de postmortem rodou antes do tracking: re-renderiza
                 # com a seção Incident Tracking.
@@ -214,7 +227,7 @@ def _save_outputs(
                     result,
                     incident,
                     now=datetime.now(),
-                    tracker_url=tracker.url,
+                    tracker_url=cast(_UrlTracker, tracker).url,
                     tracker_issue_key=issue_key,
                 )
 
@@ -330,7 +343,7 @@ def run_v1(args: argparse.Namespace) -> int:
             data=data or {},
         )
         try:
-            asyncio.run(_slack_notifier.on_event(evt))
+            asyncio.run(cast("SlackNotifier", _slack_notifier).on_event(evt))
             console.print(f"[cyan]Slack: {event_type} fired[/cyan]")
         except Exception as _exc:
             console.print(f"[yellow]Slack: {event_type} failed: {_exc}[/yellow]")
@@ -402,7 +415,7 @@ def run_v1(args: argparse.Namespace) -> int:
             *sources, stats=telemetry_stats
         )
     elif args.scenario:
-        incident = get_scenario(args.scenario)(seed=42)
+        incident = get_scenario(args.scenario)(42)
     else:
         incident = create_incident()
 

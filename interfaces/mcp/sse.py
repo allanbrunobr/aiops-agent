@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hmac
 import json
+from typing import Any, cast
 
 import jwt as pyjwt
 from fastapi import FastAPI, Request, Response
@@ -62,7 +63,7 @@ def _principal_user(client_id: str, scopes: list[str]) -> AuthenticatedUser:
 def mount_sse(
     app: FastAPI,
     config: object | None = None,
-    **server_deps: object,
+    **server_deps: Any,
 ) -> None:
     """Monta endpoints SSE do MCP no app FastAPI existente.
 
@@ -307,6 +308,9 @@ def mount_sse(
             _current_client_id.reset(token_ctx)
             _current_scopes.reset(scopes_ctx)
             _enforce_scopes.reset(enforce_ctx)
+        # Comportamento preservado: o handler sempre devolveu None aqui (o
+        # transporte já respondeu); o cast só satisfaz a anotação.
+        return cast(Response, None)
 
     @app.post("/mcp/messages")
     async def message_endpoint(request: Request) -> Response:
