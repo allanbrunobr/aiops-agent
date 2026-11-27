@@ -2,17 +2,17 @@
   {
     "number": 1,
     "category": "functional",
-    "title": "AIOPS-99 lote2: mypy interfaces/http + gate",
-    "description": "SPEC AUTORITATIVA: docs/mypy-http-batch-agent-prompt.md. ESCOPO FECHADO interfaces/http/. 16 erros own em 7 files (metrics/pipeline _percentile list[int]→Sequence[int|float]; webhook/router DedupStore|None guard; webhook/errors handler Exception; routes/a2a build_pipeline AppConfig guard; notifications/slack AsyncWebClient|None guard; handlers/false_positive object→tipo store; app.py Path object+_build_prediction_blocks). Flip override +interfaces/http.* MANTER \"*\" true; update ci-local.sh:79+ci.yml:47. NÃO interfaces/mcp,cli,validation,app.",
+    "title": "AIOPS-99 lote3: mypy interfaces/mcp+cli + gate",
+    "description": "SPEC AUTORITATIVA: docs/mypy-mcp-cli-batch-agent-prompt.md. ESCOPO FECHADO somente interfaces/mcp+interfaces/cli. 4 erros OWN (args.py:240 Any→str|None; mcp/tools.py:259 Any→bool; mcp/tools.py:474 str<int|None narrow). ~100 validation importados FORA (suprimidos \"*\"). Flip override +interfaces.mcp/cli (.*); update ci-local.sh:79+ci.yml:47. Verificação strict own=0+gate estendido Success+unit 2169+snapshot 17 inalterados+ruff+smoke exit3. NÃO ci-local.sh unit/M1.",
     "dependencies": "none",
     "steps": [
-      "Leia docs/mypy-http-batch-agent-prompt.md; confirme file:line.",
-      "Corrigir 16 erros interfaces/http sem mudar comportamento; strict interfaces/http own=0.",
-      "Flip override +interfaces/http.* + update gate command; gate estendido Success.",
-      "Verificação LOCAL M5: unit 2169 idêntico + snapshot 17 inalterados + ruff + smoke exit3. NÃO ci-local.sh unit/M1.",
-      "Commit msg AIOPS-99; passes:true só com gate verde; reportar números."
+      "Leia spec; confirme file:line.",
+      "Corrigir 4 erros own sem mudar comportamento; strict own=0.",
+      "Flip override+update gate cmd; mypy ...interfaces/mcp interfaces/cli Success.",
+      "Verificação LOCAL M5 unit 2169+snapshot inalterados+ruff+smoke exit3.",
+      "Commit AIOPS-99; passes:true só com gate verde; reportar números."
     ],
-    "passes": true,
+    "passes": false,
     "jira_key": "AIOPS-99"
   }
 ]
